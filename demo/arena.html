@@ -497,7 +497,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   arenaEl.addEventListener('dragover', e => e.preventDefault()); arenaEl.addEventListener('drop', e => { e.preventDefault(); const t = e.dataTransfer.getData('text'); if (!t) return; const p = toWorld(e.clientX, e.clientY); addWord(t, p.x, p.y); logEvent('word_dropped', { word: t }); });
   document.addEventListener('keydown', e => { if (!selected || !e.key.startsWith('Arrow')) return; if (document.activeElement && document.activeElement.tagName === 'INPUT') return; e.preventDefault(); const d = { ArrowLeft: [-30, 0], ArrowRight: [30, 0], ArrowUp: [0, -30], ArrowDown: [0, 30] }[e.key]; goto(selected, selected.tx + d[0], selected.ty + d[1]); feel(selected, 'drag'); logEvent('nudge', { who: selected.name, key: e.key }); });
   $('#export').addEventListener('click', () => { const b = new Blob([JSON.stringify(events.filter(e => e.page === 'arena'), null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'arena_log.json'; a.click(); });
-  window.__arena = { act: (i, o, a) => act(creatures[i], o, a), genomes: () => genomes, mutate: k => applyGenome(k, mutate(k), 'mutate'), addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
+  window.__arena = { understand: (a, i) => understand(a, i == null ? null : creatures[i]), act: (i, o, a) => act(creatures[i], o, a), genomes: () => genomes, mutate: k => applyGenome(k, mutate(k), 'mutate'), addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
   // ---------- collection: kept creatures, compare two, release visitors into the arena ----------
   let collection = (() => { try { return JSON.parse(localStorage.getItem('arena.collection') || '[]'); } catch (e) { return []; } })();
   function saveColl() { try { localStorage.setItem('arena.collection', JSON.stringify(collection.slice(-60))); } catch (e) {} }
@@ -680,10 +680,27 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // ---------- voice: press 🎤, speak, and the words go out as a message (room chat → everyone; creature popover → that creature) ----------
   // Uses the browser's Web Speech API. In Chrome the audio is sent to Google's speech service; nothing is recorded by this page. A local
   // Whisper-tiny in the browser (transformers.js) is the private alternative, not built yet.
+  // making sense of a bad transcript: the recogniser returns up to 6 guesses; each is read by the instruction model, words that sound
+  // like a word on the floor snap to it (object resolution against what is actually there), and the guess the model is surest of wins
+  function lev(a, b) { const m = a.length, n = b.length, d = Array.from({ length: m + 1 }, (_, i) => [i, ...new Array(n).fill(0)]); for (let j = 1; j <= n; j++) d[0][j] = j; for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n]; }
+  const skel = w => w.replace(/[aeiouy]+/g, 'a').replace(/(.)\1+/g, '$1');   // rough sound-alike key: vowels collapsed, doubles merged
+  function snapToFloor(text) { const floorWords = [...new Set(words.filter(w => !w.carriedBy).map(w => w.text))]; let snapped = 0;
+    const out = text.split(/\s+/).map(tok => { const t = tok.toLowerCase().replace(/[^a-z'|-]/g, ''); if (t.length < 3 || floorWords.includes(t)) return tok;
+      let best = null, bd = 9; for (const fw of floorWords) { if (Math.abs(fw.length - t.length) > 2) continue; const d = Math.min(lev(t, fw), t.length >= 4 ? lev(skel(t), skel(fw)) : 9); if (d < bd) { bd = d; best = fw; } }
+      if (best && bd <= (t.length >= 6 ? 2 : 1)) { snapped++; return best; } return tok; }); return { text: out.join(' '), snapped }; }
+  async function understand(alts, to) { let best = { text: alts[0], p: 0 };
+    for (const a of alts) { const sn = snapToFloor(a); let r; try { r = await classify(sn.text); } catch (e) { continue; } const opts = to ? to.options.concat('none') : null;
+      const p = opts ? Math.max(...opts.filter(o => o !== 'none').map(o => r.probs[o] || 0)) : Math.max(...Object.entries(r.probs).filter(([o]) => o !== 'none').map(([, v]) => v));
+      const onFloor = words.some(w => !w.carriedBy && sn.text.toLowerCase().split(/\s+/).includes(w.text)), score = p + (onFloor ? 0.25 : 0) - 0.02 * alts.indexOf(a);
+      if (score > (best.score ?? -1)) best = { text: sn.text, p: +p.toFixed(2), score }; } return best; }
   const Voice = (() => { const SR = window.SpeechRecognition || window.webkitSpeechRecognition; let rec = null, on = false;
     function start(inputId, btn) { if (!SR) { say('lab', 'this browser has no speech recognition (Chrome and Safari do)', 'lab'); return; } if (on) { rec.stop(); return; }
-      rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true; rec.maxAlternatives = 1; const inp = document.getElementById(inputId); on = true; btn.classList.add('on');
-      rec.onresult = e => { let txt = ''; for (const r of e.results) txt += r[0].transcript; inp.value = txt; if (e.results[e.results.length - 1].isFinal) { logEvent('voice', { to: inputId, len: txt.length }); if (inputId === 'chat') $('#send').click(); else inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); } };
+      rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true; rec.maxAlternatives = 6; const inp = document.getElementById(inputId); on = true; btn.classList.add('on');
+      rec.onresult = async e => { let txt = ''; for (const r of e.results) txt += r[0].transcript; inp.value = txt; const last = e.results[e.results.length - 1]; if (!last.isFinal) return;
+        const alts = [...last].map(a => a.transcript.trim()).filter(Boolean); const best = await understand(alts, inputId === 'chat' ? null : lastWhisper);
+        if (best.text.toLowerCase() !== alts[0].toLowerCase()) say('lab', `heard “${alts[0]}” → understood “${best.text}”`, 'lab');
+        inp.value = best.text; logEvent('voice', { to: inputId, heard: alts[0], used: best.text, alts: alts.length, p: best.p });
+        if (inputId === 'chat') $('#send').click(); else inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); };
       rec.onend = () => { on = false; btn.classList.remove('on'); }; rec.onerror = ev => { say('lab', 'voice: ' + ev.error, 'lab'); }; rec.start(); }
     document.addEventListener('click', e => { const b = e.target.closest('.mic'); if (b) start(b.dataset.mic, b); });
     return { listening: () => on }; })();
