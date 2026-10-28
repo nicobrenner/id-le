@@ -5,8 +5,8 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15161a;--ink:#e8e6e1;--floor:#1c1e24}}
 body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 #top{display:flex;gap:12px;align-items:center;padding:8px 16px;font-size:13px;opacity:.85;flex-wrap:wrap}#top a{color:var(--accent)}
-#arena{position:relative;height:520px;margin:0 16px;border:1px solid #8884;border-radius:12px;background:var(--floor);overflow:hidden;user-select:none}
-#floor{position:absolute;inset:0}
+#arena{position:relative;height:calc(100vh - 150px);min-height:520px;margin:0 16px;border:1px solid #8884;border-radius:12px;background:var(--floor);overflow:hidden;user-select:none}
+#floor{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
 .word{position:absolute;padding:2px 8px;border-radius:6px;background:#ffe9a8;color:#333;border:1px solid #d9b85a;font:13px ui-monospace,Menlo,monospace;cursor:grab;transform:translate(-50%,-50%);z-index:3}
 .word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px;transition:left .42s cubic-bezier(.2,.9,.3,1.2),top .42s cubic-bezier(.2,.9,.3,1.2)}.word.crumb{background:#ffd6e8;border-color:#e89ab9;font-size:10px;padding:0 4px}
 .creature{position:absolute;transform:translate(-50%,-50%);z-index:5;cursor:grab;border-radius:50%;touch-action:none}.creature:active{cursor:grabbing}
@@ -33,16 +33,23 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 .ln{margin:3px 0}.ln b{opacity:.7;font-weight:600}.ln.oracle{color:var(--accent)}.ln.crawly{color:#8a5cff}.ln.tok{color:#b8860b}
 #chatrow{display:flex;gap:8px;margin:8px 16px}#chat{flex:1;font:15px system-ui;padding:8px 10px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit}
 button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit;cursor:pointer}
+#weather{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+#minimap{position:absolute;right:10px;bottom:10px;z-index:9;border:1px solid #8886;border-radius:6px;background:color-mix(in srgb,var(--floor) 80%,transparent);cursor:crosshair}
+#topbar{position:absolute;left:10px;top:8px;z-index:9;font-size:12px;opacity:.85}#topbar button{font-size:12px;padding:3px 9px;background:color-mix(in srgb,var(--floor) 80%,transparent)}#weatherLabel{opacity:.7;margin-left:6px}
+#roomchat{position:absolute;left:10px;bottom:10px;width:min(460px,60%);max-height:55%;z-index:9;display:flex;flex-direction:column;border:1px solid #8885;border-radius:12px;background:color-mix(in srgb,var(--floor) 72%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#rc-head{display:flex;justify-content:space-between;align-items:center;padding:4px 10px;font-size:12px;opacity:.85}#rc-head button{border:0;background:none;font-size:14px;padding:0 4px;cursor:pointer;color:inherit}
+#rc-body{display:flex;flex-direction:column;min-height:0;overflow:hidden}#roomchat.min #rc-body{display:none}#roomchat #log{order:1;margin:0 10px;max-height:none;flex:1;overflow:auto;border:0;font-size:13px;padding-top:0}#roomchat #quick{order:2;margin:4px 10px 0}#roomchat #chatrow{order:3;margin:6px 10px 8px}
+#roomchat #chat{font-size:13px;padding:6px 8px}#rc-open{position:absolute;left:10px;bottom:10px;z-index:9;display:none}#roomchat.closed{display:none}#roomchat.closed+#rc-open{display:block}
+#arena.panning{cursor:grabbing}
 </style></head><body>
 <div id="top"><b>The arena</b> · two creatures with their own models (drives + policy + an instruction model), the Oracle as a third voice · <a href="index.html">back to the chat</a> · <span id="status">loading…</span></div>
-<div id="arena"><div id="floor"></div><div id="whisper"><input id="whisperIn" placeholder="say something to it…"></div><button id="soundBtn" title="sounds (off by default)">🔇</button></div>
+<div id="arena"><div id="floor"></div><canvas id="weather"></canvas><canvas id="minimap" title="the whole world: click or drag to look somewhere else"></canvas><div id="topbar"><button id="evolveWorldBtn" title="mutate the world: layout, tilt, typeface, weather">🌦 evolve world</button> <span id="weatherLabel"></span></div><div id="roomchat"><div id="rc-head"><b>room chat</b><span><button id="rc-min" title="collapse">▾</button><button id="rc-close" title="close">×</button></span></div><div id="rc-body"><div id="quick"></div>
+<div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
+<div id="log"></div></div></div><button id="rc-open">💬 chat</button><div id="whisper"><input id="whisperIn" placeholder="say something to it…"></div><button id="soundBtn" title="sounds (off by default)">🔇</button></div>
 <div id="terrainrow"><input id="terrain" placeholder="paste text, or a web address, and press enter: it grows into the world"><button id="terrainGo">grow world</button><button id="terrainClear">clear world</button><button id="collBtn">collection (0)</button></div>
 <details id="workshop"><summary>workshop · how they feel, evolve them, the collection, the world</summary><div id="drives"></div><div id="evo"></div>
 <div id="coll"></div><div id="worldrow"><b>world</b> <small id="worldInfo"></small> <button id="worldMut">mutate world</button><button id="worldReset">default world</button></div></details>
 <div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to talk to it directly · arrow keys nudge the selected one · drag a word onto the floor</span></div>
-<div id="quick"></div>
-<div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
-<div id="log"></div>
 <aside id="lab"><div id="lab-head"><b>lab · arena</b><button id="lab-close">close</button></div><div id="lab-thread"></div><div id="lab-form"><textarea id="lab-text" placeholder="notes to the lab: what to change about the creatures, the arena… (Cmd+Enter)"></textarea><button id="lab-send">send</button> <small style="opacity:.6">replies appear here; the lab can push new genomes</small></div></aside><button id="lab-toggle">lab</button>
 <script>
 (() => {
@@ -125,19 +132,29 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   let events = []; try { events = JSON.parse(localStorage.getItem('tinyoracle.events') || '[]'); } catch (e) {}
   function logEvent(type, extra) { events.push({ t: Date.now(), page: 'arena', type: 'arena_' + type, ...(extra || {}) }); if (events.length > 5000) events = events.slice(-5000); try { localStorage.setItem('tinyoracle.events', JSON.stringify(events)); } catch (e) {} }
   function say(who, text, cls) { const d = document.createElement('div'); d.className = 'ln ' + (cls || who); d.innerHTML = '<b>' + who + ':</b> ' + text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight; }
+  // ---------- space: a world 4x the view that wraps at every edge (a torus: walk off the right, come back on the left), with a camera ----------
+  const SPACE = { W: 1600, H: 1100 }, cam = { x: 0, y: 0, z: 1 };
+  (() => { const r = arenaEl.getBoundingClientRect(); SPACE.W = Math.max(1600, Math.round(r.width * 2)); SPACE.H = Math.max(1100, Math.round(r.height * 2)); cam.x = r.width / 2; cam.y = r.height / 2; floor.style.width = SPACE.W + 'px'; floor.style.height = SPACE.H + 'px'; })();
+  const wd = (a, b, L) => { let d = ((b - a) % L + L) % L; if (d > L / 2) d -= L; return d; };   // shortest signed step from a to b around the loop
+  const near = (v, c, L) => c + wd(c, v, L);                                                          // the copy of v closest to c
+  const dist = (p, q) => Math.hypot(wd(p.x, q.x, SPACE.W), wd(p.y, q.y, SPACE.H));
+  function viewSize() { const r = arenaEl.getBoundingClientRect(); return { w: r.width, h: r.height, r }; }
+  function toWorld(cx, cy) { const { w, h, r } = viewSize(); return { x: cam.x + (cx - r.left - w / 2) / cam.z, y: cam.y + (cy - r.top - h / 2) / cam.z }; }
+  function applyCam() { const { w, h } = viewSize(); const zmin = Math.max(w / SPACE.W, h / SPACE.H); cam.z = Math.max(zmin, Math.min(2.5, cam.z)); cam.x = ((cam.x % SPACE.W) + SPACE.W) % SPACE.W; cam.y = ((cam.y % SPACE.H) + SPACE.H) % SPACE.H;
+    floor.style.transform = `translate(${w / 2 - cam.x * cam.z}px,${h / 2 - cam.y * cam.z}px) scale(${cam.z})`; words.forEach(place); }
   // ---------- words on the floor (the objects creatures act on) ----------
-  const words = []; let dragging = null;
+  const words = []; let dragging = null; applyCam();
   function addWord(text, x, y, piece) {
     const el = document.createElement('div'); el.className = 'word' + (piece ? ' piece' : ''); el.textContent = text; const w = { text: text.toLowerCase(), el, x, y, carriedBy: null, piece: !!piece, vx: 0, vy: 0, rot: 0, vr: 0 }; words.push(w); floor.appendChild(el); place(w);
     el.addEventListener('pointerdown', ev => { if (w.carriedBy) return; dragging = w; el.setPointerCapture(ev.pointerId); logEvent('word_drag', { word: w.text }); });
-    el.addEventListener('pointermove', ev => { if (dragging !== w) return; const r = arenaEl.getBoundingClientRect(); w.x = Math.max(10, Math.min(r.width - 10, ev.clientX - r.left)); w.y = Math.max(10, Math.min(r.height - 10, ev.clientY - r.top)); place(w); });
+    el.addEventListener('pointermove', ev => { if (dragging !== w) return; const p = toWorld(ev.clientX, ev.clientY); w.x = p.x; w.y = p.y; place(w); });
     el.addEventListener('pointerup', () => { dragging = null; }); return w;
   }
   const HL = ['#2b5cff', '#00b8e6', '#ffd400', '#3ddc5a', '#ff6a2b', '#b18cff'];
   function hit(w, c) { const now = performance.now(); if (now - (w.lastHit || 0) < 600) return; w.lastHit = now; const col = c.g.hlColor || HL[(c.key.length * 7 + w.text.length) % HL.length];
     w.el.animate([{ boxShadow: `0 0 0 2px ${col}`, background: col + '55' }, { boxShadow: '0 0 0 0 transparent' }], { duration: 1300, easing: 'ease-out' }); }
   function stepped(w) { w.el.classList.remove('stepped'); void w.el.offsetWidth; w.el.classList.add('stepped'); clearTimeout(w._st); w._st = setTimeout(() => w.el.classList.remove('stepped'), 900); }
-  function place(w) { w.el.style.left = w.x + 'px'; w.el.style.top = w.y + 'px'; w.el.style.transform = 'translate(-50%,-50%) rotate(' + (w.rot || 0).toFixed(1) + 'deg)'; }
+  function place(w) { w.el.style.left = near(w.x, cam.x, SPACE.W) + 'px'; w.el.style.top = near(w.y, cam.y, SPACE.H) + 'px'; w.el.style.transform = 'translate(-50%,-50%) rotate(' + (w.rot || 0).toFixed(1) + 'deg)'; }
   function findWord(text) { if (!text) return null; const t = text.toLowerCase().trim(); return words.find(w => !w.carriedBy && w.text === t) || words.find(w => !w.carriedBy && (w.text.startsWith(t) || t.startsWith(w.text)) && Math.min(w.text.length, t.length) >= 3) || null; }
   // ---------- creatures (Oct 28): spider-style bodies with IK legs planted in world space, a genome per creature, idle life, pick-up ----------
   // Leg mechanics follow the web-crawler genre (fredfokan/web-crawler, cyohei9907/web-crawlers): each foot stays planted until it lags its
@@ -190,7 +207,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY, moved: false }; el.setPointerCapture(ev.pointerId); });
     el.addEventListener('pointermove', ev => {
       if (!down) return; if (!down.moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) { down.moved = true; c.held = true; c.state = 'held'; select(c); speak(c, 'held'); logEvent('picked_up', { who: c.name, genome: c.g.id }); feel(c, 'drag'); if (Math.random() < 0.6) oracleComment(pick(ORACLE_SEEDS.held(c.name)), 'held'); }
-      if (down.moved) { const r = arenaEl.getBoundingClientRect(); c.x = c.tx = Math.max(20, Math.min(r.width - 20, ev.clientX - r.left)); c.y = c.ty = Math.max(20, Math.min(r.height - 20, ev.clientY - r.top)); }
+      if (down.moved) { const p = toWorld(ev.clientX, ev.clientY); const nx = c.x + wd(c.x, p.x, SPACE.W), ny = c.y + wd(c.y, p.y, SPACE.H); c.x = c.tx = nx; c.y = c.ty = ny; }
     });
     el.addEventListener('pointerup', () => { if (!down) return; const moved = down.moved; down = null; if (moved) { c.held = false; c.state = 'idle'; c.legs.forEach(L => { L.swing = null; }); speak(c, 'dropped'); logEvent('put_down', { who: c.name }); } else { select(c); feel(c, 'click'); openWhisper(c); } });
     el.addEventListener('pointerenter', () => feel(c, 'hover'));
@@ -202,7 +219,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   function select(c) { selected = c; }
   const clamp = v => Math.max(0, Math.min(1, v)); const pick = a => a[Math.floor(Math.random() * a.length)];
   function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); Sound.chirp(c, t); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); return t; }
-  function otherOf(c) { return creatures.filter(k => k !== c).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0] || c; }
+  function otherOf(c) { return creatures.filter(k => k !== c).sort((a, b) => dist(a, c) - dist(b, c))[0] || c; }
   function feel(c, what) { c.d.affection = clamp(c.d.affection + ({ hover: 0.05, click: 0.12, drag: 0.08, mention: 0.2, ack: 0.15 }[what] || 0)); c.d.curiosity = clamp(c.d.curiosity + 0.04); logEvent('feel', { who: c.name, what, genome: c.g.id, drives: snap(c) }); }
   function snap(c) { return { h: +c.d.hunger.toFixed(2), c: +c.d.curiosity.toFixed(2), f: +c.d.fatigue.toFixed(2), a: +c.d.affection.toFixed(2) }; }
   function bars(c) { const b = (v, lab) => `<span class="dv" title="${lab} ${Math.round(v * 100)}%"><i style="width:${Math.round(v * 100)}%"></i></span> ${lab}`; return `<div class="drow"><b>${c.name}</b> <span class="dstate">${({ idle: 'idling', move: 'on the move', sleep: 'asleep', hide: 'hiding', held: 'being held' })[c.state] || c.state}${c.carrying ? ', carrying “' + c.carrying.text + '”' : ''}</span> ${b(c.d.hunger, 'hungry')} ${b(c.d.curiosity, 'curious')} ${b(c.d.fatigue, 'tired')} ${b(c.d.affection, 'fond of you')}</div>`; }
@@ -246,25 +263,25 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       c.vx = c.vx * 0.8 + vx * 0.2; c.vy = c.vy * 0.8 + vy * 0.2;
       if (Math.hypot(c.vx, c.vy) > 0.2) { const want = Math.atan2(c.vy, c.vx); let d = want - c.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); c.heading += d * 0.08; }
       else if (!c.held && c.state !== 'sleep') c.heading += Math.sin(t / 1300 + c.phase) * 0.003;   // looking around
-      if (!c.held && c.state === 'idle' && t > c.nextShift && Math.hypot(c.tx - c.x, c.ty - c.y) < 2) { c.nextShift = t + 2500 + Math.random() * 4000; const r = arenaEl.getBoundingClientRect(); c.tx = Math.max(30, Math.min(r.width - 30, c.x + (Math.random() - .5) * 46)); c.ty = Math.max(30, Math.min(r.height - 30, c.y + (Math.random() - .5) * 46)); }   // weight shifts: creatures rarely stay still
-      stepLegs(c, t); svg += legsSVG(c) + bodySVG(c, t);
-      const hitR = Math.max(c.g.bodyL, c.g.bodyW) + 14; c.el.style.cssText = `left:${c.x}px;top:${c.y}px;width:${hitR * 2}px;height:${hitR * 2}px;opacity:${c.state === 'hide' ? 0.12 : 1}`;
-      c.bub.style.left = c.x + 'px'; c.bub.style.top = (c.y - c.g.bodyW - 18) + 'px';
+      if (!c.held && c.state === 'idle' && t > c.nextShift && Math.hypot(c.tx - c.x, c.ty - c.y) < 2) { c.nextShift = t + 2500 + Math.random() * 4000; c.tx = c.x + (Math.random() - .5) * 46; c.ty = c.y + (Math.random() - .5) * 46; }   // weight shifts: creatures rarely stay still
+      stepLegs(c, t); const ox = near(c.x, cam.x, SPACE.W) - c.x, oy = near(c.y, cam.y, SPACE.H) - c.y; c.ox = ox; c.oy = oy; svg += `<g transform="translate(${ox},${oy})">` + legsSVG(c) + bodySVG(c, t) + '</g>';
+      const hitR = Math.max(c.g.bodyL, c.g.bodyW) + 14; c.el.style.cssText = `left:${c.x + ox}px;top:${c.y + oy}px;width:${hitR * 2}px;height:${hitR * 2}px;opacity:${c.state === 'hide' ? 0.12 : 1}`;
+      c.bub.style.left = (c.x + ox) + 'px'; c.bub.style.top = (c.y + oy - c.g.bodyW - 18) + 'px';
       if (c.carrying) { c.carrying.x = c.x + 18; c.carrying.y = c.y - 26; place(c.carrying); }
       if (c.until && Date.now() > c.until) { c.until = 0; if (c.state === 'sleep' || c.state === 'hide') { c.state = 'idle'; } }
     }
     // word physics: feet that land and bodies that pass kick words; words slide, spin, damp, and flash a highlight
     const r = arenaEl.getBoundingClientRect();
     for (const c of creatures) { if (c.state === 'hide') continue; const bodyR = Math.max(c.g.bodyL, c.g.bodyW) * 0.7 + 6, fast = Math.hypot(c.vx, c.vy);
-      for (const w of words) { if (w.carriedBy || w === dragging) continue; const dx = w.x - c.x, dy = w.y - c.y, d = Math.hypot(dx, dy) || 1;
+      for (const w of words) { if (w.carriedBy || w === dragging) continue; const dx = wd(c.x, w.x, SPACE.W), dy = wd(c.y, w.y, SPACE.H), d = Math.hypot(dx, dy) || 1;
         if (d < bodyR * 0.8 && (fast > 0.3 || c.held) && performance.now() - (w.pushed || 0) > 500) { w.pushed = performance.now(); const sp = Math.hypot(c.vx, c.vy) || 1, nx = -c.vy / sp, ny = c.vx / sp, side = (dx * nx + dy * ny) >= 0 ? 1 : -1, k = (c.held ? 2.2 : 0.9) * (c.g.kick ?? 1); w.vx += nx * side * k; w.vy += ny * side * k; w.vr += (Math.random() - .5) * 6 * k; stepped(w); } }
-      for (const L of c.legs) if (L.justLanded) { L.justLanded = false; for (const w of words) { if (w.carriedBy) continue; const dx = w.x - L.foot.x, dy = w.y - L.foot.y, d = Math.hypot(dx, dy) || 1; if (d < 14) { const k = (14 - d) / 14 * 0.9 * (c.g.kick ?? 1); w.vx += dx / d * k; w.vy += dy / d * k; w.vr += (Math.random() - .5) * 5 * k; stepped(w); Sound.step(c); } } } }
+      for (const L of c.legs) if (L.justLanded) { L.justLanded = false; for (const w of words) { if (w.carriedBy) continue; const dx = wd(L.foot.x, w.x, SPACE.W), dy = wd(L.foot.y, w.y, SPACE.H), d = Math.hypot(dx, dy) || 1; if (d < 14) { const k = (14 - d) / 14 * 0.9 * (c.g.kick ?? 1); w.vx += dx / d * k; w.vy += dy / d * k; w.vr += (Math.random() - .5) * 5 * k; stepped(w); Sound.step(c); } } } }
     for (const w of words) { if (w.carriedBy || w === dragging) continue; if (Math.abs(w.vx) + Math.abs(w.vy) + Math.abs(w.vr) < 0.02) continue;
       w.x += w.vx; w.y += w.vy; w.rot += w.vr; w.vx *= 0.82; w.vy *= 0.82; w.vr *= 0.82; w.rot *= 0.97;
-      if (w.x < 12 || w.x > r.width - 12) { w.vx *= -0.6; w.x = Math.max(12, Math.min(r.width - 12, w.x)); } if (w.y < 12 || w.y > r.height - 12) { w.vy *= -0.6; w.y = Math.max(12, Math.min(r.height - 12, w.y)); } place(w); }
+      place(w); }
     // targeting lasers (an evolvable trait): a beam and a ring on what the creature is going for
-    for (const c of creatures) { if (!c.g.laser || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T = c.target, hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2;
-      svg += `<line x1="${c.x}" y1="${c.y}" x2="${T.x}" y2="${T.y}" stroke="hsl(${hue},95%,60%)" stroke-width="1" stroke-dasharray="3 3" opacity=".85"/><ellipse cx="${T.x}" cy="${T.y}" rx="${T.text.length * 4.2 + 14 + j}" ry="${13 + j / 2}" fill="none" stroke="hsl(${hue},95%,60%)" stroke-width="1.4"/><text x="${T.x + T.text.length * 4 + 18}" y="${T.y - 12}" font-size="9" font-family="ui-monospace,Menlo,monospace" fill="hsl(${hue},95%,${matchMedia('(prefers-color-scheme: dark)').matches ? 70 : 38}%)">${c.name.toUpperCase()} · ${T.text.toUpperCase()}</text>`; }
+    for (const c of creatures) { if (!c.g.laser || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T0 = c.target, T = { x: c.x + c.ox + wd(c.x, T0.x, SPACE.W), y: c.y + c.oy + wd(c.y, T0.y, SPACE.H), text: T0.text }, hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2;
+      svg += `<line x1="${c.x + c.ox}" y1="${c.y + c.oy}" x2="${T.x}" y2="${T.y}" stroke="hsl(${hue},95%,60%)" stroke-width="1" stroke-dasharray="3 3" opacity=".85"/><ellipse cx="${T.x}" cy="${T.y}" rx="${T.text.length * 4.2 + 14 + j}" ry="${13 + j / 2}" fill="none" stroke="hsl(${hue},95%,60%)" stroke-width="1.4"/><text x="${T.x + T.text.length * 4 + 18}" y="${T.y - 12}" font-size="9" font-family="ui-monospace,Menlo,monospace" fill="hsl(${hue},95%,${matchMedia('(prefers-color-scheme: dark)').matches ? 70 : 38}%)">${c.name.toUpperCase()} · ${T.text.toUpperCase()}</text>`; }
     web.innerHTML = svg; web.style.opacity = 1; creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
     if ($('#workshop').open && (!animate._d || t - animate._d > 400)) { animate._d = t; drivesEl.innerHTML = '<small style="opacity:.65">their drives: they get hungrier and more curious over time, tired from moving, fond of you when you play with them; the highest need picks what they do next</small>' + creatures.map(bars).join(''); } requestAnimationFrame(animate);
   }
@@ -301,7 +318,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     else if (a === 'keep') { lineage.push({ t: Date.now(), key: k, why: 'keep', to: genomes[k].id, genome: genomes[k] }); addToCollection(k, genomes[k]); saveGenomes(); renderEvo(); logEvent('genome_keep', { id: genomes[k].id }); } });
   let labGenomeV = (() => { try { return +(localStorage.getItem('arena.labGenomeV') || 0); } catch (e) { return 0; } })();
   setInterval(async () => { try { const j = await (await fetch('arena_genomes.json', { cache: 'no-store' })).json(); if (j.v > labGenomeV) { labGenomeV = j.v; try { localStorage.setItem('arena.labGenomeV', j.v); } catch (e) {} for (const k of ['crawly', 'tok']) if (j[k]) applyGenome(k, { ...genomes[k], ...j[k], parent: genomes[k].id, id: j[k].id || (k + '-lab' + j.v) }, 'lab'); say('lab', j.note || 'new genomes from the lab', 'lab'); } } catch (e) {} }, 8000);
-  function goto(c, x, y) { const r = arenaEl.getBoundingClientRect(); c.tx = Math.max(30, Math.min(r.width - 30, x)); c.ty = Math.max(30, Math.min(r.height - 30, y)); c.state = 'move'; }
+  function goto(c, x, y) { c.tx = c.x + wd(c.x, x, SPACE.W); c.ty = c.y + wd(c.y, y, SPACE.H); c.state = 'move'; }
   function arrived(c) { return Math.hypot(c.tx - c.x, c.ty - c.y) < 3; }
   async function when(pred, ms) { const t0 = Date.now(); while (!pred() && Date.now() - t0 < (ms || 6000)) await new Promise(r => setTimeout(r, 60)); return pred(); }
   // ---------- actions (the options) ----------
@@ -311,7 +328,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     logEvent('task', { who: c.name, option: 'fetch', arg, success: true, word: w.text }); oracleComment(pick(ORACLE_SEEDS.fetched(w.text, c.name)), 'fetched'); return true;
   }
   async function doBring(c, target) {
-    if (!c.carrying) { speak(c, 'nope', { w: 'nothing' }); return false; } const w = c.carrying; const dest = target === 'oracle' ? { x: 380, y: 50 } : target === 'other' ? otherOf(c) : { x: 380, y: 400 };
+    if (!c.carrying) { speak(c, 'nope', { w: 'nothing' }); return false; } const w = c.carrying; const { w: vw, h: vh } = viewSize(); const dest = target === 'oracle' ? { x: cam.x, y: cam.y - vh / 2 / cam.z + 60 } : target === 'other' ? otherOf(c) : { x: cam.x, y: cam.y + vh / 2 / cam.z - 90 };
     goto(c, dest.x - 30, dest.y); await when(() => arrived(c)); c.carrying = null; w.carriedBy = null; w.el.classList.remove('carried'); w.x = c.x + 36; w.y = c.y; place(w); c.d.affection = clamp(c.d.affection + 0.1); speak(c, 'bring', { w: w.text }); c.state = 'idle';
     logEvent('task', { who: c.name, option: 'bring', target: target || 'user', success: true, word: w.text }); if (target === 'other') { feel(otherOf(c), 'ack'); oracleComment(pick(ORACLE_SEEDS.handover(w.text)), 'handover'); } return true;
   }
@@ -325,15 +342,15 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     c.d.hunger = clamp(c.d.hunger - 0.3); speak(c, 'chop', { p: pcs.join('|'), n: pcs.length }); c.state = 'idle'; logEvent('task', { who: c.name, option: 'chop', arg, success: true, pieces: pcs.length }); return true;
   }
   async function doEat(c) {   // Crawly's snack: pieces and crumbs the tokenizer left behind
-    const food = words.filter(w => w.piece && !w.carriedBy).sort((a, b) => (b.crumb - a.crumb) || (Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y)))[0]; if (!food) return false;
+    const food = words.filter(w => w.piece && !w.carriedBy).sort((a, b) => (b.crumb - a.crumb) || (dist(a, c) - dist(b, c)))[0]; if (!food) return false;
     c.target = food; goto(c, food.x, food.y + 10); await when(() => arrived(c), 9000); c.target = null; if (!words.includes(food) || food.carriedBy) return false;
     food.el.animate([{ transform: 'translate(-50%,-50%) scale(1)' }, { transform: 'translate(-50%,-50%) scale(0)' }], { duration: 300 }); setTimeout(() => { food.el.remove(); const i = words.indexOf(food); if (i >= 0) words.splice(i, 1); }, 280);
     Sound.crunch(); c.d.hunger = clamp(c.d.hunger - (food.crumb ? 0.12 : 0.22)); c.state = 'idle'; speak(c, 'eat', { w: food.text }); logEvent('task', { who: c.name, option: 'eat', success: true, word: food.text, crumb: !!food.crumb }); return true;
   }
   async function doSteal(c) {   // take what another creature is carrying
-    const victim = creatures.filter(k => k !== c && k.carrying && !k.held).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0]; if (!victim) return false;
-    for (let i = 0; i < 40 && victim.carrying && Math.hypot(victim.x - c.x, victim.y - c.y) > 22; i++) { goto(c, victim.x, victim.y); await new Promise(r => setTimeout(r, 120)); }
-    const w = victim.carrying; if (!w || Math.hypot(victim.x - c.x, victim.y - c.y) > 30) { speak(c, 'nope', { w: 'it' }); return false; }
+    const victim = creatures.filter(k => k !== c && k.carrying && !k.held).sort((a, b) => dist(a, c) - dist(b, c))[0]; if (!victim) return false;
+    for (let i = 0; i < 40 && victim.carrying && dist(victim, c) > 22; i++) { goto(c, victim.x, victim.y); await new Promise(r => setTimeout(r, 120)); }
+    const w = victim.carrying; if (!w || dist(victim, c) > 30) { speak(c, 'nope', { w: 'it' }); return false; }
     if (Math.random() < 0.35) { speak(victim, 'guard'); logEvent('steal', { who: c.name, from: victim.name, success: false }); return false; }
     victim.carrying = null; w.carriedBy = c; c.carrying = w; speak(c, 'steal', { w: w.text }); speak(victim, 'robbed'); victim.d.affection = clamp(victim.d.affection - 0.2); c.state = 'idle';
     logEvent('steal', { who: c.name, from: victim.name, word: w.text, success: true }); oracleComment(pick([`${c.name} just took "${w.text}" from ${victim.name}. There is no law in this room`, `Theft in my room. "${w.text}" changed owners without asking`, `${victim.name} had "${w.text}". Had`]), 'steal'); return true;
@@ -346,7 +363,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   }
   async function doSimple(c, opt) {
     if (opt === 'greet') { speak(c, 'greet'); [0, 150, 300, 450].forEach((ms, i) => setTimeout(() => { c.heading += (i % 2 ? -0.5 : 0.5); }, ms)); c.d.affection = clamp(c.d.affection + 0.1); }
-    if (opt === 'come') { goto(c, 380, 300); speak(c, 'come'); await when(() => arrived(c)); c.state = 'idle'; }
+    if (opt === 'come') { goto(c, cam.x, cam.y); speak(c, 'come'); await when(() => arrived(c)); c.state = 'idle'; }
     if (opt === 'sleep') { c.state = 'sleep'; c.until = Date.now() + 15000; speak(c, 'sleep'); oracleComment(pick(ORACLE_SEEDS.sleeping(c.name)), 'sleeping'); }
     if (opt === 'hide') { c.state = 'hide'; c.until = Date.now() + 10000; speak(c, 'hide'); }
     logEvent('task', { who: c.name, option: opt, success: true }); return true;
@@ -362,7 +379,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const sc = { wander: 0.25 + 0.5 * c.d.curiosity - 0.5 * c.d.fatigue, fetch: free.length && c.options.includes('fetch') ? 0.9 * c.d.hunger + 0.3 * c.d.curiosity - 0.6 * c.d.fatigue : -1, chop: free.length && c.options.includes('chop') ? 0.8 * c.d.hunger - 0.5 * c.d.fatigue : -1, bring: c.carrying ? 0.7 * c.d.affection : -1, nap: 1.1 * c.d.fatigue - 0.2, hand: c.carrying && c.d.curiosity > 0.6 ? 0.5 : -1, eat: c.voiceKey === 'crawly' && words.some(w => w.piece && !w.carriedBy) ? 1.1 * c.d.hunger + 0.1 : -1, steal: !c.carrying && creatures.some(k => k !== c && k.carrying) ? 0.55 * c.d.hunger + 0.45 * c.d.curiosity - 0.5 * c.d.affection - 0.1 : -1 };
     const best = Object.keys(sc).sort((a, b) => sc[b] - sc[a])[0]; logEvent('decide', { who: c.name, reason, drives: snap(c), scores: Object.fromEntries(Object.entries(sc).map(([k, v]) => [k, +v.toFixed(2)])), chosen: best });
     const r = arenaEl.getBoundingClientRect();
-    if (best === 'wander') { goto(c, 40 + Math.random() * (r.width - 80), 40 + Math.random() * (r.height - 80)); speak(c, 'own', { w: free.length ? pick(free).text : '' }); }
+    if (best === 'wander') { goto(c, c.x + (Math.random() - .5) * 700, c.y + (Math.random() - .5) * 500); speak(c, 'own', { w: free.length ? pick(free).text : '' }); }
     else if (best === 'fetch') act(c, 'fetch', pick(free).text); else if (best === 'chop') act(c, 'chop', pick(free).text); else if (best === 'bring') act(c, 'bring', 'user'); else if (best === 'hand') act(c, 'hand'); else if (best === 'eat') act(c, 'eat'); else if (best === 'steal') act(c, 'steal'); else if (best === 'nap') act(c, 'sleep');
   }
   setInterval(() => creatures.forEach(c => ownThing(c, 'timer')), 7000);
@@ -409,8 +426,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // ---------- UI ----------
   $('#send').addEventListener('click', () => { const t = $('#chat').value.trim(); if (!t || !hidSession) return; $('#chat').value = ''; handleChat(t); });
   $('#chat').addEventListener('keydown', e => { if (e.key === 'Enter') $('#send').click(); });
-  $('#newword').addEventListener('keydown', e => { if (e.key !== 'Enter') return; const t = e.target.value.trim(); if (!t) return; e.target.value = ''; const ch = document.createElement('span'); ch.className = 'chip'; ch.textContent = t; ch.draggable = true; ch.addEventListener('dragstart', ev => ev.dataTransfer.setData('text', t)); ch.addEventListener('click', () => addWord(t, 120 + Math.random() * 500, 80 + Math.random() * 300)); $('#chips').appendChild(ch); logEvent('toy', { word: t }); });
-  arenaEl.addEventListener('dragover', e => e.preventDefault()); arenaEl.addEventListener('drop', e => { e.preventDefault(); const t = e.dataTransfer.getData('text'); if (!t) return; const r = arenaEl.getBoundingClientRect(); addWord(t, e.clientX - r.left, e.clientY - r.top); logEvent('word_dropped', { word: t }); });
+  $('#newword').addEventListener('keydown', e => { if (e.key !== 'Enter') return; const t = e.target.value.trim(); if (!t) return; e.target.value = ''; const ch = document.createElement('span'); ch.className = 'chip'; ch.textContent = t; ch.draggable = true; ch.addEventListener('dragstart', ev => ev.dataTransfer.setData('text', t)); ch.addEventListener('click', () => addWord(t, cam.x + (Math.random() - .5) * 400, cam.y + (Math.random() - .5) * 260)); $('#chips').appendChild(ch); logEvent('toy', { word: t }); });
+  arenaEl.addEventListener('dragover', e => e.preventDefault()); arenaEl.addEventListener('drop', e => { e.preventDefault(); const t = e.dataTransfer.getData('text'); if (!t) return; const p = toWorld(e.clientX, e.clientY); addWord(t, p.x, p.y); logEvent('word_dropped', { word: t }); });
   document.addEventListener('keydown', e => { if (!selected || !e.key.startsWith('Arrow')) return; if (document.activeElement && document.activeElement.tagName === 'INPUT') return; e.preventDefault(); const d = { ArrowLeft: [-30, 0], ArrowRight: [30, 0], ArrowUp: [0, -30], ArrowDown: [0, 30] }[e.key]; goto(selected, selected.tx + d[0], selected.ty + d[1]); feel(selected, 'drag'); logEvent('nudge', { who: selected.name, key: e.key }); });
   $('#export').addEventListener('click', () => { const b = new Blob([JSON.stringify(events.filter(e => e.page === 'arena'), null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'arena_log.json'; a.click(); });
   window.__arena = { act: (i, o, a) => act(creatures[i], o, a), genomes: () => genomes, mutate: k => applyGenome(k, mutate(k), 'mutate'), addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
@@ -434,7 +451,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   function release(x, quiet) {
     if (creatures.filter(c => c.visitor).length >= 6) { say('lab', 'the arena holds six extra residents at most; remove one first', 'lab'); return; }
     const k = 'v' + (++visitorN), g = { ...x.genome }, r = arenaEl.getBoundingClientRect(); const voice = g.body === 'chip' ? 'crawly' : 'tok';
-    const c = mk(g.name || x.key, k, 40 + Math.random() * (r.width - 80), 40 + Math.random() * (r.height - 80), { genome: g, options: voice === 'crawly' ? ['fetch', 'bring', 'greet', 'come', 'sleep', 'hide', 'hand'] : ['chop', 'greet', 'come', 'sleep', 'hide', 'hand'], voice });
+    const c = mk(g.name || x.key, k, cam.x + (Math.random() - .5) * 500, cam.y + (Math.random() - .5) * 300, { genome: g, options: voice === 'crawly' ? ['fetch', 'bring', 'greet', 'come', 'sleep', 'hide', 'hand'] : ['chop', 'greet', 'come', 'sleep', 'hide', 'hand'], voice });
     c.name = (g.name || x.key) + ' (' + g.id.slice(-4) + ')'; creatures.push(c); renderEvo(); saveResidents(); if (quiet) return; speak(c, 'greet'); logEvent('visitor', { id: g.id }); oracleComment(`A new resident from the collection: ${c.name}. Looks like family`, 'visitor');
   }
   function saveResidents() { try { localStorage.setItem('arena.residents', JSON.stringify(creatures.filter(c => c.visitor).map(c => c.g.id))); } catch (e) {} }
@@ -448,17 +465,18 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   const GRASS = new Set('a an the of to in on at by for and or but is was are were be been it its as with from that this he she they we you i his her their my your our not no so if then than there here who whom which what when where why how all any each into upon over under after before up down out off yea'.split(' '));
   function clearTerrain() { for (let i = words.length - 1; i >= 0; i--) if (words[i].terrain && !words[i].carriedBy) { words[i].el.remove(); words.splice(i, 1); } floor.querySelectorAll('.island').forEach(e => e.remove()); }
   // the world has a genome too (Nico: "should we be evolving the environment too?"): layout, typeface, size, spacing, ink colour, density
-  const DEFAULT_WORLD = { id: 'world-0', layout: 'page', font: 'serif', size: 15, line: 1.65, ink: 0, inkSat: 0, density: 1, margin: 40 };
+  const WEATHERS = ['clear', 'bitrain', 'static', 'fog', 'wind', 'hum'], WEATHER_NAMES = { clear: 'clear', bitrain: 'bit rain', static: 'static storm', fog: 'packet fog', wind: 'data wind', hum: 'mains hum' };
+  const DEFAULT_WORLD = { id: 'world-0', layout: 'mix', font: 'serif', size: 15, line: 1.65, ink: 0, inkSat: 0, density: 1, margin: 40, tilt: 18, mounds: 5, weather: 'bitrain', wint: 0.35 };
   let world = (() => { try { return { ...DEFAULT_WORLD, ...JSON.parse(localStorage.getItem('arena.world') || '{}') }; } catch (e) { return { ...DEFAULT_WORLD }; } })();
   let lastWorldText = null;
-  function saveWorld() { try { localStorage.setItem('arena.world', JSON.stringify(world)); } catch (e) {} const el = $('#worldInfo'); if (el) el.textContent = `${world.id} · ${world.layout} · ${world.font} ${world.size}px · spacing ${(+world.line).toFixed(2)} · ink ${world.inkSat ? 'hue ' + world.ink : 'plain'}`; }
+  function saveWorld() { try { localStorage.setItem('arena.world', JSON.stringify(world)); } catch (e) {} const el = $('#worldInfo'); if (el) el.textContent = `${world.id} · ${world.layout} · tilt ±${world.tilt ?? 18}° · ${world.font} ${world.size}px · ink ${world.inkSat ? 'hue ' + world.ink : 'plain'} · weather ${WEATHER_NAMES[world.weather] || world.weather} ${Math.round((world.wint ?? .35) * 100)}%`; const wl = $('#weatherLabel'); if (wl) wl.textContent = '☁ ' + (WEATHER_NAMES[world.weather] || world.weather); if (window.__weather) window.__weather.set(world.weather, world.wint ?? .35); }
   function worldFont() { return { serif: "Georgia,'Times New Roman',serif", mono: 'ui-monospace,Menlo,monospace', sans: 'system-ui,sans-serif' }[world.font] || 'Georgia,serif'; }
   function mutateWorld() { const g = (v, r) => +(v * Math.exp(gauss() * r)).toFixed(2); const w = { ...world, id: 'world-' + Date.now().toString(36).slice(-4) };
-    if (Math.random() < 0.3) w.layout = pick(['page', 'islands', 'scatter', 'columns']); if (Math.random() < 0.3) w.font = pick(['serif', 'mono', 'sans']);
+    if (Math.random() < 0.35) w.layout = pick(['mix', 'mounds', 'spread', 'page']); w.tilt = Math.max(0, Math.min(45, Math.round((world.tilt ?? 18) + gauss() * 8))); w.mounds = Math.max(2, Math.min(10, (world.mounds || 5) + Math.round(gauss() * 1.5))); if (Math.random() < 0.6) w.weather = pick(WEATHERS.filter(x => x !== world.weather)); w.wint = Math.max(0.1, Math.min(1, +((world.wint ?? 0.35) * Math.exp(gauss() * 0.35)).toFixed(2))); if (Math.random() < 0.3) w.font = pick(['serif', 'mono', 'sans']);
     w.size = Math.max(11, Math.min(20, Math.round(g(world.size, 0.12)))); w.line = Math.max(1.2, Math.min(2.4, g(world.line, 0.12))); w.margin = Math.max(16, Math.min(90, Math.round(g(world.margin, 0.25))));
     w.density = Math.max(0.5, Math.min(1.6, g(world.density, 0.2))); if (Math.random() < 0.4) { w.inkSat = w.inkSat ? 0 : 45; } w.ink = Math.round((world.ink + gauss() * 60 + 360) % 360); return w; }
   function layTerrain(text, title) {
-    lastWorldText = { text, title }; if (world.layout !== 'islands') return layPage(text, title);
+    lastWorldText = { text, title }; return layPage(text, title);
     clearTerrain(); const r = arenaEl.getBoundingClientRect(), W = r.width, H = r.height;
     const sentences = String(text).replace(/\s+/g, ' ').split(/(?<=[.!?;:])\s+/).map(se => se.split(' ').map(w => ({ raw: w.replace(/^[^\w']+|[^\w']+$/g, ''), }) ).filter(o => /^[A-Za-z][A-Za-z'-]{0,17}$/.test(o.raw))).filter(a => a.length);
     let flat = []; sentences.forEach((se, si) => se.forEach(o => flat.push({ ...o, si }))); flat = flat.slice(0, 220); if (!flat.length) return;
@@ -475,16 +493,20 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     say('lab', 'world: ' + (title ? '"' + title.slice(0, 60) + '", ' : '') + flat.length + ' words on ' + nIsl + ' islands', 'lab'); logEvent('terrain', { n: flat.length, islands: nIsl, url: !!title });
     oracleComment(pick([`New world. ${nIsl} islands of words, and the legs have noticed`, `Someone grew a landscape in my room. The crawler will eat half of it`, `My room has islands now. ${title ? 'They used to be ' + title.slice(0, 40) : 'Do not ask me to read them'}`]), 'terrain');
   }
-  function layPage(text, title) {   // plain flowing text, like a page the creatures walk on (the video's look): page, scatter or columns
-    clearTerrain(); const r = arenaEl.getBoundingClientRect(), W = r.width, H = r.height, fs = world.size, lh = fs * world.line, cw = fs * (world.font === 'mono' ? 0.62 : 0.5);
-    const toks = String(text).replace(/\s+/g, ' ').split(' ').map(w => w.replace(/^[^\w']+|[^\w']+$/g, '')).filter(w => /^[A-Za-z][A-Za-z'-]{0,17}$/.test(w)).slice(0, Math.round(260 * world.density));
-    const cols = world.layout === 'columns' ? 2 : 1, colW = (W - world.margin * (cols + 1)) / cols; let col = 0, x = world.margin, y = world.margin * 0.7 + lh / 2, placed = 0;
-    for (const raw of toks) { const w = raw.length * cw + fs * 0.45; let px, py;
-      if (world.layout === 'scatter') { px = world.margin + Math.random() * (W - 2 * world.margin); py = world.margin + Math.random() * (H - 2 * world.margin); }
-      else { const left = world.margin + col * (colW + world.margin); if (x + w > left + colW) { x = left; y += lh; } if (y > H - world.margin * 0.5) { if (++col >= cols) break; x = world.margin + col * (colW + world.margin); y = world.margin * 0.7 + lh / 2; } if (x < left) x = left; px = x + w / 2; py = y; x += w; }
-      const ww = addWord(raw.toLowerCase(), px, py); ww.terrain = true; ww.el.classList.add('terrain', 't-page'); ww.el.style.font = `${fs}px/1 ${worldFont()}`; if (world.inkSat) ww.el.style.color = `hsl(${world.ink},${world.inkSat}%,55%)`; placed++; }
-    say('lab', 'world: ' + (title ? '"' + title.slice(0, 60) + '", ' : '') + placed + ' words, ' + world.layout, 'lab'); logEvent('terrain', { n: placed, layout: world.layout, world: world.id, url: !!title });
-    oracleComment(pick([`New floor. Words everywhere, and the legs have noticed`, `Someone brought a page in. The crawler will eat half of it`, `My room is made of text now. ${title ? 'It used to be ' + title.slice(0, 40) : 'Do not ask me to read it'}`]), 'terrain');
+  function layPage(text, title) {   // spread the text over the whole world: mix (patches of text + mounds + strays), mounds, spread, or page; one size, one colour, varied tilt
+    clearTerrain(); const W = SPACE.W, H = SPACE.H, fs = world.size, lh = fs * world.line, cw = fs * (world.font === 'mono' ? 0.62 : 0.5), tilt = world.tilt ?? 18;
+    const toks = String(text).replace(/\s+/g, ' ').split(' ').map(w => w.replace(/^[^\w']+|[^\w']+$/g, '')).filter(w => /^[A-Za-z][A-Za-z'-]{0,17}$/.test(w)).slice(0, Math.round(320 * world.density));
+    const put = (raw, x, y, rot) => { const ww = addWord(raw.toLowerCase(), x, y); ww.terrain = true; ww.el.classList.add('terrain', 't-page'); ww.el.style.font = `${fs}px/1 ${worldFont()}`; if (world.inkSat) ww.el.style.color = `hsl(${world.ink},${world.inkSat}%,55%)`; ww.rot = rot; place(ww); };
+    const rnd = (a, b) => a + Math.random() * (b - a), rot = () => (Math.random() - .5) * 2 * tilt;
+    const patch = (list, cx, cy, width) => { let x = cx - width / 2, y = cy; const r0 = (Math.random() - .5) * tilt * 0.5; for (const raw of list) { const w = raw.length * cw + fs * 0.45; if (x + w > cx + width / 2) { x = cx - width / 2; y += lh; } put(raw, x + w / 2, y, r0 + (Math.random() - .5) * 4); x += w; } };
+    const mound = (list, cx, cy) => list.forEach((raw, i) => { const a = i * 2.39996, rr = 9 * Math.sqrt(i + 1); put(raw, cx + Math.cos(a) * rr * 1.6 + rnd(-6, 6), cy + Math.sin(a) * rr + rnd(-4, 4), rot() * 2); });
+    let i = 0; const take = n => toks.slice(i, i += n);
+    if (world.layout === 'page') patch(toks, W / 2, 60, W - 2 * world.margin);
+    else if (world.layout === 'spread') toks.forEach(raw => put(raw, rnd(0, W), rnd(0, H), rot()));
+    else if (world.layout === 'mounds') { const k = Math.max(2, world.mounds || 5), per = Math.ceil(toks.length / k); for (let m = 0; m < k; m++) mound(take(per), rnd(0, W), rnd(0, H)); }
+    else { while (i < toks.length) { const roll = Math.random(); if (roll < 0.35) patch(take(18 + Math.floor(Math.random() * 30)), rnd(0, W), rnd(0, H), rnd(160, 340)); else if (roll < 0.7) mound(take(8 + Math.floor(Math.random() * 18)), rnd(0, W), rnd(0, H)); else take(6).forEach(raw => put(raw, rnd(0, W), rnd(0, H), rot())); } }
+    say('lab', 'world: ' + (title ? '"' + title.slice(0, 60) + '", ' : '') + toks.length + ' words, ' + world.layout + ' (pan to explore, the edges wrap)', 'lab'); logEvent('terrain', { n: toks.length, layout: world.layout, world: world.id, url: !!title });
+    oracleComment(pick([`New floor. Words everywhere, and the legs have noticed`, `Someone brought a page in and scattered it. The crawler will eat half of it`, `My room is made of text now. ${title ? 'It used to be ' + title.slice(0, 40) : 'Do not ask me to read it'}`]), 'terrain');
   }
   async function terrainFrom(input) {
     const v = input.trim(); if (!v) return;
@@ -504,7 +526,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   renderQuick();
   // ---------- whisper: click a creature to talk to it directly; it acts and answers in its own bubble ----------
   let whisperTo = null;
-  function openWhisper(c) { whisperTo = c; const el = $('#whisper'); el.style.display = 'block'; el.style.left = c.x + 'px'; el.style.top = (c.y + Math.max(c.g.bodyL, c.g.bodyW) + 18) + 'px'; const i = $('#whisperIn'); i.placeholder = 'say something to ' + c.name + '…'; i.value = ''; i.focus(); }
+  function openWhisper(c) { whisperTo = c; const el = $('#whisper'); el.style.display = 'block'; const { w, h } = viewSize(); const sx = w / 2 + (c.x + (c.ox || 0) - cam.x) * cam.z, sy = h / 2 + (c.y + (c.oy || 0) - cam.y) * cam.z + 30; el.style.left = sx + 'px'; el.style.top = sy + 'px'; return openWhisper2(c, el); }
+  function openWhisper2(c, el) {  const i = $('#whisperIn'); i.placeholder = 'say something to ' + c.name + '…'; i.value = ''; i.focus(); }
   $('#whisperIn').addEventListener('keydown', e => { if (e.key === 'Escape') { $('#whisper').style.display = 'none'; whisperTo = null; } if (e.key !== 'Enter' || !whisperTo || !hidSession) return; const t = e.target.value.trim(); if (!t) return; const c = whisperTo; $('#whisper').style.display = 'none'; whisperTo = null; logEvent('whisper', { to: c.name }); handleChat(t, c); });
   $('#whisperIn').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('#whisperIn')) $('#whisper').style.display = 'none'; }, 200));
   // ---------- sound (Web Audio, synthesized, off by default): footsteps, chirps per creature voice, snip, crunch ----------
@@ -514,12 +537,57 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       const s = a.createBufferSource(); s.buffer = b; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 4; const g = a.createGain(); g.gain.value = vol; s.connect(f); f.connect(g); g.connect(a.destination); s.start(); }
     function blip(t0, f0, f1, dur, vol, type) { const a = ensure(), o = a.createOscillator(), g = a.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f0, a.currentTime + t0); o.frequency.exponentialRampToValueAtTime(Math.max(40, f1), a.currentTime + t0 + dur);
       g.gain.setValueAtTime(0.0001, a.currentTime + t0); g.gain.exponentialRampToValueAtTime(vol, a.currentTime + t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur); o.connect(g); g.connect(a.destination); o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02); }
-    return { toggle() { on = !on; if (on) ensure().resume(); $('#soundBtn').textContent = on ? '🔊' : '🔇'; logEvent('sound', { on }); return on; },
+    return { toggle() { on = !on; if (on) ensure().resume(); $('#soundBtn').textContent = on ? '🔊' : '🔇'; logEvent('sound', { on }); this.ambient(...(this._ambK || ['clear', 0])); return on; },
       step(c) { if (!on) return; const now = performance.now(); if (now - lastStep < 45) return; lastStep = now; noise(0.03, 1800 + 4000 / (c.g.l1 + c.g.l2) * 30, 0.05); },
       chirp(c, text) { if (!on) return; const base = c.g.voicePitch || (c.voiceKey === 'crawly' ? 900 : 480), n = Math.min(6, 2 + Math.floor((text || '').length / 8)), wave = c.g.voiceWave || (c.voiceKey === 'crawly' ? 'square' : 'triangle');
         for (let i = 0; i < n; i++) { const f = base * Math.pow(2, (Math.random() - .5) * (c.g.voiceRange || 0.8)); blip(i * 0.075, f, f * (Math.random() < .5 ? 1.3 : 0.75), 0.06, 0.035, wave); } },
+      ambient(kind, k) { this._amb && this._amb.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); this._amb = []; clearInterval(this._ambT); this._ambK = [kind, k]; if (!on || kind === 'clear') return; const a = ensure(), out = a.createGain(); out.gain.value = 0.9; out.connect(a.destination); this._amb.push(out);
+        const loopNoise = (type, f, vol) => { const n = a.sampleRate * 2, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const src = a.createBufferSource(); src.buffer = b; src.loop = true; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const gg = a.createGain(); gg.gain.value = vol; src.connect(fl); fl.connect(gg); gg.connect(out); src.start(); this._amb.push(src); return fl; };
+        const tone = (f, vol, type) => { const o = a.createOscillator(), gg = a.createGain(); o.type = type || 'sine'; o.frequency.value = f; gg.gain.value = vol; o.connect(gg); gg.connect(out); o.start(); this._amb.push(o); return o; };
+        if (kind === 'bitrain') this._ambT = setInterval(() => { if (Math.random() < 0.5 + k / 2) blip(0, 2200 + Math.random() * 2600, 1800 + Math.random() * 1500, 0.025, 0.012 + 0.02 * k, 'sine'); }, 70);
+        if (kind === 'static') loopNoise('highpass', 3500, 0.012 + 0.03 * k);
+        if (kind === 'fog') { tone(68, 0.03 * k + 0.01); tone(71.5, 0.03 * k + 0.01); loopNoise('lowpass', 300, 0.01 * k); }
+        if (kind === 'wind') { const fl = loopNoise('bandpass', 600, 0.03 + 0.05 * k); const l = a.createOscillator(), lg = a.createGain(); l.frequency.value = 0.15; lg.gain.value = 400; l.connect(lg); lg.connect(fl.frequency); l.start(); this._amb.push(l); }
+        if (kind === 'hum') { tone(50, 0.02 + 0.02 * k); tone(100, 0.01 + 0.01 * k); tone(150, 0.006, 'triangle'); } },
       snip() { if (on) { noise(0.05, 5200, 0.12); blip(0.02, 2400, 900, 0.05, 0.03, 'sawtooth'); } }, crunch() { if (on) { noise(0.12, 900, 0.15); noise(0.08, 2400, 0.08); } } }; })();
   $('#soundBtn').addEventListener('click', () => Sound.toggle());
+  // ---------- digital weather: a visual layer over the arena and an ambient sound, part of the world genome ----------
+  const Weather = (() => { const cv = $('#weather'), g = cv.getContext('2d'); let kind = 'clear', k = 0.35, parts = [], amb = null;
+    function resize() { const { w, h } = viewSize(); cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio; g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); }
+    resize(); addEventListener('resize', () => { resize(); applyCam(); });
+    function seed() { const { w, h } = viewSize(); parts = []; const n = Math.round(({ bitrain: 140, static: 0, fog: 7, wind: 60, hum: 0, clear: 0 })[kind] * k); for (let i = 0; i < n; i++) parts.push({ x: Math.random() * w, y: Math.random() * h, v: 0.5 + Math.random(), c: Math.random() < 0.5 ? '0' : '1', r: 80 + Math.random() * 160 }); }
+    function draw(t) { const { w, h } = viewSize(); g.clearRect(0, 0, w, h); const dark = matchMedia('(prefers-color-scheme: dark)').matches, ink = dark ? '160,190,255' : '43,92,255';
+      if (kind === 'bitrain') { g.font = '11px ui-monospace,Menlo,monospace'; for (const p of parts) { p.y += 2.2 * p.v; if (p.y > h) { p.y = -10; p.x = Math.random() * w; p.c = Math.random() < 0.5 ? '0' : '1'; } g.fillStyle = `rgba(${ink},${0.12 + 0.2 * p.v * k})`; g.fillText(p.c, p.x, p.y); } }
+      else if (kind === 'static') { const n = Math.round(500 * k); g.fillStyle = `rgba(${dark ? '255,255,255' : '0,0,0'},${0.18 * k + 0.05})`; for (let i = 0; i < n; i++) g.fillRect(Math.random() * w, Math.random() * h, 1.5, 1.5); if (Math.random() < 0.08 * k) { g.fillStyle = `rgba(${ink},0.08)`; g.fillRect(0, Math.random() * h, w, 2 + Math.random() * 6); } }
+      else if (kind === 'fog') { for (const p of parts) { p.x += 0.15 * p.v; if (p.x - p.r > w) p.x = -p.r; const gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r); gr.addColorStop(0, `rgba(${dark ? '200,200,220' : '150,150,170'},${0.16 * k})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(p.x - p.r, p.y - p.r, 2 * p.r, 2 * p.r); } }
+      else if (kind === 'wind') { g.strokeStyle = `rgba(${ink},${0.12 + 0.15 * k})`; g.lineWidth = 1; for (const p of parts) { p.x += 7 * p.v * (0.5 + k); if (p.x > w + 40) { p.x = -40; p.y = Math.random() * h; } g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - 30 * p.v, p.y); g.stroke(); }
+        if (Math.random() < 0.3) for (const wd0 of words) if (!wd0.carriedBy && Math.random() < 0.01 * k) { wd0.vx += 0.6 * k; wd0.vr += (Math.random() - .5) * 2; } }   // the wind moves light things
+      else if (kind === 'hum') { const a = 0.04 + 0.04 * Math.sin(t / 300); g.strokeStyle = `rgba(${ink},${a * (0.5 + k)})`; g.lineWidth = 1; const step = 48 * cam.z; const ox = (-cam.x * cam.z) % step, oy = (-cam.y * cam.z) % step; for (let x = ox; x < w; x += step) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); } for (let y = oy; y < h; y += step) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } }
+      requestAnimationFrame(draw); }
+    requestAnimationFrame(draw);
+    return { set(kd, kk) { const changed = kd !== kind; kind = kd; k = kk; seed(); Sound.ambient(kind, k); if (changed && typeof oracleComment === 'function' && genSession) oracleComment(pick({ clear: ['The weather cleared. Nothing falling on the floor for once'], bitrain: ['It is raining bits again. Zeros mostly', 'Bit rain. The crawler hates getting ones in its legs'], static: ['Static storm. Hold on to your words', 'Static in the air, everything crackles'], fog: ['Packet fog. I can barely see the other side of the room', 'Foggy in here, the far words are guesses'], wind: ['Data wind from the left. Light words are leaving', 'Windy. Hold on to the small words'], hum: ['The mains hum is back. Everything vibrates a little', 'Humming weather. Good for sleeping'] }[kind] || ['The weather changed']), 'weather'); }, get: () => ({ kind, k }) }; })();
+  // ---------- camera: drag the floor to pan, wheel or pinch to zoom, minimap to jump ----------
+  (() => { let pan = null;
+    arenaEl.addEventListener('pointerdown', e => { if (e.target !== arenaEl && e.target !== floor && e.target.id !== 'web' && !(e.target.closest && e.target.closest('#web'))) return; if (e.target.closest && (e.target.closest('.creature') || e.target.closest('.word'))) return; pan = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false }; arenaEl.setPointerCapture(e.pointerId); });
+    arenaEl.addEventListener('pointermove', e => { if (!pan) return; const dx = e.clientX - pan.x, dy = e.clientY - pan.y; if (Math.hypot(dx, dy) > 3) { pan.moved = true; arenaEl.classList.add('panning'); } cam.x = pan.cx - dx / cam.z; cam.y = pan.cy - dy / cam.z; applyCam(); });
+    arenaEl.addEventListener('pointerup', () => { if (pan && pan.moved) logEvent('pan', { x: Math.round(cam.x), y: Math.round(cam.y) }); pan = null; arenaEl.classList.remove('panning'); });
+    arenaEl.addEventListener('wheel', e => { if (e.target.closest && (e.target.closest('#roomchat') || e.target.closest('#workshop'))) return; e.preventDefault(); const before = toWorld(e.clientX, e.clientY); cam.z *= Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)); applyCam(); const after = toWorld(e.clientX, e.clientY); cam.x += before.x - after.x; cam.y += before.y - after.y; applyCam(); }, { passive: false });
+    const mm = $('#minimap'), mg = mm.getContext('2d'), MW = 190, MH = Math.round(190 * SPACE.H / SPACE.W); mm.width = MW * devicePixelRatio; mm.height = MH * devicePixelRatio; mm.style.width = MW + 'px'; mm.style.height = MH + 'px'; mg.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    const sx = MW / SPACE.W, sy = MH / SPACE.H, wrapX = v => ((v % SPACE.W) + SPACE.W) % SPACE.W, wrapY = v => ((v % SPACE.H) + SPACE.H) % SPACE.H;
+    function drawMini() { mg.clearRect(0, 0, MW, MH); const dark = matchMedia('(prefers-color-scheme: dark)').matches; mg.fillStyle = dark ? '#ffffff55' : '#00000040'; for (const w of words) mg.fillRect(wrapX(w.x) * sx, wrapY(w.y) * sy, 1.5, 1.5);
+      for (const c of creatures) { mg.fillStyle = `hsl(${c.g.hue},80%,${dark ? 70 : 50}%)`; mg.beginPath(); mg.arc(wrapX(c.x) * sx, wrapY(c.y) * sy, 3.5, 0, 7); mg.fill(); }
+      const { w, h } = viewSize(), vw = w / cam.z * sx, vh = h / cam.z * sy, x0 = wrapX(cam.x - w / 2 / cam.z) * sx, y0 = wrapY(cam.y - h / 2 / cam.z) * sy; mg.strokeStyle = '#2b5cff'; mg.lineWidth = 1.2;
+      for (const dx of [0, -MW]) for (const dy of [0, -MH]) mg.strokeRect(x0 + dx, y0 + dy, vw, vh);   // the view rectangle wraps too
+      requestAnimationFrame(drawMini); }
+    requestAnimationFrame(drawMini);
+    let mmDown = false; const jump = e => { const r = mm.getBoundingClientRect(); cam.x = (e.clientX - r.left) / sx; cam.y = (e.clientY - r.top) / sy; applyCam(); };
+    mm.addEventListener('pointerdown', e => { e.stopPropagation(); mmDown = true; mm.setPointerCapture(e.pointerId); jump(e); logEvent('minimap', {}); }); mm.addEventListener('pointermove', e => { if (mmDown) jump(e); }); mm.addEventListener('pointerup', () => { mmDown = false; });
+  })();
+  // room chat overlay: collapse, close, reopen
+  $('#rc-min').addEventListener('click', () => { $('#roomchat').classList.toggle('min'); $('#rc-min').textContent = $('#roomchat').classList.contains('min') ? '▴' : '▾'; });
+  $('#rc-close').addEventListener('click', () => $('#roomchat').classList.add('closed')); $('#rc-open').addEventListener('click', () => $('#roomchat').classList.remove('closed'));
+  $('#evolveWorldBtn').addEventListener('click', () => $('#worldMut').click());
+  window.__weather = Weather; Weather.set(world.weather || 'bitrain', world.wint ?? 0.35); saveWorld();
   // ---------- lab tab (same thread as the chat page: pile_runs/lab/*.jsonl via demo_server.py, localhost only) ----------
   (() => {
     const el = $('#lab'), thread = $('#lab-thread'), text = $('#lab-text'); let seen = 0, open = false;
