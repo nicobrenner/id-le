@@ -10,6 +10,9 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 .word{position:absolute;padding:2px 8px;border-radius:6px;background:#ffe9a8;color:#333;border:1px solid #d9b85a;font:13px ui-monospace,Menlo,monospace;cursor:grab;transform:translate(-50%,-50%);z-index:3}
 .word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px}
 .creature{position:absolute;transform:translate(-50%,-50%);z-index:5;cursor:grab;border-radius:50%;touch-action:none}.creature:active{cursor:grabbing}
+#terrainrow{display:flex;gap:6px;padding:4px 16px}#terrain{flex:1;font:13px system-ui;padding:5px 8px;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit}
+.word.terrain{background:transparent;border-color:#8883;color:inherit;opacity:.75;font-size:12px;padding:1px 4px}
+#coll{display:none;padding:6px 16px}#coll.on{display:block}.cards{display:flex;flex-wrap:wrap;gap:10px}.card{border:1px solid #8885;border-radius:10px;padding:6px 8px;font-size:12px;width:200px}.card.cmp{border-color:#2b5cff}.card svg{display:block;margin:auto}.cbtns button{font-size:11px;padding:2px 6px;margin:2px 2px 0 0}.cmpt{margin-top:10px;border-collapse:collapse;font-size:12px}.cmpt td,.cmpt th{padding:3px 10px;border-bottom:1px solid #8883;text-align:left}.cmpt tr.diff{background:#2b5cff14}.sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle}
 #evo{display:flex;flex-direction:column;gap:4px;padding:4px 16px;font-size:12px}#evo button{font-size:11px;padding:2px 7px;margin-left:3px}#evo small{opacity:.65}.ln.lab{color:#0a8}
 #lab{position:fixed;right:0;top:0;height:100%;width:320px;background:var(--bg);border-left:1px solid #8884;box-shadow:-4px 0 16px #0002;z-index:50;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .2s}#lab.open{transform:none}#lab-head{padding:8px 10px;border-bottom:1px solid #8884;display:flex;justify-content:space-between;align-items:center}#lab-thread{flex:1;overflow:auto;padding:8px 10px;font-size:13px}.lab-row{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881}.lab-row b{opacity:.7}.lab-row.nico{background:#2b5cff22}.lab-row small{display:block;opacity:.55;font-size:11px}#lab-form{padding:8px 10px;border-top:1px solid #8884}#lab-text{width:100%;box-sizing:border-box;min-height:64px;font:13px system-ui;background:transparent;color:inherit;border:1px solid #8886;border-radius:6px;padding:6px}#lab-toggle{position:fixed;right:10px;bottom:10px;z-index:51;border-radius:16px;background:var(--bg)}
 .bubble{position:absolute;transform:translate(-50%,-115%);background:#fff;color:#222;border:1px solid #8886;border-radius:10px;padding:3px 8px;font-size:12px;white-space:nowrap;z-index:6;pointer-events:none;opacity:0;transition:opacity .2s}.bubble.on{opacity:1}
@@ -24,6 +27,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 <div id="top"><b>The arena</b> · two creatures with their own models (drives + policy + an instruction model), the Oracle as a third voice · <a href="index.html">back to the chat</a> · <span id="status">loading…</span></div>
 <div id="arena"><div id="floor"></div><div class="drives" id="drives"></div></div>
 <div id="evo"></div>
+<div id="terrainrow"><input id="terrain" placeholder="paste text, or a web address, and press enter: it becomes the floor"><button id="terrainGo">make floor</button><button id="terrainClear">clear floor</button><button id="collBtn">collection (0)</button></div>
+<div id="coll"></div>
 <div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to call it · arrow keys nudge the selected one · drag a word onto the floor</span></div>
 <div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
 <div id="log"></div>
@@ -125,8 +130,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   const NS = 'http://www.w3.org/2000/svg';
   const web = document.createElementNS(NS, 'svg'); web.setAttribute('id', 'web'); web.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;overflow:visible'; floor.appendChild(web);
   const DEFAULT_GENOMES = {
-    crawly: { id: 'crawly-0', parent: null, legs: 8, l1: 30, l2: 36, bodyL: 26, bodyW: 15, abdomen: 1, hue: 262, footHue: 330, step: 24, speed: 1.7, palps: 2, fidget: 0.6, body: 'chip' },
-    tok: { id: 'tok-0', parent: null, legs: 6, l1: 15, l2: 19, bodyL: 22, bodyW: 30, abdomen: 0, hue: 44, footHue: 24, step: 15, speed: 1.15, palps: 0, fidget: 0.9, body: 'box' },
+    crawly: { id: 'crawly-0', name: 'Crawly', born: 0, parent: null, legs: 8, l1: 30, l2: 36, bodyL: 26, bodyW: 15, abdomen: 1, hue: 262, footHue: 330, step: 24, speed: 1.7, palps: 2, fidget: 0.6, body: 'chip' },
+    tok: { id: 'tok-0', name: 'the tokenizer', born: 0, parent: null, legs: 6, l1: 15, l2: 19, bodyL: 22, bodyW: 30, abdomen: 0, hue: 44, footHue: 24, step: 15, speed: 1.15, palps: 0, fidget: 0.9, body: 'box' },
   };
   let genomes = (() => { try { const g = JSON.parse(localStorage.getItem('arena.genomes') || 'null'); if (g && g.crawly && g.tok) return g; } catch (e) {} return JSON.parse(JSON.stringify(DEFAULT_GENOMES)); })();
   let lineage = (() => { try { return JSON.parse(localStorage.getItem('arena.lineage') || '[]'); } catch (e) { return []; } })();
@@ -164,7 +169,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   function mk(name, key, x, y, opts) {
     const el = document.createElement('div'); el.className = 'creature hit'; floor.appendChild(el);
     const bub = document.createElement('div'); bub.className = 'bubble'; floor.appendChild(bub);
-    const c = { name, key, el, bub, x, y, tx: x, ty: y, vx: 0, vy: 0, heading: Math.random() * 6.28, speed: genomes[key].speed, g: genomes[key], options: opts.options, d: { hunger: 0.5, curiosity: 0.5, fatigue: 0.1, affection: 0.3 }, carrying: null, state: 'idle', until: 0, lastDecision: 0, phase: Math.random() * 10, voice: VOICE[opts.voice], task: null, held: false, nextFidget: 0, nextShift: 0 };
+    const g0 = opts.genome || genomes[key]; const c = { name: g0.name || name, key, voiceKey: opts.voice, visitor: !!opts.genome, userUntil: 0, el, bub, x, y, tx: x, ty: y, vx: 0, vy: 0, heading: Math.random() * 6.28, speed: g0.speed, g: g0, options: opts.options, d: { hunger: 0.5, curiosity: 0.5, fatigue: 0.1, affection: 0.3 }, carrying: null, state: 'idle', until: 0, lastDecision: 0, phase: Math.random() * 10, voice: VOICE[opts.voice], task: null, held: false, nextFidget: 0, nextShift: 0 };
     buildLegs(c);
     let down = null;   // click vs pick-up: past 5 px of movement it is a pick-up
     el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY, moved: false }; el.setPointerCapture(ev.pointerId); });
@@ -181,7 +186,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   const creatures = [crawly, tokc]; let selected = null;
   function select(c) { selected = c; }
   const clamp = v => Math.max(0, Math.min(1, v)); const pick = a => a[Math.floor(Math.random() * a.length)];
-  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c === crawly ? 'crawly' : 'tok'); return t; }
+  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); return t; }
+  function otherOf(c) { return creatures.filter(k => k !== c).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0] || c; }
   function feel(c, what) { c.d.affection = clamp(c.d.affection + ({ hover: 0.05, click: 0.12, drag: 0.08, mention: 0.2, ack: 0.15 }[what] || 0)); c.d.curiosity = clamp(c.d.curiosity + 0.04); logEvent('feel', { who: c.name, what, genome: c.g.id, drives: snap(c) }); }
   function snap(c) { return { h: +c.d.hunger.toFixed(2), c: +c.d.curiosity.toFixed(2), f: +c.d.fatigue.toFixed(2), a: +c.d.affection.toFixed(2) }; }
   function bars(c) { const b = v => '▮'.repeat(Math.round(v * 5)) + '▯'.repeat(5 - Math.round(v * 5)); return `${c.name.toUpperCase().padEnd(13)} H ${b(c.d.hunger)} C ${b(c.d.curiosity)} F ${b(c.d.fatigue)} A ${b(c.d.affection)}  ${c.state}${c.carrying ? ' [' + c.carrying.text + ']' : ''} · ${c.g.id}`; }
@@ -239,7 +245,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // ---------- evolution: mutate / revert / keep, and genomes pushed from the lab (arena_genomes.json) ----------
   const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
   function mutate(key, rate) {
-    const p = genomes[key], g = { ...p }, r = rate || 0.14; g.parent = p.id; g.id = key + '-' + Date.now().toString(36).slice(-5);
+    const p = genomes[key], g = { ...p }, r = rate || 0.14; g.parent = p.id; g.id = key + '-' + Date.now().toString(36).slice(-5); g.born = Date.now(); g.name = p.name;
     for (const f of ['l1', 'l2', 'bodyL', 'bodyW', 'step', 'speed', 'fidget']) g[f] = +(p[f] * Math.exp(gauss() * r)).toFixed(2);
     g.hue = Math.round((p.hue + gauss() * 22 + 360) % 360); g.footHue = Math.round((p.footHue + gauss() * 30 + 360) % 360);
     if (Math.random() < 0.25) g.legs = Math.max(4, Math.min(12, p.legs + (Math.random() < 0.5 ? -2 : 2)));
@@ -251,16 +257,21 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const c = creatures.find(k => k.key === key); lineage.push({ t: Date.now(), key, from: genomes[key].id, to: g.id, why, genome: g }); genomes[key] = g; c.g = g; buildLegs(c); saveGenomes(); renderEvo();
     logEvent('genome', { who: c.name, why, id: g.id, parent: g.parent }); if (why !== 'revert') oracleComment(pick(ORACLE_SEEDS.mutated(c.name)), 'mutated');
   }
+  function ageOf(g) { const ms = Date.now() - (g.born || Date.now()); const m = Math.floor(ms / 60000); return g.born ? (m < 60 ? m + ' min' : m < 1440 ? Math.floor(m / 60) + ' h' : Math.floor(m / 1440) + ' d') : 'original'; }
+  document.addEventListener('focusout', e => { const b = e.target.closest && e.target.closest('.cname'); if (!b) return; const k = b.dataset.k, n = b.textContent.trim().slice(0, 24); if (!n || !genomes[k]) return; genomes[k].name = n; const c = creatures.find(x => x.key === k); if (c && c.name !== n) { logEvent('rename', { from: c.name, to: n }); c.name = n; say('lab', 'renamed: ' + n, 'lab'); } saveGenomes(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('cname')) { e.preventDefault(); e.target.blur(); } });
   function renderEvo() {
     const el = document.getElementById('evo'); if (!el) return;
     el.innerHTML = creatures.map(c => { const g = c.g, kept = lineage.filter(x => x.key === c.key && x.why === 'keep').length;
-      return `<span class="evo-c"><b>${c.name}</b> <small>${g.id} · ${g.legs} legs · reach ${Math.round(g.l1 + g.l2)} · speed ${(+g.speed).toFixed(2)}${kept ? ' · ♥' + kept : ''}</small> <button data-a="mutate" data-k="${c.key}">mutate</button><button data-a="big" data-k="${c.key}" title="bigger jump">mutate ×3</button><button data-a="revert" data-k="${c.key}">revert</button><button data-a="keep" data-k="${c.key}" title="mark this one as a favourite (the fitness signal)">♥ keep</button><button data-a="reset" data-k="${c.key}">original</button></span>`; }).join('');
+      if (c.visitor) return `<span class="evo-c"><b>${c.name}</b> <small>visitor from your collection · ${g.id} · age ${ageOf(g)}</small> <button data-a="recall" data-k="${c.key}">send back</button></span>`;
+      return `<span class="evo-c"><b class="cname" contenteditable="true" spellcheck="false" data-k="${c.key}" title="click to rename">${c.name}</b> <small>${g.id} · age ${ageOf(g)} · ${g.legs} legs · reach ${Math.round(g.l1 + g.l2)} · speed ${(+g.speed).toFixed(2)}${kept ? ' · ♥' + kept : ''}</small> <button data-a="mutate" data-k="${c.key}">mutate</button><button data-a="big" data-k="${c.key}" title="bigger jump">mutate ×3</button><button data-a="revert" data-k="${c.key}">revert</button><button data-a="keep" data-k="${c.key}" title="mark this one as a favourite (the fitness signal)">♥ keep</button><button data-a="reset" data-k="${c.key}">original</button></span>`; }).join('');
   }
   document.addEventListener('click', e => { const b = e.target.closest('#evo button'); if (!b) return; const k = b.dataset.k, a = b.dataset.a;
     if (a === 'mutate' || a === 'big') applyGenome(k, mutate(k, a === 'big' ? 0.42 : 0.14), a);
-    else if (a === 'revert') { const prev = [...lineage].reverse().find(x => x.key === k && x.to === genomes[k].id); const back = prev && lineage.find(x => x.key === k && x.to === prev.from); applyGenome(k, back ? back.genome : JSON.parse(JSON.stringify(DEFAULT_GENOMES[k])), 'revert'); }
-    else if (a === 'reset') applyGenome(k, JSON.parse(JSON.stringify(DEFAULT_GENOMES[k])), 'revert');
-    else if (a === 'keep') { lineage.push({ t: Date.now(), key: k, why: 'keep', to: genomes[k].id, genome: genomes[k] }); saveGenomes(); renderEvo(); logEvent('genome_keep', { id: genomes[k].id }); } });
+    else if (a === 'revert') { const prev = [...lineage].reverse().find(x => x.key === k && x.to === genomes[k].id); const back = prev && lineage.find(x => x.key === k && x.to === prev.from); applyGenome(k, back ? back.genome : { ...JSON.parse(JSON.stringify(DEFAULT_GENOMES[k])), name: genomes[k].name }, 'revert'); }
+    else if (a === 'reset') applyGenome(k, { ...JSON.parse(JSON.stringify(DEFAULT_GENOMES[k])), name: genomes[k].name }, 'revert');
+    else if (a === 'recall') recall(k);
+    else if (a === 'keep') { lineage.push({ t: Date.now(), key: k, why: 'keep', to: genomes[k].id, genome: genomes[k] }); addToCollection(k, genomes[k]); saveGenomes(); renderEvo(); logEvent('genome_keep', { id: genomes[k].id }); } });
   let labGenomeV = (() => { try { return +(localStorage.getItem('arena.labGenomeV') || 0); } catch (e) { return 0; } })();
   setInterval(async () => { try { const j = await (await fetch('arena_genomes.json', { cache: 'no-store' })).json(); if (j.v > labGenomeV) { labGenomeV = j.v; try { localStorage.setItem('arena.labGenomeV', j.v); } catch (e) {} for (const k of ['crawly', 'tok']) if (j[k]) applyGenome(k, { ...genomes[k], ...j[k], parent: genomes[k].id, id: j[k].id || (k + '-lab' + j.v) }, 'lab'); say('lab', j.note || 'new genomes from the lab', 'lab'); } } catch (e) {} }, 8000);
   function goto(c, x, y) { const r = arenaEl.getBoundingClientRect(); c.tx = Math.max(30, Math.min(r.width - 30, x)); c.ty = Math.max(30, Math.min(r.height - 30, y)); c.state = 'move'; }
@@ -273,9 +284,9 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     logEvent('task', { who: c.name, option: 'fetch', arg, success: true, word: w.text }); oracleComment(pick(ORACLE_SEEDS.fetched(w.text)), 'fetched'); return true;
   }
   async function doBring(c, target) {
-    if (!c.carrying) { speak(c, 'nope', { w: 'nothing' }); return false; } const w = c.carrying; const dest = target === 'oracle' ? { x: 380, y: 50 } : target === 'other' ? (c === crawly ? tokc : crawly) : { x: 380, y: 400 };
+    if (!c.carrying) { speak(c, 'nope', { w: 'nothing' }); return false; } const w = c.carrying; const dest = target === 'oracle' ? { x: 380, y: 50 } : target === 'other' ? otherOf(c) : { x: 380, y: 400 };
     goto(c, dest.x - 30, dest.y); await when(() => arrived(c)); c.carrying = null; w.carriedBy = null; w.el.classList.remove('carried'); w.x = c.x + 36; w.y = c.y; place(w); c.d.affection = clamp(c.d.affection + 0.1); speak(c, 'bring', { w: w.text }); c.state = 'idle';
-    logEvent('task', { who: c.name, option: 'bring', target: target || 'user', success: true, word: w.text }); if (target === 'other') { feel(c === crawly ? tokc : crawly, 'ack'); oracleComment(pick(ORACLE_SEEDS.handover(w.text)), 'handover'); } return true;
+    logEvent('task', { who: c.name, option: 'bring', target: target || 'user', success: true, word: w.text }); if (target === 'other') { feel(otherOf(c), 'ack'); oracleComment(pick(ORACLE_SEEDS.handover(w.text)), 'handover'); } return true;
   }
   async function doChop(c, arg) {
     const w = findWord(arg); const text = w ? w.text : (arg || ''); if (!text) { speak(c, 'nope', { w: '?' }); logEvent('task', { who: c.name, option: 'chop', arg, success: false }); return false; }
@@ -285,7 +296,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     c.d.hunger = clamp(c.d.hunger - 0.3); speak(c, 'chop', { p: pcs.join('|'), n: pcs.length }); c.state = 'idle'; logEvent('task', { who: c.name, option: 'chop', arg, success: true, pieces: pcs.length }); return true;
   }
   async function doHand(c) {   // give a piece (or the carried word) to the other creature
-    const other = c === crawly ? tokc : crawly; let w = c.carrying || words.find(x => x.piece && !x.carriedBy) || words.find(x => !x.carriedBy);
+    const other = otherOf(c); let w = c.carrying || words.find(x => x.piece && !x.carriedBy) || words.find(x => !x.carriedBy);
     if (!w) { speak(c, 'nope', { w: 'nothing' }); return false; } if (!c.carrying) { goto(c, w.x, w.y + 20); await when(() => arrived(c)); w.carriedBy = c; c.carrying = w; w.el.classList.add('carried'); }
     goto(c, other.x - 40, other.y + 10); await when(() => arrived(c)); c.carrying = null; w.carriedBy = other; other.carrying = w; speak(c, 'hand', { w: w.text }); speak(other, 'hand', { w: w.text }); feel(other, 'ack'); c.state = 'idle';
     logEvent('task', { who: c.name, option: 'hand', success: true, word: w.text }); oracleComment(pick(ORACLE_SEEDS.handover(w.text)), 'handover'); return true;
@@ -304,7 +315,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // ---------- drives + hand policy (the pet-model first signal; logged for the learned one) ----------
   setInterval(() => { for (const c of creatures) { if (c.state === 'sleep') c.d.fatigue = clamp(c.d.fatigue - 0.05); else { c.d.hunger = clamp(c.d.hunger + 0.012); c.d.curiosity = clamp(c.d.curiosity + 0.008); c.d.fatigue = clamp(c.d.fatigue + 0.004); } c.d.affection = clamp(c.d.affection - 0.004); } }, 2000);
   function ownThing(c, reason) {
-    if (c.state === 'sleep' || c.state === 'hide' || Date.now() - c.lastDecision < 5000) return; c.lastDecision = Date.now(); const free = words.filter(w => !w.carriedBy);
+    if (c.state === 'sleep' || c.state === 'hide' || c.held || Date.now() < c.userUntil || Date.now() - c.lastDecision < 5000) return; c.lastDecision = Date.now(); const free = words.filter(w => !w.carriedBy);
     const sc = { wander: 0.25 + 0.5 * c.d.curiosity - 0.5 * c.d.fatigue, fetch: free.length && c.options.includes('fetch') ? 0.9 * c.d.hunger + 0.3 * c.d.curiosity - 0.6 * c.d.fatigue : -1, chop: free.length && c.options.includes('chop') ? 0.8 * c.d.hunger - 0.5 * c.d.fatigue : -1, bring: c.carrying ? 0.7 * c.d.affection : -1, nap: 1.1 * c.d.fatigue - 0.2, hand: c.carrying && c.d.curiosity > 0.6 ? 0.5 : -1 };
     const best = Object.keys(sc).sort((a, b) => sc[b] - sc[a])[0]; logEvent('decide', { who: c.name, reason, drives: snap(c), scores: Object.fromEntries(Object.entries(sc).map(([k, v]) => [k, +v.toFixed(2)])), chosen: best });
     const r = arenaEl.getBoundingClientRect();
@@ -335,7 +346,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   }
   const SYSTEM_TAG = '<|system|> ' + SYSTEM + '\n';
   async function handleChat(text) {
-    say('you', text, 'you'); logEvent('chat', { len: text.length }); if (/crawl(y|er)/i.test(text)) feel(crawly, 'mention'); if (/tokeni[sz]er/i.test(text)) feel(tokc, 'mention');   // mention proxies: measurement only
+    say('you', text, 'you'); logEvent('chat', { len: text.length }); if (/crawl(y|er)/i.test(text)) feel(crawly, 'mention'); if (/tokeni[sz]er/i.test(text)) feel(tokc, 'mention'); creatures.forEach(k => { if (k.name && text.toLowerCase().includes(k.name.toLowerCase())) feel(k, 'mention'); });   // mention proxies: measurement only
     const r = await classify(text); logEvent('instruction', { option: r.option, arg: r.arg, p: r.probs[r.option] });
     const target = /oracle/i.test(text) ? 'oracle' : (/(tokeni[sz]er|crawl(y|er))/i.test(text) ? 'other' : 'user');   // bring target: who is named (display routing only; the option itself is the classifier's)
     if (r.option === 'none') { creatures.forEach(c => ownThing(c, 'chat_none')); return r; }
@@ -343,7 +354,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const c = able.length ? (able.length === 1 ? able[0] : (selected && able.includes(selected) ? selected : able.sort((a, b) => (b.d.affection + b.d.curiosity) - (a.d.affection + a.d.curiosity))[0])) : null;
     if (!c) { creatures.forEach(k => ownThing(k, 'chat_unable')); return r; }
     if (Math.random() < 0.15) { speak(c, 'refuse'); logEvent('refuse', { who: c.name, option: r.option }); oracleComment(pick(ORACLE_SEEDS.refused(c.name)), 'refused'); return { ...r, refused: true }; }   // Trico rule
-    r.success = await act(c, r.option, r.arg, target); r.who = c.name; return r;
+    c.userUntil = Date.now() + 25000; r.success = await act(c, r.option, r.arg, target); c.userUntil = Date.now() + 8000; r.who = c.name; return r;
   }
   // ---------- UI ----------
   $('#send').addEventListener('click', () => { const t = $('#chat').value.trim(); if (!t || !hidSession) return; $('#chat').value = ''; handleChat(t); });
@@ -353,6 +364,46 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   document.addEventListener('keydown', e => { if (!selected || !e.key.startsWith('Arrow')) return; if (document.activeElement && document.activeElement.tagName === 'INPUT') return; e.preventDefault(); const d = { ArrowLeft: [-30, 0], ArrowRight: [30, 0], ArrowUp: [0, -30], ArrowDown: [0, 30] }[e.key]; goto(selected, selected.tx + d[0], selected.ty + d[1]); feel(selected, 'drag'); logEvent('nudge', { who: selected.name, key: e.key }); });
   $('#export').addEventListener('click', () => { const b = new Blob([JSON.stringify(events.filter(e => e.page === 'arena'), null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'arena_log.json'; a.click(); });
   window.__arena = { genomes: () => genomes, mutate: k => applyGenome(k, mutate(k), 'mutate'), addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
+  // ---------- collection: kept creatures, compare two, release visitors into the arena ----------
+  let collection = (() => { try { return JSON.parse(localStorage.getItem('arena.collection') || '[]'); } catch (e) { return []; } })();
+  function saveColl() { try { localStorage.setItem('arena.collection', JSON.stringify(collection.slice(-60))); } catch (e) {} }
+  function addToCollection(key, g) { if (collection.some(x => x.genome.id === g.id)) return; collection.push({ key, kept: Date.now(), genome: JSON.parse(JSON.stringify({ ...g, born: g.born || Date.now() })) }); saveColl(); renderColl(); }
+  const TRAITS = [['legs', 'legs'], ['l1', 'upper leg'], ['l2', 'lower leg'], ['bodyL', 'body length'], ['bodyW', 'body width'], ['abdomen', 'abdomen'], ['palps', 'feelers'], ['speed', 'speed'], ['step', 'stride'], ['fidget', 'fidgetiness'], ['hue', 'colour'], ['footHue', 'foot colour']];
+  function miniSVG(g) { const c = { x: 70, y: 52, vx: 0, vy: 0, heading: -0.4, state: 'idle', held: false, phase: 1, g }; buildLegs(c); return `<svg viewBox="0 0 140 104" width="140" height="104">${legsSVG(c)}${bodySVG(c, 0)}</svg>`; }
+  const compareSel = new Set();
+  function renderColl() {
+    const el = $('#coll'), btn = $('#collBtn'); if (btn) btn.textContent = 'collection (' + collection.length + ')'; if (!el || !el.classList.contains('on')) return;
+    if (!collection.length) { el.innerHTML = '<p style="opacity:.7">Empty. Press <b>♥ keep</b> on a creature you like and it lands here, with its traits, so you can compare two or let one visit the arena.</p>'; return; }
+    let h = '<div class="cards">' + collection.map((x, i) => { const g = x.genome; return `<div class="card${compareSel.has(i) ? ' cmp' : ''}">${miniSVG(g)}<div><b>${g.name || x.key}</b> <small>${g.id} · kept ${new Date(x.kept).toLocaleDateString()} · age ${ageOf(g)}</small></div><div><small>${g.legs} legs · reach ${Math.round(g.l1 + g.l2)} · speed ${(+g.speed).toFixed(2)}</small></div><div class="cbtns"><label><input type="checkbox" data-c="${i}" ${compareSel.has(i) ? 'checked' : ''}> compare</label> <button data-ca="release" data-c="${i}">let it visit</button><button data-ca="use" data-c="${i}" title="make it the resident ${x.key === 'crawly' ? 'crawler' : 'tokenizer'}">make resident</button><button data-ca="drop" data-c="${i}">remove</button></div></div>`; }).join('') + '</div>';
+    if (compareSel.size === 2) { const [a, b] = [...compareSel].map(i => collection[i].genome); h += '<table class="cmpt"><tr><th></th><th>' + (a.name || a.id) + ' <small>' + a.id + '</small></th><th>' + (b.name || b.id) + ' <small>' + b.id + '</small></th></tr>' + TRAITS.map(([k, lab]) => { const va = a[k] ?? 0, vb = b[k] ?? 0, diff = Math.abs(va - vb) > 1e-6, fa = typeof va === 'number' ? +(+va).toFixed(2) : va, fb = typeof vb === 'number' ? +(+vb).toFixed(2) : vb; return `<tr class="${diff ? 'diff' : ''}"><td>${lab}</td><td>${diff && va > vb ? '<b>' + fa + '</b>' : fa}${k.includes('ue') ? ` <span class="sw" style="background:hsl(${va},70%,70%)"></span>` : ''}</td><td>${diff && vb > va ? '<b>' + fb + '</b>' : fb}${k.includes('ue') ? ` <span class="sw" style="background:hsl(${vb},70%,70%)"></span>` : ''}</td></tr>`; }).join('') + '<tr><td>age</td><td>' + ageOf(a) + '</td><td>' + ageOf(b) + '</td></tr></table><small style="opacity:.6">bold = the larger value; shaded rows differ</small>'; }
+    else if (compareSel.size) h += '<p style="opacity:.6">tick one more to compare</p>';
+    el.innerHTML = h;
+  }
+  document.addEventListener('change', e => { const cb = e.target.closest && e.target.closest('#coll input[type=checkbox]'); if (!cb) return; const i = +cb.dataset.c; if (cb.checked) { if (compareSel.size >= 2) compareSel.delete([...compareSel][0]); compareSel.add(i); } else compareSel.delete(i); renderColl(); logEvent('compare', { n: compareSel.size }); });
+  let visitorN = 0;
+  function release(x) {
+    if (creatures.filter(c => c.visitor).length >= 4) { say('lab', 'the arena holds four visitors at most; send one back first', 'lab'); return; }
+    const k = 'v' + (++visitorN), g = { ...x.genome }, r = arenaEl.getBoundingClientRect(); const voice = g.body === 'chip' ? 'crawly' : 'tok';
+    const c = mk(g.name || x.key, k, 40 + Math.random() * (r.width - 80), 40 + Math.random() * (r.height - 80), { genome: g, options: voice === 'crawly' ? ['fetch', 'bring', 'greet', 'come', 'sleep', 'hide', 'hand'] : ['chop', 'greet', 'come', 'sleep', 'hide', 'hand'], voice });
+    c.name = (g.name || x.key) + ' (' + g.id.slice(-4) + ')'; creatures.push(c); renderEvo(); speak(c, 'greet'); logEvent('visitor', { id: g.id }); oracleComment(`A visitor from the collection: ${c.name}. Looks like family`, 'visitor');
+  }
+  function recall(k) { const i = creatures.findIndex(c => c.key === k); if (i < 0) return; const c = creatures[i]; if (c.carrying) { c.carrying.carriedBy = null; c.carrying.el.classList.remove('carried'); } c.el.remove(); c.bub.remove(); creatures.splice(i, 1); if (selected === c) selected = null; renderEvo(); logEvent('visitor_back', { id: c.g.id }); }
+  document.addEventListener('click', e => { const b = e.target.closest('#coll button'); if (!b) return; const i = +b.dataset.c, x = collection[i]; if (!x) return;
+    if (b.dataset.ca === 'release') release(x); else if (b.dataset.ca === 'use') applyGenome(x.key, { ...x.genome }, 'collection'); else if (b.dataset.ca === 'drop') { collection.splice(i, 1); compareSel.clear(); saveColl(); renderColl(); } });
+  // ---------- terrain: paste text or a URL; its words become the floor the creatures walk, eat and chop ----------
+  function clearTerrain() { for (let i = words.length - 1; i >= 0; i--) if (words[i].terrain && !words[i].carriedBy) { words[i].el.remove(); words.splice(i, 1); } }
+  function layTerrain(text, title) {
+    clearTerrain(); const toks = String(text).replace(/\s+/g, ' ').split(' ').filter(w => /[a-zA-Z]/.test(w)).slice(0, 400).map(w => w.replace(/^[^\w']+|[^\w']+$/g, '').toLowerCase()).filter(w => /^[a-z][a-z'-]{0,17}$/.test(w));
+    const r = arenaEl.getBoundingClientRect(); let x = 30, y = 34; const lh = 26;
+    for (const t of toks) { const w = t.length * 7.4 + 14; if (x + w > r.width - 24) { x = 30; y += lh; } if (y > r.height - 40) break; const ww = addWord(t, x + w / 2, y); ww.terrain = true; ww.el.classList.add('terrain'); x += w + 6; }
+    say('lab', 'terrain: ' + (title ? '"' + title.slice(0, 60) + '", ' : '') + words.filter(w => w.terrain).length + ' words on the floor', 'lab'); logEvent('terrain', { n: toks.length, url: !!title });
+    oracleComment(pick([`New floor. Words everywhere, and the legs have noticed`, `Someone brought a whole page in. The crawler will eat half of it`, `My room is made of text now. ${title ? 'It used to be ' + title.slice(0, 40) : 'Do not ask me to read it'}`]), 'terrain');
+  }
+  async function terrainFrom(input) {
+    const v = input.trim(); if (!v) return;
+    if (/^https?:\/\//i.test(v)) { say('lab', 'fetching ' + v.slice(0, 80) + '…', 'lab'); try { const j = await (await fetch('/lab/fetch?url=' + encodeURIComponent(v))).json(); if (j.error) { say('lab', 'could not fetch: ' + j.error, 'lab'); return; } layTerrain(j.text, j.title || v); } catch (e) { say('lab', 'could not fetch (is demo_server.py running?)', 'lab'); } }
+    else layTerrain(v, null);
+  }
   // ---------- lab tab (same thread as the chat page: pile_runs/lab/*.jsonl via demo_server.py, localhost only) ----------
   (() => {
     const el = $('#lab'), thread = $('#lab-thread'), text = $('#lab-text'); let seen = 0, open = false;
@@ -368,6 +419,11 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     $('#lab-toggle').addEventListener('click', () => show(!open)); $('#lab-close').addEventListener('click', () => show(false)); $('#lab-send').addEventListener('click', send);
     text.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); } });
   })();
+  $('#terrain').addEventListener('keydown', e => { if (e.key === 'Enter') { terrainFrom(e.target.value); e.target.value = ''; } });
+  $('#terrainGo').addEventListener('click', () => { terrainFrom($('#terrain').value); $('#terrain').value = ''; });
+  $('#terrainClear').addEventListener('click', clearTerrain);
+  $('#collBtn').addEventListener('click', () => { $('#coll').classList.toggle('on'); renderColl(); logEvent('collection_open', { on: $('#coll').classList.contains('on') }); });
+  renderColl();
   renderEvo();
   // ---------- boot ----------
   (async () => {
