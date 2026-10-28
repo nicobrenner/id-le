@@ -15,6 +15,14 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 .island{position:absolute;background:radial-gradient(closest-side,#c9e6b733,#9fd18f22 60%,transparent);pointer-events:none;z-index:0}
 @media (prefers-color-scheme:dark){.word.t-tree{color:#7ad48f}.word.t-grass{color:#7fbf8a}}
 #coll{display:none;padding:6px 16px}#coll.on{display:block}.cards{display:flex;flex-wrap:wrap;gap:10px}.card{border:1px solid #8885;border-radius:10px;padding:6px 8px;font-size:12px;width:200px}.card.cmp{border-color:#2b5cff}.card svg{display:block;margin:auto}.cbtns button{font-size:11px;padding:2px 6px;margin:2px 2px 0 0}.cmpt{margin-top:10px;border-collapse:collapse;font-size:12px}.cmpt td,.cmpt th{padding:3px 10px;border-bottom:1px solid #8883;text-align:left}.cmpt tr.diff{background:#2b5cff14}.sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle}
+#workshop{margin:6px 16px;border:1px solid #8884;border-radius:10px;padding:4px 8px;font-size:12px}#workshop summary{cursor:pointer;opacity:.75;padding:3px 0}#workshop #evo,#workshop #terrainrow{padding:4px 0}
+#drives{padding:4px 0}.drow{margin:3px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.drow b{min-width:90px}.dstate{opacity:.7;min-width:150px}.dv{display:inline-block;width:46px;height:6px;border-radius:3px;background:#8883;overflow:hidden;vertical-align:middle}.dv i{display:block;height:100%;background:#2b5cff}
+#worldrow{padding:4px 0}#worldrow button{font-size:11px;padding:2px 7px;margin-left:3px}
+#soundBtn{position:absolute;right:8px;top:8px;z-index:8;font-size:14px;padding:2px 6px;opacity:.7}
+#quick{display:flex;gap:6px;flex-wrap:wrap;margin:6px 16px 0}#quick button{font-size:12px;padding:3px 9px;border-radius:14px}#quick .x{margin-left:4px;opacity:.5}#quick .add{opacity:.6}
+.word.stepped{animation:stepped .9s ease-out}@keyframes stepped{0%{color:#2b5cff;text-shadow:0 0 6px #2b5cff88;translate:0 -2px}100%{text-shadow:none;translate:0 0}}
+.word.t-page{background:transparent;border:0;font:15px/1 Georgia,'Times New Roman',serif;color:inherit;opacity:.78;padding:0 1px;cursor:grab}
+#whisper{position:absolute;z-index:9;display:none;transform:translate(-50%,0)}#whisper input{font:13px system-ui;padding:4px 8px;border:1px solid #2b5cff;border-radius:12px;background:var(--floor);color:inherit;width:200px}
 #evo{display:flex;flex-direction:column;gap:4px;padding:4px 16px;font-size:12px}#evo button{font-size:11px;padding:2px 7px;margin-left:3px}#evo small{opacity:.65}.ln.lab{color:#0a8}
 #lab{position:fixed;right:0;top:0;height:100%;width:320px;background:var(--bg);border-left:1px solid #8884;box-shadow:-4px 0 16px #0002;z-index:50;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .2s}#lab.open{transform:none}#lab-head{padding:8px 10px;border-bottom:1px solid #8884;display:flex;justify-content:space-between;align-items:center}#lab-thread{flex:1;overflow:auto;padding:8px 10px;font-size:13px}.lab-row{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881}.lab-row b{opacity:.7}.lab-row.nico{background:#2b5cff22}.lab-row small{display:block;opacity:.55;font-size:11px}#lab-form{padding:8px 10px;border-top:1px solid #8884}#lab-text{width:100%;box-sizing:border-box;min-height:64px;font:13px system-ui;background:transparent;color:inherit;border:1px solid #8886;border-radius:6px;padding:6px}#lab-toggle{position:fixed;right:10px;bottom:10px;z-index:51;border-radius:16px;background:var(--bg)}
 .bubble{position:absolute;transform:translate(-50%,-115%);background:#fff;color:#222;border:1px solid #8886;border-radius:10px;padding:3px 8px;font-size:12px;white-space:nowrap;z-index:6;pointer-events:none;opacity:0;transition:opacity .2s}.bubble.on{opacity:1}
@@ -27,11 +35,12 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit;cursor:pointer}
 </style></head><body>
 <div id="top"><b>The arena</b> · two creatures with their own models (drives + policy + an instruction model), the Oracle as a third voice · <a href="index.html">back to the chat</a> · <span id="status">loading…</span></div>
-<div id="arena"><div id="floor"></div><div class="drives" id="drives"></div></div>
-<div id="evo"></div>
+<div id="arena"><div id="floor"></div><div id="whisper"><input id="whisperIn" placeholder="say something to it…"></div><button id="soundBtn" title="sounds (off by default)">🔇</button></div>
 <div id="terrainrow"><input id="terrain" placeholder="paste text, or a web address, and press enter: it grows into the world"><button id="terrainGo">grow world</button><button id="terrainClear">clear world</button><button id="collBtn">collection (0)</button></div>
-<div id="coll"></div>
-<div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to call it · arrow keys nudge the selected one · drag a word onto the floor</span></div>
+<details id="workshop"><summary>workshop · how they feel, evolve them, the collection, the world</summary><div id="drives"></div><div id="evo"></div>
+<div id="coll"></div><div id="worldrow"><b>world</b> <small id="worldInfo"></small> <button id="worldMut">mutate world</button><button id="worldReset">default world</button></div></details>
+<div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to talk to it directly · arrow keys nudge the selected one · drag a word onto the floor</span></div>
+<div id="quick"></div>
 <div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
 <div id="log"></div>
 <aside id="lab"><div id="lab-head"><b>lab · arena</b><button id="lab-close">close</button></div><div id="lab-thread"></div><div id="lab-form"><textarea id="lab-text" placeholder="notes to the lab: what to change about the creatures, the arena… (Cmd+Enter)"></textarea><button id="lab-send">send</button> <small style="opacity:.6">replies appear here; the lab can push new genomes</small></div></aside><button id="lab-toggle">lab</button>
@@ -127,6 +136,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   const HL = ['#2b5cff', '#00b8e6', '#ffd400', '#3ddc5a', '#ff6a2b', '#b18cff'];
   function hit(w, c) { const now = performance.now(); if (now - (w.lastHit || 0) < 600) return; w.lastHit = now; const col = c.g.hlColor || HL[(c.key.length * 7 + w.text.length) % HL.length];
     w.el.animate([{ boxShadow: `0 0 0 2px ${col}`, background: col + '55' }, { boxShadow: '0 0 0 0 transparent' }], { duration: 1300, easing: 'ease-out' }); }
+  function stepped(w) { w.el.classList.remove('stepped'); void w.el.offsetWidth; w.el.classList.add('stepped'); clearTimeout(w._st); w._st = setTimeout(() => w.el.classList.remove('stepped'), 900); }
   function place(w) { w.el.style.left = w.x + 'px'; w.el.style.top = w.y + 'px'; w.el.style.transform = 'translate(-50%,-50%) rotate(' + (w.rot || 0).toFixed(1) + 'deg)'; }
   function findWord(text) { if (!text) return null; const t = text.toLowerCase().trim(); return words.find(w => !w.carriedBy && w.text === t) || words.find(w => !w.carriedBy && (w.text.startsWith(t) || t.startsWith(w.text)) && Math.min(w.text.length, t.length) >= 3) || null; }
   // ---------- creatures (Oct 28): spider-style bodies with IK legs planted in world space, a genome per creature, idle life, pick-up ----------
@@ -182,7 +192,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       if (!down) return; if (!down.moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) { down.moved = true; c.held = true; c.state = 'held'; select(c); speak(c, 'held'); logEvent('picked_up', { who: c.name, genome: c.g.id }); feel(c, 'drag'); if (Math.random() < 0.6) oracleComment(pick(ORACLE_SEEDS.held(c.name)), 'held'); }
       if (down.moved) { const r = arenaEl.getBoundingClientRect(); c.x = c.tx = Math.max(20, Math.min(r.width - 20, ev.clientX - r.left)); c.y = c.ty = Math.max(20, Math.min(r.height - 20, ev.clientY - r.top)); }
     });
-    el.addEventListener('pointerup', () => { if (!down) return; const moved = down.moved; down = null; if (moved) { c.held = false; c.state = 'idle'; c.legs.forEach(L => { L.swing = null; }); speak(c, 'dropped'); logEvent('put_down', { who: c.name }); } else { select(c); feel(c, 'click'); callOver(c, 'click'); } });
+    el.addEventListener('pointerup', () => { if (!down) return; const moved = down.moved; down = null; if (moved) { c.held = false; c.state = 'idle'; c.legs.forEach(L => { L.swing = null; }); speak(c, 'dropped'); logEvent('put_down', { who: c.name }); } else { select(c); feel(c, 'click'); openWhisper(c); } });
     el.addEventListener('pointerenter', () => feel(c, 'hover'));
     return c;
   }
@@ -191,11 +201,11 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   const creatures = [crawly, tokc]; let selected = null;
   function select(c) { selected = c; }
   const clamp = v => Math.max(0, Math.min(1, v)); const pick = a => a[Math.floor(Math.random() * a.length)];
-  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); return t; }
+  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); Sound.chirp(c, t); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); return t; }
   function otherOf(c) { return creatures.filter(k => k !== c).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0] || c; }
   function feel(c, what) { c.d.affection = clamp(c.d.affection + ({ hover: 0.05, click: 0.12, drag: 0.08, mention: 0.2, ack: 0.15 }[what] || 0)); c.d.curiosity = clamp(c.d.curiosity + 0.04); logEvent('feel', { who: c.name, what, genome: c.g.id, drives: snap(c) }); }
   function snap(c) { return { h: +c.d.hunger.toFixed(2), c: +c.d.curiosity.toFixed(2), f: +c.d.fatigue.toFixed(2), a: +c.d.affection.toFixed(2) }; }
-  function bars(c) { const b = v => '▮'.repeat(Math.round(v * 5)) + '▯'.repeat(5 - Math.round(v * 5)); return `${c.name.toUpperCase().padEnd(13)} H ${b(c.d.hunger)} C ${b(c.d.curiosity)} F ${b(c.d.fatigue)} A ${b(c.d.affection)}  ${c.state}${c.carrying ? ' [' + c.carrying.text + ']' : ''} · ${c.g.id}`; }
+  function bars(c) { const b = (v, lab) => `<span class="dv" title="${lab} ${Math.round(v * 100)}%"><i style="width:${Math.round(v * 100)}%"></i></span> ${lab}`; return `<div class="drow"><b>${c.name}</b> <span class="dstate">${({ idle: 'idling', move: 'on the move', sleep: 'asleep', hide: 'hiding', held: 'being held' })[c.state] || c.state}${c.carrying ? ', carrying “' + c.carrying.text + '”' : ''}</span> ${b(c.d.hunger, 'hungry')} ${b(c.d.curiosity, 'curious')} ${b(c.d.fatigue, 'tired')} ${b(c.d.affection, 'fond of you')}</div>`; }
   function bodySVG(c, t) {
     const g = c.g, breathe = 1 + (c.state === 'sleep' ? 0.05 : 0.025) * Math.sin(t / (c.state === 'sleep' ? 900 : 380) + c.phase), deg = c.heading * 180 / Math.PI, L = g.bodyL * breathe, W = g.bodyW * breathe;
     const sw = c.held ? Math.sin(t / 60) * 12 : Math.sin(t / 700 + c.phase) * 2.5;   // idle sway; violent when held
@@ -247,16 +257,16 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const r = arenaEl.getBoundingClientRect();
     for (const c of creatures) { if (c.state === 'hide') continue; const bodyR = Math.max(c.g.bodyL, c.g.bodyW) * 0.7 + 6, fast = Math.hypot(c.vx, c.vy);
       for (const w of words) { if (w.carriedBy || w === dragging) continue; const dx = w.x - c.x, dy = w.y - c.y, d = Math.hypot(dx, dy) || 1;
-        if (d < bodyR && (fast > 0.3 || c.held)) { const k = (bodyR - d) / bodyR * (c.held ? 3 : 1.6) * (c.g.kick ?? 1); w.vx += dx / d * k + c.vx * 0.4; w.vy += dy / d * k + c.vy * 0.4; w.vr += (Math.random() - .5) * 14 * k; hit(w, c); } }
-      for (const L of c.legs) if (L.justLanded) { L.justLanded = false; for (const w of words) { if (w.carriedBy) continue; const dx = w.x - L.foot.x, dy = w.y - L.foot.y, d = Math.hypot(dx, dy) || 1; if (d < 16) { const k = (16 - d) / 16 * 2.2 * (c.g.kick ?? 1); w.vx += dx / d * k; w.vy += dy / d * k; w.vr += (Math.random() - .5) * 10 * k; hit(w, c); } } } }
+        if (d < bodyR * 0.8 && (fast > 0.3 || c.held) && performance.now() - (w.pushed || 0) > 500) { w.pushed = performance.now(); const sp = Math.hypot(c.vx, c.vy) || 1, nx = -c.vy / sp, ny = c.vx / sp, side = (dx * nx + dy * ny) >= 0 ? 1 : -1, k = (c.held ? 2.2 : 0.9) * (c.g.kick ?? 1); w.vx += nx * side * k; w.vy += ny * side * k; w.vr += (Math.random() - .5) * 6 * k; stepped(w); } }
+      for (const L of c.legs) if (L.justLanded) { L.justLanded = false; for (const w of words) { if (w.carriedBy) continue; const dx = w.x - L.foot.x, dy = w.y - L.foot.y, d = Math.hypot(dx, dy) || 1; if (d < 14) { const k = (14 - d) / 14 * 0.9 * (c.g.kick ?? 1); w.vx += dx / d * k; w.vy += dy / d * k; w.vr += (Math.random() - .5) * 5 * k; stepped(w); Sound.step(c); } } } }
     for (const w of words) { if (w.carriedBy || w === dragging) continue; if (Math.abs(w.vx) + Math.abs(w.vy) + Math.abs(w.vr) < 0.02) continue;
-      w.x += w.vx; w.y += w.vy; w.rot += w.vr; w.vx *= 0.9; w.vy *= 0.9; w.vr *= 0.88; w.rot *= 0.985;
+      w.x += w.vx; w.y += w.vy; w.rot += w.vr; w.vx *= 0.82; w.vy *= 0.82; w.vr *= 0.82; w.rot *= 0.97;
       if (w.x < 12 || w.x > r.width - 12) { w.vx *= -0.6; w.x = Math.max(12, Math.min(r.width - 12, w.x)); } if (w.y < 12 || w.y > r.height - 12) { w.vy *= -0.6; w.y = Math.max(12, Math.min(r.height - 12, w.y)); } place(w); }
     // targeting lasers (an evolvable trait): a beam and a ring on what the creature is going for
     for (const c of creatures) { if (!c.g.laser || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T = c.target, hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2;
       svg += `<line x1="${c.x}" y1="${c.y}" x2="${T.x}" y2="${T.y}" stroke="hsl(${hue},95%,60%)" stroke-width="1" stroke-dasharray="3 3" opacity=".85"/><ellipse cx="${T.x}" cy="${T.y}" rx="${T.text.length * 4.2 + 14 + j}" ry="${13 + j / 2}" fill="none" stroke="hsl(${hue},95%,60%)" stroke-width="1.4"/><text x="${T.x + T.text.length * 4 + 18}" y="${T.y - 12}" font-size="9" font-family="ui-monospace,Menlo,monospace" fill="hsl(${hue},95%,${matchMedia('(prefers-color-scheme: dark)').matches ? 70 : 38}%)">${c.name.toUpperCase()} · ${T.text.toUpperCase()}</text>`; }
     web.innerHTML = svg; web.style.opacity = 1; creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
-    drivesEl.textContent = creatures.map(bars).join('\n'); requestAnimationFrame(animate);
+    if ($('#workshop').open && (!animate._d || t - animate._d > 400)) { animate._d = t; drivesEl.innerHTML = '<small style="opacity:.65">their drives: they get hungrier and more curious over time, tired from moving, fond of you when you play with them; the highest need picks what they do next</small>' + creatures.map(bars).join(''); } requestAnimationFrame(animate);
   }
   requestAnimationFrame(animate);
   // ---------- evolution: mutate / revert / keep, and genomes pushed from the lab (arena_genomes.json) ----------
@@ -267,7 +277,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     g.hue = Math.round((p.hue + gauss() * 22 + 360) % 360); g.footHue = Math.round((p.footHue + gauss() * 30 + 360) % 360);
     if (Math.random() < 0.25) g.legs = Math.max(4, Math.min(12, p.legs + (Math.random() < 0.5 ? -2 : 2)));
     if (Math.random() < 0.15) g.palps = Math.max(0, Math.min(2, (p.palps || 0) + (Math.random() < 0.5 ? -1 : 1)));
-    if (Math.random() < 0.12) g.abdomen = p.abdomen ? 0 : 1; if (Math.random() < 0.15) g.laser = p.laser ? 0 : 1; g.laserHue = Math.round(((p.laserHue ?? 200) + gauss() * 30 + 360) % 360); g.kick = +((p.kick ?? 1) * Math.exp(gauss() * r)).toFixed(2);
+    if (Math.random() < 0.12) g.abdomen = p.abdomen ? 0 : 1; if (Math.random() < 0.15) g.laser = p.laser ? 0 : 1; g.laserHue = Math.round(((p.laserHue ?? 200) + gauss() * 30 + 360) % 360); g.kick = +((p.kick ?? 1) * Math.exp(gauss() * r)).toFixed(2); g.voicePitch = Math.round((p.voicePitch || (key === 'crawly' ? 900 : 480)) * Math.exp(gauss() * r)); g.voiceRange = +((p.voiceRange || 0.8) * Math.exp(gauss() * r)).toFixed(2); if (Math.random() < 0.12) g.voiceWave = pick(['sine', 'square', 'triangle', 'sawtooth']);
     return g;
   }
   function applyGenome(key, g, why) {
@@ -310,7 +320,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (w) { c.target = w; goto(c, w.x, w.y - 24); await when(() => arrived(c), 9000); c.target = null; }
     const toPieces = t => tokenizer.encode(t).map(i => (tokenizer.invVocab[i] || '').replace(/^Ġ|^▁/, '')).filter(Boolean);
     let pcs = toPieces(' ' + text); if (pcs.length < 2 && text.length > 2) pcs = toPieces(text); if (pcs.length < 2 && text.length > 1) { pcs = []; for (let i = 0; i < text.length; i += 2) pcs.push(text.slice(i, i + 2)); }   // literal to a fault: a one-token word still gets cut
-    c.chopUntil = performance.now() + 450; const ox = w ? w.x : c.x, oy = w ? w.y : c.y; if (w) { if (w.carriedBy) { w.carriedBy.carrying = null; } w.el.remove(); words.splice(words.indexOf(w), 1); }
+    c.chopUntil = performance.now() + 450; Sound.snip(); const ox = w ? w.x : c.x, oy = w ? w.y : c.y; if (w) { if (w.carriedBy) { w.carriedBy.carrying = null; } w.el.remove(); words.splice(words.indexOf(w), 1); }
     pcs.forEach((p, k) => { const pw = addWord(p, ox, oy, true); pw.crumb = /^[^a-z]+$/i.test(p) || p.length < 2; if (pw.crumb) pw.el.classList.add('crumb'); const ang = (k / pcs.length) * Math.PI * 2 + Math.random(), dist = 34 + Math.random() * 26; pw.el.animate([{ transform: 'translate(-50%,-50%) scale(1.4)', opacity: .3 }, { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }], { duration: 420 }); pw.x = ox + Math.cos(ang) * dist; pw.y = oy + Math.sin(ang) * dist; setTimeout(() => place(pw), 20); });
     c.d.hunger = clamp(c.d.hunger - 0.3); speak(c, 'chop', { p: pcs.join('|'), n: pcs.length }); c.state = 'idle'; logEvent('task', { who: c.name, option: 'chop', arg, success: true, pieces: pcs.length }); return true;
   }
@@ -318,7 +328,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const food = words.filter(w => w.piece && !w.carriedBy).sort((a, b) => (b.crumb - a.crumb) || (Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y)))[0]; if (!food) return false;
     c.target = food; goto(c, food.x, food.y + 10); await when(() => arrived(c), 9000); c.target = null; if (!words.includes(food) || food.carriedBy) return false;
     food.el.animate([{ transform: 'translate(-50%,-50%) scale(1)' }, { transform: 'translate(-50%,-50%) scale(0)' }], { duration: 300 }); setTimeout(() => { food.el.remove(); const i = words.indexOf(food); if (i >= 0) words.splice(i, 1); }, 280);
-    c.d.hunger = clamp(c.d.hunger - (food.crumb ? 0.12 : 0.22)); c.state = 'idle'; speak(c, 'eat', { w: food.text }); logEvent('task', { who: c.name, option: 'eat', success: true, word: food.text, crumb: !!food.crumb }); return true;
+    Sound.crunch(); c.d.hunger = clamp(c.d.hunger - (food.crumb ? 0.12 : 0.22)); c.state = 'idle'; speak(c, 'eat', { w: food.text }); logEvent('task', { who: c.name, option: 'eat', success: true, word: food.text, crumb: !!food.crumb }); return true;
   }
   async function doSteal(c) {   // take what another creature is carrying
     const victim = creatures.filter(k => k !== c && k.carrying && !k.held).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0]; if (!victim) return false;
@@ -378,8 +388,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     return { option, arg, probs };
   }
   const SYSTEM_TAG = '<|system|> ' + SYSTEM + '\n';
-  async function handleChat(text) {
-    say('you', text, 'you'); logEvent('chat', { len: text.length }); if (/crawl(y|er)/i.test(text)) feel(crawly, 'mention'); if (/tokeni[sz]er/i.test(text)) feel(tokc, 'mention'); creatures.forEach(k => { if (k.name && text.toLowerCase().includes(k.name.toLowerCase())) feel(k, 'mention'); });   // mention proxies: measurement only
+  async function handleChat(text, to) {
+    say(to ? 'you → ' + to.name : 'you', text, 'you'); logEvent('chat', { len: text.length }); if (/crawl(y|er)/i.test(text)) feel(crawly, 'mention'); if (/tokeni[sz]er/i.test(text)) feel(tokc, 'mention'); creatures.forEach(k => { if (k.name && text.toLowerCase().includes(k.name.toLowerCase())) feel(k, 'mention'); });   // mention proxies: measurement only
     const r = await classify(text); logEvent('instruction', { option: r.option, arg: r.arg, p: r.probs[r.option] });
     // argument grounding: the span tagger is weak (9/14), so resolve the argument against the words actually on the floor —
     // a floor word the user named wins over a garbled span (object resolution, not intent routing)
@@ -387,11 +397,11 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       const named = words.filter(w => !w.carriedBy && toks.includes(w.text) && !names.includes(w.text)).sort((a, b) => b.text.length - a.text.length);
       if (named.length && !(r.arg && named.some(w => w.text === r.arg.toLowerCase()))) { logEvent('arg_grounded', { span: r.arg, floor: named[0].text }); r.arg = named[0].text; } }
     const target = /oracle/i.test(text) ? 'oracle' : (/(tokeni[sz]er|crawl(y|er))/i.test(text) ? 'other' : 'user');   // bring target: who is named (display routing only; the option itself is the classifier's)
-    if (r.option === 'none') { creatures.forEach(c => ownThing(c, 'chat_none')); return r; }
+    if (r.option === 'none') { if (to) { speak(to, pick(['greet', 'own'])); feel(to, 'mention'); return r; } creatures.forEach(c => ownThing(c, 'chat_none')); return r; }
     const able = creatures.filter(c => c.options.includes(r.option) && c.state !== 'sleep' && c.state !== 'hide');
     const named = able.find(k => k.name && text.toLowerCase().includes(k.name.toLowerCase().replace(/\s*\(.*\)$/, ''))) || (/(tokeni[sz]er|id\|?le)/i.test(text) ? able.find(k => k.voiceKey === 'tok') : null) || (/crawl/i.test(text) ? able.find(k => k.voiceKey === 'crawly') : null);
-    const c = named ? named : able.length ? (able.length === 1 ? able[0] : (selected && able.includes(selected) ? selected : able.sort((a, b) => (b.d.affection + b.d.curiosity) - (a.d.affection + a.d.curiosity))[0])) : null;
-    if (!c) { creatures.forEach(k => ownThing(k, 'chat_unable')); return r; }
+    const c = to ? (to.options.includes(r.option) ? to : null) : named ? named : able.length ? (able.length === 1 ? able[0] : (selected && able.includes(selected) ? selected : able.sort((a, b) => (b.d.affection + b.d.curiosity) - (a.d.affection + a.d.curiosity))[0])) : null;
+    if (!c) { if (to) { speak(to, r.option === 'none' ? 'own' : 'nope', { w: r.arg || '?' }); return r; } creatures.forEach(k => ownThing(k, 'chat_unable')); return r; }
     if (!c.refusedLast && Math.random() < 0.08) { c.refusedLast = true; speak(c, 'refuse'); logEvent('refuse', { who: c.name, option: r.option }); oracleComment(pick(ORACLE_SEEDS.refused(c.name)), 'refused'); return { ...r, refused: true }; }   // Trico rule, rarer, never twice in a row
     c.refusedLast = false; if (r.option === 'fetch' && c.carrying) { const old = c.carrying; old.carriedBy = null; old.el.classList.remove('carried'); c.carrying = null; old.vx = (Math.random() - .5) * 4; old.vy = 3; }
     c.userUntil = Date.now() + 25000; r.success = await act(c, r.option, r.arg, target); c.userUntil = Date.now() + 8000; r.who = c.name; return r;
@@ -408,7 +418,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   let collection = (() => { try { return JSON.parse(localStorage.getItem('arena.collection') || '[]'); } catch (e) { return []; } })();
   function saveColl() { try { localStorage.setItem('arena.collection', JSON.stringify(collection.slice(-60))); } catch (e) {} }
   function addToCollection(key, g) { if (collection.some(x => x.genome.id === g.id)) return; collection.push({ key, kept: Date.now(), genome: JSON.parse(JSON.stringify({ ...g, born: g.born || Date.now() })) }); saveColl(); renderColl(); }
-  const TRAITS = [['legs', 'legs'], ['l1', 'upper leg'], ['l2', 'lower leg'], ['bodyL', 'body length'], ['bodyW', 'body width'], ['abdomen', 'abdomen'], ['palps', 'feelers'], ['speed', 'speed'], ['step', 'stride'], ['fidget', 'fidgetiness'], ['kick', 'kick strength'], ['laser', 'targeting laser'], ['hue', 'colour'], ['footHue', 'foot colour']];
+  const TRAITS = [['legs', 'legs'], ['l1', 'upper leg'], ['l2', 'lower leg'], ['bodyL', 'body length'], ['bodyW', 'body width'], ['abdomen', 'abdomen'], ['palps', 'feelers'], ['speed', 'speed'], ['step', 'stride'], ['fidget', 'fidgetiness'], ['kick', 'kick strength'], ['laser', 'targeting laser'], ['voicePitch', 'voice pitch'], ['voiceRange', 'voice range'], ['hue', 'colour'], ['footHue', 'foot colour']];
   function miniSVG(g) { const c = { x: 70, y: 52, vx: 0, vy: 0, heading: -0.4, state: 'idle', held: false, phase: 1, g }; buildLegs(c); return `<svg viewBox="0 0 140 104" width="140" height="104">${legsSVG(c)}${bodySVG(c, 0)}</svg>`; }
   const compareSel = new Set();
   function renderColl() {
@@ -437,7 +447,18 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // the world: sentences become islands, each grown as a spiral; small words are grass, long ones rocks, names trees, repeated words grow
   const GRASS = new Set('a an the of to in on at by for and or but is was are were be been it its as with from that this he she they we you i his her their my your our not no so if then than there here who whom which what when where why how all any each into upon over under after before up down out off yea'.split(' '));
   function clearTerrain() { for (let i = words.length - 1; i >= 0; i--) if (words[i].terrain && !words[i].carriedBy) { words[i].el.remove(); words.splice(i, 1); } floor.querySelectorAll('.island').forEach(e => e.remove()); }
+  // the world has a genome too (Nico: "should we be evolving the environment too?"): layout, typeface, size, spacing, ink colour, density
+  const DEFAULT_WORLD = { id: 'world-0', layout: 'page', font: 'serif', size: 15, line: 1.65, ink: 0, inkSat: 0, density: 1, margin: 40 };
+  let world = (() => { try { return { ...DEFAULT_WORLD, ...JSON.parse(localStorage.getItem('arena.world') || '{}') }; } catch (e) { return { ...DEFAULT_WORLD }; } })();
+  let lastWorldText = null;
+  function saveWorld() { try { localStorage.setItem('arena.world', JSON.stringify(world)); } catch (e) {} const el = $('#worldInfo'); if (el) el.textContent = `${world.id} · ${world.layout} · ${world.font} ${world.size}px · spacing ${(+world.line).toFixed(2)} · ink ${world.inkSat ? 'hue ' + world.ink : 'plain'}`; }
+  function worldFont() { return { serif: "Georgia,'Times New Roman',serif", mono: 'ui-monospace,Menlo,monospace', sans: 'system-ui,sans-serif' }[world.font] || 'Georgia,serif'; }
+  function mutateWorld() { const g = (v, r) => +(v * Math.exp(gauss() * r)).toFixed(2); const w = { ...world, id: 'world-' + Date.now().toString(36).slice(-4) };
+    if (Math.random() < 0.3) w.layout = pick(['page', 'islands', 'scatter', 'columns']); if (Math.random() < 0.3) w.font = pick(['serif', 'mono', 'sans']);
+    w.size = Math.max(11, Math.min(20, Math.round(g(world.size, 0.12)))); w.line = Math.max(1.2, Math.min(2.4, g(world.line, 0.12))); w.margin = Math.max(16, Math.min(90, Math.round(g(world.margin, 0.25))));
+    w.density = Math.max(0.5, Math.min(1.6, g(world.density, 0.2))); if (Math.random() < 0.4) { w.inkSat = w.inkSat ? 0 : 45; } w.ink = Math.round((world.ink + gauss() * 60 + 360) % 360); return w; }
   function layTerrain(text, title) {
+    lastWorldText = { text, title }; if (world.layout !== 'islands') return layPage(text, title);
     clearTerrain(); const r = arenaEl.getBoundingClientRect(), W = r.width, H = r.height;
     const sentences = String(text).replace(/\s+/g, ' ').split(/(?<=[.!?;:])\s+/).map(se => se.split(' ').map(w => ({ raw: w.replace(/^[^\w']+|[^\w']+$/g, ''), }) ).filter(o => /^[A-Za-z][A-Za-z'-]{0,17}$/.test(o.raw))).filter(a => a.length);
     let flat = []; sentences.forEach((se, si) => se.forEach(o => flat.push({ ...o, si }))); flat = flat.slice(0, 220); if (!flat.length) return;
@@ -454,11 +475,51 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     say('lab', 'world: ' + (title ? '"' + title.slice(0, 60) + '", ' : '') + flat.length + ' words on ' + nIsl + ' islands', 'lab'); logEvent('terrain', { n: flat.length, islands: nIsl, url: !!title });
     oracleComment(pick([`New world. ${nIsl} islands of words, and the legs have noticed`, `Someone grew a landscape in my room. The crawler will eat half of it`, `My room has islands now. ${title ? 'They used to be ' + title.slice(0, 40) : 'Do not ask me to read them'}`]), 'terrain');
   }
+  function layPage(text, title) {   // plain flowing text, like a page the creatures walk on (the video's look): page, scatter or columns
+    clearTerrain(); const r = arenaEl.getBoundingClientRect(), W = r.width, H = r.height, fs = world.size, lh = fs * world.line, cw = fs * (world.font === 'mono' ? 0.62 : 0.5);
+    const toks = String(text).replace(/\s+/g, ' ').split(' ').map(w => w.replace(/^[^\w']+|[^\w']+$/g, '')).filter(w => /^[A-Za-z][A-Za-z'-]{0,17}$/.test(w)).slice(0, Math.round(260 * world.density));
+    const cols = world.layout === 'columns' ? 2 : 1, colW = (W - world.margin * (cols + 1)) / cols; let col = 0, x = world.margin, y = world.margin * 0.7 + lh / 2, placed = 0;
+    for (const raw of toks) { const w = raw.length * cw + fs * 0.45; let px, py;
+      if (world.layout === 'scatter') { px = world.margin + Math.random() * (W - 2 * world.margin); py = world.margin + Math.random() * (H - 2 * world.margin); }
+      else { const left = world.margin + col * (colW + world.margin); if (x + w > left + colW) { x = left; y += lh; } if (y > H - world.margin * 0.5) { if (++col >= cols) break; x = world.margin + col * (colW + world.margin); y = world.margin * 0.7 + lh / 2; } if (x < left) x = left; px = x + w / 2; py = y; x += w; }
+      const ww = addWord(raw.toLowerCase(), px, py); ww.terrain = true; ww.el.classList.add('terrain', 't-page'); ww.el.style.font = `${fs}px/1 ${worldFont()}`; if (world.inkSat) ww.el.style.color = `hsl(${world.ink},${world.inkSat}%,55%)`; placed++; }
+    say('lab', 'world: ' + (title ? '"' + title.slice(0, 60) + '", ' : '') + placed + ' words, ' + world.layout, 'lab'); logEvent('terrain', { n: placed, layout: world.layout, world: world.id, url: !!title });
+    oracleComment(pick([`New floor. Words everywhere, and the legs have noticed`, `Someone brought a page in. The crawler will eat half of it`, `My room is made of text now. ${title ? 'It used to be ' + title.slice(0, 40) : 'Do not ask me to read it'}`]), 'terrain');
+  }
   async function terrainFrom(input) {
     const v = input.trim(); if (!v) return;
     if (/^https?:\/\//i.test(v)) { say('lab', 'fetching ' + v.slice(0, 80) + '…', 'lab'); try { const j = await (await fetch('/lab/fetch?url=' + encodeURIComponent(v))).json(); if (j.error) { say('lab', 'could not fetch: ' + j.error, 'lab'); return; } layTerrain(j.text, j.title || v); } catch (e) { say('lab', 'could not fetch (is demo_server.py running?)', 'lab'); } }
     else layTerrain(v, null);
   }
+  $('#worldMut').addEventListener('click', () => { world = mutateWorld(); saveWorld(); logEvent('world_mutate', { world }); if (lastWorldText) layTerrain(lastWorldText.text, lastWorldText.title); else say('lab', 'world changed: grow a world from text to see it', 'lab'); });
+  $('#worldReset').addEventListener('click', () => { world = { ...DEFAULT_WORLD }; saveWorld(); if (lastWorldText) layTerrain(lastWorldText.text, lastWorldText.title); });
+  saveWorld();
+  // ---------- quick actions: one click dispatches; {word} becomes a random word on the floor; + saves what you typed as a new one ----------
+  const QUICK0 = ['fetch {word}', 'Id|le, chop {word}', 'say hi', 'come here', 'hand a piece to Crawly', 'take a nap', 'bring it to me'];
+  let quick = (() => { try { return JSON.parse(localStorage.getItem('arena.quick') || 'null') || QUICK0.slice(); } catch (e) { return QUICK0.slice(); } })();
+  function renderQuick() { $('#quick').innerHTML = quick.map((q, i) => `<button data-q="${i}">${q.replace(/[<>&]/g, '')}<span class="x" data-qx="${i}" title="remove">×</span></button>`).join('') + '<button class="add" id="quickAdd" title="save what is in the chat box as a quick action ({word} = a random floor word)">+ save typed</button>'; }
+  document.addEventListener('click', e => { const x = e.target.closest('[data-qx]'); if (x) { e.stopPropagation(); quick.splice(+x.dataset.qx, 1); try { localStorage.setItem('arena.quick', JSON.stringify(quick)); } catch (er) {} renderQuick(); return; }
+    const b = e.target.closest('#quick [data-q]'); if (b && hidSession) { const free = words.filter(w => !w.carriedBy); const t = quick[+b.dataset.q].replace('{word}', free.length ? pick(free).text : 'ball'); logEvent('quick', { i: +b.dataset.q }); handleChat(t); return; }
+    if (e.target.id === 'quickAdd') { const t = $('#chat').value.trim(); if (!t) { say('lab', 'type an instruction in the chat box first, then + saves it', 'lab'); return; } quick.push(t); try { localStorage.setItem('arena.quick', JSON.stringify(quick)); } catch (er) {} $('#chat').value = ''; renderQuick(); } });
+  renderQuick();
+  // ---------- whisper: click a creature to talk to it directly; it acts and answers in its own bubble ----------
+  let whisperTo = null;
+  function openWhisper(c) { whisperTo = c; const el = $('#whisper'); el.style.display = 'block'; el.style.left = c.x + 'px'; el.style.top = (c.y + Math.max(c.g.bodyL, c.g.bodyW) + 18) + 'px'; const i = $('#whisperIn'); i.placeholder = 'say something to ' + c.name + '…'; i.value = ''; i.focus(); }
+  $('#whisperIn').addEventListener('keydown', e => { if (e.key === 'Escape') { $('#whisper').style.display = 'none'; whisperTo = null; } if (e.key !== 'Enter' || !whisperTo || !hidSession) return; const t = e.target.value.trim(); if (!t) return; const c = whisperTo; $('#whisper').style.display = 'none'; whisperTo = null; logEvent('whisper', { to: c.name }); handleChat(t, c); });
+  $('#whisperIn').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('#whisperIn')) $('#whisper').style.display = 'none'; }, 200));
+  // ---------- sound (Web Audio, synthesized, off by default): footsteps, chirps per creature voice, snip, crunch ----------
+  const Sound = (() => { let ctx = null, on = false, lastStep = 0;
+    const ensure = () => { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; };
+    function noise(dur, freq, vol) { const a = ensure(), n = Math.floor(a.sampleRate * dur), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+      const s = a.createBufferSource(); s.buffer = b; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 4; const g = a.createGain(); g.gain.value = vol; s.connect(f); f.connect(g); g.connect(a.destination); s.start(); }
+    function blip(t0, f0, f1, dur, vol, type) { const a = ensure(), o = a.createOscillator(), g = a.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f0, a.currentTime + t0); o.frequency.exponentialRampToValueAtTime(Math.max(40, f1), a.currentTime + t0 + dur);
+      g.gain.setValueAtTime(0.0001, a.currentTime + t0); g.gain.exponentialRampToValueAtTime(vol, a.currentTime + t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur); o.connect(g); g.connect(a.destination); o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02); }
+    return { toggle() { on = !on; if (on) ensure().resume(); $('#soundBtn').textContent = on ? '🔊' : '🔇'; logEvent('sound', { on }); return on; },
+      step(c) { if (!on) return; const now = performance.now(); if (now - lastStep < 45) return; lastStep = now; noise(0.03, 1800 + 4000 / (c.g.l1 + c.g.l2) * 30, 0.05); },
+      chirp(c, text) { if (!on) return; const base = c.g.voicePitch || (c.voiceKey === 'crawly' ? 900 : 480), n = Math.min(6, 2 + Math.floor((text || '').length / 8)), wave = c.g.voiceWave || (c.voiceKey === 'crawly' ? 'square' : 'triangle');
+        for (let i = 0; i < n; i++) { const f = base * Math.pow(2, (Math.random() - .5) * (c.g.voiceRange || 0.8)); blip(i * 0.075, f, f * (Math.random() < .5 ? 1.3 : 0.75), 0.06, 0.035, wave); } },
+      snip() { if (on) { noise(0.05, 5200, 0.12); blip(0.02, 2400, 900, 0.05, 0.03, 'sawtooth'); } }, crunch() { if (on) { noise(0.12, 900, 0.15); noise(0.08, 2400, 0.08); } } }; })();
+  $('#soundBtn').addEventListener('click', () => Sound.toggle());
   // ---------- lab tab (same thread as the chat page: pile_runs/lab/*.jsonl via demo_server.py, localhost only) ----------
   (() => {
     const el = $('#lab'), thread = $('#lab-thread'), text = $('#lab-text'); let seen = 0, open = false;
@@ -480,7 +541,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   $('#terrain').addEventListener('keydown', e => { if (e.key === 'Enter') { terrainFrom(e.target.value); e.target.value = ''; } });
   $('#terrainGo').addEventListener('click', () => { terrainFrom($('#terrain').value); $('#terrain').value = ''; });
   $('#terrainClear').addEventListener('click', clearTerrain);
-  $('#collBtn').addEventListener('click', () => { $('#coll').classList.toggle('on'); renderColl(); logEvent('collection_open', { on: $('#coll').classList.contains('on') }); });
+  $('#collBtn').addEventListener('click', () => { $('#workshop').open = true; $('#coll').classList.toggle('on'); renderColl(); logEvent('collection_open', { on: $('#coll').classList.contains('on') }); });
   renderColl();
   restoreResidents();
   renderEvo();
