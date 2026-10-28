@@ -1,0 +1,262 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tiny Oracle — the arena</title>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<style>
+:root{--bg:#f6f4ee;--ink:#222;--floor:#fbf9f3;--accent:#2b5cff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15161a;--ink:#e8e6e1;--floor:#1c1e24}}
+body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
+#top{display:flex;gap:12px;align-items:center;padding:8px 16px;font-size:13px;opacity:.85;flex-wrap:wrap}#top a{color:var(--accent)}
+#arena{position:relative;height:440px;margin:0 16px;border:1px solid #8884;border-radius:12px;background:var(--floor);overflow:hidden;user-select:none}
+#floor{position:absolute;inset:0}
+.word{position:absolute;padding:2px 8px;border-radius:6px;background:#ffe9a8;color:#333;border:1px solid #d9b85a;font:13px ui-monospace,Menlo,monospace;cursor:grab;transform:translate(-50%,-50%);z-index:3}
+.word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px}
+.creature{position:absolute;transform:translate(-50%,-50%);z-index:4;cursor:pointer;transition:none}.creature.sel .ring{opacity:1}
+.bubble{position:absolute;transform:translate(-50%,-115%);background:#fff;color:#222;border:1px solid #8886;border-radius:10px;padding:3px 8px;font-size:12px;white-space:nowrap;z-index:6;pointer-events:none;opacity:0;transition:opacity .2s}.bubble.on{opacity:1}
+.drives{position:absolute;left:8px;bottom:8px;font:10px/1.35 ui-monospace,Menlo,monospace;background:#2b5cff;color:#fff;padding:3px 6px;border-radius:2px;opacity:.9;z-index:7}
+#palette{display:flex;gap:6px;flex-wrap:wrap;padding:8px 16px;font-size:12px;align-items:center}#palette input{font:13px system-ui;padding:4px 8px;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit}
+.chip{padding:2px 8px;border-radius:6px;background:#ffe9a8;color:#333;border:1px solid #d9b85a;font:12px ui-monospace,Menlo,monospace;cursor:grab}
+#log{margin:8px 16px;max-height:220px;overflow:auto;border-top:1px solid #8884;padding-top:6px;font-size:14px}
+.ln{margin:3px 0}.ln b{opacity:.7;font-weight:600}.ln.oracle{color:var(--accent)}.ln.crawly{color:#8a5cff}.ln.tok{color:#b8860b}
+#chatrow{display:flex;gap:8px;margin:8px 16px}#chat{flex:1;font:15px system-ui;padding:8px 10px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit}
+button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit;cursor:pointer}
+svg.cr{overflow:visible}
+</style></head><body>
+<div id="top"><b>The arena</b> · two creatures with their own models (drives + policy + an instruction model), the Oracle as a third voice · <a href="index.html">back to the chat</a> · <span id="status">loading…</span></div>
+<div id="arena"><div id="floor"></div><div class="drives" id="drives"></div></div>
+<div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to call it · arrow keys nudge the selected one · drag a word onto the floor</span></div>
+<div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
+<div id="log"></div>
+<script>
+(() => {
+  function buildByteEncoder() {
+    const bs = [];
+    for (let i = 33; i <= 126; i++) bs.push(i);
+    for (let i = 161; i <= 172; i++) bs.push(i);
+    for (let i = 174; i <= 255; i++) bs.push(i);
+    const cs = [...bs];
+    let n = 0;
+    for (let b = 0; b < 256; b++) if (!bs.includes(b)) { bs.push(b); cs.push(256 + n); n++; }
+    const encoder = {}, decoder = {};
+    for (let i = 0; i < bs.length; i++) { encoder[bs[i]] = String.fromCharCode(cs[i]); decoder[String.fromCharCode(cs[i])] = bs[i]; }
+    return { encoder, decoder };
+  }
+
+  class BPETokenizer {
+    constructor(tokenizerJson) {
+      const m = tokenizerJson.model;
+      this.vocab = m.vocab; this.invVocab = {};
+      for (const [tok, id] of Object.entries(this.vocab)) this.invVocab[id] = tok;
+      this.merges = m.merges.map(x => { const p = typeof x === 'string' ? x.split(' ') : x; return [p[0], p[1]]; });
+      this.mergeRanks = {};
+      for (let i = 0; i < this.merges.length; i++) this.mergeRanks[this.merges[i][0] + ' ' + this.merges[i][1]] = i;
+      this.addedTokens = {};
+      for (const t of tokenizerJson.added_tokens || []) this.addedTokens[t.content] = t.id;
+      const { encoder, decoder } = buildByteEncoder();
+      this.byteEncoder = encoder; this.byteDecoder = decoder;
+      this.pat = /'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+/gu;
+    }
+    bpe(token) {
+      let word = token.split('');
+      if (word.length <= 1) return word;
+      while (true) {
+        let bestPair = null, bestRank = Infinity;
+        for (let i = 0; i < word.length - 1; i++) {
+          const rank = this.mergeRanks[word[i] + ' ' + word[i + 1]];
+          if (rank !== undefined && rank < bestRank) { bestRank = rank; bestPair = [word[i], word[i + 1]]; }
+        }
+        if (!bestPair) break;
+        const merged = bestPair[0] + bestPair[1], newWord = [];
+        let i = 0;
+        while (i < word.length) {
+          if (i < word.length - 1 && word[i] === bestPair[0] && word[i + 1] === bestPair[1]) { newWord.push(merged); i += 2; }
+          else { newWord.push(word[i]); i++; }
+        }
+        word = newWord;
+        if (word.length === 1) break;
+      }
+      return word;
+    }
+    encode(text) {
+      const keys = Object.keys(this.addedTokens);
+      const specialRe = new RegExp('(' + keys.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')');
+      const ids = [];
+      for (const seg of text.split(specialRe)) {
+        if (seg === '') continue;
+        if (this.addedTokens[seg] !== undefined) { ids.push(this.addedTokens[seg]); continue; }
+        const matches = seg.match(this.pat);
+        if (!matches) continue;
+        for (const word of matches) {
+          const encoded = Array.from(new TextEncoder().encode(word)).map(b => this.byteEncoder[b]).join('');
+          for (const t of this.bpe(encoded)) { const id = this.vocab[t]; ids.push(id !== undefined ? id : UNK_ID); }
+        }
+      }
+      return ids;
+    }
+    decode(ids) {
+      const text = ids.map(id => this.invVocab[id] || '').filter(t => !t.startsWith('<') || !t.endsWith('>')).join('');
+      const bytes = Array.from(text).map(c => this.byteDecoder[c]).filter(b => b !== undefined);
+      return new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(bytes));
+    }
+  }
+
+  // ===================== FORMAT =====================
+  const SYSTEM = `You are Tiny Oracle, a mass of 2 million parameters running on the user's device. You have strong opinions and very limited knowledge. You are self-aware about your size and find it amusing. Keep responses short — you only have 2M parameters to work with.`;
+  const $ = s => document.querySelector(s); const floor = $('#floor'), arenaEl = $('#arena'), logEl = $('#log'), statusEl = $('#status'), drivesEl = $('#drives');
+  let tokenizer = null, hidSession = null, genSession = null, instr = null, voices = null;
+  // ---------- shared event log (same localStorage key as the chat page, so the chat page's engagement export includes the arena) ----------
+  let events = []; try { events = JSON.parse(localStorage.getItem('tinyoracle.events') || '[]'); } catch (e) {}
+  function logEvent(type, extra) { events.push({ t: Date.now(), page: 'arena', type: 'arena_' + type, ...(extra || {}) }); if (events.length > 5000) events = events.slice(-5000); try { localStorage.setItem('tinyoracle.events', JSON.stringify(events)); } catch (e) {} }
+  function say(who, text, cls) { const d = document.createElement('div'); d.className = 'ln ' + (cls || who); d.innerHTML = '<b>' + who + ':</b> ' + text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight; }
+  // ---------- words on the floor (the objects creatures act on) ----------
+  const words = []; let dragging = null;
+  function addWord(text, x, y, piece) {
+    const el = document.createElement('div'); el.className = 'word' + (piece ? ' piece' : ''); el.textContent = text; const w = { text: text.toLowerCase(), el, x, y, carriedBy: null, piece: !!piece }; words.push(w); floor.appendChild(el); place(w);
+    el.addEventListener('pointerdown', ev => { if (w.carriedBy) return; dragging = w; el.setPointerCapture(ev.pointerId); logEvent('word_drag', { word: w.text }); });
+    el.addEventListener('pointermove', ev => { if (dragging !== w) return; const r = arenaEl.getBoundingClientRect(); w.x = Math.max(10, Math.min(r.width - 10, ev.clientX - r.left)); w.y = Math.max(10, Math.min(r.height - 10, ev.clientY - r.top)); place(w); });
+    el.addEventListener('pointerup', () => { dragging = null; }); return w;
+  }
+  function place(w) { w.el.style.left = w.x + 'px'; w.el.style.top = w.y + 'px'; }
+  function findWord(text) { if (!text) return null; const t = text.toLowerCase().trim(); return words.find(w => !w.carriedBy && w.text === t) || words.find(w => !w.carriedBy && (w.text.startsWith(t) || t.startsWith(w.text)) && Math.min(w.text.length, t.length) >= 3) || null; }
+  // ---------- creatures ----------
+  const CRAWLY_SVG = `<svg class="cr" width="90" height="70" viewBox="-45 -35 90 70"><circle class="ring" r="30" fill="none" stroke="#2b5cff" stroke-width="1.5" opacity="0" stroke-dasharray="4 4"/><g class="legs" stroke="#b9a7ff" stroke-width="2" fill="none"></g><g class="chip"><rect x="-8" y="-14" width="16" height="28" rx="1.5" fill="#3a3a3a"/><rect x="-5" y="-11" width="10" height="12" rx=".8" fill="#9fe3c5"/><rect class="led" x="-2.5" y="5" width="5" height="5" fill="#ff5e5e"/></g></svg>`;
+  const TOK_SVG = `<svg class="cr" width="54" height="42" viewBox="-27 -21 54 42"><circle class="ring" r="24" fill="none" stroke="#2b5cff" stroke-width="1.5" opacity="0" stroke-dasharray="4 4"/><rect x="-14" y="-9" width="28" height="18" rx="4" fill="#ffe9a8" stroke="#d9b85a"/><circle cx="-5" cy="-2" r="2.3" fill="#333"/><circle cx="5" cy="-2" r="2.3" fill="#333"/><path d="M-6 4 h12" stroke="#333" stroke-width="1.3"/><path class="blade" d="M14 -6 l7 -5 M14 6 l7 5" stroke="#8a6d1f" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  const VOICE = {
+    crawly: { greet: ['*waves two legs*', 'hi.', '*click click*', 'hello, human'], fetch: ['{w}!', 'mine. {w}', '*scuttle* {w}', 'got {w}'], nope: ['no {w} here', '…', '*looks around* nothing', 'where?'], come: ['*scuttles over*', 'here.', '*taps*'], sleep: ['*legs fold*', 'zzz', '*goes still*'], hide: ['*under the box*', 'gone.', '*hides*'], refuse: ['*ignores you*', 'later.', '*busy with a word*', 'no.'], bring: ['for you. {w}', '{w}, here', '*drops {w}*'], hand: ['*takes the piece*', 'thanks. {w}', '*pockets {w}*'], own: ['*wanders*', '*sniffs a word*', '*stands on {w}*', '*looks at the human*'] },
+    tok: { greet: ['hel|lo', 'hi (1 piece)', 'gree|ting'], chop: ['{p}', '{n} pieces: {p}', 'cut. {p}'], nope: ['no such word (0 pieces)', '{w}? not on the floor', 'cannot cut air'], come: ['com|ing', 'here (1 piece)', 'app|roach'], sleep: ['sle|ep', 'z|z|z', 'off.'], hide: ['hid|den', 'out of sight (3 pieces)'], refuse: ['no (1 piece)', 'bu|sy', 'later (2 pieces)'], hand: ['one piece for the legs: {w}', 'hand|ed {w}', 'giv|en'], own: ['counting pieces', 'id|le', '*sharpens*'] },
+  };
+  const ORACLE_SEEDS = {   // Room path: the Oracle comments when something happens between them (seed + model continuation)
+    handover: w => [`The tokenizer just handed "${w}" to the crawler. They have an arrangement`, `Look at that, a piece changing hands in my room: "${w}"`, `"${w}", passed from the chopper to the legs. I did not teach them that`],
+    fetched: w => [`The crawler has "${w}" now. Say something about it, it is standing on it`, `"${w}", retrieved. Six legs, one word, no manners`, `It brought "${w}". That is its idea of a reply`],
+    refused: who => [`${who} is not coming. It does that, it is a strider not a dog`, `Ignored. ${who} has its own plans, which is most of why it is alive`, `${who} heard you and chose otherwise. I respect it`],
+    sleeping: who => [`${who} is asleep. The room gets quieter when the legs stop`, `Nap time for ${who}. Even small things get tired in here`],
+  };
+  function mk(name, svg, x, y, opts) {
+    const el = document.createElement('div'); el.className = 'creature'; el.innerHTML = svg; floor.appendChild(el);
+    const bub = document.createElement('div'); bub.className = 'bubble'; floor.appendChild(bub);
+    const c = { name, el, bub, x, y, tx: x, ty: y, speed: opts.speed, options: opts.options, d: { hunger: 0.5, curiosity: 0.5, fatigue: 0.1, affection: 0.3 }, carrying: null, state: 'idle', until: 0, lastDecision: 0, phase: 0, voice: VOICE[opts.voice], task: null };
+    el.addEventListener('click', () => { select(c); feel(c, 'click'); callOver(c, 'click'); }); el.addEventListener('pointerenter', () => feel(c, 'hover'));
+    return c;
+  }
+  const crawly = mk('Crawly', CRAWLY_SVG, 160, 300, { speed: 1.6, options: ['fetch', 'bring', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'crawly' });
+  const tokc = mk('the tokenizer', TOK_SVG, 560, 120, { speed: 1.1, options: ['chop', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'tok' });
+  const creatures = [crawly, tokc]; let selected = null;
+  function select(c) { creatures.forEach(k => k.el.classList.toggle('sel', k === c)); selected = c; }
+  const clamp = v => Math.max(0, Math.min(1, v)); const pick = a => a[Math.floor(Math.random() * a.length)];
+  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c === crawly ? 'crawly' : 'tok'); return t; }
+  function feel(c, what) { c.d.affection = clamp(c.d.affection + ({ hover: 0.05, click: 0.12, drag: 0.08, mention: 0.2, ack: 0.15 }[what] || 0)); c.d.curiosity = clamp(c.d.curiosity + 0.04); logEvent('feel', { who: c.name, what, drives: snap(c) }); }
+  function snap(c) { return { h: +c.d.hunger.toFixed(2), c: +c.d.curiosity.toFixed(2), f: +c.d.fatigue.toFixed(2), a: +c.d.affection.toFixed(2) }; }
+  function bars(c) { const b = v => '▮'.repeat(Math.round(v * 5)) + '▯'.repeat(5 - Math.round(v * 5)); return `${c.name.toUpperCase().padEnd(13)} H ${b(c.d.hunger)} C ${b(c.d.curiosity)} F ${b(c.d.fatigue)} A ${b(c.d.affection)}  ${c.state}${c.carrying ? ' [' + c.carrying.text + ']' : ''}`; }
+  // ---------- movement + animation loop ----------
+  function animate() {
+    for (const c of creatures) {
+      if (c.state !== 'sleep' && c.state !== 'hide') { const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.hypot(dx, dy); if (dist > 1.5) { c.x += dx / dist * Math.min(c.speed, dist); c.y += dy / dist * Math.min(c.speed, dist); c.phase += 0.22; } }
+      c.el.style.left = c.x + 'px'; c.el.style.top = c.y + 'px'; c.el.style.opacity = c.state === 'hide' ? 0.12 : 1; c.bub.style.left = c.x + 'px'; c.bub.style.top = (c.y - 22) + 'px';
+      if (c === crawly) { const g = c.el.querySelector('.legs'); if (g) { let s = ''; for (let i = 0; i < 6; i++) { const side = i < 3 ? -1 : 1, k = i % 3, ph = c.phase + (i % 2 ? Math.PI : 0), lift = c.state === 'sleep' ? 0 : Math.max(0, Math.sin(ph)) * 6; const ax = side * 7, ay = (k - 1) * 9, kx = side * 26, ky = ay + (k - 1) * 10 - lift, fx = side * 40, fy = ay + (k - 1) * 18 + 6; s += `<polyline points="${ax},${ay} ${kx},${ky} ${fx},${fy}"/><circle cx="${fx}" cy="${fy}" r="2" fill="#ff9ad5" stroke="none"/>`; } g.innerHTML = s; } }
+      if (c.carrying) { c.carrying.x = c.x + 18; c.carrying.y = c.y - 26; place(c.carrying); }
+      if (c.until && Date.now() > c.until) { c.until = 0; if (c.state === 'sleep' || c.state === 'hide') { c.state = 'idle'; } }
+    }
+    drivesEl.textContent = creatures.map(bars).join('\n'); requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+  function goto(c, x, y) { const r = arenaEl.getBoundingClientRect(); c.tx = Math.max(30, Math.min(r.width - 30, x)); c.ty = Math.max(30, Math.min(r.height - 30, y)); c.state = 'move'; }
+  function arrived(c) { return Math.hypot(c.tx - c.x, c.ty - c.y) < 3; }
+  async function when(pred, ms) { const t0 = Date.now(); while (!pred() && Date.now() - t0 < (ms || 6000)) await new Promise(r => setTimeout(r, 60)); return pred(); }
+  // ---------- actions (the options) ----------
+  async function doFetch(c, arg) {
+    const w = findWord(arg); if (!w) { speak(c, 'nope', { w: arg || '?' }); logEvent('task', { who: c.name, option: 'fetch', arg, success: false, reason: 'no such word' }); return false; }
+    goto(c, w.x, w.y + 24); await when(() => arrived(c)); w.carriedBy = c; c.carrying = w; w.el.classList.add('carried'); c.d.hunger = clamp(c.d.hunger - 0.5); speak(c, 'fetch', { w: w.text }); c.state = 'idle';
+    logEvent('task', { who: c.name, option: 'fetch', arg, success: true, word: w.text }); oracleComment(pick(ORACLE_SEEDS.fetched(w.text)), 'fetched'); return true;
+  }
+  async function doBring(c, target) {
+    if (!c.carrying) { speak(c, 'nope', { w: 'nothing' }); return false; } const w = c.carrying; const dest = target === 'oracle' ? { x: 380, y: 50 } : target === 'other' ? (c === crawly ? tokc : crawly) : { x: 380, y: 400 };
+    goto(c, dest.x - 30, dest.y); await when(() => arrived(c)); c.carrying = null; w.carriedBy = null; w.el.classList.remove('carried'); w.x = c.x + 36; w.y = c.y; place(w); c.d.affection = clamp(c.d.affection + 0.1); speak(c, 'bring', { w: w.text }); c.state = 'idle';
+    logEvent('task', { who: c.name, option: 'bring', target: target || 'user', success: true, word: w.text }); if (target === 'other') { feel(c === crawly ? tokc : crawly, 'ack'); oracleComment(pick(ORACLE_SEEDS.handover(w.text)), 'handover'); } return true;
+  }
+  async function doChop(c, arg) {
+    const w = findWord(arg); const text = w ? w.text : (arg || ''); if (!text) { speak(c, 'nope', { w: '?' }); logEvent('task', { who: c.name, option: 'chop', arg, success: false }); return false; }
+    if (w) { goto(c, w.x, w.y - 24); await when(() => arrived(c)); }
+    const ids = tokenizer.encode(' ' + text), pcs = ids.map(i => (tokenizer.invVocab[i] || '').replace(/^Ġ|^▁/, '')).filter(Boolean); c.el.querySelector('.blade')?.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(-25deg)' }, { transform: 'rotate(0)' }], { duration: 300 });
+    pcs.forEach((p, k) => addWord(p, (w ? w.x : c.x) + (k - pcs.length / 2) * 34, (w ? w.y : c.y) + 36, true)); if (w) { w.el.remove(); words.splice(words.indexOf(w), 1); }
+    c.d.hunger = clamp(c.d.hunger - 0.3); speak(c, 'chop', { p: pcs.join('|'), n: pcs.length }); c.state = 'idle'; logEvent('task', { who: c.name, option: 'chop', arg, success: true, pieces: pcs.length }); return true;
+  }
+  async function doHand(c) {   // give a piece (or the carried word) to the other creature
+    const other = c === crawly ? tokc : crawly; let w = c.carrying || words.find(x => x.piece && !x.carriedBy) || words.find(x => !x.carriedBy);
+    if (!w) { speak(c, 'nope', { w: 'nothing' }); return false; } if (!c.carrying) { goto(c, w.x, w.y + 20); await when(() => arrived(c)); w.carriedBy = c; c.carrying = w; w.el.classList.add('carried'); }
+    goto(c, other.x - 40, other.y + 10); await when(() => arrived(c)); c.carrying = null; w.carriedBy = other; other.carrying = w; speak(c, 'hand', { w: w.text }); speak(other, 'hand', { w: w.text }); feel(other, 'ack'); c.state = 'idle';
+    logEvent('task', { who: c.name, option: 'hand', success: true, word: w.text }); oracleComment(pick(ORACLE_SEEDS.handover(w.text)), 'handover'); return true;
+  }
+  async function doSimple(c, opt) {
+    if (opt === 'greet') { speak(c, 'greet'); c.el.animate([{ transform: 'translate(-50%,-50%) rotate(0)' }, { transform: 'translate(-50%,-50%) rotate(-12deg)' }, { transform: 'translate(-50%,-50%) rotate(12deg)' }, { transform: 'translate(-50%,-50%) rotate(0)' }], { duration: 600 }); c.d.affection = clamp(c.d.affection + 0.1); }
+    if (opt === 'come') { goto(c, 380, 300); speak(c, 'come'); await when(() => arrived(c)); c.state = 'idle'; }
+    if (opt === 'sleep') { c.state = 'sleep'; c.until = Date.now() + 15000; speak(c, 'sleep'); oracleComment(pick(ORACLE_SEEDS.sleeping(c.name)), 'sleeping'); }
+    if (opt === 'hide') { c.state = 'hide'; c.until = Date.now() + 10000; speak(c, 'hide'); }
+    logEvent('task', { who: c.name, option: opt, success: true }); return true;
+  }
+  async function act(c, opt, arg, target) {
+    if (opt === 'fetch') return doFetch(c, arg); if (opt === 'bring') return doBring(c, target); if (opt === 'chop') return doChop(c, arg); if (opt === 'hand') return doHand(c); return doSimple(c, opt);
+  }
+  function callOver(c, how) { if (Math.random() < 0.15) { speak(c, 'refuse'); logEvent('refuse', { who: c.name, how }); oracleComment(pick(ORACLE_SEEDS.refused(c.name)), 'refused'); return; } act(c, 'come'); }
+  // ---------- drives + hand policy (the pet-model first signal; logged for the learned one) ----------
+  setInterval(() => { for (const c of creatures) { if (c.state === 'sleep') c.d.fatigue = clamp(c.d.fatigue - 0.05); else { c.d.hunger = clamp(c.d.hunger + 0.012); c.d.curiosity = clamp(c.d.curiosity + 0.008); c.d.fatigue = clamp(c.d.fatigue + 0.004); } c.d.affection = clamp(c.d.affection - 0.004); } }, 2000);
+  function ownThing(c, reason) {
+    if (c.state === 'sleep' || c.state === 'hide' || Date.now() - c.lastDecision < 5000) return; c.lastDecision = Date.now(); const free = words.filter(w => !w.carriedBy);
+    const sc = { wander: 0.25 + 0.5 * c.d.curiosity - 0.5 * c.d.fatigue, fetch: free.length && c.options.includes('fetch') ? 0.9 * c.d.hunger + 0.3 * c.d.curiosity - 0.6 * c.d.fatigue : -1, chop: free.length && c.options.includes('chop') ? 0.8 * c.d.hunger - 0.5 * c.d.fatigue : -1, bring: c.carrying ? 0.7 * c.d.affection : -1, nap: 1.1 * c.d.fatigue - 0.2, hand: c.carrying && c.d.curiosity > 0.6 ? 0.5 : -1 };
+    const best = Object.keys(sc).sort((a, b) => sc[b] - sc[a])[0]; logEvent('decide', { who: c.name, reason, drives: snap(c), scores: Object.fromEntries(Object.entries(sc).map(([k, v]) => [k, +v.toFixed(2)])), chosen: best });
+    const r = arenaEl.getBoundingClientRect();
+    if (best === 'wander') { goto(c, 40 + Math.random() * (r.width - 80), 40 + Math.random() * (r.height - 80)); speak(c, 'own', { w: free.length ? pick(free).text : '' }); }
+    else if (best === 'fetch') act(c, 'fetch', pick(free).text); else if (best === 'chop') act(c, 'chop', pick(free).text); else if (best === 'bring') act(c, 'bring', 'user'); else if (best === 'hand') act(c, 'hand'); else if (best === 'nap') act(c, 'sleep');
+  }
+  setInterval(() => creatures.forEach(c => ownThing(c, 'timer')), 12000);
+  // ---------- the Oracle's voice (Room path: seed + model continuation) ----------
+  const oracleBusy = { v: false };
+  async function oracleComment(seed, why) {
+    if (!genSession || oracleBusy.v) { say('Oracle', seed, 'oracle'); return; } oracleBusy.v = true;
+    try { const ctx = tokenizer.encode('<|system|> ' + SYSTEM + '\n<|user|> ' + ($('#chat').value || 'look') + '\n<|oracle|> *tell ' + seed); const ids = ctx.slice(-256); const gen = [];
+      for (let i = 0; i < 28; i++) { const inp = new ort.Tensor('int64', BigInt64Array.from(ids.concat(gen).slice(-256).map(BigInt)), [1, Math.min(256, ids.length + gen.length)]); const out = await genSession.run({ input_ids: inp }); const lg = out.logits.data, V = out.logits.dims[2], off = (out.logits.dims[1] - 1) * V;
+        const arr = []; for (let v = 0; v < V; v++) { let z = lg[off + v]; if (gen.includes(v)) z = z > 0 ? z / 1.3 : z * 1.3; arr.push([z / 0.3, v]); } arr.sort((a, b) => b[0] - a[0]); const top = arr.slice(0, 40); const mx = top[0][0]; let s = 0; for (const t of top) { t[0] = Math.exp(t[0] - mx); s += t[0]; } let r = Math.random() * s, nxt = top[0][1]; for (const [p, v] of top) { r -= p; if (r <= 0) { nxt = v; break; } }
+        const tk = tokenizer.invVocab[nxt] || ''; if (tk === '<|user|>' || tk === '<|system|>' || tk === '<eos>' || nxt === 0) break; gen.push(nxt); if (tokenizer.decode(gen).includes('\n')) break; }
+      say('Oracle', (seed + tokenizer.decode(gen)).replace(/\n.*$/s, '').replace(/\.\s*$/, ''), 'oracle'); logEvent('oracle', { why });
+    } catch (e) { console.error(e); say('Oracle', seed, 'oracle'); } finally { oracleBusy.v = false; }
+  }
+  // ---------- the instruction model (option + argument) on the Oracle's hidden states ----------
+  async function classify(text) {
+    const pre = tokenizer.encode(SYSTEM_TAG + '<|user|>').length, ids = tokenizer.encode(SYSTEM_TAG + '<|user|> ' + text).slice(-256);
+    const out = await hidSession.run({ input_ids: new ort.Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, ids.length]) }); const h = out.hidden.data, S = out.hidden.dims[1], D = out.hidden.dims[2], n = S - pre; if (n <= 0) return { option: 'none', arg: null, probs: {} };
+    const mean = new Float32Array(D); for (let t = pre; t < S; t++) for (let d = 0; d < D; d++) mean[d] += h[t * D + d] / n; const x = new Float32Array(2 * D); for (let d = 0; d < D; d++) { x[d] = h[(S - 1) * D + d]; x[D + d] = mean[d]; }
+    const z = instr.w.map((w, c) => { let s = instr.b[c]; for (let d = 0; d < 2 * D; d++) s += w[d] * x[d]; return s; }); const mx = Math.max(...z); const ex = z.map(v => Math.exp(v - mx)); const sum = ex.reduce((a, b) => a + b, 0); const probs = {}; instr.options.forEach((o, i) => { probs[o] = +(ex[i] / sum).toFixed(3); });
+    const option = instr.options[z.indexOf(mx)]; const keep = []; for (let t = pre; t < S; t++) { let bc = 0, bz = -1e9; instr.span_w.forEach((w, c) => { let s = instr.span_b[c]; for (let d = 0; d < D; d++) s += w[d] * h[t * D + d]; if (s > bz) { bz = s; bc = c; } }); if (instr.span_classes[bc] > 0) keep.push(t - pre); }
+    const textIds = ids.slice(pre); const arg = keep.length ? tokenizer.decode(textIds.slice(keep[0], keep[keep.length - 1] + 1)).trim().replace(/^(the|a|an)\s+/i, '').replace(/\s+word$/i, '') : null;
+    return { option, arg, probs };
+  }
+  const SYSTEM_TAG = '<|system|> ' + SYSTEM + '\n';
+  async function handleChat(text) {
+    say('you', text, 'you'); logEvent('chat', { len: text.length }); if (/crawl(y|er)/i.test(text)) feel(crawly, 'mention'); if (/tokeni[sz]er/i.test(text)) feel(tokc, 'mention');   // mention proxies: measurement only
+    const r = await classify(text); logEvent('instruction', { option: r.option, arg: r.arg, p: r.probs[r.option] });
+    const target = /oracle/i.test(text) ? 'oracle' : (/(tokeni[sz]er|crawl(y|er))/i.test(text) ? 'other' : 'user');   // bring target: who is named (display routing only; the option itself is the classifier's)
+    if (r.option === 'none') { creatures.forEach(c => ownThing(c, 'chat_none')); return r; }
+    const able = creatures.filter(c => c.options.includes(r.option) && c.state !== 'sleep' && c.state !== 'hide');
+    const c = able.length ? (able.length === 1 ? able[0] : (selected && able.includes(selected) ? selected : able.sort((a, b) => (b.d.affection + b.d.curiosity) - (a.d.affection + a.d.curiosity))[0])) : null;
+    if (!c) { creatures.forEach(k => ownThing(k, 'chat_unable')); return r; }
+    if (Math.random() < 0.15) { speak(c, 'refuse'); logEvent('refuse', { who: c.name, option: r.option }); oracleComment(pick(ORACLE_SEEDS.refused(c.name)), 'refused'); return { ...r, refused: true }; }   // Trico rule
+    r.success = await act(c, r.option, r.arg, target); r.who = c.name; return r;
+  }
+  // ---------- UI ----------
+  $('#send').addEventListener('click', () => { const t = $('#chat').value.trim(); if (!t || !hidSession) return; $('#chat').value = ''; handleChat(t); });
+  $('#chat').addEventListener('keydown', e => { if (e.key === 'Enter') $('#send').click(); });
+  $('#newword').addEventListener('keydown', e => { if (e.key !== 'Enter') return; const t = e.target.value.trim(); if (!t) return; e.target.value = ''; const ch = document.createElement('span'); ch.className = 'chip'; ch.textContent = t; ch.draggable = true; ch.addEventListener('dragstart', ev => ev.dataTransfer.setData('text', t)); ch.addEventListener('click', () => addWord(t, 120 + Math.random() * 500, 80 + Math.random() * 300)); $('#chips').appendChild(ch); logEvent('toy', { word: t }); });
+  arenaEl.addEventListener('dragover', e => e.preventDefault()); arenaEl.addEventListener('drop', e => { e.preventDefault(); const t = e.dataTransfer.getData('text'); if (!t) return; const r = arenaEl.getBoundingClientRect(); addWord(t, e.clientX - r.left, e.clientY - r.top); logEvent('word_dropped', { word: t }); });
+  document.addEventListener('keydown', e => { if (!selected || !e.key.startsWith('Arrow')) return; if (document.activeElement && document.activeElement.tagName === 'INPUT') return; e.preventDefault(); const d = { ArrowLeft: [-30, 0], ArrowRight: [30, 0], ArrowUp: [0, -30], ArrowDown: [0, 30] }[e.key]; goto(selected, selected.tx + d[0], selected.ty + d[1]); feel(selected, 'drag'); logEvent('nudge', { who: selected.name, key: e.key }); });
+  $('#export').addEventListener('click', () => { const b = new Blob([JSON.stringify(events.filter(e => e.page === 'arena'), null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'arena_log.json'; a.click(); });
+  window.__arena = { addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
+  // ---------- boot ----------
+  (async () => {
+    try {
+      statusEl.textContent = 'loading tokenizer…'; tokenizer = new BPETokenizer(await (await fetch('tokenizer_chat_v2.json')).json());
+      statusEl.textContent = 'loading the instruction model…'; instr = await (await fetch('arena_instr_v1.json')).json(); ort.env.wasm.numThreads = (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated) ? (navigator.hardwareConcurrency || 4) : 1;
+      hidSession = await ort.InferenceSession.create('oracle_v2_grown_ct2_judge_int8.onnx', { executionProviders: ['wasm'] });
+      statusEl.textContent = 'loading the Oracle…'; genSession = await ort.InferenceSession.create('oracle_v2_grown_ct2_int8.onnx', { executionProviders: ['wasm'] });
+      ['ball', 'coffee', 'cat'].forEach((w, i) => addWord(w, 260 + i * 120, 220 + (i % 2) * 70)); statusEl.textContent = 'ready · instruction model held-out accuracy ' + instr.heldout.option_acc + ', argument ' + instr.heldout.arg_exact;
+      say('Oracle', 'My room, with the pets in it. Talk to them, or drag a word in and see who wants it', 'oracle'); logEvent('load');
+    } catch (e) { statusEl.textContent = 'error: ' + e.message; console.error(e); }
+  })();
+})();
+</script></body></html>
