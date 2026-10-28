@@ -5,11 +5,13 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15161a;--ink:#e8e6e1;--floor:#1c1e24}}
 body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 #top{display:flex;gap:12px;align-items:center;padding:8px 16px;font-size:13px;opacity:.85;flex-wrap:wrap}#top a{color:var(--accent)}
-#arena{position:relative;height:440px;margin:0 16px;border:1px solid #8884;border-radius:12px;background:var(--floor);overflow:hidden;user-select:none}
+#arena{position:relative;height:520px;margin:0 16px;border:1px solid #8884;border-radius:12px;background:var(--floor);overflow:hidden;user-select:none}
 #floor{position:absolute;inset:0}
 .word{position:absolute;padding:2px 8px;border-radius:6px;background:#ffe9a8;color:#333;border:1px solid #d9b85a;font:13px ui-monospace,Menlo,monospace;cursor:grab;transform:translate(-50%,-50%);z-index:3}
 .word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px}
-.creature{position:absolute;transform:translate(-50%,-50%);z-index:4;cursor:pointer;transition:none}.creature.sel .ring{opacity:1}
+.creature{position:absolute;transform:translate(-50%,-50%);z-index:5;cursor:grab;border-radius:50%;touch-action:none}.creature:active{cursor:grabbing}
+#evo{display:flex;flex-direction:column;gap:4px;padding:4px 16px;font-size:12px}#evo button{font-size:11px;padding:2px 7px;margin-left:3px}#evo small{opacity:.65}.ln.lab{color:#0a8}
+#lab{position:fixed;right:0;top:0;height:100%;width:320px;background:var(--bg);border-left:1px solid #8884;box-shadow:-4px 0 16px #0002;z-index:50;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .2s}#lab.open{transform:none}#lab-head{padding:8px 10px;border-bottom:1px solid #8884;display:flex;justify-content:space-between;align-items:center}#lab-thread{flex:1;overflow:auto;padding:8px 10px;font-size:13px}.lab-row{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881}.lab-row b{opacity:.7}.lab-row.nico{background:#2b5cff22}.lab-row small{display:block;opacity:.55;font-size:11px}#lab-form{padding:8px 10px;border-top:1px solid #8884}#lab-text{width:100%;box-sizing:border-box;min-height:64px;font:13px system-ui;background:transparent;color:inherit;border:1px solid #8886;border-radius:6px;padding:6px}#lab-toggle{position:fixed;right:10px;bottom:10px;z-index:51;border-radius:16px;background:var(--bg)}
 .bubble{position:absolute;transform:translate(-50%,-115%);background:#fff;color:#222;border:1px solid #8886;border-radius:10px;padding:3px 8px;font-size:12px;white-space:nowrap;z-index:6;pointer-events:none;opacity:0;transition:opacity .2s}.bubble.on{opacity:1}
 .drives{position:absolute;left:8px;bottom:8px;font:10px/1.35 ui-monospace,Menlo,monospace;background:#2b5cff;color:#fff;padding:3px 6px;border-radius:2px;opacity:.9;z-index:7}
 #palette{display:flex;gap:6px;flex-wrap:wrap;padding:8px 16px;font-size:12px;align-items:center}#palette input{font:13px system-ui;padding:4px 8px;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit}
@@ -18,13 +20,14 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 .ln{margin:3px 0}.ln b{opacity:.7;font-weight:600}.ln.oracle{color:var(--accent)}.ln.crawly{color:#8a5cff}.ln.tok{color:#b8860b}
 #chatrow{display:flex;gap:8px;margin:8px 16px}#chat{flex:1;font:15px system-ui;padding:8px 10px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit}
 button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit;cursor:pointer}
-svg.cr{overflow:visible}
 </style></head><body>
 <div id="top"><b>The arena</b> · two creatures with their own models (drives + policy + an instruction model), the Oracle as a third voice · <a href="index.html">back to the chat</a> · <span id="status">loading…</span></div>
 <div id="arena"><div id="floor"></div><div class="drives" id="drives"></div></div>
+<div id="evo"></div>
 <div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to call it · arrow keys nudge the selected one · drag a word onto the floor</span></div>
 <div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
 <div id="log"></div>
+<aside id="lab"><div id="lab-head"><b>lab · arena</b><button id="lab-close">close</button></div><div id="lab-thread"></div><div id="lab-form"><textarea id="lab-text" placeholder="notes to the lab: what to change about the creatures, the arena… (Cmd+Enter)"></textarea><button id="lab-send">send</button> <small style="opacity:.6">replies appear here; the lab can push new genomes</small></div></aside><button id="lab-toggle">lab</button>
 <script>
 (() => {
   function buildByteEncoder() {
@@ -116,47 +119,150 @@ svg.cr{overflow:visible}
   }
   function place(w) { w.el.style.left = w.x + 'px'; w.el.style.top = w.y + 'px'; }
   function findWord(text) { if (!text) return null; const t = text.toLowerCase().trim(); return words.find(w => !w.carriedBy && w.text === t) || words.find(w => !w.carriedBy && (w.text.startsWith(t) || t.startsWith(w.text)) && Math.min(w.text.length, t.length) >= 3) || null; }
-  // ---------- creatures ----------
-  const CRAWLY_SVG = `<svg class="cr" width="90" height="70" viewBox="-45 -35 90 70"><circle class="ring" r="30" fill="none" stroke="#2b5cff" stroke-width="1.5" opacity="0" stroke-dasharray="4 4"/><g class="legs" stroke="#b9a7ff" stroke-width="2" fill="none"></g><g class="chip"><rect x="-8" y="-14" width="16" height="28" rx="1.5" fill="#3a3a3a"/><rect x="-5" y="-11" width="10" height="12" rx=".8" fill="#9fe3c5"/><rect class="led" x="-2.5" y="5" width="5" height="5" fill="#ff5e5e"/></g></svg>`;
-  const TOK_SVG = `<svg class="cr" width="54" height="42" viewBox="-27 -21 54 42"><circle class="ring" r="24" fill="none" stroke="#2b5cff" stroke-width="1.5" opacity="0" stroke-dasharray="4 4"/><rect x="-14" y="-9" width="28" height="18" rx="4" fill="#ffe9a8" stroke="#d9b85a"/><circle cx="-5" cy="-2" r="2.3" fill="#333"/><circle cx="5" cy="-2" r="2.3" fill="#333"/><path d="M-6 4 h12" stroke="#333" stroke-width="1.3"/><path class="blade" d="M14 -6 l7 -5 M14 6 l7 5" stroke="#8a6d1f" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  // ---------- creatures (Oct 28): spider-style bodies with IK legs planted in world space, a genome per creature, idle life, pick-up ----------
+  // Leg mechanics follow the web-crawler genre (fredfokan/web-crawler, cyohei9907/web-crawlers): each foot stays planted until it lags its
+  // rest spot by more than a step threshold, then swings ahead; two-bone IK for the knee; alternating groups so it never lifts neighbours.
+  const NS = 'http://www.w3.org/2000/svg';
+  const web = document.createElementNS(NS, 'svg'); web.setAttribute('id', 'web'); web.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;overflow:visible'; floor.appendChild(web);
+  const DEFAULT_GENOMES = {
+    crawly: { id: 'crawly-0', parent: null, legs: 8, l1: 30, l2: 36, bodyL: 26, bodyW: 15, abdomen: 1, hue: 262, footHue: 330, step: 24, speed: 1.7, palps: 2, fidget: 0.6, body: 'chip' },
+    tok: { id: 'tok-0', parent: null, legs: 6, l1: 15, l2: 19, bodyL: 22, bodyW: 30, abdomen: 0, hue: 44, footHue: 24, step: 15, speed: 1.15, palps: 0, fidget: 0.9, body: 'box' },
+  };
+  let genomes = (() => { try { const g = JSON.parse(localStorage.getItem('arena.genomes') || 'null'); if (g && g.crawly && g.tok) return g; } catch (e) {} return JSON.parse(JSON.stringify(DEFAULT_GENOMES)); })();
+  let lineage = (() => { try { return JSON.parse(localStorage.getItem('arena.lineage') || '[]'); } catch (e) { return []; } })();
+  function saveGenomes() { try { localStorage.setItem('arena.genomes', JSON.stringify(genomes)); localStorage.setItem('arena.lineage', JSON.stringify(lineage.slice(-200))); } catch (e) {} }
   const VOICE = {
-    crawly: { greet: ['*waves two legs*', 'hi.', '*click click*', 'hello, human'], fetch: ['{w}!', 'mine. {w}', '*scuttle* {w}', 'got {w}'], nope: ['no {w} here', '…', '*looks around* nothing', 'where?'], come: ['*scuttles over*', 'here.', '*taps*'], sleep: ['*legs fold*', 'zzz', '*goes still*'], hide: ['*under the box*', 'gone.', '*hides*'], refuse: ['*ignores you*', 'later.', '*busy with a word*', 'no.'], bring: ['for you. {w}', '{w}, here', '*drops {w}*'], hand: ['*takes the piece*', 'thanks. {w}', '*pockets {w}*'], own: ['*wanders*', '*sniffs a word*', '*stands on {w}*', '*looks at the human*'] },
-    tok: { greet: ['hel|lo', 'hi (1 piece)', 'gree|ting'], chop: ['{p}', '{n} pieces: {p}', 'cut. {p}'], nope: ['no such word (0 pieces)', '{w}? not on the floor', 'cannot cut air'], come: ['com|ing', 'here (1 piece)', 'app|roach'], sleep: ['sle|ep', 'z|z|z', 'off.'], hide: ['hid|den', 'out of sight (3 pieces)'], refuse: ['no (1 piece)', 'bu|sy', 'later (2 pieces)'], hand: ['one piece for the legs: {w}', 'hand|ed {w}', 'giv|en'], own: ['counting pieces', 'id|le', '*sharpens*'] },
+    crawly: { greet: ['*waves two legs*', 'hi.', '*click click*', 'hello, human'], fetch: ['{w}!', 'mine. {w}', '*scuttle* {w}', 'got {w}'], nope: ['no {w} here', '…', '*looks around* nothing', 'where?'], come: ['*scuttles over*', 'here.', '*taps*'], sleep: ['*legs fold*', 'zzz', '*goes still*'], hide: ['*under the box*', 'gone.', '*hides*'], refuse: ['*ignores you*', 'later.', '*busy with a word*', 'no.'], bring: ['for you. {w}', '{w}, here', '*drops {w}*'], hand: ['*takes the piece*', 'thanks. {w}', '*pockets {w}*'], own: ['*wanders*', '*sniffs a word*', '*stands on {w}*', '*looks at the human*'], held: ['*wriggles*', '*all eight legs at once*', 'down. DOWN.', '*kicks the air*'], dropped: ['*lands*', '*shakes off*', 'rude.', '*checks all legs*'] },
+    tok: { greet: ['hel|lo', 'hi (1 piece)', 'gree|ting'], chop: ['{p}', '{n} pieces: {p}', 'cut. {p}'], nope: ['no such word (0 pieces)', '{w}? not on the floor', 'cannot cut air'], come: ['com|ing', 'here (1 piece)', 'app|roach'], sleep: ['sle|ep', 'z|z|z', 'off.'], hide: ['hid|den', 'out of sight (3 pieces)'], refuse: ['no (1 piece)', 'bu|sy', 'later (2 pieces)'], hand: ['one piece for the legs: {w}', 'hand|ed {w}', 'giv|en'], own: ['counting pieces', 'id|le', '*sharpens*'], held: ['put|me|down', 'up (1 piece)', 'air (0 pieces)'], dropped: ['land|ed', 'down (1 piece)'] },
   };
   const ORACLE_SEEDS = {   // Room path: the Oracle comments when something happens between them (seed + model continuation)
     handover: w => [`The tokenizer just handed "${w}" to the crawler. They have an arrangement`, `Look at that, a piece changing hands in my room: "${w}"`, `"${w}", passed from the chopper to the legs. I did not teach them that`],
     fetched: w => [`The crawler has "${w}" now. Say something about it, it is standing on it`, `"${w}", retrieved. Six legs, one word, no manners`, `It brought "${w}". That is its idea of a reply`],
     refused: who => [`${who} is not coming. It does that, it is a strider not a dog`, `Ignored. ${who} has its own plans, which is most of why it is alive`, `${who} heard you and chose otherwise. I respect it`],
     sleeping: who => [`${who} is asleep. The room gets quieter when the legs stop`, `Nap time for ${who}. Even small things get tired in here`],
+    held: who => [`Let it go, it is wriggling`, `You picked up ${who}. Every leg has an opinion about that`, `${who} is in the air. It does not like the air`],
+    mutated: who => [`${who} looks different today. I am not going to say anything`, `Something changed about ${who}. The legs, I think`, `${who} came back from the lab a little rearranged`],
   };
-  function mk(name, svg, x, y, opts) {
-    const el = document.createElement('div'); el.className = 'creature'; el.innerHTML = svg; floor.appendChild(el);
+  function buildLegs(c) {
+    const g = c.g, m = Math.max(1, Math.floor(g.legs / 2)); c.legs = [];
+    for (let side of [-1, 1]) for (let k = 0; k < m; k++) { const L = { side, k, m, foot: null, swing: null, group: (k + (side > 0 ? 1 : 0)) % 2 }; c.legs.push(L); }
+    c.legs.forEach(L => { L.foot = restSpot(c, L); });
+  }
+  function restSpot(c, L, extra) {
+    const g = c.g, reach = (g.l1 + g.l2) * (c.state === 'sleep' ? 0.45 : c.held ? 0.55 : 0.78);
+    const along = L.m > 1 ? (L.k / (L.m - 1) - 0.5) : 0, fx = along * g.bodyL * 1.9 + along * reach * 0.55, fy = L.side * reach * (0.75 + 0.25 * Math.cos(along * Math.PI));
+    const ca = Math.cos(c.heading), sa = Math.sin(c.heading), lead = c.held ? 0 : 7;
+    let x = c.x + fx * ca - fy * sa + c.vx * lead, y = c.y + fx * sa + fy * ca + c.vy * lead;
+    if (extra) { x += extra[0]; y += extra[1]; } return { x, y };
+  }
+  function hip(c, L) { const g = c.g, along = L.m > 1 ? (L.k / (L.m - 1) - 0.5) : 0, hx = along * g.bodyL * 0.9, hy = L.side * g.bodyW * 0.42, ca = Math.cos(c.heading), sa = Math.sin(c.heading); return { x: c.x + hx * ca - hy * sa, y: c.y + hx * sa + hy * ca }; }
+  function knee(H, F, l1, l2, side, heading) {   // two-bone IK, knee bent away from the body
+    let dx = F.x - H.x, dy = F.y - H.y, d = Math.hypot(dx, dy) || 1e-6; const dd = Math.min(d, l1 + l2 - 0.01);
+    const a = (l1 * l1 - l2 * l2 + dd * dd) / (2 * dd), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)), ux = dx / d, uy = dy / d;
+    const s = side * (Math.sin(Math.atan2(uy, ux) - heading) >= 0 ? 1 : -1) >= 0 ? 1 : -1; return { x: H.x + ux * a - uy * h * s, y: H.y + uy * a + ux * h * s };
+  }
+  function mk(name, key, x, y, opts) {
+    const el = document.createElement('div'); el.className = 'creature hit'; floor.appendChild(el);
     const bub = document.createElement('div'); bub.className = 'bubble'; floor.appendChild(bub);
-    const c = { name, el, bub, x, y, tx: x, ty: y, speed: opts.speed, options: opts.options, d: { hunger: 0.5, curiosity: 0.5, fatigue: 0.1, affection: 0.3 }, carrying: null, state: 'idle', until: 0, lastDecision: 0, phase: 0, voice: VOICE[opts.voice], task: null };
-    el.addEventListener('click', () => { select(c); feel(c, 'click'); callOver(c, 'click'); }); el.addEventListener('pointerenter', () => feel(c, 'hover'));
+    const c = { name, key, el, bub, x, y, tx: x, ty: y, vx: 0, vy: 0, heading: Math.random() * 6.28, speed: genomes[key].speed, g: genomes[key], options: opts.options, d: { hunger: 0.5, curiosity: 0.5, fatigue: 0.1, affection: 0.3 }, carrying: null, state: 'idle', until: 0, lastDecision: 0, phase: Math.random() * 10, voice: VOICE[opts.voice], task: null, held: false, nextFidget: 0, nextShift: 0 };
+    buildLegs(c);
+    let down = null;   // click vs pick-up: past 5 px of movement it is a pick-up
+    el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY, moved: false }; el.setPointerCapture(ev.pointerId); });
+    el.addEventListener('pointermove', ev => {
+      if (!down) return; if (!down.moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) { down.moved = true; c.held = true; c.state = 'held'; select(c); speak(c, 'held'); logEvent('picked_up', { who: c.name, genome: c.g.id }); feel(c, 'drag'); if (Math.random() < 0.6) oracleComment(pick(ORACLE_SEEDS.held(c.name)), 'held'); }
+      if (down.moved) { const r = arenaEl.getBoundingClientRect(); c.x = c.tx = Math.max(20, Math.min(r.width - 20, ev.clientX - r.left)); c.y = c.ty = Math.max(20, Math.min(r.height - 20, ev.clientY - r.top)); }
+    });
+    el.addEventListener('pointerup', () => { if (!down) return; const moved = down.moved; down = null; if (moved) { c.held = false; c.state = 'idle'; c.legs.forEach(L => { L.swing = null; }); speak(c, 'dropped'); logEvent('put_down', { who: c.name }); } else { select(c); feel(c, 'click'); callOver(c, 'click'); } });
+    el.addEventListener('pointerenter', () => feel(c, 'hover'));
     return c;
   }
-  const crawly = mk('Crawly', CRAWLY_SVG, 160, 300, { speed: 1.6, options: ['fetch', 'bring', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'crawly' });
-  const tokc = mk('the tokenizer', TOK_SVG, 560, 120, { speed: 1.1, options: ['chop', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'tok' });
+  const crawly = mk('Crawly', 'crawly', 160, 300, { options: ['fetch', 'bring', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'crawly' });
+  const tokc = mk('the tokenizer', 'tok', 560, 120, { options: ['chop', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'tok' });
   const creatures = [crawly, tokc]; let selected = null;
-  function select(c) { creatures.forEach(k => k.el.classList.toggle('sel', k === c)); selected = c; }
+  function select(c) { selected = c; }
   const clamp = v => Math.max(0, Math.min(1, v)); const pick = a => a[Math.floor(Math.random() * a.length)];
-  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c === crawly ? 'crawly' : 'tok'); return t; }
-  function feel(c, what) { c.d.affection = clamp(c.d.affection + ({ hover: 0.05, click: 0.12, drag: 0.08, mention: 0.2, ack: 0.15 }[what] || 0)); c.d.curiosity = clamp(c.d.curiosity + 0.04); logEvent('feel', { who: c.name, what, drives: snap(c) }); }
+  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c === crawly ? 'crawly' : 'tok'); return t; }
+  function feel(c, what) { c.d.affection = clamp(c.d.affection + ({ hover: 0.05, click: 0.12, drag: 0.08, mention: 0.2, ack: 0.15 }[what] || 0)); c.d.curiosity = clamp(c.d.curiosity + 0.04); logEvent('feel', { who: c.name, what, genome: c.g.id, drives: snap(c) }); }
   function snap(c) { return { h: +c.d.hunger.toFixed(2), c: +c.d.curiosity.toFixed(2), f: +c.d.fatigue.toFixed(2), a: +c.d.affection.toFixed(2) }; }
-  function bars(c) { const b = v => '▮'.repeat(Math.round(v * 5)) + '▯'.repeat(5 - Math.round(v * 5)); return `${c.name.toUpperCase().padEnd(13)} H ${b(c.d.hunger)} C ${b(c.d.curiosity)} F ${b(c.d.fatigue)} A ${b(c.d.affection)}  ${c.state}${c.carrying ? ' [' + c.carrying.text + ']' : ''}`; }
+  function bars(c) { const b = v => '▮'.repeat(Math.round(v * 5)) + '▯'.repeat(5 - Math.round(v * 5)); return `${c.name.toUpperCase().padEnd(13)} H ${b(c.d.hunger)} C ${b(c.d.curiosity)} F ${b(c.d.fatigue)} A ${b(c.d.affection)}  ${c.state}${c.carrying ? ' [' + c.carrying.text + ']' : ''} · ${c.g.id}`; }
+  function bodySVG(c, t) {
+    const g = c.g, breathe = 1 + (c.state === 'sleep' ? 0.05 : 0.025) * Math.sin(t / (c.state === 'sleep' ? 900 : 380) + c.phase), deg = c.heading * 180 / Math.PI, L = g.bodyL * breathe, W = g.bodyW * breathe;
+    const sw = c.held ? Math.sin(t / 60) * 12 : Math.sin(t / 700 + c.phase) * 2.5;   // idle sway; violent when held
+    let s = `<g transform="translate(${c.x},${c.y}) rotate(${deg + sw})">`;
+    if (g.abdomen) s += `<ellipse cx="${-L * 0.95}" cy="0" rx="${L * 0.55}" ry="${W * 0.55}" fill="hsl(${g.hue},25%,18%)" stroke="hsl(${g.hue},60%,72%)" stroke-width=".8"/>`;
+    for (let p = 0; p < (g.palps || 0); p++) { const sd = p ? 1 : -1, a = 0.35 + 0.25 * Math.sin(t / 160 + p * 2 + c.phase); s += `<path d="M${L * 0.5},${sd * W * 0.2} l${9 * Math.cos(a * sd)},${sd * 9 * Math.sin(a)}" stroke="hsl(${g.hue},70%,78%)" stroke-width="1.4" stroke-linecap="round"/>`; }
+    if (g.body === 'chip') s += `<rect x="${-L / 2}" y="${-W / 2}" width="${L}" height="${W}" rx="2" fill="#2e2e33" stroke="hsl(${g.hue},60%,72%)" stroke-width=".8"/><rect x="${-L / 2 + 4}" y="${-W / 2 + 3}" width="${L * 0.45}" height="${W - 6}" rx="1" fill="#9fe3c5"/><circle cx="${L / 2 - 4}" cy="0" r="2.2" fill="${c.state === 'sleep' ? '#553' : '#ff5e5e'}"><animate attributeName="opacity" values="1;.3;1" dur="${c.state === 'sleep' ? 3 : 1.2}s" repeatCount="indefinite"/></circle>`;
+    else { const blink = (Math.floor(t / 2600 + c.phase) % 5 === 0 && (t % 2600) < 140) || c.state === 'sleep'; s += `<rect x="${-L / 2}" y="${-W / 2}" width="${L}" height="${W}" rx="4" fill="hsl(${g.hue},90%,82%)" stroke="hsl(${g.hue},55%,48%)"/>` + (blink ? `<path d="M${L * 0.05},${-W * 0.18} h4 M${L * 0.05},${W * 0.18 - 2} h4" stroke="#333" stroke-width="1.3"/>` : `<circle cx="${L * 0.1}" cy="${-W * 0.18}" r="2.2" fill="#333"/><circle cx="${L * 0.1}" cy="${W * 0.18}" r="2.2" fill="#333"/>`) + `<path class="blade" d="M${L / 2},${-W * 0.25} l7,-5 M${L / 2},${W * 0.25} l7,5" stroke="hsl(${g.hue},60%,32%)" stroke-width="2.2" stroke-linecap="round" transform="rotate(${c.chopUntil > t ? Math.sin(t / 30) * 20 : 0} ${L / 2} 0)"/>`; }
+    if (c === selected) s += `<circle r="${Math.max(L, W) * 0.9 + 6}" fill="none" stroke="#2b5cff" stroke-width="1.2" stroke-dasharray="4 4" opacity=".8"/>`;
+    return s + '</g>';
+  }
+  function stepLegs(c, t) {
+    const moving = Math.hypot(c.vx, c.vy) > 0.15, inAir = c.legs.filter(L => L.swing).length, maxAir = Math.max(1, Math.floor(c.legs.length / 2));
+    for (const L of c.legs) {
+      if (L.swing) { const u = Math.min(1, (t - L.swing.t0) / L.swing.dur), e = u * u * (3 - 2 * u); L.foot = { x: L.swing.from.x + (L.swing.to.x - L.swing.from.x) * e, y: L.swing.from.y + (L.swing.to.y - L.swing.from.y) * e }; L.lift = Math.sin(u * Math.PI); if (u >= 1) { L.swing = null; L.lift = 0; } continue; }
+      if (c.held) { const r = restSpot(c, L, [Math.sin(t / 50 + L.k * 1.7 + L.side) * 9, Math.cos(t / 65 + L.k) * 9]); L.foot = { x: L.foot.x + (r.x - L.foot.x) * 0.35, y: L.foot.y + (r.y - L.foot.y) * 0.35 }; L.lift = 0.8; continue; }   // dangling, kicking
+      const target = restSpot(c, L), lag = Math.hypot(target.x - L.foot.x, target.y - L.foot.y);
+      const nbAir = c.legs.some(o => o !== L && o.swing && o.side === L.side && Math.abs(o.k - L.k) === 1);
+      if (lag > c.g.step && !nbAir && inAir < maxAir && (moving ? L.group === (Math.floor(t / 140) % 2) : true)) L.swing = { from: { ...L.foot }, to: restSpot(c, L, [c.vx * 10, c.vy * 10]), t0: t, dur: 130 + 60 * Math.random() };
+    }
+    if (!moving && !c.held && c.state !== 'sleep' && t > c.nextFidget) {   // idle life: one leg re-plants or taps
+      c.nextFidget = t + (900 + Math.random() * 2600) / Math.max(0.2, c.g.fidget); const L = pick(c.legs);
+      if (!L.swing) L.swing = { from: { ...L.foot }, to: restSpot(c, L, [(Math.random() - .5) * 10, (Math.random() - .5) * 10]), t0: t, dur: 160 + Math.random() * 120 };
+    }
+  }
+  function legsSVG(c) {
+    const g = c.g; let s = '';
+    for (const L of c.legs) { const H = hip(c, L), F = L.foot, K = knee(H, F, g.l1, g.l2, L.side, c.heading), lift = L.lift || 0; const Kx = K.x + (K.x - H.x) * 0.12 * lift, Ky = K.y + (K.y - H.y) * 0.12 * lift;
+      s += `<polyline points="${H.x.toFixed(1)},${H.y.toFixed(1)} ${Kx.toFixed(1)},${Ky.toFixed(1)} ${F.x.toFixed(1)},${F.y.toFixed(1)}" fill="none" stroke="hsl(${g.hue},70%,${c.state === 'sleep' ? 55 : 76}%)" stroke-width="${1.5 + 0.4 * lift}" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${F.x.toFixed(1)}" cy="${F.y.toFixed(1)}" r="${1.8 + 1.4 * lift}" fill="hsl(${g.footHue},90%,72%)"/>`; }
+    return s;
+  }
   // ---------- movement + animation loop ----------
-  function animate() {
+  function animate(t) {
+    let svg = '';
     for (const c of creatures) {
-      if (c.state !== 'sleep' && c.state !== 'hide') { const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.hypot(dx, dy); if (dist > 1.5) { c.x += dx / dist * Math.min(c.speed, dist); c.y += dy / dist * Math.min(c.speed, dist); c.phase += 0.22; } }
-      c.el.style.left = c.x + 'px'; c.el.style.top = c.y + 'px'; c.el.style.opacity = c.state === 'hide' ? 0.12 : 1; c.bub.style.left = c.x + 'px'; c.bub.style.top = (c.y - 22) + 'px';
-      if (c === crawly) { const g = c.el.querySelector('.legs'); if (g) { let s = ''; for (let i = 0; i < 6; i++) { const side = i < 3 ? -1 : 1, k = i % 3, ph = c.phase + (i % 2 ? Math.PI : 0), lift = c.state === 'sleep' ? 0 : Math.max(0, Math.sin(ph)) * 6; const ax = side * 7, ay = (k - 1) * 9, kx = side * 26, ky = ay + (k - 1) * 10 - lift, fx = side * 40, fy = ay + (k - 1) * 18 + 6; s += `<polyline points="${ax},${ay} ${kx},${ky} ${fx},${fy}"/><circle cx="${fx}" cy="${fy}" r="2" fill="#ff9ad5" stroke="none"/>`; } g.innerHTML = s; } }
+      c.speed = c.g.speed; let vx = 0, vy = 0;
+      if (!c.held && c.state !== 'sleep' && c.state !== 'hide') { const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.hypot(dx, dy); if (dist > 1.5) { const sp = Math.min(c.speed, dist); vx = dx / dist * sp; vy = dy / dist * sp; c.x += vx; c.y += vy; } }
+      c.vx = c.vx * 0.8 + vx * 0.2; c.vy = c.vy * 0.8 + vy * 0.2;
+      if (Math.hypot(c.vx, c.vy) > 0.2) { const want = Math.atan2(c.vy, c.vx); let d = want - c.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); c.heading += d * 0.08; }
+      else if (!c.held && c.state !== 'sleep') c.heading += Math.sin(t / 1300 + c.phase) * 0.003;   // looking around
+      if (!c.held && c.state === 'idle' && t > c.nextShift && Math.hypot(c.tx - c.x, c.ty - c.y) < 2) { c.nextShift = t + 2500 + Math.random() * 4000; const r = arenaEl.getBoundingClientRect(); c.tx = Math.max(30, Math.min(r.width - 30, c.x + (Math.random() - .5) * 46)); c.ty = Math.max(30, Math.min(r.height - 30, c.y + (Math.random() - .5) * 46)); }   // weight shifts: creatures rarely stay still
+      stepLegs(c, t); svg += legsSVG(c) + bodySVG(c, t);
+      const hitR = Math.max(c.g.bodyL, c.g.bodyW) + 14; c.el.style.cssText = `left:${c.x}px;top:${c.y}px;width:${hitR * 2}px;height:${hitR * 2}px;opacity:${c.state === 'hide' ? 0.12 : 1}`;
+      c.bub.style.left = c.x + 'px'; c.bub.style.top = (c.y - c.g.bodyW - 18) + 'px';
       if (c.carrying) { c.carrying.x = c.x + 18; c.carrying.y = c.y - 26; place(c.carrying); }
       if (c.until && Date.now() > c.until) { c.until = 0; if (c.state === 'sleep' || c.state === 'hide') { c.state = 'idle'; } }
     }
+    web.innerHTML = svg; web.style.opacity = 1; creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
     drivesEl.textContent = creatures.map(bars).join('\n'); requestAnimationFrame(animate);
   }
   requestAnimationFrame(animate);
+  // ---------- evolution: mutate / revert / keep, and genomes pushed from the lab (arena_genomes.json) ----------
+  const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  function mutate(key, rate) {
+    const p = genomes[key], g = { ...p }, r = rate || 0.14; g.parent = p.id; g.id = key + '-' + Date.now().toString(36).slice(-5);
+    for (const f of ['l1', 'l2', 'bodyL', 'bodyW', 'step', 'speed', 'fidget']) g[f] = +(p[f] * Math.exp(gauss() * r)).toFixed(2);
+    g.hue = Math.round((p.hue + gauss() * 22 + 360) % 360); g.footHue = Math.round((p.footHue + gauss() * 30 + 360) % 360);
+    if (Math.random() < 0.25) g.legs = Math.max(4, Math.min(12, p.legs + (Math.random() < 0.5 ? -2 : 2)));
+    if (Math.random() < 0.15) g.palps = Math.max(0, Math.min(2, (p.palps || 0) + (Math.random() < 0.5 ? -1 : 1)));
+    if (Math.random() < 0.12) g.abdomen = p.abdomen ? 0 : 1;
+    return g;
+  }
+  function applyGenome(key, g, why) {
+    const c = creatures.find(k => k.key === key); lineage.push({ t: Date.now(), key, from: genomes[key].id, to: g.id, why, genome: g }); genomes[key] = g; c.g = g; buildLegs(c); saveGenomes(); renderEvo();
+    logEvent('genome', { who: c.name, why, id: g.id, parent: g.parent }); if (why !== 'revert') oracleComment(pick(ORACLE_SEEDS.mutated(c.name)), 'mutated');
+  }
+  function renderEvo() {
+    const el = document.getElementById('evo'); if (!el) return;
+    el.innerHTML = creatures.map(c => { const g = c.g, kept = lineage.filter(x => x.key === c.key && x.why === 'keep').length;
+      return `<span class="evo-c"><b>${c.name}</b> <small>${g.id} · ${g.legs} legs · reach ${Math.round(g.l1 + g.l2)} · speed ${(+g.speed).toFixed(2)}${kept ? ' · ♥' + kept : ''}</small> <button data-a="mutate" data-k="${c.key}">mutate</button><button data-a="big" data-k="${c.key}" title="bigger jump">mutate ×3</button><button data-a="revert" data-k="${c.key}">revert</button><button data-a="keep" data-k="${c.key}" title="mark this one as a favourite (the fitness signal)">♥ keep</button><button data-a="reset" data-k="${c.key}">original</button></span>`; }).join('');
+  }
+  document.addEventListener('click', e => { const b = e.target.closest('#evo button'); if (!b) return; const k = b.dataset.k, a = b.dataset.a;
+    if (a === 'mutate' || a === 'big') applyGenome(k, mutate(k, a === 'big' ? 0.42 : 0.14), a);
+    else if (a === 'revert') { const prev = [...lineage].reverse().find(x => x.key === k && x.to === genomes[k].id); const back = prev && lineage.find(x => x.key === k && x.to === prev.from); applyGenome(k, back ? back.genome : JSON.parse(JSON.stringify(DEFAULT_GENOMES[k])), 'revert'); }
+    else if (a === 'reset') applyGenome(k, JSON.parse(JSON.stringify(DEFAULT_GENOMES[k])), 'revert');
+    else if (a === 'keep') { lineage.push({ t: Date.now(), key: k, why: 'keep', to: genomes[k].id, genome: genomes[k] }); saveGenomes(); renderEvo(); logEvent('genome_keep', { id: genomes[k].id }); } });
+  let labGenomeV = (() => { try { return +(localStorage.getItem('arena.labGenomeV') || 0); } catch (e) { return 0; } })();
+  setInterval(async () => { try { const j = await (await fetch('arena_genomes.json', { cache: 'no-store' })).json(); if (j.v > labGenomeV) { labGenomeV = j.v; try { localStorage.setItem('arena.labGenomeV', j.v); } catch (e) {} for (const k of ['crawly', 'tok']) if (j[k]) applyGenome(k, { ...genomes[k], ...j[k], parent: genomes[k].id, id: j[k].id || (k + '-lab' + j.v) }, 'lab'); say('lab', j.note || 'new genomes from the lab', 'lab'); } } catch (e) {} }, 8000);
   function goto(c, x, y) { const r = arenaEl.getBoundingClientRect(); c.tx = Math.max(30, Math.min(r.width - 30, x)); c.ty = Math.max(30, Math.min(r.height - 30, y)); c.state = 'move'; }
   function arrived(c) { return Math.hypot(c.tx - c.x, c.ty - c.y) < 3; }
   async function when(pred, ms) { const t0 = Date.now(); while (!pred() && Date.now() - t0 < (ms || 6000)) await new Promise(r => setTimeout(r, 60)); return pred(); }
@@ -174,7 +280,7 @@ svg.cr{overflow:visible}
   async function doChop(c, arg) {
     const w = findWord(arg); const text = w ? w.text : (arg || ''); if (!text) { speak(c, 'nope', { w: '?' }); logEvent('task', { who: c.name, option: 'chop', arg, success: false }); return false; }
     if (w) { goto(c, w.x, w.y - 24); await when(() => arrived(c)); }
-    const ids = tokenizer.encode(' ' + text), pcs = ids.map(i => (tokenizer.invVocab[i] || '').replace(/^Ġ|^▁/, '')).filter(Boolean); c.el.querySelector('.blade')?.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(-25deg)' }, { transform: 'rotate(0)' }], { duration: 300 });
+    const ids = tokenizer.encode(' ' + text), pcs = ids.map(i => (tokenizer.invVocab[i] || '').replace(/^Ġ|^▁/, '')).filter(Boolean); c.chopUntil = performance.now() + 450;
     pcs.forEach((p, k) => addWord(p, (w ? w.x : c.x) + (k - pcs.length / 2) * 34, (w ? w.y : c.y) + 36, true)); if (w) { w.el.remove(); words.splice(words.indexOf(w), 1); }
     c.d.hunger = clamp(c.d.hunger - 0.3); speak(c, 'chop', { p: pcs.join('|'), n: pcs.length }); c.state = 'idle'; logEvent('task', { who: c.name, option: 'chop', arg, success: true, pieces: pcs.length }); return true;
   }
@@ -185,7 +291,7 @@ svg.cr{overflow:visible}
     logEvent('task', { who: c.name, option: 'hand', success: true, word: w.text }); oracleComment(pick(ORACLE_SEEDS.handover(w.text)), 'handover'); return true;
   }
   async function doSimple(c, opt) {
-    if (opt === 'greet') { speak(c, 'greet'); c.el.animate([{ transform: 'translate(-50%,-50%) rotate(0)' }, { transform: 'translate(-50%,-50%) rotate(-12deg)' }, { transform: 'translate(-50%,-50%) rotate(12deg)' }, { transform: 'translate(-50%,-50%) rotate(0)' }], { duration: 600 }); c.d.affection = clamp(c.d.affection + 0.1); }
+    if (opt === 'greet') { speak(c, 'greet'); [0, 150, 300, 450].forEach((ms, i) => setTimeout(() => { c.heading += (i % 2 ? -0.5 : 0.5); }, ms)); c.d.affection = clamp(c.d.affection + 0.1); }
     if (opt === 'come') { goto(c, 380, 300); speak(c, 'come'); await when(() => arrived(c)); c.state = 'idle'; }
     if (opt === 'sleep') { c.state = 'sleep'; c.until = Date.now() + 15000; speak(c, 'sleep'); oracleComment(pick(ORACLE_SEEDS.sleeping(c.name)), 'sleeping'); }
     if (opt === 'hide') { c.state = 'hide'; c.until = Date.now() + 10000; speak(c, 'hide'); }
@@ -205,7 +311,7 @@ svg.cr{overflow:visible}
     if (best === 'wander') { goto(c, 40 + Math.random() * (r.width - 80), 40 + Math.random() * (r.height - 80)); speak(c, 'own', { w: free.length ? pick(free).text : '' }); }
     else if (best === 'fetch') act(c, 'fetch', pick(free).text); else if (best === 'chop') act(c, 'chop', pick(free).text); else if (best === 'bring') act(c, 'bring', 'user'); else if (best === 'hand') act(c, 'hand'); else if (best === 'nap') act(c, 'sleep');
   }
-  setInterval(() => creatures.forEach(c => ownThing(c, 'timer')), 12000);
+  setInterval(() => creatures.forEach(c => ownThing(c, 'timer')), 7000);
   // ---------- the Oracle's voice (Room path: seed + model continuation) ----------
   const oracleBusy = { v: false };
   async function oracleComment(seed, why) {
@@ -246,7 +352,23 @@ svg.cr{overflow:visible}
   arenaEl.addEventListener('dragover', e => e.preventDefault()); arenaEl.addEventListener('drop', e => { e.preventDefault(); const t = e.dataTransfer.getData('text'); if (!t) return; const r = arenaEl.getBoundingClientRect(); addWord(t, e.clientX - r.left, e.clientY - r.top); logEvent('word_dropped', { word: t }); });
   document.addEventListener('keydown', e => { if (!selected || !e.key.startsWith('Arrow')) return; if (document.activeElement && document.activeElement.tagName === 'INPUT') return; e.preventDefault(); const d = { ArrowLeft: [-30, 0], ArrowRight: [30, 0], ArrowUp: [0, -30], ArrowDown: [0, 30] }[e.key]; goto(selected, selected.tx + d[0], selected.ty + d[1]); feel(selected, 'drag'); logEvent('nudge', { who: selected.name, key: e.key }); });
   $('#export').addEventListener('click', () => { const b = new Blob([JSON.stringify(events.filter(e => e.page === 'arena'), null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'arena_log.json'; a.click(); });
-  window.__arena = { addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
+  window.__arena = { genomes: () => genomes, mutate: k => applyGenome(k, mutate(k), 'mutate'), addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
+  // ---------- lab tab (same thread as the chat page: pile_runs/lab/*.jsonl via demo_server.py, localhost only) ----------
+  (() => {
+    const el = $('#lab'), thread = $('#lab-thread'), text = $('#lab-text'); let seen = 0, open = false;
+    const esc = s => String(s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const row = r => { const d = document.createElement('div'); d.className = 'lab-row ' + (r.who || ''); d.innerHTML = '<b>' + esc(r.who) + '</b> ' + esc(r.text) + '<small>' + new Date((r.t || 0) * 1000).toLocaleTimeString() + (r.ctx && r.ctx.page ? ' · ' + esc(r.ctx.page) : '') + '</small>'; return d; };
+    const ctx = () => ({ page: 'arena', genomes, creatures: creatures.map(c => ({ name: c.name, state: c.state, drives: snap(c), genome: c.g.id })), log: [...document.querySelectorAll('#log .ln')].slice(-8).map(n => n.textContent) });
+    async function send() { const t = text.value.trim(); if (!t) return; const note = { t: Date.now() / 1000, who: 'nico', text: t, ctx: ctx() };
+      try { await fetch('/lab/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(note) }); thread.appendChild(row(note)); thread.scrollTop = 1e9; text.value = ''; logEvent('lab_note', { len: t.length }); } catch (e) { thread.appendChild(row({ who: 'page', text: 'could not post (is demo_server.py running?)', t: Date.now() / 1000 })); } }
+    async function poll() { try { const rows = await (await fetch('/lab/replies')).json(); if (rows.length > seen) { rows.slice(seen).forEach(r => thread.appendChild(row(r))); seen = rows.length; thread.scrollTop = 1e9; } } catch (e) {} }
+    (async () => { try { const notes = await (await fetch('/lab/notes')).json(); notes.slice(-10).forEach(r => thread.appendChild(row(r))); } catch (e) {} })();
+    setInterval(() => { if (open) poll(); }, 5000);
+    const show = on => { open = on; el.classList.toggle('open', on); if (on) poll(); };
+    $('#lab-toggle').addEventListener('click', () => show(!open)); $('#lab-close').addEventListener('click', () => show(false)); $('#lab-send').addEventListener('click', send);
+    text.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); } });
+  })();
+  renderEvo();
   // ---------- boot ----------
   (async () => {
     try {
