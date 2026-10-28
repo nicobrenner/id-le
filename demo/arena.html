@@ -17,7 +17,7 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 #coll{display:none;padding:6px 16px}#coll.on{display:block}.cards{display:flex;flex-wrap:wrap;gap:10px}.card{border:1px solid #8885;border-radius:10px;padding:6px 8px;font-size:12px;width:200px}.card.cmp{border-color:#2b5cff}.card svg{display:block;margin:auto}.cbtns button{font-size:11px;padding:2px 6px;margin:2px 2px 0 0}.cmpt{margin-top:10px;border-collapse:collapse;font-size:12px}.cmpt td,.cmpt th{padding:3px 10px;border-bottom:1px solid #8883;text-align:left}.cmpt tr.diff{background:#2b5cff14}.sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle}
 #workshop{margin:6px 16px;border:1px solid #8884;border-radius:10px;padding:4px 8px;font-size:12px}#workshop summary{cursor:pointer;opacity:.75;padding:3px 0}#workshop #evo,#workshop #terrainrow{padding:4px 0}
 #drives{padding:4px 0}.drow{margin:3px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.drow b{min-width:90px}.dstate{opacity:.7;min-width:150px}.dv{display:inline-block;width:46px;height:6px;border-radius:3px;background:#8883;overflow:hidden;vertical-align:middle}.dv i{display:block;height:100%;background:#2b5cff}
-#worldrow{padding:4px 0}#worldrow button{font-size:11px;padding:2px 7px;margin-left:3px}
+#worldrow{padding:4px 0}#worldCtl{display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0}#worldCtl label{display:flex;align-items:center;gap:5px}#worldCtl input[type=range]{width:90px}#worldColl .wcard{display:inline-block;border:1px solid #8885;border-radius:8px;padding:4px 8px;margin:3px 6px 3px 0;font-size:11px;vertical-align:top}#worldColl .wcard.cmp{border-color:#2b5cff}#worldColl button{font-size:10px;padding:1px 6px;margin:2px 2px 0 0}#worldrow button{font-size:11px;padding:2px 7px;margin-left:3px}
 #soundBtn{position:absolute;right:8px;top:8px;z-index:8;font-size:14px;padding:2px 6px;opacity:.7}
 #quick{display:flex;gap:6px;flex-wrap:wrap;margin:6px 16px 0}#quick button{font-size:12px;padding:3px 9px;border-radius:14px}#quick .x{margin-left:4px;opacity:.5}#quick .add{opacity:.6}
 .word.stepped{animation:stepped .9s ease-out}@keyframes stepped{0%{color:#2b5cff;text-shadow:0 0 6px #2b5cff88;translate:0 -2px}100%{text-shadow:none;translate:0 0}}
@@ -48,7 +48,16 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 <div id="log"></div></div></div><button id="rc-open">💬 chat</button><div id="whisper"><input id="whisperIn" placeholder="say something to it…"></div><button id="soundBtn" title="sounds (off by default)">🔇</button></div>
 <div id="terrainrow"><input id="terrain" placeholder="paste text, or a web address, and press enter: it grows into the world"><button id="terrainGo">grow world</button><button id="terrainClear">clear world</button><button id="collBtn">collection (0)</button></div>
 <details id="workshop"><summary>workshop · how they feel, evolve them, the collection, the world</summary><div id="drives"></div><div id="evo"></div>
-<div id="coll"></div><div id="worldrow"><b>world</b> <small id="worldInfo"></small> <button id="worldMut">mutate world</button><button id="worldReset">default world</button></div></details>
+<div id="coll"></div><div id="worldrow"><b>world</b> <small id="worldInfo"></small><br>
+<button id="worldMut">mutate</button><button id="worldMut3" title="bigger jump">mutate ×3</button><button id="worldRevert">revert</button><button id="worldKeep" title="save this world to the world collection">♥ keep</button><button id="worldReset">default</button>
+<div id="worldCtl">
+<label>layout <select id="wcLayout"><option>mix</option><option>mounds</option><option>spread</option><option>page</option></select></label>
+<label>tilt <input id="wcTilt" type="range" min="0" max="45" step="1"></label>
+<label>weather <select id="wcWeather"><option value="clear">clear</option><option value="bitrain">bit rain</option><option value="static">static storm</option><option value="fog">packet fog</option><option value="wind">data wind</option><option value="hum">mains hum</option></select></label>
+<label>strength <input id="wcInt" type="range" min="0.05" max="1" step="0.05"></label>
+<label>weather sound <input id="wcAmb" type="range" min="0" max="1.5" step="0.05"></label>
+<label>creature sounds <input id="wcFx" type="range" min="0" max="1.5" step="0.05"></label>
+</div><div id="worldColl"></div></div></details>
 <div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to talk to it directly · arrow keys nudge the selected one · drag a word onto the floor</span></div>
 <aside id="lab"><div id="lab-head"><b>lab · arena</b><button id="lab-close">close</button></div><div id="lab-thread"></div><div id="lab-form"><textarea id="lab-text" placeholder="notes to the lab: what to change about the creatures, the arena… (Cmd+Enter)"></textarea><button id="lab-send">send</button> <small style="opacity:.6">replies appear here; the lab can push new genomes</small></div></aside><button id="lab-toggle">lab</button>
 <script>
@@ -513,8 +522,29 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (/^https?:\/\//i.test(v)) { say('lab', 'fetching ' + v.slice(0, 80) + '…', 'lab'); try { const j = await (await fetch('/lab/fetch?url=' + encodeURIComponent(v))).json(); if (j.error) { say('lab', 'could not fetch: ' + j.error, 'lab'); return; } layTerrain(j.text, j.title || v); } catch (e) { say('lab', 'could not fetch (is demo_server.py running?)', 'lab'); } }
     else layTerrain(v, null);
   }
-  $('#worldMut').addEventListener('click', () => { world = mutateWorld(); saveWorld(); logEvent('world_mutate', { world }); if (lastWorldText) layTerrain(lastWorldText.text, lastWorldText.title); else say('lab', 'world changed: grow a world from text to see it', 'lab'); });
-  $('#worldReset').addEventListener('click', () => { world = { ...DEFAULT_WORLD }; saveWorld(); if (lastWorldText) layTerrain(lastWorldText.text, lastWorldText.title); });
+  // world evolution: mutate / revert / keep, a world collection, and direct controls; layout changes regrow the text, weather changes do not
+  let worldHist = (() => { try { return JSON.parse(localStorage.getItem('arena.worldHist') || '[]'); } catch (e) { return []; } })();
+  let worldColl = (() => { try { return JSON.parse(localStorage.getItem('arena.worldColl') || '[]'); } catch (e) { return []; } })();
+  const LAYOUT_KEYS = ['layout', 'tilt', 'font', 'size', 'line', 'density', 'mounds', 'ink', 'inkSat', 'margin'];
+  function applyWorld(w, why) { const relayout = LAYOUT_KEYS.some(k => w[k] !== world[k]); if (why !== 'revert') worldHist.push(world); worldHist = worldHist.slice(-40); try { localStorage.setItem('arena.worldHist', JSON.stringify(worldHist)); } catch (e) {}
+    world = w; saveWorld(); syncCtl(); logEvent('world', { why, id: w.id, layout: w.layout, weather: w.weather }); if (relayout && lastWorldText) layTerrain(lastWorldText.text, lastWorldText.title); else if (relayout && why !== 'control') say('lab', 'world changed: grow a world from text to see the new layout', 'lab'); }
+  function bigMutate() { let w = world; for (let i = 0; i < 3; i++) { const prev = world; world = w; w = mutateWorld(); world = prev; } return w; }
+  $('#worldMut').addEventListener('click', () => applyWorld(mutateWorld(), 'mutate'));
+  $('#worldMut3').addEventListener('click', () => applyWorld(bigMutate(), 'mutate3'));
+  $('#worldRevert').addEventListener('click', () => { const prev = worldHist.pop(); if (!prev) { say('lab', 'nothing to revert to', 'lab'); return; } applyWorld(prev, 'revert'); });
+  $('#worldReset').addEventListener('click', () => applyWorld({ ...DEFAULT_WORLD }, 'default'));
+  $('#worldKeep').addEventListener('click', () => { if (worldColl.some(x => x.id === world.id)) return; worldColl.push({ ...world, kept: Date.now(), name: world.name || (WEATHER_NAMES[world.weather] + ', ' + world.layout) }); try { localStorage.setItem('arena.worldColl', JSON.stringify(worldColl.slice(-40))); } catch (e) {} renderWorldColl(); logEvent('world_keep', { id: world.id }); });
+  const wcmp = new Set();
+  function renderWorldColl() { const el = $('#worldColl'); if (!el) return; if (!worldColl.length) { el.innerHTML = '<small style="opacity:.6">kept worlds appear here (♥ keep)</small>'; return; }
+    let h = worldColl.map((w, i) => `<span class="wcard${wcmp.has(i) ? ' cmp' : ''}"><b>${(w.name || w.id).replace(/[<>&]/g, '')}</b><br>${w.layout} · tilt ±${w.tilt ?? 18}° · ${w.font}<br>${WEATHER_NAMES[w.weather] || w.weather} ${Math.round((w.wint ?? .35) * 100)}%${w.inkSat ? ` · <span class="sw" style="background:hsl(${w.ink},${w.inkSat}%,55%)"></span>` : ''}<br><label><input type="checkbox" data-wc="${i}" ${wcmp.has(i) ? 'checked' : ''}> compare</label> <button data-wa="use" data-wi="${i}">use</button><button data-wa="drop" data-wi="${i}">remove</button></span>`).join('');
+    if (wcmp.size === 2) { const [a, b] = [...wcmp].map(i => worldColl[i]); h += '<table class="cmpt"><tr><th></th><th>' + (a.name || a.id) + '</th><th>' + (b.name || b.id) + '</th></tr>' + ['layout', 'tilt', 'font', 'size', 'line', 'density', 'mounds', 'weather', 'wint', 'ink', 'inkSat'].map(k => `<tr class="${a[k] !== b[k] ? 'diff' : ''}"><td>${k === 'wint' ? 'weather strength' : k}</td><td>${a[k] ?? ''}</td><td>${b[k] ?? ''}</td></tr>`).join('') + '</table>'; }
+    el.innerHTML = h; }
+  document.addEventListener('click', e => { const b = e.target.closest('#worldColl [data-wa]'); if (!b) return; const i = +b.dataset.wi; if (b.dataset.wa === 'use') applyWorld({ ...worldColl[i] }, 'collection'); else { worldColl.splice(i, 1); wcmp.clear(); try { localStorage.setItem('arena.worldColl', JSON.stringify(worldColl)); } catch (er) {} renderWorldColl(); } });
+  document.addEventListener('change', e => { const cb = e.target.closest && e.target.closest('#worldColl [data-wc]'); if (!cb) return; const i = +cb.dataset.wc; if (cb.checked) { if (wcmp.size >= 2) wcmp.delete([...wcmp][0]); wcmp.add(i); } else wcmp.delete(i); renderWorldColl(); });
+  function syncCtl() { $('#wcLayout').value = world.layout; $('#wcTilt').value = world.tilt ?? 18; $('#wcWeather').value = world.weather; $('#wcInt').value = world.wint ?? .35; }
+  const ctl = (id, key, num) => $(id).addEventListener('change', e => applyWorld({ ...world, [key]: num ? +e.target.value : e.target.value, id: 'world-' + Date.now().toString(36).slice(-4) }, 'control'));
+  ctl('#wcLayout', 'layout'); ctl('#wcTilt', 'tilt', true); ctl('#wcWeather', 'weather'); ctl('#wcInt', 'wint', true);
+  renderWorldColl(); syncCtl();
   saveWorld();
   // ---------- quick actions: one click dispatches; {word} becomes a random word on the floor; + saves what you typed as a new one ----------
   const QUICK0 = ['fetch {word}', 'Id|le, chop {word}', 'say hi', 'come here', 'hand a piece to Crawly', 'take a nap', 'bring it to me'];
@@ -531,17 +561,17 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   $('#whisperIn').addEventListener('keydown', e => { if (e.key === 'Escape') { $('#whisper').style.display = 'none'; whisperTo = null; } if (e.key !== 'Enter' || !whisperTo || !hidSession) return; const t = e.target.value.trim(); if (!t) return; const c = whisperTo; $('#whisper').style.display = 'none'; whisperTo = null; logEvent('whisper', { to: c.name }); handleChat(t, c); });
   $('#whisperIn').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('#whisperIn')) $('#whisper').style.display = 'none'; }, 200));
   // ---------- sound (Web Audio, synthesized, off by default): footsteps, chirps per creature voice, snip, crunch ----------
-  const Sound = (() => { let ctx = null, on = false, lastStep = 0;
+  const Sound = (() => { let ctx = null, on = false, lastStep = 0, fxVol = +(localStorage.getItem('arena.fxVol') ?? 1), ambVol = +(localStorage.getItem('arena.ambVol') ?? 0.9);
     const ensure = () => { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; };
     function noise(dur, freq, vol) { const a = ensure(), n = Math.floor(a.sampleRate * dur), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
-      const s = a.createBufferSource(); s.buffer = b; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 4; const g = a.createGain(); g.gain.value = vol; s.connect(f); f.connect(g); g.connect(a.destination); s.start(); }
+      const s = a.createBufferSource(); s.buffer = b; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 4; const g = a.createGain(); g.gain.value = vol * fxVol; s.connect(f); f.connect(g); g.connect(a.destination); s.start(); }
     function blip(t0, f0, f1, dur, vol, type) { const a = ensure(), o = a.createOscillator(), g = a.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f0, a.currentTime + t0); o.frequency.exponentialRampToValueAtTime(Math.max(40, f1), a.currentTime + t0 + dur);
-      g.gain.setValueAtTime(0.0001, a.currentTime + t0); g.gain.exponentialRampToValueAtTime(vol, a.currentTime + t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur); o.connect(g); g.connect(a.destination); o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02); }
+      g.gain.setValueAtTime(0.0001, a.currentTime + t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * fxVol), a.currentTime + t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur); o.connect(g); g.connect(a.destination); o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02); }
     return { toggle() { on = !on; if (on) ensure().resume(); $('#soundBtn').textContent = on ? '🔊' : '🔇'; logEvent('sound', { on }); this.ambient(...(this._ambK || ['clear', 0])); return on; },
       step(c) { if (!on) return; const now = performance.now(); if (now - lastStep < 45) return; lastStep = now; noise(0.03, 1800 + 4000 / (c.g.l1 + c.g.l2) * 30, 0.05); },
       chirp(c, text) { if (!on) return; const base = c.g.voicePitch || (c.voiceKey === 'crawly' ? 900 : 480), n = Math.min(6, 2 + Math.floor((text || '').length / 8)), wave = c.g.voiceWave || (c.voiceKey === 'crawly' ? 'square' : 'triangle');
         for (let i = 0; i < n; i++) { const f = base * Math.pow(2, (Math.random() - .5) * (c.g.voiceRange || 0.8)); blip(i * 0.075, f, f * (Math.random() < .5 ? 1.3 : 0.75), 0.06, 0.035, wave); } },
-      ambient(kind, k) { this._amb && this._amb.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); this._amb = []; clearInterval(this._ambT); this._ambK = [kind, k]; if (!on || kind === 'clear') return; const a = ensure(), out = a.createGain(); out.gain.value = 0.9; out.connect(a.destination); this._amb.push(out);
+      ambient(kind, k) { this._amb && this._amb.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); this._amb = []; clearInterval(this._ambT); this._ambK = [kind, k]; if (!on || kind === 'clear') return; const a = ensure(), out = a.createGain(); out.gain.value = ambVol; this._out = out; out.connect(a.destination); this._amb.push(out);
         const loopNoise = (type, f, vol) => { const n = a.sampleRate * 2, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const src = a.createBufferSource(); src.buffer = b; src.loop = true; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const gg = a.createGain(); gg.gain.value = vol; src.connect(fl); fl.connect(gg); gg.connect(out); src.start(); this._amb.push(src); return fl; };
         const tone = (f, vol, type) => { const o = a.createOscillator(), gg = a.createGain(); o.type = type || 'sine'; o.frequency.value = f; gg.gain.value = vol; o.connect(gg); gg.connect(out); o.start(); this._amb.push(o); return o; };
         if (kind === 'bitrain') this._ambT = setInterval(() => { if (Math.random() < 0.5 + k / 2) blip(0, 2200 + Math.random() * 2600, 1800 + Math.random() * 1500, 0.025, 0.012 + 0.02 * k, 'sine'); }, 70);
@@ -549,6 +579,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         if (kind === 'fog') { tone(68, 0.03 * k + 0.01); tone(71.5, 0.03 * k + 0.01); loopNoise('lowpass', 300, 0.01 * k); }
         if (kind === 'wind') { const fl = loopNoise('bandpass', 600, 0.03 + 0.05 * k); const l = a.createOscillator(), lg = a.createGain(); l.frequency.value = 0.15; lg.gain.value = 400; l.connect(lg); lg.connect(fl.frequency); l.start(); this._amb.push(l); }
         if (kind === 'hum') { tone(50, 0.02 + 0.02 * k); tone(100, 0.01 + 0.01 * k); tone(150, 0.006, 'triangle'); } },
+      vols(f, am) { if (f != null) { fxVol = f; try { localStorage.setItem('arena.fxVol', f); } catch (e) {} } if (am != null) { ambVol = am; try { localStorage.setItem('arena.ambVol', am); } catch (e) {} if (this._out) this._out.gain.value = am; } return { fxVol, ambVol }; },
       snip() { if (on) { noise(0.05, 5200, 0.12); blip(0.02, 2400, 900, 0.05, 0.03, 'sawtooth'); } }, crunch() { if (on) { noise(0.12, 900, 0.15); noise(0.08, 2400, 0.08); } } }; })();
   $('#soundBtn').addEventListener('click', () => Sound.toggle());
   // ---------- digital weather: a visual layer over the arena and an ambient sound, part of the world genome ----------
@@ -587,6 +618,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   $('#rc-min').addEventListener('click', () => { $('#roomchat').classList.toggle('min'); $('#rc-min').textContent = $('#roomchat').classList.contains('min') ? '▴' : '▾'; });
   $('#rc-close').addEventListener('click', () => $('#roomchat').classList.add('closed')); $('#rc-open').addEventListener('click', () => $('#roomchat').classList.remove('closed'));
   $('#evolveWorldBtn').addEventListener('click', () => $('#worldMut').click());
+  { const v = Sound.vols(); $('#wcAmb').value = v.ambVol; $('#wcFx').value = v.fxVol; $('#wcAmb').addEventListener('input', e => Sound.vols(null, +e.target.value)); $('#wcFx').addEventListener('input', e => Sound.vols(+e.target.value, null)); }
   window.__weather = Weather; Weather.set(world.weather || 'bitrain', world.wint ?? 0.35); saveWorld();
   // ---------- lab tab (same thread as the chat page: pile_runs/lab/*.jsonl via demo_server.py, localhost only) ----------
   (() => {
