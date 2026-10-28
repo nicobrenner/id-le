@@ -8,7 +8,7 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 #arena{position:relative;height:520px;margin:0 16px;border:1px solid #8884;border-radius:12px;background:var(--floor);overflow:hidden;user-select:none}
 #floor{position:absolute;inset:0}
 .word{position:absolute;padding:2px 8px;border-radius:6px;background:#ffe9a8;color:#333;border:1px solid #d9b85a;font:13px ui-monospace,Menlo,monospace;cursor:grab;transform:translate(-50%,-50%);z-index:3}
-.word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px}
+.word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px;transition:left .42s cubic-bezier(.2,.9,.3,1.2),top .42s cubic-bezier(.2,.9,.3,1.2)}.word.crumb{background:#ffd6e8;border-color:#e89ab9;font-size:10px;padding:0 4px}
 .creature{position:absolute;transform:translate(-50%,-50%);z-index:5;cursor:grab;border-radius:50%;touch-action:none}.creature:active{cursor:grabbing}
 #terrainrow{display:flex;gap:6px;padding:4px 16px}#terrain{flex:1;font:13px system-ui;padding:5px 8px;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit}
 .word.terrain{background:transparent;border-color:#8883;color:inherit;opacity:.75;font-size:12px;padding:1px 4px}
@@ -131,14 +131,14 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   const web = document.createElementNS(NS, 'svg'); web.setAttribute('id', 'web'); web.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;overflow:visible'; floor.appendChild(web);
   const DEFAULT_GENOMES = {
     crawly: { id: 'crawly-0', name: 'Crawly', born: 0, parent: null, legs: 8, l1: 30, l2: 36, bodyL: 26, bodyW: 15, abdomen: 1, hue: 262, footHue: 330, step: 24, speed: 1.7, palps: 2, fidget: 0.6, body: 'chip' },
-    tok: { id: 'tok-0', name: 'the tokenizer', born: 0, parent: null, legs: 6, l1: 15, l2: 19, bodyL: 22, bodyW: 30, abdomen: 0, hue: 44, footHue: 24, step: 15, speed: 1.15, palps: 0, fidget: 0.9, body: 'box' },
+    tok: { id: 'tok-0', name: 'Id|le', born: 0, parent: null, legs: 6, l1: 15, l2: 19, bodyL: 22, bodyW: 30, abdomen: 0, hue: 44, footHue: 24, step: 15, speed: 1.15, palps: 0, fidget: 0.9, body: 'box' },
   };
   let genomes = (() => { try { const g = JSON.parse(localStorage.getItem('arena.genomes') || 'null'); if (g && g.crawly && g.tok) return g; } catch (e) {} return JSON.parse(JSON.stringify(DEFAULT_GENOMES)); })();
   let lineage = (() => { try { return JSON.parse(localStorage.getItem('arena.lineage') || '[]'); } catch (e) { return []; } })();
   function saveGenomes() { try { localStorage.setItem('arena.genomes', JSON.stringify(genomes)); localStorage.setItem('arena.lineage', JSON.stringify(lineage.slice(-200))); } catch (e) {} }
   const VOICE = {
-    crawly: { greet: ['*waves two legs*', 'hi.', '*click click*', 'hello, human'], fetch: ['{w}!', 'mine. {w}', '*scuttle* {w}', 'got {w}'], nope: ['no {w} here', '…', '*looks around* nothing', 'where?'], come: ['*scuttles over*', 'here.', '*taps*'], sleep: ['*legs fold*', 'zzz', '*goes still*'], hide: ['*under the box*', 'gone.', '*hides*'], refuse: ['*ignores you*', 'later.', '*busy with a word*', 'no.'], bring: ['for you. {w}', '{w}, here', '*drops {w}*'], hand: ['*takes the piece*', 'thanks. {w}', '*pockets {w}*'], own: ['*wanders*', '*sniffs a word*', '*stands on {w}*', '*looks at the human*'], held: ['*wriggles*', '*all eight legs at once*', 'down. DOWN.', '*kicks the air*'], dropped: ['*lands*', '*shakes off*', 'rude.', '*checks all legs*'] },
-    tok: { greet: ['hel|lo', 'hi (1 piece)', 'gree|ting'], chop: ['{p}', '{n} pieces: {p}', 'cut. {p}'], nope: ['no such word (0 pieces)', '{w}? not on the floor', 'cannot cut air'], come: ['com|ing', 'here (1 piece)', 'app|roach'], sleep: ['sle|ep', 'z|z|z', 'off.'], hide: ['hid|den', 'out of sight (3 pieces)'], refuse: ['no (1 piece)', 'bu|sy', 'later (2 pieces)'], hand: ['one piece for the legs: {w}', 'hand|ed {w}', 'giv|en'], own: ['counting pieces', 'id|le', '*sharpens*'], held: ['put|me|down', 'up (1 piece)', 'air (0 pieces)'], dropped: ['land|ed', 'down (1 piece)'] },
+    crawly: { greet: ['*waves two legs*', 'hi.', '*click click*', 'hello, human'], fetch: ['{w}!', 'mine. {w}', '*scuttle* {w}', 'got {w}'], nope: ['no {w} here', '…', '*looks around* nothing', 'where?'], come: ['*scuttles over*', 'here.', '*taps*'], sleep: ['*legs fold*', 'zzz', '*goes still*'], hide: ['*under the box*', 'gone.', '*hides*'], refuse: ['*ignores you*', 'later.', '*busy with a word*', 'no.'], bring: ['for you. {w}', '{w}, here', '*drops {w}*'], hand: ['*takes the piece*', 'thanks. {w}', '*pockets {w}*'], own: ['*wanders*', '*sniffs a word*', '*stands on {w}*', '*looks at the human*'], eat: ['*munch* {w}', 'crunchy.', '*eats {w}*', 'mm. {w}'], steal: ['mine now. {w}', '*snatches {w}*', 'finders keepers'], robbed: ['hey!', '*looks at its empty legs*', 'that was mine'], guard: ['*holds on*', 'no.', '*turns away*'], held: ['*wriggles*', '*all eight legs at once*', 'down. DOWN.', '*kicks the air*'], dropped: ['*lands*', '*shakes off*', 'rude.', '*checks all legs*'] },
+    tok: { greet: ['hel|lo', 'hi (1 piece)', 'gree|ting'], chop: ['{p}', '{n} pieces: {p}', 'cut. {p}'], nope: ['no such word (0 pieces)', '{w}? not on the floor', 'cannot cut air'], come: ['com|ing', 'here (1 piece)', 'app|roach'], sleep: ['sle|ep', 'z|z|z', 'off.'], hide: ['hid|den', 'out of sight (3 pieces)'], refuse: ['no (1 piece)', 'bu|sy', 'later (2 pieces)'], hand: ['one piece for the legs: {w}', 'hand|ed {w}', 'giv|en'], own: ['counting pieces', 'id|le', '*sharpens*'], steal: ['tak|en {w}', 'mine (1 piece)', 'yo|ink'], robbed: ['he|y', 'thi|ef', 'that (1 piece) was mine'], guard: ['no (1 piece)', 'mi|ne'], eat: ['no|m'], held: ['put|me|down', 'up (1 piece)', 'air (0 pieces)'], dropped: ['land|ed', 'down (1 piece)'] },
   };
   const ORACLE_SEEDS = {   // Room path: the Oracle comments when something happens between them (seed + model continuation)
     handover: w => [`The tokenizer just handed "${w}" to the crawler. They have an arrangement`, `Look at that, a piece changing hands in my room: "${w}"`, `"${w}", passed from the chopper to the legs. I did not teach them that`],
@@ -182,7 +182,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     return c;
   }
   const crawly = mk('Crawly', 'crawly', 160, 300, { options: ['fetch', 'bring', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'crawly' });
-  const tokc = mk('the tokenizer', 'tok', 560, 120, { options: ['chop', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'tok' });
+  const tokc = mk('Id|le', 'tok', 560, 120, { options: ['chop', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'tok' });
   const creatures = [crawly, tokc]; let selected = null;
   function select(c) { selected = c; }
   const clamp = v => Math.max(0, Math.min(1, v)); const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -291,9 +291,25 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   async function doChop(c, arg) {
     const w = findWord(arg); const text = w ? w.text : (arg || ''); if (!text) { speak(c, 'nope', { w: '?' }); logEvent('task', { who: c.name, option: 'chop', arg, success: false }); return false; }
     if (w) { goto(c, w.x, w.y - 24); await when(() => arrived(c)); }
-    const ids = tokenizer.encode(' ' + text), pcs = ids.map(i => (tokenizer.invVocab[i] || '').replace(/^Ġ|^▁/, '')).filter(Boolean); c.chopUntil = performance.now() + 450;
-    pcs.forEach((p, k) => addWord(p, (w ? w.x : c.x) + (k - pcs.length / 2) * 34, (w ? w.y : c.y) + 36, true)); if (w) { w.el.remove(); words.splice(words.indexOf(w), 1); }
+    const toPieces = t => tokenizer.encode(t).map(i => (tokenizer.invVocab[i] || '').replace(/^Ġ|^▁/, '')).filter(Boolean);
+    let pcs = toPieces(' ' + text); if (pcs.length < 2 && text.length > 2) pcs = toPieces(text); if (pcs.length < 2 && text.length > 1) { pcs = []; for (let i = 0; i < text.length; i += 2) pcs.push(text.slice(i, i + 2)); }   // literal to a fault: a one-token word still gets cut
+    c.chopUntil = performance.now() + 450; const ox = w ? w.x : c.x, oy = w ? w.y : c.y; if (w) { if (w.carriedBy) { w.carriedBy.carrying = null; } w.el.remove(); words.splice(words.indexOf(w), 1); }
+    pcs.forEach((p, k) => { const pw = addWord(p, ox, oy, true); pw.crumb = /^[^a-z]+$/i.test(p) || p.length < 2; if (pw.crumb) pw.el.classList.add('crumb'); const ang = (k / pcs.length) * Math.PI * 2 + Math.random(), dist = 34 + Math.random() * 26; pw.el.animate([{ transform: 'translate(-50%,-50%) scale(1.4)', opacity: .3 }, { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }], { duration: 420 }); pw.x = ox + Math.cos(ang) * dist; pw.y = oy + Math.sin(ang) * dist; setTimeout(() => place(pw), 20); });
     c.d.hunger = clamp(c.d.hunger - 0.3); speak(c, 'chop', { p: pcs.join('|'), n: pcs.length }); c.state = 'idle'; logEvent('task', { who: c.name, option: 'chop', arg, success: true, pieces: pcs.length }); return true;
+  }
+  async function doEat(c) {   // Crawly's snack: pieces and crumbs the tokenizer left behind
+    const food = words.filter(w => w.piece && !w.carriedBy).sort((a, b) => (b.crumb - a.crumb) || (Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y)))[0]; if (!food) return false;
+    goto(c, food.x, food.y + 10); await when(() => arrived(c)); if (!words.includes(food) || food.carriedBy) return false;
+    food.el.animate([{ transform: 'translate(-50%,-50%) scale(1)' }, { transform: 'translate(-50%,-50%) scale(0)' }], { duration: 300 }); setTimeout(() => { food.el.remove(); const i = words.indexOf(food); if (i >= 0) words.splice(i, 1); }, 280);
+    c.d.hunger = clamp(c.d.hunger - (food.crumb ? 0.12 : 0.22)); c.state = 'idle'; speak(c, 'eat', { w: food.text }); logEvent('task', { who: c.name, option: 'eat', success: true, word: food.text, crumb: !!food.crumb }); return true;
+  }
+  async function doSteal(c) {   // take what another creature is carrying
+    const victim = creatures.filter(k => k !== c && k.carrying && !k.held).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0]; if (!victim) return false;
+    for (let i = 0; i < 40 && victim.carrying && Math.hypot(victim.x - c.x, victim.y - c.y) > 22; i++) { goto(c, victim.x, victim.y); await new Promise(r => setTimeout(r, 120)); }
+    const w = victim.carrying; if (!w || Math.hypot(victim.x - c.x, victim.y - c.y) > 30) { speak(c, 'nope', { w: 'it' }); return false; }
+    if (Math.random() < 0.35) { speak(victim, 'guard'); logEvent('steal', { who: c.name, from: victim.name, success: false }); return false; }
+    victim.carrying = null; w.carriedBy = c; c.carrying = w; speak(c, 'steal', { w: w.text }); speak(victim, 'robbed'); victim.d.affection = clamp(victim.d.affection - 0.2); c.state = 'idle';
+    logEvent('steal', { who: c.name, from: victim.name, word: w.text, success: true }); oracleComment(pick([`${c.name} just took "${w.text}" from ${victim.name}. There is no law in this room`, `Theft in my room. "${w.text}" changed owners without asking`, `${victim.name} had "${w.text}". Had`]), 'steal'); return true;
   }
   async function doHand(c) {   // give a piece (or the carried word) to the other creature
     const other = otherOf(c); let w = c.carrying || words.find(x => x.piece && !x.carriedBy) || words.find(x => !x.carriedBy);
@@ -309,18 +325,18 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     logEvent('task', { who: c.name, option: opt, success: true }); return true;
   }
   async function act(c, opt, arg, target) {
-    if (opt === 'fetch') return doFetch(c, arg); if (opt === 'bring') return doBring(c, target); if (opt === 'chop') return doChop(c, arg); if (opt === 'hand') return doHand(c); return doSimple(c, opt);
+    if (opt === 'fetch') return doFetch(c, arg); if (opt === 'bring') return doBring(c, target); if (opt === 'chop') return doChop(c, arg); if (opt === 'hand') return doHand(c); if (opt === 'eat') return doEat(c); if (opt === 'steal') return doSteal(c); return doSimple(c, opt);
   }
   function callOver(c, how) { if (Math.random() < 0.15) { speak(c, 'refuse'); logEvent('refuse', { who: c.name, how }); oracleComment(pick(ORACLE_SEEDS.refused(c.name)), 'refused'); return; } act(c, 'come'); }
   // ---------- drives + hand policy (the pet-model first signal; logged for the learned one) ----------
   setInterval(() => { for (const c of creatures) { if (c.state === 'sleep') c.d.fatigue = clamp(c.d.fatigue - 0.05); else { c.d.hunger = clamp(c.d.hunger + 0.012); c.d.curiosity = clamp(c.d.curiosity + 0.008); c.d.fatigue = clamp(c.d.fatigue + 0.004); } c.d.affection = clamp(c.d.affection - 0.004); } }, 2000);
   function ownThing(c, reason) {
     if (c.state === 'sleep' || c.state === 'hide' || c.held || Date.now() < c.userUntil || Date.now() - c.lastDecision < 5000) return; c.lastDecision = Date.now(); const free = words.filter(w => !w.carriedBy);
-    const sc = { wander: 0.25 + 0.5 * c.d.curiosity - 0.5 * c.d.fatigue, fetch: free.length && c.options.includes('fetch') ? 0.9 * c.d.hunger + 0.3 * c.d.curiosity - 0.6 * c.d.fatigue : -1, chop: free.length && c.options.includes('chop') ? 0.8 * c.d.hunger - 0.5 * c.d.fatigue : -1, bring: c.carrying ? 0.7 * c.d.affection : -1, nap: 1.1 * c.d.fatigue - 0.2, hand: c.carrying && c.d.curiosity > 0.6 ? 0.5 : -1 };
+    const sc = { wander: 0.25 + 0.5 * c.d.curiosity - 0.5 * c.d.fatigue, fetch: free.length && c.options.includes('fetch') ? 0.9 * c.d.hunger + 0.3 * c.d.curiosity - 0.6 * c.d.fatigue : -1, chop: free.length && c.options.includes('chop') ? 0.8 * c.d.hunger - 0.5 * c.d.fatigue : -1, bring: c.carrying ? 0.7 * c.d.affection : -1, nap: 1.1 * c.d.fatigue - 0.2, hand: c.carrying && c.d.curiosity > 0.6 ? 0.5 : -1, eat: c.voiceKey === 'crawly' && words.some(w => w.piece && !w.carriedBy) ? 1.1 * c.d.hunger + 0.1 : -1, steal: !c.carrying && creatures.some(k => k !== c && k.carrying) ? 0.55 * c.d.hunger + 0.45 * c.d.curiosity - 0.5 * c.d.affection - 0.1 : -1 };
     const best = Object.keys(sc).sort((a, b) => sc[b] - sc[a])[0]; logEvent('decide', { who: c.name, reason, drives: snap(c), scores: Object.fromEntries(Object.entries(sc).map(([k, v]) => [k, +v.toFixed(2)])), chosen: best });
     const r = arenaEl.getBoundingClientRect();
     if (best === 'wander') { goto(c, 40 + Math.random() * (r.width - 80), 40 + Math.random() * (r.height - 80)); speak(c, 'own', { w: free.length ? pick(free).text : '' }); }
-    else if (best === 'fetch') act(c, 'fetch', pick(free).text); else if (best === 'chop') act(c, 'chop', pick(free).text); else if (best === 'bring') act(c, 'bring', 'user'); else if (best === 'hand') act(c, 'hand'); else if (best === 'nap') act(c, 'sleep');
+    else if (best === 'fetch') act(c, 'fetch', pick(free).text); else if (best === 'chop') act(c, 'chop', pick(free).text); else if (best === 'bring') act(c, 'bring', 'user'); else if (best === 'hand') act(c, 'hand'); else if (best === 'eat') act(c, 'eat'); else if (best === 'steal') act(c, 'steal'); else if (best === 'nap') act(c, 'sleep');
   }
   setInterval(() => creatures.forEach(c => ownThing(c, 'timer')), 7000);
   // ---------- the Oracle's voice (Room path: seed + model continuation) ----------
@@ -363,7 +379,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   arenaEl.addEventListener('dragover', e => e.preventDefault()); arenaEl.addEventListener('drop', e => { e.preventDefault(); const t = e.dataTransfer.getData('text'); if (!t) return; const r = arenaEl.getBoundingClientRect(); addWord(t, e.clientX - r.left, e.clientY - r.top); logEvent('word_dropped', { word: t }); });
   document.addEventListener('keydown', e => { if (!selected || !e.key.startsWith('Arrow')) return; if (document.activeElement && document.activeElement.tagName === 'INPUT') return; e.preventDefault(); const d = { ArrowLeft: [-30, 0], ArrowRight: [30, 0], ArrowUp: [0, -30], ArrowDown: [0, 30] }[e.key]; goto(selected, selected.tx + d[0], selected.ty + d[1]); feel(selected, 'drag'); logEvent('nudge', { who: selected.name, key: e.key }); });
   $('#export').addEventListener('click', () => { const b = new Blob([JSON.stringify(events.filter(e => e.page === 'arena'), null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'arena_log.json'; a.click(); });
-  window.__arena = { genomes: () => genomes, mutate: k => applyGenome(k, mutate(k), 'mutate'), addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
+  window.__arena = { act: (i, o, a) => act(creatures[i], o, a), genomes: () => genomes, mutate: k => applyGenome(k, mutate(k), 'mutate'), addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), events: () => events.filter(e => e.page === 'arena') };
   // ---------- collection: kept creatures, compare two, release visitors into the arena ----------
   let collection = (() => { try { return JSON.parse(localStorage.getItem('arena.collection') || '[]'); } catch (e) { return []; } })();
   function saveColl() { try { localStorage.setItem('arena.collection', JSON.stringify(collection.slice(-60))); } catch (e) {} }
