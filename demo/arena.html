@@ -11,7 +11,9 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 .word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px;transition:left .42s cubic-bezier(.2,.9,.3,1.2),top .42s cubic-bezier(.2,.9,.3,1.2)}.word.crumb{background:#ffd6e8;border-color:#e89ab9;font-size:10px;padding:0 4px}
 .creature{position:absolute;transform:translate(-50%,-50%);z-index:5;cursor:grab;border-radius:50%;touch-action:none}.creature:active{cursor:grabbing}
 #terrainrow{display:flex;gap:6px;padding:4px 16px}#terrain{flex:1;font:13px system-ui;padding:5px 8px;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit}
-.word.terrain{background:transparent;border-color:#8883;color:inherit;opacity:.75;font-size:12px;padding:1px 4px}
+.word.terrain{background:transparent;border:0;color:inherit;font-size:12px;padding:0 3px}.word.t-grass{opacity:.45;font-size:10px;color:#3a8a4a}.word.t-soil{opacity:.85}.word.t-rock{font-weight:700;background:#8882;border-radius:8px}.word.t-tree{color:#1f7a3a;font-weight:600}.word.t-tree::before{content:'▲ ';font-size:9px;color:#3aa55a}
+.island{position:absolute;background:radial-gradient(closest-side,#c9e6b733,#9fd18f22 60%,transparent);pointer-events:none;z-index:0}
+@media (prefers-color-scheme:dark){.word.t-tree{color:#7ad48f}.word.t-grass{color:#7fbf8a}}
 #coll{display:none;padding:6px 16px}#coll.on{display:block}.cards{display:flex;flex-wrap:wrap;gap:10px}.card{border:1px solid #8885;border-radius:10px;padding:6px 8px;font-size:12px;width:200px}.card.cmp{border-color:#2b5cff}.card svg{display:block;margin:auto}.cbtns button{font-size:11px;padding:2px 6px;margin:2px 2px 0 0}.cmpt{margin-top:10px;border-collapse:collapse;font-size:12px}.cmpt td,.cmpt th{padding:3px 10px;border-bottom:1px solid #8883;text-align:left}.cmpt tr.diff{background:#2b5cff14}.sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle}
 #evo{display:flex;flex-direction:column;gap:4px;padding:4px 16px;font-size:12px}#evo button{font-size:11px;padding:2px 7px;margin-left:3px}#evo small{opacity:.65}.ln.lab{color:#0a8}
 #lab{position:fixed;right:0;top:0;height:100%;width:320px;background:var(--bg);border-left:1px solid #8884;box-shadow:-4px 0 16px #0002;z-index:50;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .2s}#lab.open{transform:none}#lab-head{padding:8px 10px;border-bottom:1px solid #8884;display:flex;justify-content:space-between;align-items:center}#lab-thread{flex:1;overflow:auto;padding:8px 10px;font-size:13px}.lab-row{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881}.lab-row b{opacity:.7}.lab-row.nico{background:#2b5cff22}.lab-row small{display:block;opacity:.55;font-size:11px}#lab-form{padding:8px 10px;border-top:1px solid #8884}#lab-text{width:100%;box-sizing:border-box;min-height:64px;font:13px system-ui;background:transparent;color:inherit;border:1px solid #8886;border-radius:6px;padding:6px}#lab-toggle{position:fixed;right:10px;bottom:10px;z-index:51;border-radius:16px;background:var(--bg)}
@@ -27,7 +29,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 <div id="top"><b>The arena</b> · two creatures with their own models (drives + policy + an instruction model), the Oracle as a third voice · <a href="index.html">back to the chat</a> · <span id="status">loading…</span></div>
 <div id="arena"><div id="floor"></div><div class="drives" id="drives"></div></div>
 <div id="evo"></div>
-<div id="terrainrow"><input id="terrain" placeholder="paste text, or a web address, and press enter: it becomes the floor"><button id="terrainGo">make floor</button><button id="terrainClear">clear floor</button><button id="collBtn">collection (0)</button></div>
+<div id="terrainrow"><input id="terrain" placeholder="paste text, or a web address, and press enter: it grows into the world"><button id="terrainGo">grow world</button><button id="terrainClear">clear world</button><button id="collBtn">collection (0)</button></div>
 <div id="coll"></div>
 <div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to call it · arrow keys nudge the selected one · drag a word onto the floor</span></div>
 <div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
@@ -432,12 +434,25 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (b.dataset.ca === 'release') release(x); else if (b.dataset.ca === 'use') applyGenome(x.key, { ...x.genome }, 'collection'); else if (b.dataset.ca === 'drop') { collection.splice(i, 1); compareSel.clear(); saveColl(); renderColl(); } });
   // ---------- terrain: paste text or a URL; its words become the floor the creatures walk, eat and chop ----------
   function clearTerrain() { for (let i = words.length - 1; i >= 0; i--) if (words[i].terrain && !words[i].carriedBy) { words[i].el.remove(); words.splice(i, 1); } }
+  // the world: sentences become islands, each grown as a spiral; small words are grass, long ones rocks, names trees, repeated words grow
+  const GRASS = new Set('a an the of to in on at by for and or but is was are were be been it its as with from that this he she they we you i his her their my your our not no so if then than there here who whom which what when where why how all any each into upon over under after before up down out off yea'.split(' '));
+  function clearTerrain() { for (let i = words.length - 1; i >= 0; i--) if (words[i].terrain && !words[i].carriedBy) { words[i].el.remove(); words.splice(i, 1); } floor.querySelectorAll('.island').forEach(e => e.remove()); }
   function layTerrain(text, title) {
-    clearTerrain(); const toks = String(text).replace(/\s+/g, ' ').split(' ').filter(w => /[a-zA-Z]/.test(w)).slice(0, 400).map(w => w.replace(/^[^\w']+|[^\w']+$/g, '').toLowerCase()).filter(w => /^[a-z][a-z'-]{0,17}$/.test(w));
-    const r = arenaEl.getBoundingClientRect(); let x = 30, y = 34; const lh = 26;
-    for (const t of toks) { const w = t.length * 7.4 + 14; if (x + w > r.width - 24) { x = 30; y += lh; } if (y > r.height - 40) break; const ww = addWord(t, x + w / 2, y); ww.terrain = true; ww.el.classList.add('terrain'); x += w + 6; }
-    say('lab', 'terrain: ' + (title ? '"' + title.slice(0, 60) + '", ' : '') + words.filter(w => w.terrain).length + ' words on the floor', 'lab'); logEvent('terrain', { n: toks.length, url: !!title });
-    oracleComment(pick([`New floor. Words everywhere, and the legs have noticed`, `Someone brought a whole page in. The crawler will eat half of it`, `My room is made of text now. ${title ? 'It used to be ' + title.slice(0, 40) : 'Do not ask me to read it'}`]), 'terrain');
+    clearTerrain(); const r = arenaEl.getBoundingClientRect(), W = r.width, H = r.height;
+    const sentences = String(text).replace(/\s+/g, ' ').split(/(?<=[.!?;:])\s+/).map(se => se.split(' ').map(w => ({ raw: w.replace(/^[^\w']+|[^\w']+$/g, ''), }) ).filter(o => /^[A-Za-z][A-Za-z'-]{0,17}$/.test(o.raw))).filter(a => a.length);
+    let flat = []; sentences.forEach((se, si) => se.forEach(o => flat.push({ ...o, si }))); flat = flat.slice(0, 220); if (!flat.length) return;
+    const freq = {}; flat.forEach(o => { const k = o.raw.toLowerCase(); freq[k] = (freq[k] || 0) + 1; });
+    const nIsl = Math.max(2, Math.min(7, Math.round(flat.length / 35))), centers = [];
+    for (let i = 0; i < nIsl; i++) { let best = null, bd = -1; for (let k = 0; k < 30; k++) { const c = { x: 90 + Math.random() * (W - 180), y: 80 + Math.random() * (H - 160) }; const d = centers.length ? Math.min(...centers.map(o => Math.hypot(o.x - c.x, o.y - c.y))) : 1e9; if (d > bd) { bd = d; best = c; } } centers.push(best); }
+    const per = Math.ceil(flat.length / nIsl), counts = new Array(nIsl).fill(0);
+    centers.forEach((c, i) => { const isl = document.createElement('div'); isl.className = 'island'; const rad = 40 + Math.sqrt(per) * 13; isl.style.cssText = `left:${c.x - rad}px;top:${c.y - rad * 0.8}px;width:${rad * 2}px;height:${rad * 1.6}px;border-radius:${45 + Math.random() * 10}% ${55 - Math.random() * 10}% ${50 + Math.random() * 8}% ${48 - Math.random() * 8}%;transform:rotate(${(Math.random() - .5) * 40}deg)`; floor.insertBefore(isl, floor.firstChild); });
+    flat.forEach((o, n) => { const i = Math.min(nIsl - 1, Math.floor(n / per)), c = centers[i], k = counts[i]++, ang = k * 2.39996 + i, rad = 18 * Math.sqrt(k + 0.6);
+      const x = Math.max(16, Math.min(W - 16, c.x + Math.cos(ang) * rad * 1.35 + (Math.random() - .5) * 6)), y = Math.max(14, Math.min(H - 14, c.y + Math.sin(ang) * rad * 0.95 + (Math.random() - .5) * 6));
+      const low = o.raw.toLowerCase(), ww = addWord(low, x, y); ww.terrain = true; ww.el.classList.add('terrain');
+      const kind = GRASS.has(low) || low.length <= 2 ? 'grass' : /^[A-Z]/.test(o.raw) && n && !/[.!?]$/.test(flat[n - 1].raw) ? 'tree' : low.length >= 8 ? 'rock' : 'soil';
+      ww.kind = kind; ww.el.classList.add('t-' + kind); if (freq[low] > 1 && kind !== 'grass') ww.el.style.fontSize = Math.min(18, 11 + freq[low] * 1.5) + 'px'; ww.rot = (Math.random() - .5) * (kind === 'grass' ? 30 : 8); place(ww); });
+    say('lab', 'world: ' + (title ? '"' + title.slice(0, 60) + '", ' : '') + flat.length + ' words on ' + nIsl + ' islands', 'lab'); logEvent('terrain', { n: flat.length, islands: nIsl, url: !!title });
+    oracleComment(pick([`New world. ${nIsl} islands of words, and the legs have noticed`, `Someone grew a landscape in my room. The crawler will eat half of it`, `My room has islands now. ${title ? 'They used to be ' + title.slice(0, 40) : 'Do not ask me to read them'}`]), 'terrain');
   }
   async function terrainFrom(input) {
     const v = input.trim(); if (!v) return;
@@ -451,10 +466,13 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const row = r => { const d = document.createElement('div'); d.className = 'lab-row ' + (r.who || ''); d.innerHTML = '<b>' + esc(r.who) + '</b> ' + esc(r.text) + '<small>' + new Date((r.t || 0) * 1000).toLocaleTimeString() + (r.ctx && r.ctx.page ? ' · ' + esc(r.ctx.page) : '') + '</small>'; return d; };
     const ctx = () => ({ page: 'arena', genomes, creatures: creatures.map(c => ({ name: c.name, state: c.state, drives: snap(c), genome: c.g.id })), log: [...document.querySelectorAll('#log .ln')].slice(-8).map(n => n.textContent) });
     async function send() { const t = text.value.trim(); if (!t) return; const note = { t: Date.now() / 1000, who: 'nico', text: t, ctx: ctx() };
-      try { await fetch('/lab/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(note) }); thread.appendChild(row(note)); thread.scrollTop = 1e9; text.value = ''; logEvent('lab_note', { len: t.length }); } catch (e) { thread.appendChild(row({ who: 'page', text: 'could not post (is demo_server.py running?)', t: Date.now() / 1000 })); } }
-    async function poll() { try { const rows = await (await fetch('/lab/replies')).json(); if (rows.length > seen) { rows.slice(seen).forEach(r => thread.appendChild(row(r))); seen = rows.length; thread.scrollTop = 1e9; } } catch (e) {} }
-    (async () => { try { const notes = await (await fetch('/lab/notes')).json(); notes.slice(-10).forEach(r => thread.appendChild(row(r))); } catch (e) {} })();
-    setInterval(() => { if (open) poll(); }, 5000);
+      try { await fetch('/lab/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(note) }); text.value = ''; await loadThread(); thread.scrollTop = 1e9; logEvent('lab_note', { len: t.length }); } catch (e) { thread.appendChild(row({ who: 'page', text: 'could not post (is demo_server.py running?)', t: Date.now() / 1000 })); } }
+    async function loadThread() {   // notes (Nico) + replies (lab sessions), interleaved by time
+      try { const [n, r] = await Promise.all([fetch('/lab/notes').then(x => x.json()), fetch('/lab/replies').then(x => x.json())]); const ts = v => { const t = typeof v === 'string' ? Date.parse(v) / 1000 : +v || 0; return t > 1e12 ? t / 1000 : t; };
+        const all = n.concat(r).map(x => ({ ...x, t: ts(x.t) })).sort((a, b) => a.t - b.t); if (all.length === seen) return; seen = all.length; const atEnd = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40 || !thread.childElementCount;
+        thread.innerHTML = ''; all.slice(-60).forEach(x => thread.appendChild(row(x))); if (atEnd) thread.scrollTop = thread.scrollHeight; } catch (e) {} }
+    const poll = loadThread; loadThread();
+    setInterval(() => { if (open) poll(); }, 4000);
     const show = on => { open = on; el.classList.toggle('open', on); if (on) poll(); };
     $('#lab-toggle').addEventListener('click', () => show(!open)); $('#lab-close').addEventListener('click', () => show(false)); $('#lab-send').addEventListener('click', send);
     text.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); } });
