@@ -6,11 +6,7 @@
 body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 #top{display:flex;gap:12px;align-items:center;padding:8px 16px;font-size:13px;opacity:.85;flex-wrap:wrap}#top a{color:var(--accent)}
 #arena{position:relative;height:calc(100vh - 150px);min-height:520px;margin:0 16px;border:1px solid #8884;border-radius:12px;background:var(--floor);overflow:hidden;user-select:none}
-#travelPage{position:absolute;z-index:0;height:980px;column-width:380px;column-gap:44px;column-fill:auto;padding:26px 30px;background:#fffdf8;color:#222;border:1px solid #e3dccb;border-radius:4px;box-shadow:0 6px 30px #0002;font:15px/1.5 Georgia,serif;width:380px;box-sizing:content-box}
-#travelPage h1.ptitle{font-size:28px;margin:0 0 2px;column-span:none}#travelPage .psrc{font:11px ui-monospace,Menlo,monospace;color:#888;margin-bottom:12px}#travelPage h2,#travelPage h3{font-family:Georgia,serif;margin:14px 0 6px;break-after:avoid}
-#travelPage p{margin:0 0 10px}#travelPage table{font-size:12px;border-collapse:collapse;max-width:360px}#travelPage td,#travelPage th{border:1px solid #ddd;padding:2px 4px}#travelPage .pimg{display:block;margin:8px 0;border-radius:3px;cursor:grab;break-inside:avoid}
-#travelPage .pw{cursor:pointer;border-radius:3px}#travelPage .pw:hover{background:#ffe9a8}#travelPage .plink{color:#2457c5}#travelPage .gone{visibility:hidden}#travelPage .pimg.gone{visibility:visible;opacity:.12;filter:grayscale(1)}
-#travelPage .restyled{font-weight:600}#travelPage .pdebug{outline:1.5px dashed #ff3b6b;outline-offset:3px;position:relative}#travelPage .pdebug::before{content:attr(data-tag);position:absolute;top:-16px;left:0;font:10px ui-monospace,Menlo,monospace;color:#ff3b6b;background:#fffdf8}
+#arena.traveling .grow{display:none}
 #travelPill{white-space:nowrap;max-width:80%;overflow:hidden;text-overflow:ellipsis;position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:30;background:#fffdf8ee;border:1px solid #d8cfb8;border-radius:16px;padding:4px 6px 4px 12px;font:12px ui-monospace,Menlo,monospace;color:#333}
 @media (prefers-color-scheme: dark){#travelPill{background:#222e;color:#ddd;border-color:#555}}
 #floor{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
@@ -108,6 +104,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     return { encoder, decoder };
   }
 
+  const UNK_ID = 1;   // same id as the chat demo's tokenizer
   class BPETokenizer {
     constructor(tokenizerJson) {
       const m = tokenizerJson.model;
@@ -325,12 +322,12 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   }
   // ---------- movement + animation loop ----------
   function animate(t) {
-    let svg = featuresSVG(t) + portalsSVG(t) + DataLab.svg(t) + specialsSVG(); featureEffects(t); if (window.__dis) { window.__dis.tick(t); svg += window.__dis.svg(t); }
+    const away = window.__traveling; let svg = away ? '' : featuresSVG(t) + portalsSVG(t) + DataLab.svg(t) + specialsSVG(); if (!away) featureEffects(t); if (window.__dis) { window.__dis.tick(t); svg += window.__dis.svg(t); }
     for (const c of creatures) {
       c.speed = c.g.speed * (c.sickUntil > Date.now() ? 0.5 : 1) * (c.boost && c.boost.what === 'speed' && c.boost.until > Date.now() ? 1.6 : 1); let vx = 0, vy = 0;
       if (!c.held && c.state !== 'sleep' && c.state !== 'hide') { const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.hypot(dx, dy); if (dist > 1.5) { const sp = Math.min(c.speed, dist); vx = dx / dist * sp; vy = dy / dist * sp; c.x += vx; c.y += vy; } }
       const wnd = window.__weather && window.__weather.wind(); if (wnd && !c.held && c.state !== 'hide') { const ca = Math.cos(wnd.a), sa = Math.sin(wnd.a), sp = Math.hypot(vx, vy); if (sp > 0) { const against = -(vx * ca + vy * sa) / sp; if (against > 0) { const slow = 1 - 0.6 * wnd.f * against; c.x -= vx * (1 - slow); c.y -= vy * (1 - slow); vx *= slow; vy *= slow; } } const push = 0.35 * wnd.f / Math.max(0.6, (c.g.legs || 6) / 6); c.x += ca * push; c.y += sa * push; c.tx += ca * push * 0.5; c.ty += sa * push * 0.5; }
-      for (const f of (world.features || [])) if (f.type === 'well' && Math.hypot(wd(f.x, c.x, SPACE.W), wd(f.y, c.y, SPACE.H)) < f.r) { c.x -= vx * 0.6; c.y -= vy * 0.6; vx *= 0.4; vy *= 0.4; }   // latency well: everything moves slow inside
+      for (const f of (window.__traveling ? [] : world.features || [])) if (f.type === 'well' && Math.hypot(wd(f.x, c.x, SPACE.W), wd(f.y, c.y, SPACE.H)) < f.r) { c.x -= vx * 0.6; c.y -= vy * 0.6; vx *= 0.4; vy *= 0.4; }   // latency well: everything moves slow inside
       c.vx = c.vx * 0.8 + vx * 0.2; c.vy = c.vy * 0.8 + vy * 0.2;
       if (Math.hypot(c.vx, c.vy) > 0.2) { const want = Math.atan2(c.vy, c.vx); let d = want - c.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); c.heading += d * 0.08; }
       else if (!c.held && c.state !== 'sleep') c.heading += Math.sin(t / 1300 + c.phase) * 0.003;   // looking around
@@ -890,8 +887,9 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     arenaEl.addEventListener('pointerdown', e => { if (e.target !== arenaEl && e.target !== floor && e.target.id !== 'web' && !(e.target.closest && (e.target.closest('#web') || e.target.closest('#travelPage')))) return; if (e.target.closest && (e.target.closest('.creature') || e.target.closest('.word'))) return; pan = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false }; arenaEl.setPointerCapture(e.pointerId); });
     arenaEl.addEventListener('pointermove', e => { if (!pan) return; const dx = e.clientX - pan.x, dy = e.clientY - pan.y; if (Math.hypot(dx, dy) > 3) { pan.moved = true; arenaEl.classList.add('panning'); } cam.x = pan.cx - dx / cam.z; cam.y = pan.cy - dy / cam.z; applyCam(); });
     arenaEl.addEventListener('pointerup', () => { if (pan && pan.moved) logEvent('pan', { x: Math.round(cam.x), y: Math.round(cam.y) }); pan = null; arenaEl.classList.remove('panning'); });
-    arenaEl.addEventListener('wheel', e => { if (e.target.closest && (e.target.closest('#roomchat') || e.target.closest('#workshop'))) return; e.preventDefault(); const before = toWorld(e.clientX, e.clientY); cam.z *= Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)); applyCam(); const after = toWorld(e.clientX, e.clientY); cam.x += before.x - after.x; cam.y += before.y - after.y; applyCam(); }, { passive: false });
-    const mm = $('#minimap'), mg = mm.getContext('2d'); let MW = 190, MH, sx, sy; function sizeMini() { MW = Math.round(190 * Math.min(1.6, Math.sqrt(SPACE.W / 2400))); MH = Math.round(MW * SPACE.H / SPACE.W); mm.width = MW * devicePixelRatio; mm.height = MH * devicePixelRatio; mm.style.width = MW + 'px'; mm.style.height = MH + 'px'; mg.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); sx = MW / SPACE.W; sy = MH / SPACE.H; placeGrow(); } window.__sizeMini = sizeMini; sizeMini();
+    arenaEl.addEventListener('wheel', e => { if (window.__traveling && !e.ctrlKey && !(e.target.closest && (e.target.closest('#roomchat') || e.target.closest('#workshop')))) { e.preventDefault(); cam.x += e.deltaX / cam.z; cam.y += e.deltaY / cam.z; applyCam(); return; }   // on a page, scrolling scrolls
+    if (e.target.closest && (e.target.closest('#roomchat') || e.target.closest('#workshop'))) return; e.preventDefault(); const before = toWorld(e.clientX, e.clientY); cam.z *= Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)); applyCam(); const after = toWorld(e.clientX, e.clientY); cam.x += before.x - after.x; cam.y += before.y - after.y; applyCam(); }, { passive: false });
+    const mm = $('#minimap'), mg = mm.getContext('2d'); let MW = 190, MH, sx, sy; function sizeMini() { MW = Math.round(190 * Math.min(1.6, Math.sqrt(SPACE.W / 2400))); MH = Math.round(MW * SPACE.H / SPACE.W); if (MH > 240) { MW = Math.max(40, Math.round(MW * 240 / MH)); MH = 240; } /* a tall page gets a narrow minimap, not a tall one */ mm.width = MW * devicePixelRatio; mm.height = MH * devicePixelRatio; mm.style.width = MW + 'px'; mm.style.height = MH + 'px'; mg.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); sx = MW / SPACE.W; sy = MH / SPACE.H; placeGrow(); } window.__sizeMini = sizeMini; sizeMini();
     const wrapX = v => ((v % SPACE.W) + SPACE.W) % SPACE.W, wrapY = v => ((v % SPACE.H) + SPACE.H) % SPACE.H;
     function drawMini() { mg.clearRect(0, 0, MW, MH); const dark = isDark(); mg.fillStyle = dark ? '#ffffff55' : '#00000040'; for (const w of words) mg.fillRect(wrapX(w.x) * sx, wrapY(w.y) * sy, 1.5, 1.5);
       for (const c of creatures) { mg.fillStyle = `hsl(${c.g.hue},80%,${dark ? 70 : 50}%)`; mg.beginPath(); mg.arc(wrapX(c.x) * sx, wrapY(c.y) * sy, 3.5, 0, 7); mg.fill(); }
@@ -976,14 +974,14 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       else if (t.kind === 'ui') { const o = addUI({ tag: t.tag, text: t.label }, t.x, t.y); o.code = t.code; o.color = t.color; o.badge = t.badge; o.rot = t.rot || 0; renderUI(o); place(o); } }
     world = { ...sn.world }; lastWorldText = sn.worldText; saveWorld(); syncCtl(); Object.assign(cam, sn.cam || {}); if (window.__sizeMini) window.__sizeMini(); applyCam(); renderEvo(); say('lab', 'snapshot restored: ' + sn.name, 'lab'); logEvent('snapshot_restore', { t: sn.t }); }
   function renderSnaps() { const el = $('#snaps'); if (!el) return; el.innerHTML = snaps.length ? snaps.map((sn, i) => `<span class="scard"><b contenteditable="true" spellcheck="false" data-sname="${i}">${String(sn.name).replace(/[<>&]/g, '')}</b><br>${(sn.words || []).length} words · ${1 + (sn.residents || []).length + 1} creatures · ${WEATHER_NAMES[sn.world.weather] || ''}<br><button data-sa="load" data-si="${i}">load</button><button data-sa="dl" data-si="${i}">download</button><button data-sa="drop" data-si="${i}">remove</button></span>`).join('') : '<small style="opacity:.6">none yet: press 📸 snapshot</small>'; }
-  $('#snapBtn').addEventListener('click', () => { snaps.push(takeSnap()); saveSnaps(); say('lab', '📸 snapshot saved (workshop → snapshots to load, rename or download it)', 'lab'); logEvent('snapshot', { n: snaps.length }); $('#snapBtn').animate([{ scale: 1.25 }, { scale: 1 }], { duration: 300 }); });
+  $('#snapBtn').addEventListener('click', () => { if (window.__traveling) { say('lab', 'snapshots are of home: leave the page first', 'lab'); return; } snaps.push(takeSnap()); saveSnaps(); say('lab', '📸 snapshot saved (workshop → snapshots to load, rename or download it)', 'lab'); logEvent('snapshot', { n: snaps.length }); $('#snapBtn').animate([{ scale: 1.25 }, { scale: 1 }], { duration: 300 }); });
   document.addEventListener('click', e => { const b = e.target.closest('#snaps [data-sa]'); if (!b) return; const i = +b.dataset.si, sn = snaps[i];
     if (b.dataset.sa === 'load') restoreSnap(sn); else if (b.dataset.sa === 'dl') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(sn)], { type: 'application/json' })); a.download = 'arena_' + String(sn.name).replace(/[^\w-]+/g, '_') + '.json'; a.click(); } else { snaps.splice(i, 1); saveSnaps(); } });
   document.addEventListener('focusout', e => { const n = e.target.dataset && e.target.dataset.sname; if (n == null) return; snaps[+n].name = e.target.textContent.trim().slice(0, 40) || snaps[+n].name; saveSnaps(); });
   $('#snapFile').addEventListener('change', async e => { const f = e.target.files[0]; if (!f) return; try { const sn = JSON.parse(await f.text()); if (!sn.world || !sn.genomes) throw new Error('not an arena snapshot'); snaps.push(sn); saveSnaps(); restoreSnap(sn); } catch (er) { say('lab', 'could not load: ' + er.message, 'lab'); } });
   renderSnaps();
   // autosave: the whole arena is kept in this browser every 15 s and when you leave; reloading brings it back (toggle in the workshop)
-  function autosave() { if (!window.__restoredOrFresh) return; try { localStorage.setItem('arena.autosave', JSON.stringify({ ...takeSnap(), name: 'last session' })); } catch (e) { try { const sn = takeSnap(); sn.things = (sn.things || []).filter(t => t.kind !== 'image'); localStorage.setItem('arena.autosave', JSON.stringify({ ...sn, name: 'last session' })); } catch (e2) {} } }
+  function autosave() { if (!window.__restoredOrFresh || window.__traveling) return; /* home was saved on the way out; the page is not home */ try { localStorage.setItem('arena.autosave', JSON.stringify({ ...takeSnap(), name: 'last session' })); } catch (e) { try { const sn = takeSnap(); sn.things = (sn.things || []).filter(t => t.kind !== 'image'); localStorage.setItem('arena.autosave', JSON.stringify({ ...sn, name: 'last session' })); } catch (e2) {} } }
   setInterval(autosave, 15000); addEventListener('visibilitychange', () => { if (document.hidden) autosave(); }); addEventListener('pagehide', autosave);
   { const auto = (() => { try { return JSON.parse(localStorage.getItem('arena.autosave') || 'null'); } catch (e) { return null; } })(), wants = localStorage.getItem('arena.autorestore') !== 'off';
     $('#autoRestore').checked = wants; $('#autoRestore').addEventListener('change', e => { try { localStorage.setItem('arena.autorestore', e.target.checked ? 'on' : 'off'); } catch (er) {} });
@@ -1155,8 +1153,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     function stop() { on = false; creatures.filter(c => c.lab).forEach(c => { const i = creatures.indexOf(c); if (i >= 0) creatures.splice(i, 1); c.el.remove(); c.bub.remove(); if (selected === c) selected = null; });
       msgs.splice(0).forEach(m => m.el.remove()); for (const k of Object.keys(bins)) delete bins[k]; $('#team').classList.remove('on'); $('#labBtn').textContent = '🧪 data lab'; renderEvo(); logEvent('lab_close', {}); say('lab', 'the data lab is closed; your team is saved for next time', 'lab'); }
     $('#labExit').addEventListener('click', stop);
-    $('#labBtn').addEventListener('click', () => { if (!on) { start(); $('#labBtn').textContent = '🧪 data lab ●'; } else $('#team').classList.toggle('on'); });
-    setInterval(() => { if (!on) return; if (playing && Date.now() - lastEmit > rate * 1000) { lastEmit = Date.now(); emit(); } for (const c of creatures) if (c.lab) work(c); renderStats(); }, 400);
+    $('#labBtn').addEventListener('click', () => { if (window.__traveling) { say('lab', 'the data lab is at home: leave the page first', 'lab'); return; } if (!on) { start(); $('#labBtn').textContent = '🧪 data lab ●'; } else $('#team').classList.toggle('on'); });
+    setInterval(() => { if (!on || window.__traveling) return; if (playing && Date.now() - lastEmit > rate * 1000) { lastEmit = Date.now(); emit(); } for (const c of creatures) if (c.lab) work(c); renderStats(); }, 400);
     function handles() { if (!on) return []; const H = [{ kind: 'inbox', label: 'inbox', x: inbox().x, y: inbox().y, move: (x, y) => { base.x += x - inbox().x; base.y += y - inbox().y; } }];
       team.forEach((st, i) => { const p = postOf(i); H.push({ kind: 'stage', label: `${i + 1}. ${ROLE_NAMES[st.role]} · ${st.head}`, x: p.x, y: p.y, info: st, move: (x, y) => { team[i].pos = { x, y }; const c = creatures.find(k => k.lab && k.lab.i === i); if (c) { c.home = { x, y }; goto(c, x, y); } saveTeam(); }, del: () => { team.splice(i, 1); saveTeam(); renderTeam(); spawnTeam(); } }); });
       for (const b of Object.values(bins)) H.push({ kind: 'bin', label: b.label + ' · ' + b.count, x: b.x, y: b.y, info: b, move: (x, y) => { const dx = x - b.x, dy = y - b.y; b.x = x; b.y = y; msgs.filter(m => m.bin === b.label).forEach(m => { m.x += dx; m.y += dy; place(m); }); }, del: () => { msgs.filter(m => m.bin === b.label).forEach(m => { m.el.remove(); msgs.splice(msgs.indexOf(m), 1); }); delete bins[b.label]; } });
@@ -1220,66 +1218,96 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     text.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); } });
   })();
   $('#terrain').addEventListener('keydown', e => { if (e.key === 'Enter') { terrainFrom(e.target.value); e.target.value = ''; } });
-  // ---------- traveling mode (Oct 28, 21:15 note): a real page rendered as the ground; its words, images and links are material ----------
-  // The server returns the raw HTML; it is parsed into an inert document and only an allowlist of tags is rebuilt here (text as text, image
-  // sources through the same-origin proxy, links kept as data), so nothing from the page runs. Every word is a span the creatures can pull out.
-  const Travel = (() => { let page = null, base = '', url = '', title = '', saveT = 0; const bits = [], grid = new Map(), CELL = 48, COLW = 380, PH = 980;
-    const ALLOW = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'UL', 'OL', 'LI', 'A', 'IMG', 'FIGURE', 'FIGCAPTION', 'BLOCKQUOTE', 'B', 'I', 'EM', 'STRONG', 'TABLE', 'TBODY', 'THEAD', 'TR', 'TD', 'TH', 'CODE', 'PRE', 'DL', 'DT', 'DD', 'CAPTION']);
-    const DROP = 'script,style,noscript,svg,nav,footer,header,form,iframe,button,input,select,textarea,link,meta,sup,.mw-editsection,.reference,.navbox,.mw-jump-link,.reflist,.references,.noprint,.hatnote,.metadata,.sistersitebox,.mw-empty-elt,#toc,.toc,.infobox-navbar';
-    function clean(src, out, budget) {
-      for (const n of src.childNodes) { if (budget.words <= 0) return;
-        if (n.nodeType === 3) { for (const p of n.textContent.split(/(\s+)/)) { if (!p) continue; if (!p.trim()) { out.appendChild(document.createTextNode(' ')); continue; } const sp = document.createElement('span'); sp.className = 'pw'; sp.textContent = p; out.appendChild(sp); budget.words--; } continue; }
-        if (n.nodeType !== 1) continue; const tag = n.tagName;
-        if (tag === 'IMG') { const s0 = n.getAttribute('src') || '', wd0 = +n.getAttribute('width') || 120; if (!s0 || s0.startsWith('data:') || wd0 < 50 || budget.imgs <= 0) continue; let abs; try { abs = new URL(s0, base).href; } catch (e) { continue; }
-          const im = document.createElement('img'); im.className = 'pimg'; im.dataset.src = abs; im.src = '/lab/img?url=' + encodeURIComponent(abs); im.style.width = Math.min(COLW - 20, wd0) + 'px'; im.addEventListener('load', reindexSoon); out.appendChild(im); budget.imgs--; continue; }
-        if (!ALLOW.has(tag)) { clean(n, out, budget); continue; }   // unknown wrappers (div, span, section…): keep what is inside
-        const el = document.createElement(tag === 'A' ? 'span' : tag); if (tag === 'A') { el.className = 'plink'; try { el.dataset.href = new URL(n.getAttribute('href') || '', base).href; } catch (e) {} }
-        clean(n, el, budget); if (el.childNodes.length) out.appendChild(el); } }
-    function position() { if (!page) return; page.style.left = (near(page.x + page.w / 2, cam.x, SPACE.W) - page.w / 2) + 'px'; page.style.top = (near(page.y + PH / 2, cam.y, SPACE.H) - PH / 2) + 'px'; }
-    let reT = 0; function reindexSoon() { clearTimeout(reT); reT = setTimeout(index, 300); }
-    function index() { if (!page) return; const pr = page.getBoundingClientRect(); grid.clear(); let maxR = 0;
-      for (const b of bits) { const r = b.el.getBoundingClientRect(); b.lx = (r.left + r.width / 2 - pr.left) / cam.z; b.ly = (r.top + r.height / 2 - pr.top) / cam.z; maxR = Math.max(maxR, (r.right - pr.left) / cam.z);
+  // ---------- traveling mode (Oct 28, 21:15 note; reworked 21:50): a mode, like the data lab. The home world is set aside untouched and the arena
+  // becomes the real page at its own width and with its own styles; the creatures, weather, day and sounds come along; 'leave page' puts
+  // everyone back exactly where they were. The page is rebuilt from an inert parse with an allowlist of tags and attributes (no scripts, no
+  // event handlers, no frames); its stylesheets, fonts and images come through the same-origin proxy, inside a shadow root so they style
+  // only the page. Every word (up to 6,000) is a span the creatures can pull out.
+  const Travel = (() => { let T = null, saveT = 0; const bits = [], grid = new Map(), CELL = 48, PW = 1280, MX = 500, MY = 400;
+    const DROPTAGS = new Set(['SCRIPT', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'SVG', 'CANVAS', 'VIDEO', 'AUDIO', 'SOURCE', 'TRACK', 'BASE', 'META', 'TITLE', 'FRAME', 'FRAMESET', 'APPLET', 'PORTAL', 'DIALOG']);
+    const TAGS = new Set('DIV SPAN P A H1 H2 H3 H4 H5 H6 UL OL LI DL DT DD TABLE THEAD TBODY TFOOT TR TD TH CAPTION COLGROUP COL IMG FIGURE FIGCAPTION PICTURE BLOCKQUOTE PRE CODE B I U S EM STRONG SMALL SUB SUP BR HR ABBR CITE Q MARK TIME KBD SAMP VAR SECTION ARTICLE HEADER FOOTER NAV MAIN ASIDE ADDRESS DETAILS SUMMARY LABEL BUTTON INPUT SELECT OPTION TEXTAREA FORM FIELDSET LEGEND BDI BDO WBR CENTER FONT'.split(' '));
+    const ATTRS = new Set(['class', 'id', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan', 'role', 'lang', 'dir', 'aria-hidden', 'aria-label', 'placeholder', 'type', 'value', 'align', 'valign', 'bgcolor', 'color', 'face', 'size', 'start', 'reversed', 'scope', 'open']);
+    const prox = (u, base) => { try { const a = new URL(u, base).href; return /^https?:/.test(a) ? '/lab/asset?url=' + encodeURIComponent(a) : null; } catch (e) { return null; } };
+    const cssFix = (css, base) => css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (m, q, u) => u.trim().startsWith('data:') ? m : 'url("' + (prox(u.trim(), base) || '') + '")').replace(/@import\s+(['"])([^'"]+)\1/g, (m, q, u) => '@import url("' + (prox(u, base) || '') + '")');
+    function clean(src, out, budget, base) {
+      for (const n of src.childNodes) {
+        if (n.nodeType === 3) { if (budget.words <= 0 || !n.textContent.trim() || out.tagName === 'STYLE') { out.appendChild(document.createTextNode(n.textContent)); continue; }
+          for (const p of n.textContent.split(/(\s+)/)) { if (!p) continue; if (!p.trim() || budget.words <= 0) { out.appendChild(document.createTextNode(p)); continue; } const sp = document.createElement('span'); sp.className = 'pw'; sp.textContent = p; out.appendChild(sp); budget.words--; } continue; }
+        if (n.nodeType !== 1) continue; const tag = n.tagName.toUpperCase();
+        if (DROPTAGS.has(tag)) continue;
+        if (tag === 'STYLE') { const st = document.createElement('style'); st.textContent = cssFix(n.textContent, base); out.appendChild(st); continue; }
+        if (tag === 'LINK') { if (/stylesheet/i.test(n.getAttribute('rel') || '') && n.getAttribute('href')) { const p = prox(n.getAttribute('href'), base); if (p) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = p; l.addEventListener('load', reindexSoon); out.appendChild(l); } } continue; }
+        if (!TAGS.has(tag)) { clean(n, out, budget, base); continue; }
+        const el = document.createElement(tag === 'FORM' ? 'div' : tag);
+        for (const a of n.attributes) { const k = a.name.toLowerCase(); if (ATTRS.has(k)) el.setAttribute(k, a.value); else if (k === 'style') el.setAttribute('style', cssFix(a.value, base)); }
+        if (tag === 'A') { try { const h = n.getAttribute('href'); if (h && !/^\s*javascript:/i.test(h)) el.dataset.href = new URL(h, base).href; } catch (e) {} el.classList.add('plink'); }
+        if (tag === 'IMG') { const s0 = n.getAttribute('src') || n.getAttribute('data-src') || ''; const p = s0 && !s0.startsWith('data:') ? prox(s0, base) : null; if (!p) continue; el.src = p; el.dataset.src = new URL(s0, base).href; el.loading = 'lazy'; el.classList.add('pimg'); el.addEventListener('load', reindexSoon); }
+        if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(tag)) { el.setAttribute('disabled', ''); el.setAttribute('tabindex', '-1'); }
+        if (tag === 'IMG') { out.appendChild(el); continue; }
+        clean(n, el, budget, base); out.appendChild(el); } }
+    let reT = 0; function reindexSoon() { clearTimeout(reT); reT = setTimeout(index, 400); }
+    function position() { if (!T) return; T.host.style.left = (near(MX + T.w / 2, cam.x, SPACE.W) - T.w / 2) + 'px'; T.host.style.top = (near(MY + T.h / 2, cam.y, SPACE.H) - T.h / 2) + 'px'; }
+    function index() { if (!T) return; const pr = T.host.getBoundingClientRect(); grid.clear(); T.w = Math.max(PW, Math.round(T.host.scrollWidth)); T.h = Math.max(600, Math.round(pr.height / cam.z));
+      for (const b of bits) { const r = b.el.getBoundingClientRect(); if (!r.width && !r.height) { b.hidden = true; continue; } b.hidden = false; b.lx = (r.left + r.width / 2 - pr.left) / cam.z; b.ly = (r.top + r.height / 2 - pr.top) / cam.z;
         const k = Math.floor(b.lx / CELL) + ',' + Math.floor(b.ly / CELL); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(b); }
-      page.w = Math.ceil(maxR + 30); page.style.width = page.w + 'px'; if (page.w + 300 > SPACE.W) growWorld('right', page.w + 300 - SPACE.W); position(); }
-    const local = (x, y) => { let lx = ((x - page.x) % SPACE.W + SPACE.W) % SPACE.W, ly = ((y - page.y) % SPACE.H + SPACE.H) % SPACE.H; if (lx > page.w + 300) lx -= SPACE.W; if (ly > PH + 300) ly -= SPACE.H; return [lx, ly]; };
-    function nearBits(x, y, R, ok) { if (!page) return []; const [lx, ly] = local(x, y), out = [], r = Math.ceil(R / CELL);
-      for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) for (const b of grid.get((Math.floor(lx / CELL) + i) + ',' + (Math.floor(ly / CELL) + j)) || []) if (!b.gone && (!ok || ok(b))) { const d = Math.hypot(b.lx - lx, b.ly - ly); if (d < R) out.push([d, b]); }
+      const W = T.w + 2 * MX, H = T.h + 2 * MY; if (W !== SPACE.W || H !== SPACE.H) { SPACE.W = W; SPACE.H = H; floor.style.width = W + 'px'; floor.style.height = H + 'px'; if (window.__sizeMini) window.__sizeMini(); } position(); }
+    function nearBits(x, y, R, ok) { if (!T) return []; const lx = x - MX, ly = y - MY, out = [], r = Math.ceil(R / CELL);
+      for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) for (const b of grid.get((Math.floor(lx / CELL) + i) + ',' + (Math.floor(ly / CELL) + j)) || []) if (!b.gone && !b.hidden && (!ok || ok(b))) { const d = Math.hypot(b.lx - lx, b.ly - ly); if (d < R) out.push([d, b]); }
       return out.sort((a, b) => a[0] - b[0]).map(x => x[1]); }
-    function pop(b) { b.gone = true; b.el.classList.add('gone'); const x = page.x + b.lx, y = page.y + b.ly; let o;
+    function pop(b) { b.gone = true; b.el.classList.add('gone'); const x = MX + b.lx, y = MY + b.ly; let o;
       if (b.kind === 'img') o = addImage(b.src, x, y); else { const t = b.text.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '') || b.text; o = addWord(t, x, y); o.fromPage = true; o.vx = (Math.random() - .5) * 3; o.vy = -1.5 - Math.random() * 2; o.vr = (Math.random() - .5) * 10; }
       stats.popped++; saveSoon(); hud(); return o; }
     const STY = ['upper', 'title', 'color', 'star', 'bracket', 'alt'];
     function restyle(b, c, st) { st = st || pick(STY); const t = b.text; b.styled = st; if (st === 'upper') b.el.textContent = t.toUpperCase(); else if (st === 'title') b.el.textContent = t[0].toUpperCase() + t.slice(1); else if (st === 'alt') b.el.textContent = [...t].map((ch, i) => i % 2 ? ch.toUpperCase() : ch).join(''); else if (st === 'color') b.el.style.color = `hsl(${c ? (c.g.paintHue ?? c.g.hue) : 200},75%,45%)`; else if (st === 'star') b.el.textContent = '✶' + t + '✶'; else b.el.textContent = '⟨' + t + '⟩';
       b.el.classList.add('restyled'); stats.styled++; saveSoon(); hud(); }
     const stats = { popped: 0, styled: 0, debugged: 0 };
-    function hud() { const el = $('#travelPill'); if (!page) { el.style.display = 'none'; return; } el.style.display = ''; $('#travelInfo').textContent = `🧭 ${title.slice(0, 28)} · ${stats.popped} pulled out · ${stats.styled} restyled · ${stats.debugged} inspected`; }
-    function saveSoon() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('arena.travel', JSON.stringify(page ? { url, x: page.x, y: page.y, gone: bits.map((b, i) => b.gone ? i : -1).filter(i => i >= 0), styled: Object.fromEntries(bits.map((b, i) => [i, b.styled]).filter(e => e[1])) } : null)); } catch (e) {} }, 800); }
-    function leave(quiet) { if (!page) return; page.remove(); page = null; bits.length = 0; grid.clear(); stats.popped = stats.styled = stats.debugged = 0; hud(); if (!quiet) { saveSoon(); say('lab', 'left the page; whatever the creatures pulled out of it stays on the floor', 'lab'); } }
-    async function go(u, at, restore) { say('lab', (restore ? 'back on ' : 'traveling to ') + u.slice(0, 80) + '…', 'lab'); let j; try { j = await (await fetch('/lab/page?url=' + encodeURIComponent(u))).json(); } catch (e) { j = { error: String(e) }; } if (j.error) { say('lab', 'could not travel: ' + j.error, 'lab'); return; }
-      leave(true); base = url = j.url; const doc = new DOMParser().parseFromString(j.html, 'text/html'); title = ((doc.querySelector('h1') || doc.querySelector('title') || {}).textContent || u).trim(); doc.querySelectorAll(DROP).forEach(e => e.remove());
-      const root = doc.querySelector('#mw-content-text .mw-parser-output') || doc.querySelector('article') || doc.querySelector('main') || doc.body;
-      page = document.createElement('div'); page.id = 'travelPage'; const h = document.createElement('h1'); h.className = 'ptitle'; clean({ childNodes: [document.createTextNode(title)] }, h, { words: 30, imgs: 0 }); page.appendChild(h);
-      const src = document.createElement('div'); src.className = 'psrc'; src.textContent = j.url.replace(/^https?:\/\//, '').slice(0, 70); page.appendChild(src);
-      clean(root, page, { words: 2200, imgs: 8 }); page.w = COLW; page.x = at ? at.x : cam.x - viewSize().w / 2 / cam.z + 30; page.y = at ? at.y : cam.y - PH / 2; floor.insertBefore(page, floor.firstChild);
-      page.querySelectorAll('.pw,.pimg').forEach(el => bits.push(el.tagName === 'IMG' ? { el, kind: 'img', src: el.dataset.src, text: 'image' } : { el, kind: 'word', text: el.textContent }));
-      position(); index();
+    function hud() { const el = $('#travelPill'); if (!T) { el.style.display = 'none'; return; } el.style.display = ''; $('#travelInfo').textContent = `🧭 ${T.title.slice(0, 28)} · ${stats.popped} pulled out · ${stats.styled} restyled · ${stats.debugged} inspected`; }
+    function saveSoon() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('arena.travel', JSON.stringify(T ? { url: T.url, gone: bits.map((b, i) => b.gone ? i : -1).filter(i => i >= 0), styled: Object.fromEntries(bits.map((b, i) => [i, b.styled]).filter(e => e[1])), cam: { x: cam.x, y: cam.y, z: cam.z } } : null)); } catch (e) {} }, 800); }
+    const hideEl = (o, on) => { if (o && o.el) o.el.style.display = on ? 'none' : ''; if (o && o.bub) o.bub.style.display = on ? 'none' : ''; };
+    function setAside() {   // the home world: words, things, lab and its creatures go out of sight and out of reach, exactly as they are
+      try { autosave(); } catch (e) {} const labCs = creatures.filter(c => c.lab); labCs.forEach(c => { creatures.splice(creatures.indexOf(c), 1); hideEl(c, true); });
+      const H = { W: SPACE.W, H: SPACE.H, cam: { ...cam }, words: words.splice(0), things: things.splice(0), labCs, msgs: window.__lab ? window.__lab.msgs.slice() : [], pos: new Map() };
+      H.words.forEach(w => hideEl(w, true)); H.things.forEach(t => hideEl(t, true)); H.msgs.forEach(m => hideEl(m, true));
+      for (const c of creatures) H.pos.set(c, { x: c.x, y: c.y, tx: c.tx, ty: c.ty, home: c.home ? { ...c.home } : null }); return H; }
+    function comeHome(H) { const keep = new Set(creatures.map(c => c.carrying).filter(Boolean));   // what a creature is carrying comes home with it
+      words.splice(0).forEach(w => { if (keep.has(w)) H.words.push(w); else w.el.remove(); }); things.splice(0).forEach(t => t.el.remove());
+      H.words.forEach(w => { words.push(w); hideEl(w, false); }); H.things.forEach(t => { things.push(t); hideEl(t, false); }); H.msgs.forEach(m => hideEl(m, false)); H.labCs.forEach(c => { creatures.push(c); hideEl(c, false); });
+      SPACE.W = H.W; SPACE.H = H.H; floor.style.width = SPACE.W + 'px'; floor.style.height = SPACE.H + 'px'; if (window.__sizeMini) window.__sizeMini();
+      for (const c of creatures) { const p = H.pos.get(c); if (!p) continue; c.x = p.x; c.y = p.y; c.tx = p.tx; c.ty = p.ty; if (p.home) c.home = p.home; c.legs.forEach(L => { L.foot.x = c.x; L.foot.y = c.y; L.swing = null; }); c.target = null; }
+      Object.assign(cam, H.cam); applyCam(); }
+    function leave(quiet) { if (!T) return; T.host.remove(); comeHome(T.home); T = null; window.__traveling = false; $('#arena').classList.remove('traveling'); bits.length = 0; grid.clear(); stats.popped = stats.styled = stats.debugged = 0; hud();
+      if (!quiet) { try { localStorage.removeItem('arena.travel'); } catch (e) {} say('lab', 'back home; everyone is where they were (anything a creature was carrying came along)', 'lab'); logEvent('travel_leave', {}); } }
+    async function go(u, restore) { say('lab', (restore ? 'back on ' : 'traveling to ') + u.slice(0, 80) + '…', 'lab'); let j; try { j = await (await fetch('/lab/page?url=' + encodeURIComponent(u))).json(); } catch (e) { j = { error: String(e) }; } if (j.error) { say('lab', 'could not travel: ' + j.error, 'lab'); return; }
+      const home = T ? T.home : setAside(); if (T) { T.host.remove(); words.splice(0).forEach(w => w.el.remove()); things.splice(0).forEach(t => t.el.remove()); bits.length = 0; stats.popped = stats.styled = stats.debugged = 0; }
+      const doc = new DOMParser().parseFromString(j.html, 'text/html'), base = j.url, title = ((doc.querySelector('title') || {}).textContent || u).trim().replace(/\s+[-–|]\s+[^-–|]+$/, '');
+      const host = document.createElement('div'); host.id = 'travelPage'; const root = host.attachShadow({ mode: 'open' });
+      const reset = document.createElement('style'); reset.textContent = `:host{all:initial;display:block;position:absolute;width:${PW}px;background:#fff;color:#202122;font-family:system-ui,sans-serif;box-shadow:0 10px 40px #0005;z-index:0}
+        .pw{cursor:pointer;border-radius:2px}.pw:hover{background:#ffe9a8}.gone{visibility:hidden!important}img.gone{visibility:visible!important;opacity:.12;filter:grayscale(1)}.restyled{font-weight:600}
+        .pdebug{outline:1.5px dashed #ff3b6b!important;outline-offset:3px}a.plink{cursor:pointer}*{transition:none!important;animation:none!important}`;
+      root.appendChild(reset); for (const n of doc.head.querySelectorAll('link,style')) clean({ childNodes: [n] }, root, { words: 0 }, base);
+      const hw = document.createElement('div'); hw.className = doc.documentElement.className; const bw = document.createElement('div'); bw.className = doc.body.className; bw.id = doc.body.id || ''; hw.appendChild(bw); root.appendChild(hw);
+      clean(doc.body, bw, { words: 6000 }, base); floor.insertBefore(host, floor.firstChild);
+      T = { url: base, title, host, root, home, w: PW, h: 1000 }; window.__traveling = true; $('#arena').classList.add('traveling');
+      root.querySelectorAll('.pw,img.pimg').forEach(el => bits.push(el.tagName === 'IMG' ? { el, kind: 'img', src: el.dataset.src, text: 'image' } : { el, kind: 'word', text: el.textContent }));
+      root.addEventListener('pointerdown', e => { const t0 = e.composedPath()[0], el = t0.closest && t0.closest('.pw:not(.gone), img.pimg:not(.gone)'); if (!el) return; const b = bits.find(x => x.el === el); if (!b || b.hidden) return; e.stopPropagation(); e.preventDefault();
+        const o = pop(b); if (o && o.el && b.kind === 'word') { dragging = o; try { o.el.setPointerCapture(e.pointerId); } catch (er) {} } logEvent('travel_pull', { kind: b.kind }); });
+      root.addEventListener('dblclick', e => { const t0 = e.composedPath()[0], a = t0.closest && t0.closest('a.plink'); if (a && a.dataset.href && /^https?:/.test(a.dataset.href)) go(a.dataset.href.split('#')[0]); });
+      index(); const { w: vw, h: vh } = viewSize(); cam.z = Math.min(1, vw / (T.w + 80)); cam.x = MX + T.w / 2; cam.y = MY + vh / 2 / cam.z - 30;
+      if (restore && restore.cam) Object.assign(cam, restore.cam); applyCam(); index();
       if (restore) { (restore.gone || []).forEach(i => { if (bits[i]) { bits[i].gone = true; bits[i].el.classList.add('gone'); } }); Object.entries(restore.styled || {}).forEach(([i, st]) => bits[i] && restyle(bits[i], null, st)); stats.popped = (restore.gone || []).length; stats.styled = Object.keys(restore.styled || {}).length; }
-      else for (const c of creatures) if (!c.lab && !c.held) { const nx = page.x + 40 + Math.random() * Math.min(page.w, viewSize().w / cam.z - 80), ny = page.y + 60 + Math.random() * (PH - 120); c.x = c.tx = nx; c.y = c.ty = ny; c.legs.forEach(L => { L.foot.x = nx; L.foot.y = ny; L.swing = null; }); if (c.home) { c.home.x = nx; c.home.y = ny; } }   // everyone comes along
-      hud(); saveSoon(); applyCam(); say('lab', `traveling: “${title.slice(0, 60)}”, ${bits.length} pieces of page (${bits.filter(b => b.kind === 'img').length} images). Creatures pull words out, Namers restyle them, Blursorts take images, Debuggers inspect blocks; click a word to pull it out yourself, double-click a link to travel on`, 'lab');
+      const view = { x0: cam.x - vw / 2 / cam.z + 60, x1: cam.x + vw / 2 / cam.z - 60, y0: cam.y - vh / 2 / cam.z + 80, y1: cam.y + vh / 2 / cam.z - 60 };
+      for (const c of creatures) { const nx = view.x0 + Math.random() * (view.x1 - view.x0), ny = view.y0 + Math.random() * (view.y1 - view.y0); c.x = c.tx = nx; c.y = c.ty = ny; c.target = null; c.legs.forEach(L => { L.foot.x = nx; L.foot.y = ny; L.swing = null; }); if (c.home) { c.home.x = nx; c.home.y = ny; } c.el.animate([{ translate: '0 -60px', opacity: 0 }, { translate: '0 0', opacity: 1 }], { duration: 500 + Math.random() * 400, easing: 'cubic-bezier(.3,1.6,.6,1)' }); }   // dropped onto the page
+      hud(); saveSoon(); say('lab', `traveling: “${title.slice(0, 60)}”, ${bits.length} pieces of page (${bits.filter(b => b.kind === 'img').length} images); home is set aside untouched. Scroll to move down the page, ctrl+scroll or pinch to zoom; creatures pull words out, Namers restyle them, Blursorts take images, Debuggers outline blocks; click a word to pull it out, double-click a link to go on, 'leave page' to go home`, 'lab');
       logEvent('travel', { n: bits.length, restore: !!restore }); if (!restore) oracleComment(pick([`We are standing on ${title.slice(0, 40)} now. Wipe your feet`, 'A real page. The crawler is already chewing the first paragraph', 'Travel day. Nobody touch the references']), 'travel'); }
-    // the creatures on the page: hungry ones pull words out, Namers restyle in place, Blursorts take the images, Debuggers outline the blocks
-    setInterval(() => { if (!page) return; for (const c of creatures) { if (c.lab || c.held || c.state === 'sleep' || c.state === 'hide' || c.carrying || c.target || c.userTask) continue; const job = c.g.job;
+    setInterval(() => { if (!T) return; for (const c of creatures) { if (c.held || c.state === 'sleep' || c.state === 'hide' || c.carrying || c.target || c.userTask) continue; const job = c.g.job;
         if (job === 'namer') { if (Math.random() < 0.3) { const b = nearBits(c.x, c.y, 70, b => b.kind === 'word' && !b.styled && b.text.length > 3)[0]; if (b) { restyle(b, c); speak(c, 'own', { w: b.el.textContent }); } } continue; }
         if (job === 'blursort') { const b = nearBits(c.x, c.y, 220, b => b.kind === 'img')[0]; if (b && Math.random() < 0.3) { const o = pop(b); c.focus = o; speak(c, 'own', { w: 'image' }); } continue; }
-        if (job === 'debug') { if (Math.random() < 0.25) { const b = nearBits(c.x, c.y, 80)[0], blk = b && b.el.closest('#travelPage > *'); if (blk && !blk.classList.contains('pdebug')) { blk.classList.add('pdebug'); blk.dataset.tag = '<' + blk.tagName.toLowerCase() + '> ' + blk.querySelectorAll('.pw').length + ' words'; stats.debugged++; hud(); speak(c, 'own', { w: blk.tagName.toLowerCase() }); } } continue; }
+        if (job === 'debug') { if (Math.random() < 0.25) { const b = nearBits(c.x, c.y, 80)[0], blk = b && b.el.parentElement && b.el.parentElement.closest('p,li,h1,h2,h3,h4,td,th,div,figure,section'); if (blk && !blk.classList.contains('pdebug')) { blk.classList.add('pdebug'); stats.debugged++; hud(); speak(c, 'own', { w: '<' + blk.tagName.toLowerCase() + '> ' + blk.querySelectorAll('.pw').length + ' words' }); } } continue; }
         if (Math.random() < 0.03 + 0.25 * (c.d.hunger || 0)) { const b = nearBits(c.x, c.y, 60, b => b.kind === 'word' && b.text.length > 1)[0]; if (b) { pop(b); Sound.snip(c); } } } }, 700);
-    page = null;
-    document.addEventListener('pointerdown', e => { const el = e.target.closest && e.target.closest('#travelPage .pw:not(.gone), #travelPage .pimg:not(.gone)'); if (!el) return; const b = bits.find(x => x.el === el); if (!b) return; e.stopPropagation(); e.preventDefault();
-      const o = pop(b); if (o && o.el && b.kind === 'word') { dragging = o; try { o.el.setPointerCapture(e.pointerId); } catch (er) {} } logEvent('travel_pull', { kind: b.kind }); }, true);
-    document.addEventListener('dblclick', e => { const a = e.target.closest && e.target.closest('#travelPage .plink'); if (a && a.dataset.href && /^https?:/.test(a.dataset.href)) go(a.dataset.href.split('#')[0], { x: page.x, y: page.y }); });
-    function find(t, from) { const norm = b => b.text.toLowerCase().replace(/[^\p{L}\p{N}'-]/gu, ''), live = bits.filter(b => !b.gone && b.kind === 'word'); let m = live.filter(b => norm(b) === t); if (!m.length && t.length >= 3) m = live.filter(b => { const n = norm(b); return n.length >= 3 && (n.startsWith(t) || t.startsWith(n)); }); if (!m.length) return null; const p = from ? local(from.x, from.y) : [0, 0]; m.sort((a, b) => Math.hypot(a.lx - p[0], a.ly - p[1]) - Math.hypot(b.lx - p[0], b.ly - p[1])); return pop(m[0]); }
-    setTimeout(() => { try { const s = JSON.parse(localStorage.getItem('arena.travel') || 'null'); if (s && s.url) go(s.url, { x: s.x, y: s.y }, s); } catch (e) {} }, 1500);
-    return { go, leave, position, find, on: () => !!page, bits: () => bits.length, stats: () => ({ ...stats, bits: bits.length, gone: bits.filter(b => b.gone).length }) }; })();
+    function find(t, from) { const norm = b => b.text.toLowerCase().replace(/[^\p{L}\p{N}'-]/gu, ''), live = bits.filter(b => !b.gone && !b.hidden && b.kind === 'word'); let m = live.filter(b => norm(b) === t); if (!m.length && t.length >= 3) m = live.filter(b => { const n = norm(b); return n.length >= 3 && (n.startsWith(t) || t.startsWith(n)); }); if (!m.length) return null;
+      const p = from ? [from.x - MX, from.y - MY] : [0, 0]; m.sort((a, b) => Math.hypot(a.lx - p[0], a.ly - p[1]) - Math.hypot(b.lx - p[0], b.ly - p[1])); return pop(m[0]); }
+    setTimeout(() => { try { const s = JSON.parse(localStorage.getItem('arena.travel') || 'null'); if (s && s.url) go(s.url, s); } catch (e) {} }, 1500);
+    return { go, leave, position, find, on: () => !!T, title: () => T ? T.title : '', stats: () => ({ ...stats, bits: bits.length, gone: bits.filter(b => b.gone).length, w: T && T.w, h: T && T.h }) }; })();
   // ---------- the Crawler (Oct 28, 21:11 note): visits a list of web addresses for real, brings back words and an image, and follows the links
   // closest to what is already on the floor. Closeness = cosine between averaged word vectors (assoc_v1: 32-d vectors learned from co-occurrence
   // in the training text), link text + address against the floor's words. No keyword rules; words outside the 3,000-word vocabulary are ignored.
@@ -1289,7 +1317,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const cos = (a, b) => a && b ? a.reduce((s, x, k) => s + x * b[k], 0) : 0;
     const dot = (a, b) => a.reduce((s, x, k) => s + x * b[k], 0);
     async function embed(texts) { try { const r = await (await fetch('/lab/embed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts }) })).json(); return r.vecs && r.vecs.length === texts.length ? r.vecs : null; } catch (e) { return null; } }
-    function floorText() { const n = {}; for (const w of words) if (!w.carriedBy && !w.lava && w.text.length > 3) n[w.text] = (n[w.text] || 0) + 1; const top = Object.entries(n).sort((a, b) => b[1] - a[1]).slice(0, 120).map(e => e[0]); const t = $('#travelInfo') ? $('#travelInfo').textContent.replace(/^🧭\s*/, '').split(' · ')[0] : ''; return (window.__travel && window.__travel.on() ? t + ': ' : '') + top.join(' '); }
+    function floorText() { const n = {}; for (const w of words) if (!w.carriedBy && !w.lava && w.text.length > 3) n[w.text] = (n[w.text] || 0) + 1; const top = Object.entries(n).sort((a, b) => b[1] - a[1]).slice(0, 120).map(e => e[0]); const t = window.__travel ? window.__travel.title() : ''; return (window.__travel && window.__travel.on() ? t + ': ' : '') + top.join(' '); }
     function floorVec() { const ws = words.filter(w => !w.carriedBy && !w.lava).map(w => w.text); if (window.__travel && window.__travel.on()) ws.push(...toks($('#travelInfo').textContent)); return vecOf(ws.flatMap(toks)); }
     const listIn = () => ($('#crawlList').value || '').split(/[\s,]+/).filter(u => /^https?:\/\//i.test(u));
     function state(c) { if (!c.crawl) { c.crawl = { queue: listIn().map(u => ({ u, d: 0 })), seen: new Set(), pages: 0, busy: false, next: 0 }; if (!c.crawl.queue.length) { try { const t = JSON.parse(localStorage.getItem('arena.travel') || 'null'); if (t && t.url) c.crawl.queue.push({ u: t.url, d: 0 }); } catch (e) {} } } return c.crawl; }
