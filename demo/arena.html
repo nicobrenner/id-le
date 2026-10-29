@@ -53,6 +53,8 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 #cmind{display:none;max-width:360px;margin:0 2px 6px}#whisper.mind #cmind{display:block}#whisper.mind #ccard,#whisper.mind #clife{display:none}
 #cmind .mbar{display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin-bottom:4px}#cmind select{font:10px system-ui;background:transparent;color:inherit;border:1px solid #8886;border-radius:4px}
 #cmind .chip{font:10px ui-monospace,monospace;padding:0 5px;border-radius:8px;border:1px solid currentColor;background:transparent;cursor:pointer}#cmind .chip.off{opacity:.3;text-decoration:line-through}
+#cmind .mstream{display:none}#cmind.st .mstream{display:block}#cmind.st .mlog,#cmind.st .chips{display:none}#cmind .chips{display:contents}
+#cmind canvas{display:block;background:#0002;border-radius:6px}#cmind .mcap{font:10px system-ui;opacity:.6;margin-top:3px}
 #cmind .mlog{height:240px;width:350px;overflow:auto;font:10.5px/1.45 ui-monospace,Menlo,monospace;background:#0001;border-radius:6px;padding:4px 6px;overscroll-behavior:contain}
 #cmind .ml{white-space:pre-wrap;word-break:break-word;animation:mlin .4s ease-out}#cmind .ml.p{font:12px/1.5 Georgia,serif;font-style:italic}@keyframes mlin{from{opacity:0;transform:translateY(3px)}}
 #cmind .mt{opacity:.4}#cmind .ms{color:var(--m-s)}#cmind .mnum{color:var(--m-n)}#cmind .mop{opacity:.6}#cmind a.mn,#cmind a.mw{color:inherit;cursor:pointer;text-decoration:underline dotted #8889}
@@ -435,10 +437,14 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   requestAnimationFrame(animate);
   // ---------- evolution: mutate / revert / keep, and genomes pushed from the lab (arena_genomes.json) ----------
   const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  // mind genes (the stream in the mind tab): base speed in chars/s, burstiness 0..1, glyph style; seeded from the id until mutated
+  function mindGenes(g) { let h = 2166136261; for (const ch of String(g.id || g.name || 'x')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+    return { rate: g.mrate ?? 25 + (h % 1000) / 1000 * 175, burst: g.mburst ?? ((h >>> 10) % 100) / 100, glyph: g.mglyph ?? (h >>> 17) % 5 }; }
   function mutate(key, rate, parent) {
     const p = parent || genomes[key], g = { ...p }, r = rate || 0.14; g.parent = p.id; g.id = key + '-' + Date.now().toString(36).slice(-5); g.born = Date.now(); g.name = p.name;
     const CL = { l1: [8, 60], l2: [8, 64], bodyL: [8, 46], bodyW: [6, 36], step: [6, 40], speed: [0.4, 3], fidget: [0.1, 3] };   // keep mutants creature-sized
     for (const f of ['l1', 'l2', 'bodyL', 'bodyW', 'step', 'speed', 'fidget']) g[f] = +Math.max(CL[f][0], Math.min(CL[f][1], p[f] * Math.exp(gauss() * r))).toFixed(2);
+    { const m = mindGenes(p); g.mrate = +Math.max(8, Math.min(400, m.rate * Math.exp(gauss() * r))).toFixed(1); g.mburst = +Math.max(0, Math.min(1, m.burst + gauss() * r * 0.8)).toFixed(2); g.mglyph = Math.random() < 0.08 ? Math.floor(Math.random() * 5) : m.glyph; }
     if (Math.random() < 0.15) g.body = pick(['chip', 'box', 'orb', 'tri', 'seg', 'star'].filter(b => b !== p.body));
     if (Math.random() < 0.18) { const acts = (p.actions || DEFAULT_GENOMES[key].actions).slice(); const out = Math.floor(Math.random() * acts.length), cand = ACTION_POOL.filter(a => !acts.includes(a)); if (cand.length) acts[out] = pick(cand); g.actions = acts; }
     if (Math.random() < 0.2) { g.job = pick(JOBS.filter(j => j !== (p.job || DEFAULT_GENOMES[key].job))); if (g.job === 'letter') g.letter = pick('rstlnaeiou'.split('')); }
@@ -1776,27 +1782,58 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       if (a.dataset.n != null) { const n = a.dataset.n, c = byName(n); if (c) { go(c.x, c.y); select(c); setTimeout(() => openWhisper(c), 60); logEvent('mention_go', { to: n }); } else if (resting(n) && window.__herd) window.__herd.toggle(true, 'Resting'); return; }
       const w = a.dataset.w, from = lastWhisper || { x: cam.x, y: cam.y }, hit = words.filter(x => x.text === w).sort((p, q2) => dist(p, from) - dist(q2, from))[0];
       if (hit) { go(hit.x, hit.y); hit.el.animate([{ outline: '2px solid #ffd54a', outlineOffset: '4px' }, { outline: '2px solid transparent', outlineOffset: '12px' }], { duration: 1400, iterations: 2 }); logEvent('mention_word', { word: w }); } }, true);
-    // ---- the mind tab: a live stream of what goes on inside one creature. Everything that happens to or in a creature is a
-    // thought (what it notices nearby, its drives, what it wants and picks, what it feels, says, does and remembers), kept
-    // in a short ring per creature (not saved: it is a live view). Three ways to read the same stream: thoughts (first
-    // person), tagged (colour per kind, numbers and words highlighted) and raw (the underlying data). Chips filter kinds.
+    // ---- the mind tab: what goes on inside one creature. Everything that happens to or in a creature is a thought (what it
+    // notices nearby, its drives, what it wants and picks, what it feels, says, does and remembers), kept in a short ring per
+    // creature (not saved: it is a live view). Three ways to read it:
+    //   stream: the raw flow, never stopping. Characters pour in at the top left, wrap row after row, and the oldest fall
+    //     out at the bottom right. Events are the data underneath; between events the creature keeps processing (drives,
+    //     where it is, what it sees, its own glyphs), and asleep it replays scrambled memories. How fast, how bursty and in
+    //     which glyphs is in its genes (mrate, mburst, mglyph: they mutate like the rest), and its state speeds it up or
+    //     slows it down (curious, excited and scared run fast; tired and asleep run slow, but never stop).
+    //   thoughts (first person) and tagged (colour per kind, numbers and words highlighted): newest on top; chips filter kinds.
     const TAGS = ['see', 'body', 'want', 'feel', 'say', 'do', 'remember', 'world'];
-    let mindOn = false, mode = (() => { try { return localStorage.getItem('arena.mindMode') || 'thoughts'; } catch (e) { return 'thoughts'; } })(), hide = new Set(), watched = null, mlog = null;
+    let mindOn = false, mode = (() => { try { const m = localStorage.getItem('arena.mindMode'); return m === 'thoughts' || m === 'tagged' ? m : 'stream'; } catch (e) { return 'stream'; } })(), hide = new Set(), watched = null, mlog = null;
     const t2 = n => n == null ? '–' : (+n).toFixed(2).replace(/^0/, ''), bar = v => '▁▂▃▄▅▆▇█'[Math.max(0, Math.min(7, Math.round((v || 0) * 7)))];
     const hl = h => h.replace(/(&quot;[^&]*?&quot;)/g, '<span class="ms">$1</span>').replace(/(“[^”<]*”)/g, '<span class="ms">$1</span>').replace(/(^|[\s(=:,{\[])(-?\d*\.?\d+)(?=[\s,)}\]%]|$)/g, '$1<span class="mnum">$2</span>').replace(/(→|&gt;|×)/g, '<span class="mop">$1</span>');
-    function think(c, tag, tagged, plain, raw) { if (!c) return; const m = c._mind = c._mind || []; const e = { t: Date.now(), tag, tagged, plain, raw }; m.push(e); if (m.length > 300) m.splice(0, m.length - 300); if (mindOn && watched === c && mlog) add(e); }
+    function think(c, tag, tagged, plain, raw) { if (!c) return; const m = c._mind = c._mind || []; const e = { t: Date.now(), tag, tagged, plain, raw }; m.push(e); if (m.length > 300) m.splice(0, m.length - 300); if (mindOn && watched === c) { if (mode === 'stream') S.feed(e); else if (mlog) add(e); } }
     const fmt = e => { const time = new Date(e.t).toLocaleTimeString([], { hour12: false }).slice(0, 8);
-      if (mode === 'raw') return `<div class="ml r ${e.tag}"><span class="mt">${time}</span> <span class="mtag">${e.tag}</span> ${hl(esc(JSON.stringify(e.raw || {})))}</div>`;
       if (mode === 'tagged') return `<div class="ml ${e.tag}"><span class="mt">${time}</span> <span class="mtag">[${e.tag}]</span> ${hl(e.tagged)}</div>`;
       return `<div class="ml p ${e.tag}">${e.plain}</div>`; };
-    function add(e) { if (hide.has(e.tag)) return; const stick = mlog.scrollHeight - mlog.scrollTop - mlog.clientHeight < 30; mlog.insertAdjacentHTML('beforeend', fmt(e)); while (mlog.childElementCount > 300) mlog.firstElementChild.remove(); if (stick) mlog.scrollTop = mlog.scrollHeight; }
-    function fill() { if (!mlog || !watched) return; mlog.innerHTML = (watched._mind || []).filter(e => !hide.has(e.tag)).map(fmt).join('') || '<div class="ml p">…quiet. Thoughts show up as they happen.</div>'; mlog.scrollTop = mlog.scrollHeight; }
-    function mindUI() { const w = $('#whisper'); if (!w || $('#ctabs')) return; w.querySelector('#ccard').insertAdjacentHTML('beforebegin', `<div id="ctabs"><button data-ct="profile" class="on">profile</button><button data-ct="mind" title="a live stream of what goes on in its mind">mind 🧠</button></div>`);
-      $('#clife').insertAdjacentHTML('afterend', `<div id="cmind"><div class="mbar"><select id="mmode" title="how to read the stream"><option value="thoughts">thoughts</option><option value="tagged">tagged</option><option value="raw">raw</option></select> ${TAGS.map(t => `<button class="chip ${t}" data-mt="${t}" title="show or hide ${t}">${t}</button>`).join('')}</div><div class="mlog"></div></div>`);
+    function add(e) { if (hide.has(e.tag)) return; const stick = mlog.scrollTop < 30; mlog.insertAdjacentHTML('afterbegin', fmt(e)); while (mlog.childElementCount > 300) mlog.lastElementChild.remove(); if (stick) mlog.scrollTop = 0; }
+    function fill() { if (!watched) return; const st = mode === 'stream'; $('#cmind').classList.toggle('st', st); if (st) { S.start(watched); return; } S.stop(); if (!mlog) return;
+      mlog.innerHTML = (watched._mind || []).filter(e => !hide.has(e.tag)).slice().reverse().map(fmt).join('') || '<div class="ml p">…quiet. Thoughts show up as they happen.</div>'; mlog.scrollTop = 0; }
+    // the stream itself: a character grid on a canvas; new text enters at index 0 (top left) and pushes the rest along
+    const S = (() => { let cv = null, g = null, buf = [], q = [], c = null, raf = 0, last = 0, acc = 0, ph = 0, cols = 58, rows = 20, CW = 6, CH = 12, col = {}, dream = 0, capEl = null, shown = 0, rateNow = 0;
+      const GLY = [['0123456789abcdef', 'hex'], ['01', 'binary'], ['░▒▓█▀▄▌▐', 'blocks'], ['⠁⠂⠄⡀⠈⠐⠠⢀⠃⠅⠆⠇⠉⠊⠋⠌⠍⠎⠏', 'braille'], ['·:;+=*#%@', 'noise']];
+      const colors = () => { const cs = getComputedStyle(document.documentElement); col = Object.fromEntries(TAGS.map(t => [t, cs.getPropertyValue('--m-' + (t === 'remember' ? 'rem' : t)).trim() || '#999'])); col.bg = cs.getPropertyValue('--m-body').trim() || '#888'; col.ink = cs.getPropertyValue('--ink').trim() || '#ddd'; };
+      function push(str, k) { for (const ch of str) q.push([ch, k]); if (q.length > 4000) q.splice(0, q.length - 4000); }
+      const feed = e => push(e.tag + JSON.stringify(e.raw || {}).replace(/\s+/g, '') + ' ', e.tag);
+      function idle(n) { const mg = mindGenes(c.g), set = GLY[mg.glyph][0], d = c.d || {}; let out = '';
+        if (c.state === 'sleep' && c.life && c.life.diary.length && Math.random() < 0.5) { const m = c.life.diary[Math.floor(Math.random() * c.life.diary.length)], t = (m.x.replace(/<[^>]+>/g, '') + (m.ws ? ' ' + m.ws.map(x => x[0]).join(' ') : '')).split(' '); for (let i = t.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [t[i], t[j]] = [t[j], t[i]]; } push('zz' + t.join('~') + '~ ', 'remember'); return; }   // dreams: scrambled memories
+        const r = Math.random(); if (r < 0.07) { push(`h${t2(d.hunger)}c${t2(d.curiosity)}f${t2(d.fatigue)}a${t2(d.affection)}|`, 'body'); return; } if (r < 0.1) { push(`x${Math.round(c.x)}y${Math.round(c.y)}v${Math.hypot(c.vx || 0, c.vy || 0).toFixed(1)}|`, 'see'); return; }
+        if (r < 0.12 && c.target && c.target.text) { push('→' + c.target.text + '|', 'want'); return; }
+        for (let i = 0; i < n; i++) out += set[Math.floor(Math.random() * set.length)]; push(out, 'bg'); }
+      function frame(now) { raf = requestAnimationFrame(frame); if (!c || !creatures.includes(c)) return; const dt = Math.min(0.1, (now - (last || now)) / 1000); last = now;
+        const mg = mindGenes(c.g), d = c.d || {}, fe = (c.life && c.life.fe) || {}, sleep = c.state === 'sleep';
+        const act = sleep ? 0.18 : Math.max(0.25, 0.55 + 0.5 * (d.curiosity || 0) + 0.6 * (fe.thrill || 0) + 1.2 * (fe.fear || 0) - 0.45 * (d.fatigue || 0));
+        ph += dt * (0.6 + mg.burst * 2.4); const gate = mg.burst > 0.15 ? (Math.sin(ph) + Math.sin(ph * 2.7) * 0.5 > 0.4 ? 1 + 2.5 * mg.burst : Math.max(0.03, 1 - 1.1 * mg.burst)) : 1;
+        rateNow = mg.rate * act * gate; acc += rateNow * dt; let n = Math.floor(acc); if (!n) return; acc -= n; n = Math.min(n, 200);
+        if (q.length < n) idle(n - q.length + 4); const chunk = q.splice(0, n); buf = chunk.concat(buf); if (buf.length > cols * rows) buf.length = cols * rows;
+        draw(); if (capEl && now - shown > 500) { shown = now; capEl.textContent = `${Math.round(rateNow)} chars/s now · ${Math.round(mg.rate)} base · ${mg.burst > 0.6 ? 'bursty' : mg.burst > 0.3 ? 'pulsing' : 'steady'} · thinks in ${GLY[mg.glyph][1]}${sleep ? ' · dreaming' : ''}`; } }
+      function draw() { const W = cols * CW, H = rows * CH; g.clearRect(0, 0, W, H); let fs = ''; const N = cols * rows;
+        for (let i = 0; i < buf.length; i++) { const [ch, k] = buf[i], x = (i % cols) * CW, y = Math.floor(i / cols) * CH; g.globalAlpha = (k === 'bg' ? 0.45 : 1) * (1 - 0.7 * i / N); const f = k === 'bg' ? col.bg : col[k] || col.ink; if (f !== fs) g.fillStyle = fs = f; g.fillText(ch, x, y + 9.5); }
+        g.globalAlpha = (Math.floor(performance.now() / 400) % 2) ? 0.9 : 0.2; g.fillStyle = col.ink; g.fillRect(0, 0, 2, CH - 1); g.globalAlpha = 1; }   // the opening, top left
+      function start(cr) { if (!cv) { const box = $('#cmind .mstream'); cv = box.querySelector('canvas'); capEl = box.querySelector('.mcap'); const dpr = devicePixelRatio || 1; cv.width = cols * CW * dpr; cv.height = rows * CH * dpr; cv.style.width = cols * CW + 'px'; cv.style.height = rows * CH + 'px'; g = cv.getContext('2d'); g.scale(dpr, dpr); g.font = '10px ui-monospace,Menlo,monospace'; g.textBaseline = 'alphabetic'; }
+        colors(); if (c !== cr) { c = cr; buf = []; q = []; (cr._mind || []).slice(-12).forEach(feed); } if (!raf) { last = 0; raf = requestAnimationFrame(frame); } }
+      function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
+      return { start, stop, feed: e => { if (c) feed(e); } }; })();
+    function mindUI() { const w = $('#whisper'); if (!w || $('#ctabs')) return; w.querySelector('#ccard').insertAdjacentHTML('beforebegin', `<div id="ctabs"><button data-ct="profile" class="on">profile</button><button data-ct="mind" title="what goes on in its mind">mind 🧠</button></div>`);
+      $('#clife').insertAdjacentHTML('afterend', `<div id="cmind"><div class="mbar"><select id="mmode" title="how to read its mind"><option value="stream">stream</option><option value="thoughts">thoughts</option><option value="tagged">tagged</option></select> <span class="chips">${TAGS.map(t => `<button class="chip ${t}" data-mt="${t}" title="show or hide ${t}">${t}</button>`).join('')}</span></div><div class="mlog"></div><div class="mstream"><canvas></canvas><div class="mcap"></div></div></div>`);
       mlog = w.querySelector('#cmind .mlog'); $('#mmode').value = mode;
       $('#mmode').addEventListener('change', e => { mode = e.target.value; try { localStorage.setItem('arena.mindMode', mode); } catch (er) {} fill(); });
-      w.addEventListener('click', e => { const b = e.target.closest('[data-ct],[data-mt]'); if (!b) return; if (b.dataset.ct) { mindOn = b.dataset.ct === 'mind'; w.classList.toggle('mind', mindOn); w.querySelectorAll('[data-ct]').forEach(x => x.classList.toggle('on', x === b)); if (mindOn) { watched = lastWhisper; fill(); } logEvent('mind_tab', { on: mindOn }); }
-        else { const t = b.dataset.mt; hide.has(t) ? hide.delete(t) : hide.add(t); b.classList.toggle('off', hide.has(t)); fill(); } }); }
+      w.addEventListener('click', e => { const b = e.target.closest('[data-ct],[data-mt]'); if (!b) return; if (b.dataset.ct) { mindOn = b.dataset.ct === 'mind'; w.classList.toggle('mind', mindOn); w.querySelectorAll('[data-ct]').forEach(x => x.classList.toggle('on', x === b)); if (mindOn) { watched = lastWhisper; fill(); } else S.stop(); logEvent('mind_tab', { on: mindOn }); }
+        else { const t = b.dataset.mt; hide.has(t) ? hide.delete(t) : hide.add(t); b.classList.toggle('off', hide.has(t)); fill(); } });
+      new MutationObserver(() => { if (w.style.display === 'none') S.stop(); else if (mindOn && mode === 'stream' && watched) S.start(watched); }).observe(w, { attributes: true, attributeFilter: ['style'] }); }
     function sync(c) { mindUI(); if (mindOn && watched !== c) { watched = c; fill(); } }
     // what the watched creature notices, every 1.2 s (only for the one you are watching, so it costs nothing otherwise)
     setInterval(() => { if (!mindOn || !watched || $('#whisper').style.display !== 'block') return; const c = watched; if (!creatures.includes(c)) return; const s = c._sense = c._sense || {};
