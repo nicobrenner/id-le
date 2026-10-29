@@ -21,6 +21,7 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 #soundBtn{position:absolute;right:8px;top:8px;z-index:8;font-size:14px;padding:2px 6px;opacity:.7}
 #quick{display:flex;gap:6px;flex-wrap:wrap;margin:6px 16px 0}#quick button{font-size:12px;padding:3px 9px;border-radius:14px}#quick .x{margin-left:4px;opacity:.5}#quick .add{opacity:.6}
 .word.locked{color:#ff3b6b!important;opacity:1!important;font-weight:700;text-shadow:0 0 10px #ff3b6baa,0 0 22px #2b5cff88;animation:lockpulse .55s ease-in-out infinite;z-index:7;outline:1.5px solid #ff3b6b;outline-offset:3px;border-radius:4px}@keyframes lockpulse{0%,100%{scale:1.15}50%{scale:1.55;text-shadow:0 0 18px #ff3b6b,0 0 30px #2b5cff}}
+.word.trash{background:transparent;border:0;opacity:.55;font-size:13px;padding:0}.word.built{font-weight:700;opacity:1;text-decoration:underline dotted}
 .word.stepped{animation:stepped .9s ease-out}@keyframes stepped{0%{color:#2b5cff;text-shadow:0 0 6px #2b5cff88;translate:0 -2px}100%{text-shadow:none;translate:0 0}}
 .word.t-page{background:transparent;border:0;font:15px/1 Georgia,'Times New Roman',serif;color:inherit;opacity:.78;padding:0 1px;cursor:grab}
 #whisper{position:absolute;z-index:10;display:none;transform:translate(-50%,0);background:color-mix(in srgb,var(--floor) 85%,transparent);border:1px solid #8885;border-radius:12px;padding:6px;backdrop-filter:blur(4px)}#whisper .wrow{display:flex;gap:4px;align-items:center}#whisperIn{width:300px!important}#whisper .wacts{margin-top:5px}#whisper .wacts button{font-size:11px;padding:2px 7px}.mic{padding:3px 7px}.mic.on{background:#ff4d4d33;border-color:#ff4d4d}#whisper input{font:13px system-ui;padding:4px 8px;border:1px solid #2b5cff;border-radius:12px;background:var(--floor);color:inherit;width:200px}
@@ -167,7 +168,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     say('lab', `world grew ${d}px on the ${side}: now ${SPACE.W} × ${SPACE.H}`, 'lab'); logEvent('grow_world', { side, W: SPACE.W, H: SPACE.H }); }
   document.addEventListener('click', e => { const b = e.target.closest('#arena .grow'); if (b) { e.stopPropagation(); growWorld(b.dataset.grow); } });
   function applyCam() { const { w, h } = viewSize(); const zmin = Math.max(w / SPACE.W, h / SPACE.H); cam.z = Math.max(zmin, Math.min(2.5, cam.z)); cam.x = ((cam.x % SPACE.W) + SPACE.W) % SPACE.W; cam.y = ((cam.y % SPACE.H) + SPACE.H) % SPACE.H;
-    floor.style.transform = `translate(${w / 2 - cam.x * cam.z}px,${h / 2 - cam.y * cam.z}px) scale(${cam.z})`; words.forEach(place); }
+    floor.style.transform = `translate(${w / 2 - cam.x * cam.z}px,${h / 2 - cam.y * cam.z}px) scale(${cam.z})`; words.forEach(place); if (window.__snd) window.__snd.zoomAmb(); }
   // ---------- words on the floor (the objects creatures act on) ----------
   const words = []; let dragging = null; applyCam();
   function addWord(text, x, y, piece) {
@@ -206,24 +207,25 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     held: who => [`Let it go, it is wriggling`, `You picked up ${who}. Every leg has an opinion about that`, `${who} is in the air. It does not like the air`],
     mutated: who => [`${who} looks different today. I am not going to say anything`, `Something changed about ${who}. The legs, I think`, `${who} came back from the lab a little rearranged`],
   };
-  const ACTION_POOL = ['fetch', 'bring', 'chop', 'hand', 'come', 'sleep', 'hide'], JOBS = ['hoard', 'vowels', 'letter', 'rotate', 'string', 'paint', 'grow'];
-  const JOB_NAMES = { hoard: 'builds a mound of words at home', vowels: 'collects vowels', letter: 'collects one letter', rotate: 'turns words around', string: 'ties words into long strings', paint: 'paints words', grow: 'makes words bigger or smaller' };
+  const ACTION_POOL = ['fetch', 'bring', 'chop', 'hand', 'come', 'sleep', 'hide'], JOBS = ['hoard', 'build', 'break', 'transform', 'vowels', 'letter', 'rotate', 'string', 'paint', 'grow'];
+  const JOB_NAMES = { build: 'builds little structures out of words', break: 'breaks structures and long words apart', transform: 'reverses, shouts or scrambles words', hoard: 'builds a mound of words at home', vowels: 'collects vowels', letter: 'collects one letter', rotate: 'turns words around', string: 'ties words into long strings', paint: 'paints words', grow: 'makes words bigger or smaller' };
   function defaultsFor(c) { return DEFAULT_GENOMES[c.key] || DEFAULT_GENOMES[c.voiceKey === 'crawly' ? 'crawly' : 'tok']; }
   function actionsOf(c) { return (c.g.actions || defaultsFor(c).actions).slice(0, 4).concat('greet'); }
   function jobOf(c) { return c.g.job || defaultsFor(c).job; }
-  function buildLegs(c) {
+  function sizeUp(c) { const k = c.size || 1; c.gs = { ...c.g, l1: c.g.l1 * k, l2: c.g.l2 * k, bodyL: c.g.bodyL * k, bodyW: c.g.bodyW * k, step: c.g.step * k }; }
+  function buildLegs(c) { sizeUp(c);
     const g = c.g, m = Math.max(1, Math.floor(g.legs / 2)); c.legs = [];
     for (let side of [-1, 1]) for (let k = 0; k < m; k++) { const L = { side, k, m, foot: null, swing: null, group: (k + (side > 0 ? 1 : 0)) % 2 }; c.legs.push(L); }
     c.legs.forEach(L => { L.foot = restSpot(c, L); });
   }
   function restSpot(c, L, extra) {
-    const g = c.g, reach = (g.l1 + g.l2) * (c.state === 'sleep' ? 0.45 : c.held ? 0.55 : 0.78);
+    const g = c.gs || c.g, reach = (g.l1 + g.l2) * (c.state === 'sleep' ? 0.45 : c.held ? 0.55 : 0.78);
     const along = L.m > 1 ? (L.k / (L.m - 1) - 0.5) : 0, fx = along * g.bodyL * 1.9 + along * reach * 0.55, fy = L.side * reach * (0.75 + 0.25 * Math.cos(along * Math.PI));
     const ca = Math.cos(c.heading), sa = Math.sin(c.heading), lead = c.held ? 0 : 7;
     let x = c.x + fx * ca - fy * sa + c.vx * lead, y = c.y + fx * sa + fy * ca + c.vy * lead;
     if (extra) { x += extra[0]; y += extra[1]; } return { x, y };
   }
-  function hip(c, L) { const g = c.g, along = L.m > 1 ? (L.k / (L.m - 1) - 0.5) : 0, hx = along * g.bodyL * 0.9, hy = L.side * g.bodyW * 0.42, ca = Math.cos(c.heading), sa = Math.sin(c.heading); return { x: c.x + hx * ca - hy * sa, y: c.y + hx * sa + hy * ca }; }
+  function hip(c, L) { const g = c.gs || c.g, along = L.m > 1 ? (L.k / (L.m - 1) - 0.5) : 0, hx = along * g.bodyL * 0.9, hy = L.side * g.bodyW * 0.42, ca = Math.cos(c.heading), sa = Math.sin(c.heading); return { x: c.x + hx * ca - hy * sa, y: c.y + hx * sa + hy * ca }; }
   function knee(H, F, l1, l2, side, heading) {   // two-bone IK, knee bent away from the body
     let dx = F.x - H.x, dy = F.y - H.y, d = Math.hypot(dx, dy) || 1e-6; const dd = Math.min(d, l1 + l2 - 0.01);
     const a = (l1 * l1 - l2 * l2 + dd * dd) / (2 * dd), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)), ux = dx / d, uy = dy / d;
@@ -233,7 +235,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const el = document.createElement('div'); el.className = 'creature hit'; floor.appendChild(el);
     const bub = document.createElement('div'); bub.className = 'bubble'; floor.appendChild(bub);
     const g0 = opts.genome || genomes[key]; const c = { home: { x, y }, name: g0.name || name, key, voiceKey: opts.voice, visitor: !!opts.genome, userUntil: 0, el, bub, x, y, tx: x, ty: y, vx: 0, vy: 0, heading: Math.random() * 6.28, speed: g0.speed, g: g0, options: opts.options, d: { hunger: 0.5, curiosity: 0.5, fatigue: 0.1, affection: 0.3 }, carrying: null, state: 'idle', until: 0, lastDecision: 0, phase: Math.random() * 10, voice: VOICE[opts.voice], task: null, held: false, nextFidget: 0, nextShift: 0 };
-    buildLegs(c); c.options = actionsOf(c);
+    c.size = c.size || 1; c.meals = 0; c.born = Date.now(); buildLegs(c); c.options = actionsOf(c);
     let down = null;   // click vs pick-up: past 5 px of movement it is a pick-up
     el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY, moved: false }; el.setPointerCapture(ev.pointerId); });
     el.addEventListener('pointermove', ev => {
@@ -255,11 +257,12 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   function snap(c) { return { h: +c.d.hunger.toFixed(2), c: +c.d.curiosity.toFixed(2), f: +c.d.fatigue.toFixed(2), a: +c.d.affection.toFixed(2) }; }
   function bars(c) { const b = (v, lab) => `<span class="dv" title="${lab} ${Math.round(v * 100)}%"><i style="width:${Math.round(v * 100)}%"></i></span> ${lab}`; return `<div class="drow"><b>${c.name}</b> <span class="dstate">${({ idle: 'idling', move: 'on the move', sleep: 'asleep', hide: 'hiding', held: 'being held' })[c.state] || c.state}${c.carrying ? ', carrying “' + c.carrying.text + '”' : ''}</span> ${b(c.d.hunger, 'hungry')} ${b(c.d.curiosity, 'curious')} ${b(c.d.fatigue, 'tired')} ${b(c.d.affection, 'fond of you')} <span class="dstate">job: ${JOB_NAMES[jobOf(c)] || jobOf(c)}${jobOf(c) === 'letter' ? ' “' + (c.g.letter || 'r') + '”' : ''} · can: ${c.options.filter(o => o !== 'greet').join(', ')}</span></div>`; }
   function bodySVG(c, t) {
-    const g = c.g, breathe = 1 + (c.state === 'sleep' ? 0.05 : 0.025) * Math.sin(t / (c.state === 'sleep' ? 900 : 380) + c.phase), deg = c.heading * 180 / Math.PI, L = g.bodyL * breathe, W = g.bodyW * breathe;
+    const g = c.gs || c.g, breathe = 1 + (c.state === 'sleep' ? 0.05 : 0.025) * Math.sin(t / (c.state === 'sleep' ? 900 : 380) + c.phase), deg = c.heading * 180 / Math.PI, L = g.bodyL * breathe, W = g.bodyW * breathe;
     const sw = c.held ? Math.sin(t / 60) * 12 : Math.sin(t / 700 + c.phase) * 2.5;   // idle sway; violent when held
     let s = `<g transform="translate(${c.x},${c.y}) rotate(${deg + sw})">`;
     if (g.abdomen) s += `<ellipse cx="${-L * 0.95}" cy="0" rx="${L * 0.55}" ry="${W * 0.55}" fill="hsl(${g.hue},25%,18%)" stroke="hsl(${g.hue},60%,72%)" stroke-width=".8"/>`;
     for (let p = 0; p < (g.palps || 0); p++) { const sd = p ? 1 : -1, a = 0.35 + 0.25 * Math.sin(t / 160 + p * 2 + c.phase); s += `<path d="M${L * 0.5},${sd * W * 0.2} l${9 * Math.cos(a * sd)},${sd * 9 * Math.sin(a)}" stroke="hsl(${g.hue},70%,78%)" stroke-width="1.4" stroke-linecap="round"/>`; }
+    if (g.wings) { const flap = Math.sin(t / (c.state === 'move' ? 45 : 160)) * 0.35 + 0.65; s += `<ellipse cx="${-L * 0.1}" cy="${-W * 0.9}" rx="${L * 0.7}" ry="${W * 0.9 * flap}" fill="hsla(${g.hue},80%,80%,.35)" stroke="hsl(${g.hue},70%,70%)" stroke-width=".6" transform="rotate(-18)"/><ellipse cx="${-L * 0.1}" cy="${W * 0.9}" rx="${L * 0.7}" ry="${W * 0.9 * flap}" fill="hsla(${g.hue},80%,80%,.35)" stroke="hsl(${g.hue},70%,70%)" stroke-width=".6" transform="rotate(18)"/>`; }
     if (g.body === 'orb') s += `<circle r="${Math.max(L, W) * 0.55}" fill="hsl(${g.hue},45%,22%)" stroke="hsl(${g.hue},70%,72%)"/><circle cx="${L * 0.18}" r="${W * 0.22}" fill="hsl(${g.footHue},90%,70%)"/>`;
     else if (g.body === 'tri') s += `<path d="M${L * 0.6},0 L${-L * 0.5},${-W * 0.6} L${-L * 0.5},${W * 0.6} Z" fill="hsl(${g.hue},40%,25%)" stroke="hsl(${g.hue},70%,72%)"/><circle cx="${L * 0.15}" r="2.2" fill="#ff5e5e"/>`;
     else if (g.body === 'seg') { for (let k = 2; k >= 0; k--) s += `<circle cx="${-k * L * 0.42}" cy="${Math.sin(t / 200 + k) * 2}" r="${W * (0.5 - k * 0.08)}" fill="hsl(${g.hue},40%,${22 + k * 6}%)" stroke="hsl(${g.hue},70%,72%)" stroke-width=".8"/>`; s += `<circle cx="${L * 0.15}" r="2" fill="#ff5e5e"/>`; }
@@ -276,7 +279,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       if (c.held) { const r = restSpot(c, L, [Math.sin(t / 50 + L.k * 1.7 + L.side) * 9, Math.cos(t / 65 + L.k) * 9]); L.foot = { x: L.foot.x + (r.x - L.foot.x) * 0.35, y: L.foot.y + (r.y - L.foot.y) * 0.35 }; L.lift = 0.8; continue; }   // dangling, kicking
       const target = restSpot(c, L), lag = Math.hypot(target.x - L.foot.x, target.y - L.foot.y);
       const nbAir = c.legs.some(o => o !== L && o.swing && o.side === L.side && Math.abs(o.k - L.k) === 1);
-      if (lag > c.g.step && !nbAir && inAir < maxAir && (moving ? L.group === (Math.floor(t / 140) % 2) : true)) L.swing = { from: { ...L.foot }, to: restSpot(c, L, [c.vx * 10, c.vy * 10]), t0: t, dur: 130 + 60 * Math.random() };
+      if (lag > (c.gs || c.g).step && !nbAir && inAir < maxAir && (moving ? L.group === (Math.floor(t / 140) % 2) : true)) L.swing = { from: { ...L.foot }, to: restSpot(c, L, [c.vx * 10, c.vy * 10]), t0: t, dur: 130 + 60 * Math.random() };
     }
     if (!moving && !c.held && c.state !== 'sleep' && t > c.nextFidget) {   // idle life: one leg re-plants or taps
       c.nextFidget = t + (900 + Math.random() * 2600) / Math.max(0.2, c.g.fidget); const L = pick(c.legs);
@@ -284,7 +287,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     }
   }
   function legsSVG(c) {
-    const g = c.g; let s = '';
+    const g = c.gs || c.g; let s = '';
     for (const L of c.legs) { const H = hip(c, L), F = L.foot, K = knee(H, F, g.l1, g.l2, L.side, c.heading), lift = L.lift || 0; const Kx = K.x + (K.x - H.x) * 0.12 * lift, Ky = K.y + (K.y - H.y) * 0.12 * lift;
       s += `<polyline points="${H.x.toFixed(1)},${H.y.toFixed(1)} ${Kx.toFixed(1)},${Ky.toFixed(1)} ${F.x.toFixed(1)},${F.y.toFixed(1)}" fill="none" stroke="hsl(${g.hue},70%,${c.state === 'sleep' ? 55 : 76}%)" stroke-width="${1.5 + 0.4 * lift}" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${F.x.toFixed(1)}" cy="${F.y.toFixed(1)}" r="${1.8 + 1.4 * lift}" fill="hsl(${g.footHue},90%,72%)"/>`; }
     return s;
@@ -332,7 +335,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (Math.random() < 0.15) g.body = pick(['chip', 'box', 'orb', 'tri', 'seg', 'star'].filter(b => b !== p.body));
     if (Math.random() < 0.18) { const acts = (p.actions || DEFAULT_GENOMES[key].actions).slice(); const out = Math.floor(Math.random() * acts.length), cand = ACTION_POOL.filter(a => !acts.includes(a)); if (cand.length) acts[out] = pick(cand); g.actions = acts; }
     if (Math.random() < 0.2) { g.job = pick(JOBS.filter(j => j !== (p.job || DEFAULT_GENOMES[key].job))); if (g.job === 'letter') g.letter = pick('rstlnaeiou'.split('')); }
-    if (Math.random() < 0.3) g.paintHue = Math.round(Math.random() * 360); g.wander = +Math.max(0, Math.min(1, (p.wander ?? 0.2) + gauss() * 0.1)).toFixed(2);
+    if (Math.random() < 0.3) g.paintHue = Math.round(Math.random() * 360); g.wander = +Math.max(0, Math.min(1, (p.wander ?? 0.2) + gauss() * 0.1)).toFixed(2); g.social = +Math.max(0, Math.min(1, (p.social ?? 0.5) + gauss() * 0.12)).toFixed(2);
     g.hue = Math.round((p.hue + gauss() * 22 + 360) % 360); g.footHue = Math.round((p.footHue + gauss() * 30 + 360) % 360);
     if (Math.random() < 0.25) g.legs = Math.max(4, Math.min(12, p.legs + (Math.random() < 0.5 ? -2 : 2)));
     if (Math.random() < 0.15) g.palps = Math.max(0, Math.min(2, (p.palps || 0) + (Math.random() < 0.5 ? -1 : 1)));
@@ -383,7 +386,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (w) { c.target = w; await chase(c, w, -18); c.target = null; }
     const toPieces = t => tokenizer.encode(t).map(i => (tokenizer.invVocab[i] || '').replace(/^Ġ|^▁/, '')).filter(Boolean);
     let pcs = toPieces(' ' + text); if (pcs.length < 2 && text.length > 2) pcs = toPieces(text); if (pcs.length < 2 && text.length > 1) { pcs = []; for (let i = 0; i < text.length; i += 2) pcs.push(text.slice(i, i + 2)); }   // literal to a fault: a one-token word still gets cut
-    c.chopUntil = performance.now() + 450; Sound.snip(); const ox = w ? w.x : c.x, oy = w ? w.y : c.y; if (w) { if (w.carriedBy) { w.carriedBy.carrying = null; } w.el.remove(); words.splice(words.indexOf(w), 1); }
+    c.chopUntil = performance.now() + 450; Sound.snip(c); const ox = w ? w.x : c.x, oy = w ? w.y : c.y; if (w) { if (w.carriedBy) { w.carriedBy.carrying = null; } w.el.remove(); words.splice(words.indexOf(w), 1); }
+    if (Math.random() < 0.6) { const tr = addWord(pick(['·', ',', '‘', '.', '~']), ox + (Math.random() - .5) * 20, oy + (Math.random() - .5) * 20, true); tr.trash = true; tr.el.classList.add('trash'); tr.born = Date.now(); }   // shavings: trash the wind rolls around
     pcs.forEach((p, k) => { const pw = addWord(p, ox, oy, true); pw.crumb = /^[^a-z]+$/i.test(p) || p.length < 2; if (pw.crumb) pw.el.classList.add('crumb'); const ang = (k / pcs.length) * Math.PI * 2 + Math.random(), dist = 34 + Math.random() * 26; pw.el.animate([{ transform: 'translate(-50%,-50%) scale(1.4)', opacity: .3 }, { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }], { duration: 420 }); pw.x = ox + Math.cos(ang) * dist; pw.y = oy + Math.sin(ang) * dist; setTimeout(() => place(pw), 20); });
     c.d.hunger = clamp(c.d.hunger - 0.3); speak(c, 'chop', { p: pcs.join('|'), n: pcs.length }); c.state = 'idle'; logEvent('task', { who: c.name, option: 'chop', arg, success: true, pieces: pcs.length }); return true;
   }
@@ -391,7 +395,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const food = words.filter(w => w.piece && !w.carriedBy).sort((a, b) => (b.crumb - a.crumb) || (dist(a, c) - dist(b, c)))[0]; if (!food) return false;
     c.target = food; goto(c, food.x, food.y + 10); await when(() => arrived(c), 9000); c.target = null; if (!words.includes(food) || food.carriedBy) return false;
     food.el.animate([{ transform: 'translate(-50%,-50%) scale(1)' }, { transform: 'translate(-50%,-50%) scale(0)' }], { duration: 300 }); setTimeout(() => { food.el.remove(); const i = words.indexOf(food); if (i >= 0) words.splice(i, 1); }, 280);
-    Sound.crunch(); c.d.hunger = clamp(c.d.hunger - (food.crumb ? 0.12 : 0.22)); c.state = 'idle'; speak(c, 'eat', { w: food.text }); logEvent('task', { who: c.name, option: 'eat', success: true, word: food.text, crumb: !!food.crumb }); return true;
+    Sound.crunch(c); c.meals = (c.meals || 0) + 1; c.size = Math.min(1.7, (c.size || 1) + 0.035); sizeUp(c); c.d.hunger = clamp(c.d.hunger - (food.crumb ? 0.12 : 0.22)); c.state = 'idle'; speak(c, 'eat', { w: food.text }); logEvent('task', { who: c.name, option: 'eat', success: true, word: food.text, crumb: !!food.crumb }); return true;
   }
   async function doSteal(c) {   // take what another creature is carrying
     const victim = creatures.filter(k => k !== c && k.carrying && !k.held).sort((a, b) => dist(a, c) - dist(b, c))[0]; if (!victim) return false;
@@ -416,8 +420,20 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         c.target = w; if (!(await chase(c, w, -14))) return false; c.target = null; if (!words.includes(w)) return false;
         const took = [...w.text].filter(ch => want.includes(ch)).join(''), rest = [...w.text].filter(ch => !want.includes(ch)).join('');
         if (rest) { w.text = rest; w.el.textContent = rest; stepped(w); } else { w.el.remove(); words.splice(words.indexOf(w), 1); }
-        const pile = addWord(took, c.home.x + (Math.random() - .5) * 40, c.home.y + (Math.random() - .5) * 30, true); pile.owner = c.key; pile.el.classList.add('crumb'); Sound.snip(); speak(c, 'fetch', { w: took });
+        const pile = addWord(took, c.home.x + (Math.random() - .5) * 40, c.home.y + (Math.random() - .5) * 30, true); pile.owner = c.key; pile.el.classList.add('crumb'); Sound.snip(c); speak(c, 'fetch', { w: took });
         logEvent('work', { who: c.name, job, from: w.text, took }); return true; }
+      if (job === 'build') {   // carry a word to the site and lay it into the next slot of a little structure: a square, then a tower above it
+        c.site = c.site || { x: c.home.x + 60, y: c.home.y, n: 0 }; const w = near1(free.filter(w => !w.built)); if (!w) return false; c.target = w; if (!(await chase(c, w, 14))) return false; c.target = null; w.carriedBy = c; c.carrying = w; w.el.classList.add('carried');
+        const n = c.site.n++, ring = Math.floor(n / 8), k = n % 8, side = 34 + ring * 6, slots = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]], [sx0, sy0] = slots[k], tx = c.site.x + sx0 * side, ty = c.site.y + sy0 * side * 0.6 - ring * 46;
+        goto(c, tx, ty + 18); await when(() => arrived(c), 15000); if (c.carrying === w) { c.carrying = null; w.carriedBy = null; w.el.classList.remove('carried'); w.x = tx; w.y = ty; w.rot = sy0 === 0 ? 90 : 0; w.vx = w.vy = w.vr = 0; w.built = c.key; w.owner = c.key; w.el.classList.add('built'); place(w); }
+        if (n === 7) oracleComment(`${c.name} finished a little house out of words. It has no door, which is very on brand`, 'built'); logEvent('work', { who: c.name, job, word: w.text, slot: n }); return true; }
+      if (job === 'break') {   // smash a structure (kick its words loose) or split a long word in two
+        const target = near1(free.filter(w => w.built || w.text.length >= 9)); if (!target) return false; c.target = target; if (!(await chase(c, target, 10))) return false; c.target = null; if (!words.includes(target)) return false;
+        if (target.built) { for (const w of words) if (w.built === target.built && dist(w, target) < 160) { w.built = null; w.el.classList.remove('built'); w.vx += (Math.random() - .5) * 8; w.vy += (Math.random() - .5) * 8; w.vr += (Math.random() - .5) * 40; } Sound.crunch(c); oracleComment(`${c.name} knocked down someone's house. The words did not mind, they just rolled`, 'broke'); }
+        else { const half = Math.ceil(target.text.length / 2), a = target.text.slice(0, half), b = target.text.slice(half); target.text = a; target.el.textContent = a; const w2 = addWord(b, target.x + 30, target.y + 8); w2.vx = 2; w2.vr = 10; Sound.snip(c); }
+        logEvent('work', { who: c.name, job, word: target.text }); return true; }
+      if (job === 'transform') { const w = near1(free.filter(w => w.text.length > 2)); if (!w) return false; c.target = w; if (!(await chase(c, w, 12))) return false; c.target = null; if (!words.includes(w)) return false;
+        const how = pick(['reverse', 'shout', 'scramble']); w.text = how === 'reverse' ? [...w.text].reverse().join('') : how === 'shout' ? w.text.toUpperCase() : [...w.text].sort(() => Math.random() - .5).join(''); w.el.textContent = w.text; stepped(w); speak(c, 'own', { w: w.text }); logEvent('work', { who: c.name, job, how }); return true; }
       const w = near1(free.slice()); c.target = w; if (!(await chase(c, w, 12))) return false; c.target = null; if (!words.includes(w)) return false;
       if (job === 'rotate') { w.vr += (Math.random() < .5 ? -1 : 1) * 18; stepped(w); speak(c, 'own', { w: w.text }); }
       else if (job === 'paint') { const h = c.g.paintHue ?? c.g.hue; w.el.style.color = `hsl(${h},75%,${matchMedia('(prefers-color-scheme: dark)').matches ? 68 : 42}%)`; w.painted = h; stepped(w); speak(c, 'own', { w: w.text }); }
@@ -454,6 +470,20 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     else if (best === 'fetch') act(c, 'fetch', pick(free).text); else if (best === 'chop') act(c, 'chop', pick(free).text); else if (best === 'bring') act(c, 'bring', 'user'); else if (best === 'hand') act(c, 'hand'); else if (best === 'work') act(c, 'work'); else if (best === 'explore') Connect.explore(c); else if (best === 'gohome') Connect.goHome(c); else if (best === 'eat') act(c, 'eat'); else if (best === 'steal') act(c, 'steal'); else if (best === 'nap') act(c, 'sleep');
   }
   setInterval(() => creatures.forEach(c => ownThing(c, 'timer')), 7000);
+  // flocking (boids): creatures of the same kind that are not busy drift together — separation, cohesion, alignment; 'social' is a gene
+  setInterval(() => { for (const c of creatures) { if (c.held || c.state === 'sleep' || c.state === 'hide' || c.working || c.target || Date.now() < c.userUntil) continue;
+      const kin = creatures.filter(o => o !== c && (o.g.body === c.g.body || o.voiceKey === c.voiceKey) && dist(o, c) < 260); if (!kin.length) continue; const soc = c.g.social ?? 0.5;
+      let sx = 0, sy = 0, cx = 0, cy = 0, ax = 0, ay = 0; for (const o of kin) { const dx = wd(c.x, o.x, SPACE.W), dy = wd(c.y, o.y, SPACE.H), d = Math.hypot(dx, dy) || 1; if (d < 55) { sx -= dx / d * (55 - d); sy -= dy / d * (55 - d); } cx += dx; cy += dy; ax += Math.cos(o.heading); ay += Math.sin(o.heading); }
+      cx /= kin.length; cy /= kin.length; const mx = (sx * 1.2 + cx * 0.5 * soc + ax * 30 * soc) , my = (sy * 1.2 + cy * 0.5 * soc + ay * 30 * soc); if (Math.hypot(mx, my) > 8) { c.tx = c.x + mx * 0.6; c.ty = c.y + my * 0.6; if (c.state === 'idle') c.state = 'move'; } } }, 900);
+  setInterval(() => { for (let i = words.length - 1; i >= 0; i--) { const w = words[i]; if (w.trash && !w.carriedBy && Date.now() - (w.born || 0) > 5 * 60000) { w.el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 1500 }); setTimeout(() => w.el.remove(), 1400); words.splice(i, 1); } } }, 10000);   // trash fades after five minutes
+  setInterval(() => { for (const c of creatures) {   // the lifecycle: starving creatures get thinner, well-fed ones may change form
+      if (c.d.hunger > 0.8 && (c.size || 1) > 0.6) { c.size = Math.max(0.6, c.size - 0.01); sizeUp(c); }
+      if ((c.meals || 0) >= 8 && !c.g.wings && !c.metaDone && Date.now() - (c.born || 0) > 4 * 60000 && Math.random() < 0.25) metamorphosis(c); } }, 3000);
+  function metamorphosis(c) { c.metaDone = true; const g = { ...c.g }, kind = pick(['wings', 'wings', 'body', 'legs']);
+    if (kind === 'wings') { g.wings = 1; g.speed = Math.min(3, g.speed * 1.4); } else if (kind === 'body') g.body = pick(['orb', 'tri', 'seg', 'star', 'chip', 'box'].filter(b => b !== g.body)); else { g.legs = Math.min(12, (g.legs || 6) + 2); g.l1 *= 1.15; g.l2 *= 1.15; }
+    g.id = (c.g.id || c.key) + '-m'; c.g = g; if (!c.visitor && genomes[c.key]) { genomes[c.key] = g; saveGenomes(); } buildLegs(c); c.options = actionsOf(c); c.held = false;
+    c.el.animate([{ scale: 1 }, { scale: 1.6 }, { scale: 1 }], { duration: 900 }); logEvent('metamorphosis', { who: c.name, kind });
+    oracleComment(kind === 'wings' ? `${c.name} grew wings. Nobody asked it to. It ate enough words to have an opinion about the sky` : `${c.name} changed shape after all those meals. Metamorphosis is just digestion with ambition`, 'metamorphosis'); renderEvo(); }
   // ---------- the Oracle's voice (Room path: seed + model continuation) ----------
   const oracleBusy = { v: false };
   async function oracleComment(seed, why) {
@@ -508,7 +538,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   let collection = (() => { try { return JSON.parse(localStorage.getItem('arena.collection') || '[]'); } catch (e) { return []; } })();
   function saveColl() { try { localStorage.setItem('arena.collection', JSON.stringify(collection.slice(-60))); } catch (e) {} }
   function addToCollection(key, g) { if (collection.some(x => x.genome.id === g.id)) return; collection.push({ key, kept: Date.now(), genome: JSON.parse(JSON.stringify({ ...g, born: g.born || Date.now() })) }); saveColl(); renderColl(); }
-  const TRAITS = [['legs', 'legs'], ['l1', 'upper leg'], ['l2', 'lower leg'], ['bodyL', 'body length'], ['bodyW', 'body width'], ['abdomen', 'abdomen'], ['palps', 'feelers'], ['speed', 'speed'], ['step', 'stride'], ['fidget', 'fidgetiness'], ['kick', 'kick strength'], ['body', 'body'], ['job', 'job'], ['actions', 'actions'], ['wander', 'wanderlust'], ['laser', 'targeting laser'], ['voicePitch', 'voice pitch'], ['voiceRange', 'voice range'], ['hue', 'colour'], ['footHue', 'foot colour']];
+  const TRAITS = [['legs', 'legs'], ['l1', 'upper leg'], ['l2', 'lower leg'], ['bodyL', 'body length'], ['bodyW', 'body width'], ['abdomen', 'abdomen'], ['palps', 'feelers'], ['speed', 'speed'], ['step', 'stride'], ['fidget', 'fidgetiness'], ['kick', 'kick strength'], ['body', 'body'], ['job', 'job'], ['actions', 'actions'], ['wander', 'wanderlust'], ['social', 'flocking'], ['laser', 'targeting laser'], ['voicePitch', 'voice pitch'], ['voiceRange', 'voice range'], ['hue', 'colour'], ['footHue', 'foot colour']];
   function miniSVG(g) { const c = { x: 70, y: 52, vx: 0, vy: 0, heading: -0.4, state: 'idle', held: false, phase: 1, g }; buildLegs(c); return `<svg viewBox="0 0 140 104" width="140" height="104">${legsSVG(c)}${bodySVG(c, 0)}</svg>`; }
   const compareSel = new Set();
   function renderColl() {
@@ -718,9 +748,12 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     function blip(t0, f0, f1, dur, vol, type) { const a = ensure(), o = a.createOscillator(), g = a.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f0, a.currentTime + t0); o.frequency.exponentialRampToValueAtTime(Math.max(40, f1), a.currentTime + t0 + dur);
       g.gain.setValueAtTime(0.0001, a.currentTime + t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * fxVol), a.currentTime + t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur); o.connect(g); g.connect(a.destination); o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02); }
     return { toggle() { on = !on; if (on) ensure().resume(); $('#soundBtn').textContent = on ? '🔊' : '🔇'; logEvent('sound', { on }); this.ambient(...(this._ambK || ['clear', 0])); return on; },
-      step(c) { if (!on) return; const now = performance.now(); if (now - lastStep < 45) return; lastStep = now; noise(0.03, 1800 + 4000 / (c.g.l1 + c.g.l2) * 30, 0.05); },
-      chirp(c, text) { if (!on) return; const base = c.g.voicePitch || (c.voiceKey === 'crawly' ? 900 : 480), n = Math.min(6, 2 + Math.floor((text || '').length / 8)), wave = c.g.voiceWave || (c.voiceKey === 'crawly' ? 'square' : 'triangle');
-        for (let i = 0; i < n; i++) { const f = base * Math.pow(2, (Math.random() - .5) * (c.g.voiceRange || 0.8)); blip(i * 0.075, f, f * (Math.random() < .5 ? 1.3 : 0.75), 0.06, 0.035, wave); } },
+      hear(c, kind) { if (!c) return 1; const { w, h } = viewSize(), sx = wd(cam.x, c.x, SPACE.W) * cam.z, sy = wd(cam.y, c.y, SPACE.H) * cam.z, d = Math.hypot(sx, sy) / (Math.hypot(w, h) / 2);
+        const zoomF = kind === 'step' ? Math.max(0, Math.min(1, (cam.z - 0.9) / 0.9)) : Math.max(0.04, Math.min(1, (cam.z - 0.4) / 0.8)); return zoomF / (1 + Math.pow(d * 1.5, 2)); },   // steps only up close; voices fade with distance and zoom
+      step(c) { if (!on) return; const g = this.hear(c, 'step'); if (g < 0.02) return; const now = performance.now(); if (now - lastStep < 45) return; lastStep = now; noise(0.03, 1800 + 4000 / (c.g.l1 + c.g.l2) * 30, 0.05 * g); },
+      zoomAmb() { if (!this._out || !ctx) return; const zmin = Math.max(viewSize().w / SPACE.W, viewSize().h / SPACE.H), zn = Math.max(0, Math.min(1, (cam.z - zmin) / (2.5 - zmin))); this._out.gain.setTargetAtTime(ambVol * (0.45 + 0.9 * (1 - zn)), ctx.currentTime, 0.2); },
+      chirp(c, text) { if (!on) return; const hg = this.hear(c, 'voice'); if (hg < 0.02) return; const base = c.g.voicePitch || (c.voiceKey === 'crawly' ? 900 : 480), n = Math.min(6, 2 + Math.floor((text || '').length / 8)), wave = c.g.voiceWave || (c.voiceKey === 'crawly' ? 'square' : 'triangle');
+        for (let i = 0; i < n; i++) { const f = base * Math.pow(2, (Math.random() - .5) * (c.g.voiceRange || 0.8)); blip(i * 0.075, f, f * (Math.random() < .5 ? 1.3 : 0.75), 0.06, 0.035 * hg, wave); } },
       ambient(kind, k) { this._amb && this._amb.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); this._amb = []; clearInterval(this._ambT); this._ambK = [kind, k]; if (!on || kind === 'clear') return; const a = ensure(), out = a.createGain(); out.gain.value = ambVol; this._out = out; out.connect(a.destination); this._amb.push(out);
         const loopNoise = (type, f, vol) => { const n = a.sampleRate * 2, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const src = a.createBufferSource(); src.buffer = b; src.loop = true; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const gg = a.createGain(); gg.gain.value = vol; src.connect(fl); fl.connect(gg); gg.connect(out); src.start(); this._amb.push(src); return fl; };
         const tone = (f, vol, type) => { const o = a.createOscillator(), gg = a.createGain(); o.type = type || 'sine'; o.frequency.value = f; gg.gain.value = vol; o.connect(gg); gg.connect(out); o.start(); this._amb.push(o); return o; };
@@ -730,7 +763,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         if (kind === 'wind') { const fl = loopNoise('bandpass', 600, 0.03 + 0.05 * k); const l = a.createOscillator(), lg = a.createGain(); l.frequency.value = 0.15; lg.gain.value = 400; l.connect(lg); lg.connect(fl.frequency); l.start(); this._amb.push(l); }
         if (kind === 'hum') { tone(50, 0.02 + 0.02 * k); tone(100, 0.01 + 0.01 * k); tone(150, 0.006, 'triangle'); } },
       vols(f, am) { if (f != null) { fxVol = f; try { localStorage.setItem('arena.fxVol', f); } catch (e) {} } if (am != null) { ambVol = am; try { localStorage.setItem('arena.ambVol', am); } catch (e) {} if (this._out) this._out.gain.value = am; } return { fxVol, ambVol }; },
-      snip() { if (on) { noise(0.05, 5200, 0.12); blip(0.02, 2400, 900, 0.05, 0.03, 'sawtooth'); } }, crunch() { if (on) { noise(0.12, 900, 0.15); noise(0.08, 2400, 0.08); } } }; })();
+      snip(c) { if (!on) return; const g = this.hear(c, 'voice'); if (g < 0.02) return; noise(0.05, 5200, 0.12 * g); blip(0.02, 2400, 900, 0.05, 0.03 * g, 'sawtooth'); }, crunch(c) { if (!on) return; const g = this.hear(c, 'voice'); if (g < 0.02) return; noise(0.12, 900, 0.15 * g); noise(0.08, 2400, 0.08 * g); } }; })();
+  window.__snd = Sound;
   $('#soundBtn').addEventListener('click', () => Sound.toggle());
   // ---------- digital weather: a visual layer over the arena and an ambient sound, part of the world genome ----------
   const Weather = (() => { const cv = $('#weather'), g = cv.getContext('2d'); let kind = 'clear', k = 0.35, parts = [], amb = null, windA = Math.random() * 6.28, gust = 1;
@@ -743,7 +777,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       else if (kind === 'fog') { for (const p of parts) { p.x += 0.15 * p.v; if (p.x - p.r > w) p.x = -p.r; const gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r); gr.addColorStop(0, `rgba(${dark ? '200,200,220' : '150,150,170'},${0.16 * k})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(p.x - p.r, p.y - p.r, 2 * p.r, 2 * p.r); } }
       else if (kind === 'wind') { windA += (Math.sin(t / 7000) * 0.0025 + (Math.random() - .5) * 0.004); gust = 0.7 + 0.5 * Math.sin(t / 2300) + 0.2 * Math.sin(t / 900); const ca = Math.cos(windA), sa = Math.sin(windA);
         g.strokeStyle = `rgba(${ink},${0.12 + 0.15 * k})`; g.lineWidth = 1; for (const p of parts) { const sp = 7 * p.v * (0.5 + k) * gust; p.x += ca * sp; p.y += sa * sp; if (p.x > w + 40 || p.x < -40 || p.y > h + 40 || p.y < -40) { p.x = ca > 0 ? -30 : w + 30; p.y = Math.random() * h; if (Math.abs(sa) > 0.7) { p.y = sa > 0 ? -30 : h + 30; p.x = Math.random() * w; } } g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - ca * 30 * p.v, p.y - sa * 30 * p.v); g.stroke(); }
-        if (Math.random() < 0.3) for (const wd0 of words) if (!wd0.carriedBy && !wd0.sheltered && Math.random() < 0.012 * k * gust) { wd0.vx += 0.7 * k * ca; wd0.vy += 0.7 * k * sa; wd0.vr += (Math.random() - .5) * 2; } }   // the wind moves light things
+        if (Math.random() < 0.3) for (const wd0 of words) if (!wd0.carriedBy && !wd0.sheltered && Math.random() < 0.012 * k * gust) { const lt = wd0.built ? 0.15 : (wd0.piece || wd0.trash) ? 2.6 : 1; wd0.vx += 0.7 * k * ca * lt; wd0.vy += 0.7 * k * sa * lt; wd0.vr += (Math.random() - .5) * 2 * lt; } }   // the wind moves light things
       else if (kind === 'hum') { const a = 0.04 + 0.04 * Math.sin(t / 300); g.strokeStyle = `rgba(${ink},${a * (0.5 + k)})`; g.lineWidth = 1; const step = 48 * cam.z; const ox = (-cam.x * cam.z) % step, oy = (-cam.y * cam.z) % step; for (let x = ox; x < w; x += step) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); } for (let y = oy; y < h; y += step) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } }
       requestAnimationFrame(draw); }
     requestAnimationFrame(draw);
@@ -774,11 +808,11 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // ---------- snapshots ----------
   let snaps = (() => { try { return JSON.parse(localStorage.getItem('arena.snaps') || '[]'); } catch (e) { return []; } })();
   function takeSnap() { return { v: 1, t: Date.now(), name: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), genomes, residents: creatures.filter(c => c.visitor && !c.guest).map(c => ({ key: c.key, genome: c.g, x: c.x, y: c.y })), world, space: { ...SPACE }, cam: { ...cam }, worldText: lastWorldText,
-    creatures: creatures.filter(c => !c.visitor).map(c => ({ key: c.key, x: c.x, y: c.y, home: c.home, d: c.d })), words: words.filter(w => !w.carriedBy).map(w => ({ text: w.text, x: Math.round(w.x), y: Math.round(w.y), rot: Math.round(w.rot || 0), piece: w.piece, terrain: w.terrain, owner: w.owner, crumb: w.crumb, cls: w.el.className, color: w.el.style.color, font: w.el.style.font, size: w.el.style.fontSize })) }; }
+    creatures: creatures.filter(c => !c.visitor).map(c => ({ key: c.key, x: c.x, y: c.y, home: c.home, d: c.d, size: c.size, meals: c.meals })), words: words.filter(w => !w.carriedBy).map(w => ({ text: w.text, x: Math.round(w.x), y: Math.round(w.y), rot: Math.round(w.rot || 0), piece: w.piece, terrain: w.terrain, owner: w.owner, crumb: w.crumb, cls: w.el.className, color: w.el.style.color, font: w.el.style.font, size: w.el.style.fontSize })) }; }
   function saveSnaps() { try { localStorage.setItem('arena.snaps', JSON.stringify(snaps.slice(-15))); } catch (e) { say('lab', 'browser storage is full: download older snapshots and remove them', 'lab'); } fetch('/lab/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ arena_snapshots: snaps.slice(-15) }) }).catch(() => {}); renderSnaps(); }
   function restoreSnap(sn) {
     SPACE.W = sn.space.W; SPACE.H = sn.space.H; floor.style.width = SPACE.W + 'px'; floor.style.height = SPACE.H + 'px'; try { localStorage.setItem('arena.space', JSON.stringify(SPACE)); } catch (e) {}
-    genomes = JSON.parse(JSON.stringify(sn.genomes)); saveGenomes(); for (const c of creatures.filter(c => !c.visitor)) { const g = genomes[c.key]; if (g) { c.g = g; c.name = g.name || c.name; buildLegs(c); c.options = actionsOf(c); } const st = (sn.creatures || []).find(x => x.key === c.key); if (st) { c.x = c.tx = st.x; c.y = c.ty = st.y; c.home = st.home || c.home; c.d = { ...c.d, ...(st.d || {}) }; buildLegs(c); } }
+    genomes = JSON.parse(JSON.stringify(sn.genomes)); saveGenomes(); for (const c of creatures.filter(c => !c.visitor)) { const g = genomes[c.key]; if (g) { c.g = g; c.name = g.name || c.name; buildLegs(c); c.options = actionsOf(c); } const st = (sn.creatures || []).find(x => x.key === c.key); if (st) { c.x = c.tx = st.x; c.y = c.ty = st.y; c.home = st.home || c.home; c.d = { ...c.d, ...(st.d || {}) }; c.size = st.size || 1; c.meals = st.meals || 0; buildLegs(c); } }
     creatures.filter(c => c.visitor).map(c => c.key).forEach(recall); (sn.residents || []).forEach(r => { release({ key: r.key, genome: r.genome }, true); const c = creatures[creatures.length - 1]; c.x = c.tx = r.x; c.y = c.ty = r.y; buildLegs(c); });
     for (let i = words.length - 1; i >= 0; i--) { if (words[i].carriedBy) { words[i].carriedBy.carrying = null; } words[i].el.remove(); words.splice(i, 1); } creatures.forEach(c => { c.carrying = null; });
     for (const w of sn.words || []) { const ww = addWord(w.text, w.x, w.y, w.piece); ww.terrain = w.terrain; ww.owner = w.owner; ww.crumb = w.crumb; ww.el.className = (w.cls || 'word').replace(/\b(locked|stepped|carried)\b/g, ''); if (w.font) ww.el.style.font = w.font; if (w.size) ww.el.style.fontSize = w.size; if (w.color) ww.el.style.color = w.color; ww.rot = w.rot || 0; place(ww); }
