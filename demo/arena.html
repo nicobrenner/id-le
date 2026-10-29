@@ -246,19 +246,21 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     function view() { const { w: vw, h: vh } = viewSize(); return { L: cam.x - vw / 2 / cam.z, T: cam.y - vh / 2 / cam.z, W: vw / cam.z, H: vh / cam.z, vw, vh }; }
     function cull() { const v = view(), m = 160 / cam.z; lastCull = performance.now();
       for (const w of words) { if (w.carriedBy || w === dragging || w.el.classList.contains('locked')) { vis(w, true); continue; } const x = w._px ?? near(w.x, cam.x, SPACE.W), y = w._py ?? near(w.y, cam.y, SPACE.H); vis(w, !far && x > v.L - m && x < v.L + v.W + m && y > v.T - m && y < v.T + v.H + m); } }
+    let camDirty = true, lastDraw = 0, LODV = 0;   // LODV: bumped when the text look changes, so cached word styles are read again
+    function props(w) { const cls = w.el.className; if (w._lc === cls && w._lv === LODV && w._lp) return w._lp; const plain = cls.includes('terrain') || cls.includes('trash'), fs = cls.includes('crumb') ? 10 : cls.includes('piece') ? 11 : plain ? 12 : 13, text = w.el.textContent;
+      w._lc = cls; w._lv = LODV; return w._lp = { plain, fs, text, wdt: text.length * fs * 0.6 + (plain ? 6 : 16), font: `${fs}px ${plain ? (w.el.style.fontFamily || 'Georgia,serif') : 'ui-monospace,Menlo,monospace'}`, color: w.el.style.color || '', bg: plain ? null : cls.includes('lava') ? '#ffb27a' : cls.includes('piece') ? '#dfe8ff' : cls.includes('crumb') ? '#ffd6e8' : '#ffe9a8', alpha: cls.includes('trash') ? 0.55 : 1 }; }
     function draw() { const v = view(), dpr = devicePixelRatio || 1, pw = Math.round(v.vw * dpr), ph = Math.round(v.vh * dpr); if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
       cv.style.left = v.L + 'px'; cv.style.top = v.T + 'px'; cv.style.width = v.W + 'px'; cv.style.height = v.H + 'px';
-      const k = dpr * cam.z; g.setTransform(k, 0, 0, k, -v.L * k, -v.T * k); g.clearRect(v.L, v.T, v.W, v.H); const text = cam.z >= 0.24, dark = isDark();
-      g.textAlign = 'center'; g.textBaseline = 'middle';
+      const k = dpr * cam.z; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pw, ph); const text = cam.z >= 0.24, dark = isDark(), ink = dark ? '#ccc' : '#444';
+      g.textAlign = 'center'; g.textBaseline = 'middle'; let font = '', fill = '', alpha = 1; g.globalAlpha = 1;   // canvas state is set only when it changes (setting the font per word was most of the cost)
       for (const w of words) { if (w.carriedBy || w === dragging) continue; const x = near(w.x, cam.x, SPACE.W), y = near(w.y, cam.y, SPACE.H); if (x < v.L - 120 || x > v.L + v.W + 120 || y < v.T - 30 || y > v.T + v.H + 30) continue;
-        const cls = w.el.className, plain = cls.includes('terrain') || cls.includes('trash'), fs = cls.includes('crumb') ? 10 : cls.includes('piece') ? 11 : plain ? 12 : 13, wdt = (w._tw ??= w.el.textContent.length * fs * 0.6 + (plain ? 6 : 16));
-        g.save(); g.translate(x, y); if (w.rot) g.rotate(w.rot * Math.PI / 180);
-        if (!plain) { g.fillStyle = cls.includes('lava') ? '#ffb27a' : cls.includes('piece') ? '#dfe8ff' : cls.includes('crumb') ? '#ffd6e8' : '#ffe9a8'; g.fillRect(-wdt / 2, -fs * 0.8, wdt, fs * 1.6); }
-        if (text || plain) { g.font = `${fs}px ${plain ? (w.el.style.fontFamily || 'Georgia,serif') : 'ui-monospace,Menlo,monospace'}`; g.fillStyle = w.el.style.color || (plain ? (dark ? '#ccc' : '#444') : '#333'); g.globalAlpha = cls.includes('trash') ? 0.55 : 1; g.fillText(w.el.textContent, 0, 1); g.globalAlpha = 1; }
-        g.restore(); } _lodDirty = false; }
-    function onCam() { const nf = cam.z < FAR; if (nf !== far) { far = nf; cv.style.display = far ? '' : 'none'; } cull(); _lodDirty = true; }
-    function frame() { if (far) { if (_lodDirty) draw(); if (performance.now() - lastCull > 1000) cull(); } else if (performance.now() - lastCull > 250) cull(); }
-    return { onCam, frame, far: () => far }; })();
+        const P = props(w), r = w.rot ? w.rot * Math.PI / 180 : 0, c = Math.cos(r) * k, sn = Math.sin(r) * k; g.setTransform(c, sn, -sn, c, (x - v.L) * k, (y - v.T) * k);
+        if (P.bg) { if (fill !== P.bg) g.fillStyle = fill = P.bg; g.fillRect(-P.wdt / 2, -P.fs * 0.8, P.wdt, P.fs * 1.6); }
+        if (text || P.plain) { if (font !== P.font) g.font = font = P.font; const col = P.color || (P.plain ? ink : '#333'); if (fill !== col) g.fillStyle = fill = col; if (alpha !== P.alpha) g.globalAlpha = alpha = P.alpha; g.fillText(P.text, 0, 1); } }
+      g.globalAlpha = 1; _lodDirty = false; camDirty = false; lastDraw = performance.now(); }
+    function onCam() { const nf = cam.z < FAR; if (nf !== far) { far = nf; cv.style.display = far ? '' : 'none'; } cull(); camDirty = true; }
+    function frame() { const now = performance.now(); if (far) { if (camDirty || (_lodDirty && now - lastDraw > 100)) draw(); if (now - lastCull > 1000) cull(); } else if (now - lastCull > 250) cull(); }   // zoomed out, moving words redraw 10 times a second; the camera redraws at once
+    return { onCam, frame, far: () => far, restyled: () => { LODV++; camDirty = true; } }; })();
   window.__lod = LOD;
   function findWord(text, from) { const f = findWord0(text, from); if (f || !text) return f || null; const t = text.toLowerCase().trim(); return (window.__travel && window.__travel.on() && window.__travel.find(t, from)) || (window.__capture && window.__capture.on() && !window.__traveling && window.__capture.find(t, from)) || null; }
   function findWord0(text, from) { if (!text) return null; const t = text.toLowerCase().trim(), byDist = a => from ? a.sort((x, y) => dist(x, from) - dist(y, from)) : a; return byDist(words.filter(w => !w.carriedBy && w.text === t))[0] || byDist(words.filter(w => !w.carriedBy && (w.text.startsWith(t) || t.startsWith(w.text)) && Math.min(w.text.length, t.length) >= 3))[0] || null; }
@@ -1105,7 +1107,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     function setWorld(patch, why) { applyWorld({ ...world, ...patch, id: nid() }, why || 'studio'); }
     function restyle(prev) { const fs = world.size, font = `${fs}px/1 ${worldFont()}`, col = world.inkSat ? `hsl(${world.ink},${world.inkSat}%,55%)` : '', t0 = prev.tilt ?? 18, t1 = world.tilt ?? 18;
       for (const w of words) { if (!w.terrain) continue; w.el.style.font = font; w.el.style.color = col; w.rot = t0 > 0.5 ? (w.rot || 0) * t1 / t0 : (Math.random() - .5) * 2 * t1; place(w); }
-      for (const t of things) { if (t.kind === 'image' && t0 > 0.5) { t.rot = (t.rot || 0) * t1 / t0; place(t); } } if (window.__lod) window.__lod.onCam(); }
+      for (const t of things) { if (t.kind === 'image' && t0 > 0.5) { t.rot = (t.rot || 0) * t1 / t0; place(t); } } if (window.__lod) window.__lod.onCam();  if (window.__lod) window.__lod.restyled(); }
     const styleOf = () => words.filter(w => w.terrain).map(w => [w, w.el.style.font, w.el.style.color, w.rot]);
     function look(patch) { const prev = { ...world }; setWorld(patch); restyle(prev); }
     function evolve(k) { const g = gauss, prevWorld = world, undo = { world: prevWorld, styles: null, mutated: [] }; let w = { ...world };
@@ -1117,7 +1119,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       applyWorld({ ...w, id: nid() }, 'studio'); if (pref.obj) restyle(prevWorld);
       if (pref.cre) { const pool = creatures.filter(c => !c.lab && !c.guest), n = Math.max(1, Math.round(pool.length / 3)); for (const c of pool.sort(() => Math.random() - .5).slice(0, n)) { evolveC(c, k > 1 ? 'big' : 'mutate'); undo.mutated.push(c); } }
       last = undo; Sound.fx && Sound.fx(k > 1 ? 'big' : 'mutate'); logEvent('studio_evolve', { k, ...pref }); say('lab', 'evolved: ' + ['environment', 'objects', 'creatures'].filter((x, i) => [pref.env, pref.obj, pref.cre][i]).join(' + ') + (k > 1 ? ' (×3)' : ''), 'lab'); render(); }
-    function undoLast() { if (!last) { say('lab', 'nothing to undo', 'lab'); return; } applyWorld({ ...last.world }, 'studio'); if (last.styles) for (const [w, f, c, r] of last.styles) { w.el.style.font = f; w.el.style.color = c; w.rot = r; place(w); } for (const c of last.mutated) if (creatures.includes(c)) evolveC(c, 'revert'); last = null; render(); }
+    function undoLast() { if (!last) { say('lab', 'nothing to undo', 'lab'); return; } applyWorld({ ...last.world }, 'studio'); if (last.styles) for (const [w, f, c, r] of last.styles) { w.el.style.font = f; w.el.style.color = c; w.rot = r; place(w); } if (window.__lod) window.__lod.restyled(); for (const c of last.mutated) if (creatures.includes(c)) evolveC(c, 'revert'); last = null; render(); }
     el.addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (!b) return; const k = b.dataset.s;
       if (k === 'close') toggle(false); else if (k === 'day' || k === 'disasters') { setWorld({ [k]: !world[k] }); if ($('#wcDis')) $('#wcDis').checked = !!world.disasters; render(); }
       else if (k === 'sound') { Sound.toggle(); render(); } else if (['env', 'obj', 'cre'].includes(k)) { pref[k] = !pref[k]; savePref(); render(); }
