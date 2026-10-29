@@ -59,7 +59,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 <div id="team"><div class="ch"><b>🧪 data lab · your team</b><button id="teamClose">×</button></div>
 <div style="opacity:.75;margin-bottom:6px">Messages arrive at the inbox. Each stage is a classifier creature (a Jeffy head running on this Mac). A <b>filter</b> drops what matches into its own bin; a <b>router</b> sorts into a bin per label, and sends anything it is not sure about to <b>review</b>; a <b>tagger</b> stamps a label and passes it on.</div>
 <div id="stages"></div><button id="addStage">+ add a stage</button>
-<div class="crow"><button id="labPlay">⏸ pause inbox</button> one message every <input id="labRate" type="range" min="1" max="10" step="1" value="4"> <span id="labRateV">4</span> s <button id="labClear">empty the bins</button></div>
+<div class="crow"><button id="labPlay">⏸ pause inbox</button> one message every <input id="labRate" type="range" min="1" max="10" step="1" value="4"> <span id="labRateV">4</span> s <button id="labClear">empty the bins</button> <button id="labExit" title="remove the lab from this world: its creatures, messages and bins">⏏ close the lab</button></div>
 <div id="labStats"></div></div>
 <div id="roomchat"><div id="rc-head"><b>room chat</b><span><button id="rc-min" title="collapse">▾</button><button id="rc-close" title="close">×</button></span></div><div id="rc-body"><div id="quick"></div>
 <div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button class="mic" data-mic="chat" title="speak to everyone (uses the browser's speech recognition)">🎤</button><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
@@ -1002,7 +1002,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     async function start() { on = true; base = { x: cam.x + 200, y: cam.y }; $('#team').classList.add('on'); if (!stream.length) { try { stream = (await (await fetch('datalab_stream.json')).json()).messages.sort(() => Math.random() - .5); } catch (e) {} }
       try { const caps = await (await fetch('/jeffy/capabilities')).json(); const list = Array.isArray(caps) ? caps : (caps.capabilities || []); heads = list.map(c => c.task_id || c.id).filter(h => h && !/^massive_intent_|^(doom_fire|fly_navigation|poker_decision)$/.test(h)).sort(); } catch (e) { heads = team.map(t => t.head); say('lab', 'data lab: could not reach Jeffy on :8411; start it to see the team work', 'lab'); }
       renderTeam(); spawnTeam(); cam.z = Math.max(cam.z, 0.6); applyCam(); oracleComment('The data lab is open. Messages in, opinions out. The spiders are classifiers now, do not tell them', 'lab_open'); logEvent('lab_open', { team }); }
-    $('#labBtn').addEventListener('click', () => { if (!on) start(); else $('#team').classList.toggle('on'); });
+    function stop() { on = false; creatures.filter(c => c.lab).forEach(c => { const i = creatures.indexOf(c); if (i >= 0) creatures.splice(i, 1); c.el.remove(); c.bub.remove(); if (selected === c) selected = null; });
+      msgs.splice(0).forEach(m => m.el.remove()); for (const k of Object.keys(bins)) delete bins[k]; $('#team').classList.remove('on'); $('#labBtn').textContent = '🧪 data lab'; renderEvo(); logEvent('lab_close', {}); say('lab', 'the data lab is closed; your team is saved for next time', 'lab'); }
+    $('#labExit').addEventListener('click', stop);
+    $('#labBtn').addEventListener('click', () => { if (!on) { start(); $('#labBtn').textContent = '🧪 data lab ●'; } else $('#team').classList.toggle('on'); });
     setInterval(() => { if (!on) return; if (playing && Date.now() - lastEmit > rate * 1000) { lastEmit = Date.now(); emit(); } for (const c of creatures) if (c.lab) work(c); renderStats(); }, 400);
     return { svg, msgs, start }; })();
   window.__lab = DataLab;
