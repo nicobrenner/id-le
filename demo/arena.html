@@ -22,6 +22,8 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 #quick{display:flex;gap:6px;flex-wrap:wrap;margin:6px 16px 0}#quick button{font-size:12px;padding:3px 9px;border-radius:14px}#quick .x{margin-left:4px;opacity:.5}#quick .add{opacity:.6}
 .word.locked{color:#ff3b6b!important;opacity:1!important;font-weight:700;text-shadow:0 0 10px #ff3b6baa,0 0 22px #2b5cff88;animation:lockpulse .55s ease-in-out infinite;z-index:7;outline:1.5px solid #ff3b6b;outline-offset:3px;border-radius:4px}@keyframes lockpulse{0%,100%{scale:1.15}50%{scale:1.55;text-shadow:0 0 18px #ff3b6b,0 0 30px #2b5cff}}
 .word.trash{background:transparent;border:0;opacity:.55;font-size:13px;padding:0}.word.built{font-weight:700;opacity:1;text-decoration:underline dotted}
+.thing{position:absolute;transform:translate(-50%,-50%);z-index:3;cursor:grab}.thing canvas{display:block;border-radius:4px;box-shadow:0 2px 8px #0003}.thing .cap{font:9px ui-monospace,Menlo,monospace;opacity:.6;text-align:center;margin-top:2px;white-space:nowrap}
+.uiobj{font:12px system-ui;padding:4px 8px;border-radius:6px;border:1px dashed #8888;background:color-mix(in srgb,var(--floor) 90%,transparent);max-width:230px}.uiobj button,.uiobj a,.uiobj input,.uiobj h1,.uiobj h2,.uiobj h3,.uiobj label{font-size:12px;margin:0;pointer-events:none}.uiobj pre{margin:0;font:10px ui-monospace,Menlo,monospace;white-space:pre-wrap;color:#c0398a}.uiobj .lbl{display:block;font:9px ui-monospace,Menlo,monospace;opacity:.6;margin-top:2px}
 .word.stepped{animation:stepped .9s ease-out}@keyframes stepped{0%{color:#2b5cff;text-shadow:0 0 6px #2b5cff88;translate:0 -2px}100%{text-shadow:none;translate:0 0}}
 .word.t-page{background:transparent;border:0;font:15px/1 Georgia,'Times New Roman',serif;color:inherit;opacity:.78;padding:0 1px;cursor:grab}
 #whisper{position:absolute;z-index:10;display:none;transform:translate(-50%,0);background:color-mix(in srgb,var(--floor) 85%,transparent);border:1px solid #8885;border-radius:12px;padding:6px;backdrop-filter:blur(4px)}#whisper .wrow{display:flex;gap:4px;align-items:center}#whisperIn{width:300px!important}#whisper .wacts{margin-top:5px}#whisper .wacts button{font-size:11px;padding:2px 7px}.mic{padding:3px 7px}.mic.on{background:#ff4d4d33;border-color:#ff4d4d}#whisper input{font:13px system-ui;padding:4px 8px;border:1px solid #2b5cff;border-radius:12px;background:var(--floor);color:inherit;width:200px}
@@ -73,7 +75,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 <label>strength <input id="wcInt" type="range" min="0.05" max="1" step="0.05"></label>
 <label>weather sound <input id="wcAmb" type="range" min="0" max="1.5" step="0.05"></label>
 <label>creature sounds <input id="wcFx" type="range" min="0" max="1.5" step="0.05"></label>
-</div><div id="worldColl"></div></div><div id="snaprow"><b>snapshots</b> <small style="opacity:.6">the whole arena as it was: creatures, residents, world, every word</small> <label class="fileload">load file <input type="file" id="snapFile" accept=".json" hidden></label><div id="snaps"></div></div></details>
+</div><div id="worldColl"></div></div><div id="specialrow"><b>special creatures</b> <button data-spawn="blursort">+ Blursort</button><button data-spawn="debug">+ Debugger</button> <button data-spawn="sorter">+ Sorter</button> using <select id="sorterHead"><option>emotion</option><option>tweet_eval_sentiment</option><option>ag_news</option><option>tweet_eval_offensive</option><option>sst2</option><option>clinc_oos</option></select> <small style="opacity:.6">sorters need the local Jeffy server; images and page elements come with a fetched web page</small></div><div id="snaprow"><b>snapshots</b> <small style="opacity:.6">the whole arena as it was: creatures, residents, world, every word</small> <label class="fileload">load file <input type="file" id="snapFile" accept=".json" hidden></label><div id="snaps"></div></div></details>
 <div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span><span style="opacity:.6">· click a creature to talk to it directly · arrow keys nudge the selected one · drag a word onto the floor</span></div>
 <aside id="lab"><div id="lab-head"><b>lab · arena</b><button id="lab-close">close</button></div><div id="lab-thread"></div><div id="lab-form"><textarea id="lab-text" placeholder="notes to the lab: what to change about the creatures, the arena… (Cmd+Enter)"></textarea><button id="lab-send">send</button> <small style="opacity:.6">replies appear here; the lab can push new genomes</small></div></aside><button id="lab-toggle">lab</button>
 <script>
@@ -175,7 +177,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     say('lab', `world grew ${d}px on the ${side}: now ${SPACE.W} × ${SPACE.H}`, 'lab'); logEvent('grow_world', { side, W: SPACE.W, H: SPACE.H }); }
   document.addEventListener('click', e => { const b = e.target.closest('#arena .grow'); if (b) { e.stopPropagation(); growWorld(b.dataset.grow); } });
   function applyCam() { const { w, h } = viewSize(); const zmin = Math.max(w / SPACE.W, h / SPACE.H); cam.z = Math.max(zmin, Math.min(2.5, cam.z)); cam.x = ((cam.x % SPACE.W) + SPACE.W) % SPACE.W; cam.y = ((cam.y % SPACE.H) + SPACE.H) % SPACE.H;
-    floor.style.transform = `translate(${w / 2 - cam.x * cam.z}px,${h / 2 - cam.y * cam.z}px) scale(${cam.z})`; words.forEach(place); if (window.__lab) window.__lab.msgs.forEach(place); if (window.__snd) window.__snd.zoomAmb(); }
+    floor.style.transform = `translate(${w / 2 - cam.x * cam.z}px,${h / 2 - cam.y * cam.z}px) scale(${cam.z})`; words.forEach(place); if (window.__things) window.__things.forEach(place); if (window.__lab) window.__lab.msgs.forEach(place); if (window.__snd) window.__snd.zoomAmb(); }
   // ---------- words on the floor (the objects creatures act on) ----------
   const words = []; let dragging = null; applyCam();
   function addWord(text, x, y, piece) {
@@ -214,8 +216,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     held: who => [`Let it go, it is wriggling`, `You picked up ${who}. Every leg has an opinion about that`, `${who} is in the air. It does not like the air`],
     mutated: who => [`${who} looks different today. I am not going to say anything`, `Something changed about ${who}. The legs, I think`, `${who} came back from the lab a little rearranged`],
   };
-  const ACTION_POOL = ['fetch', 'bring', 'chop', 'hand', 'come', 'sleep', 'hide'], JOBS = ['hoard', 'build', 'break', 'transform', 'vowels', 'letter', 'rotate', 'string', 'paint', 'grow'];
-  const JOB_NAMES = { build: 'builds little structures out of words', break: 'breaks structures and long words apart', transform: 'reverses, shouts or scrambles words', hoard: 'builds a mound of words at home', vowels: 'collects vowels', letter: 'collects one letter', rotate: 'turns words around', string: 'ties words into long strings', paint: 'paints words', grow: 'makes words bigger or smaller' };
+  const ACTION_POOL = ['fetch', 'bring', 'chop', 'hand', 'come', 'sleep', 'hide'], JOBS = ['blursort', 'debug', 'sorter', 'hoard', 'build', 'break', 'transform', 'vowels', 'letter', 'rotate', 'string', 'paint', 'grow'];
+  const JOB_NAMES = { blursort: 'pixel-sorts and remixes images', debug: 'takes web page elements apart and rewrites them', sorter: 'classifies words and piles them by class', build: 'builds little structures out of words', break: 'breaks structures and long words apart', transform: 'reverses, shouts or scrambles words', hoard: 'builds a mound of words at home', vowels: 'collects vowels', letter: 'collects one letter', rotate: 'turns words around', string: 'ties words into long strings', paint: 'paints words', grow: 'makes words bigger or smaller' };
   function defaultsFor(c) { return DEFAULT_GENOMES[c.key] || DEFAULT_GENOMES[c.voiceKey === 'crawly' ? 'crawly' : 'tok']; }
   function actionsOf(c) { return (c.g.actions || defaultsFor(c).actions).slice(0, 4).concat('greet'); }
   function jobOf(c) { return c.g.job || defaultsFor(c).job; }
@@ -301,7 +303,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   }
   // ---------- movement + animation loop ----------
   function animate(t) {
-    let svg = featuresSVG(t) + portalsSVG(t) + DataLab.svg(t); featureEffects(t);
+    let svg = featuresSVG(t) + portalsSVG(t) + DataLab.svg(t) + specialsSVG(); featureEffects(t);
     for (const c of creatures) {
       c.speed = c.g.speed; let vx = 0, vy = 0;
       if (!c.held && c.state !== 'sleep' && c.state !== 'hide') { const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.hypot(dx, dy); if (dist > 1.5) { const sp = Math.min(c.speed, dist); vx = dx / dist * sp; vy = dy / dist * sp; c.x += vx; c.y += vy; } }
@@ -342,7 +344,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (Math.random() < 0.15) g.body = pick(['chip', 'box', 'orb', 'tri', 'seg', 'star'].filter(b => b !== p.body));
     if (Math.random() < 0.18) { const acts = (p.actions || DEFAULT_GENOMES[key].actions).slice(); const out = Math.floor(Math.random() * acts.length), cand = ACTION_POOL.filter(a => !acts.includes(a)); if (cand.length) acts[out] = pick(cand); g.actions = acts; }
     if (Math.random() < 0.2) { g.job = pick(JOBS.filter(j => j !== (p.job || DEFAULT_GENOMES[key].job))); if (g.job === 'letter') g.letter = pick('rstlnaeiou'.split('')); }
-    if (Math.random() < 0.3) g.paintHue = Math.round(Math.random() * 360); g.wander = +Math.max(0, Math.min(1, (p.wander ?? 0.2) + gauss() * 0.1)).toFixed(2); g.social = +Math.max(0, Math.min(1, (p.social ?? 0.5) + gauss() * 0.12)).toFixed(2);
+    if (Math.random() < 0.3) g.paintHue = Math.round(Math.random() * 360); if (p.fx) { g.fx = Object.fromEntries(Object.entries(p.fx).map(([k, v]) => [k, +Math.max(0.02, v * Math.exp(gauss() * 0.5)).toFixed(2)])); g.sortThr = +Math.max(0.1, Math.min(0.9, (p.sortThr ?? 0.45) + gauss() * 0.1)).toFixed(2); if (Math.random() < 0.2) g.sortAxis = p.sortAxis ? 0 : 1; } g.wander = +Math.max(0, Math.min(1, (p.wander ?? 0.2) + gauss() * 0.1)).toFixed(2); g.social = +Math.max(0, Math.min(1, (p.social ?? 0.5) + gauss() * 0.12)).toFixed(2);
     g.hue = Math.round((p.hue + gauss() * 22 + 360) % 360); g.footHue = Math.round((p.footHue + gauss() * 30 + 360) % 360);
     if (Math.random() < 0.25) g.legs = Math.max(4, Math.min(12, p.legs + (Math.random() < 0.5 ? -2 : 2)));
     if (Math.random() < 0.15) g.palps = Math.max(0, Math.min(2, (p.palps || 0) + (Math.random() < 0.5 ? -1 : 1)));
@@ -373,8 +375,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   function goto(c, x, y) { c.tx = c.x + wd(c.x, x, SPACE.W); c.ty = c.y + wd(c.y, y, SPACE.H); c.state = 'move'; }
   function arrived(c) { return Math.hypot(c.tx - c.x, c.ty - c.y) < 3; }
   async function chase(c, w, off) {   // walk to a word and keep re-aiming as it gets kicked around; time budget scales with the distance
-    const lim = 5000 + dist(c, w) / Math.max(0.3, c.g.speed) / 60 * 1000 * 1.8, t0 = Date.now(); w.el.classList.add('locked');
-    try { while (Date.now() - t0 < lim) { if (!words.includes(w) || (w.carriedBy && w.carriedBy !== c) || c.held || c.state === 'sleep') return false; goto(c, w.x, w.y + off); if (Math.hypot(wd(c.x, w.x, SPACE.W), wd(c.y, w.y + off, SPACE.H)) < 9) return true; await new Promise(r => setTimeout(r, 120)); } return false; }
+    const lim = 5000 + dist(c, w) / Math.max(0.3, c.g.speed) / 60 * 1000 * 1.8, t0 = Date.now(), pool = w.thing ? things : words; w.el.classList.add('locked');
+    try { while (Date.now() - t0 < lim) { if (!pool.includes(w) || (w.carriedBy && w.carriedBy !== c) || c.held || c.state === 'sleep') return false; goto(c, w.x, w.y + off); if (Math.hypot(wd(c.x, w.x, SPACE.W), wd(c.y, w.y + off, SPACE.H)) < 9) return true; await new Promise(r => setTimeout(r, 120)); } return false; }
     finally { w.el.classList.remove('locked'); } }
   async function when(pred, ms) { const t0 = Date.now(); while (!pred() && Date.now() - t0 < (ms || 6000)) await new Promise(r => setTimeout(r, 60)); return pred(); }
   // ---------- actions (the options) ----------
@@ -429,6 +431,13 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         if (rest) { w.text = rest; w.el.textContent = rest; stepped(w); } else { w.el.remove(); words.splice(words.indexOf(w), 1); }
         const pile = addWord(took, c.home.x + (Math.random() - .5) * 40, c.home.y + (Math.random() - .5) * 30, true); pile.owner = c.key; pile.el.classList.add('crumb'); Sound.snip(c); speak(c, 'fetch', { w: took });
         logEvent('work', { who: c.name, job, from: w.text, took }); return true; }
+      if (job === 'blursort') { const t = things.filter(x => x.kind === 'image' && x.ready).sort((a, b) => dist(a, c) - dist(b, c))[0]; if (!t) return false; c.target = t; if (!(await chase(c, t, 30))) return false; c.target = null; const fx = blursort(t, c.g); speak(c, 'own', { w: fx }); Sound.snip(c); logEvent('work', { who: c.name, job, fx }); return true; }
+      if (job === 'debug') { const t = things.filter(x => x.kind === 'ui').sort((a, b) => dist(a, c) - dist(b, c))[0]; if (!t) return false; c.target = t; if (!(await chase(c, t, 22))) return false; c.target = null; const a = await debugUI(c, t); c.bub.textContent = a; c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 1800); logEvent('work', { who: c.name, job, act: a }); return true; }
+      if (job === 'sorter') { const w = free.filter(w => !w.sortedBy && w.text.length > 2 && !w.msg).sort((a, b) => dist(a, c) - dist(b, c))[0]; if (!w) return false; c.target = w; if (!(await chase(c, w, 12))) return false; c.target = null; if (!words.includes(w) || w.carriedBy) return false;
+        let r; try { r = await (await fetch('/jeffy/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: w.text, task: c.g.head }) })).json(); } catch (e) { return false; } if (!r.label) return false;
+        c.bub.textContent = `${r.label} ${Math.round(r.confidence * 100)}%`; c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 1800);
+        w.carriedBy = c; c.carrying = w; w.el.classList.add('carried'); const p = pileSpot(c, r.label); goto(c, p.x + (Math.random() - .5) * 30, p.y + (Math.random() - .5) * 24); await when(() => arrived(c), 15000);
+        if (c.carrying === w) { c.carrying = null; w.carriedBy = null; w.el.classList.remove('carried'); w.x = c.x; w.y = c.y; w.sortedBy = c.key; w.owner = c.key; w.vx = w.vy = 0; place(w); p.n++; } logEvent('work', { who: c.name, job, word: w.text, label: r.label, conf: r.confidence }); return true; }
       if (job === 'build') {   // carry a word to the site and lay it into the next slot of a little structure: a square, then a tower above it
         c.site = c.site || { x: c.home.x + 60, y: c.home.y, n: 0 }; const w = near1(free.filter(w => !w.built)); if (!w) return false; c.target = w; if (!(await chase(c, w, 14))) return false; c.target = null; w.carriedBy = c; c.carrying = w; w.el.classList.add('carried');
         const n = c.site.n++, ring = Math.floor(n / 8), k = n % 8, side = 34 + ring * 6, slots = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]], [sx0, sy0] = slots[k], tx = c.site.x + sx0 * side, ty = c.site.y + sy0 * side * 0.6 - ring * 46;
@@ -671,7 +680,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   }
   async function terrainFrom(input) {
     const v = input.trim(); if (!v) return;
-    if (/^https?:\/\//i.test(v)) { say('lab', 'fetching ' + v.slice(0, 80) + '…', 'lab'); try { const j = await (await fetch('/lab/fetch?url=' + encodeURIComponent(v))).json(); if (j.error) { say('lab', 'could not fetch: ' + j.error, 'lab'); return; } layTerrain(j.text, j.title || v); } catch (e) { say('lab', 'could not fetch (is demo_server.py running?)', 'lab'); } }
+    if (/^https?:\/\//i.test(v)) { say('lab', 'fetching ' + v.slice(0, 80) + '…', 'lab'); try { const j = await (await fetch('/lab/fetch?url=' + encodeURIComponent(v))).json(); if (j.error) { say('lab', 'could not fetch: ' + j.error, 'lab'); return; } layTerrain(j.text, j.title || v);
+        (j.images || []).forEach((u, k) => addImage(u, cam.x + (k - 1.5) * 260, cam.y - 180 + (k % 2) * 140)); (j.ui || []).forEach((u, k) => addUI(u, cam.x + (Math.random() - .5) * 900, cam.y + 120 + (Math.random() - .5) * 300));
+        if ((j.images || []).length && !creatures.some(c => jobOf(c) === 'blursort')) spawnSpecial('blursort'); if ((j.ui || []).length && !creatures.some(c => jobOf(c) === 'debug')) spawnSpecial('debug');
+        if ((j.images || []).length || (j.ui || []).length) say('lab', `the page also brought ${(j.images || []).length} images and ${(j.ui || []).length} interface elements`, 'lab'); } catch (e) { say('lab', 'could not fetch (is demo_server.py running?)', 'lab'); } }
     else layTerrain(v, null);
   }
   // world evolution: mutate / revert / keep, a world collection, and direct controls; layout changes regrow the text, weather changes do not
@@ -899,6 +911,44 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       post('view', { view: { W: SPACE.W, H: SPACE.H, weather: world.weather, wordCount: ws.length, words: ws.filter((_, i) => i % Math.max(1, Math.ceil(ws.length / 250)) === 0).map(w => ({ t: w.text, x: Math.round(wx(w.x)), y: Math.round(wy(w.y)) })), creatures: creatures.map(c => ({ n: c.name, x: Math.round(wx(c.x)), y: Math.round(wy(c.y)), h: c.g.hue })) } }); }
     post('register', { name: myName }).then(poll); setInterval(poll, 2000); setInterval(shareView, 3000);
     return { explore, goHome, _parked: {}, code: () => code }; })();
+  // ---------- images and interface elements from fetched pages, and the creatures that work on them ----------
+  const things = []; window.__things = things;
+  function addThing(el, x, y, kind) { el.classList.add('thing'); floor.appendChild(el); const t = { el, x, y, rot: (Math.random() - .5) * 16, thing: true, kind, text: kind }; things.push(t); place(t);
+    let drag = null; el.addEventListener('pointerdown', ev => { drag = true; el.setPointerCapture(ev.pointerId); ev.stopPropagation(); }); el.addEventListener('pointermove', ev => { if (!drag) return; const p = toWorld(ev.clientX, ev.clientY); t.x = p.x; t.y = p.y; place(t); }); el.addEventListener('pointerup', () => { drag = null; }); return t; }
+  function addImage(url, x, y) { const el = document.createElement('div'), cv = document.createElement('canvas'), cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = 'image'; el.append(cv, cap); const t = addThing(el, x, y, 'image'); t.cv = cv; t.cap = cap; t.fx = [];
+    const img = new Image(); img.onload = () => { const W = Math.min(200, img.width), H = Math.round(img.height * W / img.width); cv.width = W; cv.height = H; cv.getContext('2d').drawImage(img, 0, 0, W, H); t.ready = true; }; img.onerror = () => { el.remove(); things.splice(things.indexOf(t), 1); }; img.src = '/lab/img?url=' + encodeURIComponent(url); return t; }
+  function renderUI(t) { const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    t.el.innerHTML = t.code ? `<pre>&lt;${t.tag}&gt;${esc(t.label)}&lt;/${t.tag}&gt;</pre>` : (t.tag === 'input' ? `<input placeholder="${esc(t.label)}">` : `<${t.tag}>${esc(t.label)}</${t.tag}>`);
+    if (t.color) t.el.style.color = t.color; if (t.badge) t.el.insertAdjacentHTML('beforeend', `<span class="lbl">${esc(t.badge)}</span>`); }
+  function addUI(u, x, y) { const el = document.createElement('div'); el.className = 'uiobj'; const t = addThing(el, x, y, 'ui'); t.tag = ['button', 'a', 'h1', 'h2', 'h3', 'label', 'input'].includes(u.tag) ? u.tag : 'span'; t.label = u.text; t.text = u.text.toLowerCase(); renderUI(t); return t; }
+  // blursort: pixel sorting and friends on an image's pixels; the mix of effects is in the creature's genome and evolves
+  function blursort(t, g) { const cv = t.cv, ctx = cv.getContext('2d'), W = cv.width, H = cv.height; if (!W) return 'nothing';
+    const fx = g.fx || { sort: 1, blur: 0.4, hue: 0.4, poster: 0.3, shift: 0.3 }, names = Object.keys(fx), tot = names.reduce((a, k) => a + fx[k], 0); let r = Math.random() * tot, pickFx = names[0]; for (const k of names) { r -= fx[k]; if (r <= 0) { pickFx = k; break; } }
+    if (pickFx === 'blur' || pickFx === 'hue') { const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H; tmp.getContext('2d').drawImage(cv, 0, 0); ctx.filter = pickFx === 'blur' ? `blur(${1 + Math.random() * 3}px)` : `hue-rotate(${Math.round(30 + Math.random() * 300)}deg)`; ctx.clearRect(0, 0, W, H); ctx.drawImage(tmp, 0, 0); ctx.filter = 'none'; }
+    else { const id = ctx.getImageData(0, 0, W, H), d = id.data, lum = i => d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+      if (pickFx === 'sort') { const thr = (g.sortThr ?? 0.45) * 255, vertical = (g.sortAxis ?? 0) > 0.5, L = vertical ? H : W, N = vertical ? W : H;
+        for (let a = 0; a < N; a++) { let run = []; const flush = () => { if (run.length > 3) { const px = run.map(i => [d[i], d[i + 1], d[i + 2], d[i + 3], lum(i)]).sort((p, q) => p[4] - q[4]); run.forEach((i, k) => { d[i] = px[k][0]; d[i + 1] = px[k][1]; d[i + 2] = px[k][2]; d[i + 3] = px[k][3]; }); } run = []; };
+          for (let b = 0; b < L; b++) { const i = 4 * (vertical ? b * W + a : a * W + b); if (lum(i) > thr) run.push(i); else flush(); } flush(); } }
+      else if (pickFx === 'poster') { const lv = 3 + Math.floor(Math.random() * 3), q = 255 / (lv - 1); for (let i = 0; i < d.length; i += 4) for (let k = 0; k < 3; k++) d[i + k] = Math.round(d[i + k] / q) * q; }
+      else { const off = 3 + Math.floor(Math.random() * 6), cp = new Uint8ClampedArray(d); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = 4 * (y * W + x), j = 4 * (y * W + Math.min(W - 1, x + off)); d[i] = cp[j]; } }
+      ctx.putImageData(id, 0, 0); }
+    t.fx.push(pickFx); t.cap.textContent = t.fx.slice(-4).join(' · '); return pickFx; }
+  async function debugUI(c, t) { const act = pick(['code', 'code', 'recolor', 'rotate', 'label', 'break', 'mix']);
+    if (act === 'code') t.code = !t.code; else if (act === 'recolor') t.color = `hsl(${Math.round(Math.random() * 360)},70%,50%)`; else if (act === 'rotate') t.rot += pick([-90, -45, 45, 90, 180]);
+    else if (act === 'label') { try { const r = await (await fetch('/jeffy/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t.label, task: c.g.head || 'router' }) })).json(); t.badge = `${c.g.head || 'router'} → ${r.label} ${Math.round(r.confidence * 100)}%`; } catch (e) { t.badge = '<' + t.tag + '>'; } }
+    else if (act === 'break') { t.label.split(/\s+/).filter(Boolean).forEach((w, k) => { const ww = addWord(w.toLowerCase(), t.x + (k - 1) * 30, t.y + 20); ww.vx = (Math.random() - .5) * 4; ww.vy = Math.random() * 3; ww.vr = (Math.random() - .5) * 20; }); t.el.remove(); things.splice(things.indexOf(t), 1); return act; }
+    else { const o = things.filter(x => x.kind === 'ui' && x !== t).sort((a, b) => dist(a, t) - dist(b, t))[0]; if (o) { t.label = (t.label + ' ' + o.label).slice(0, 60); t.text = t.label.toLowerCase(); o.el.remove(); things.splice(things.indexOf(o), 1); } }
+    renderUI(t); place(t); return act; }
+  // word sorter: a classifier creature that classifies words on the floor and piles them by class around its home
+  const sorterPiles = {};
+  function pileSpot(c, label) { const P = sorterPiles[c.key] = sorterPiles[c.key] || {}; if (!P[label]) { const n = Object.keys(P).length, a = n * 1.3; P[label] = { x: c.home.x + Math.cos(a) * (120 + n * 18), y: c.home.y + Math.sin(a) * (90 + n * 14), n: 0, label }; } return P[label]; }
+  function specialsSVG() { let s = ''; const dark = matchMedia('(prefers-color-scheme: dark)').matches; for (const [k, P] of Object.entries(sorterPiles)) { const c = creatures.find(x => x.key === k); if (!c) continue; for (const p of Object.values(P)) { const x = near(p.x, cam.x, SPACE.W), y = near(p.y, cam.y, SPACE.H); s += `<circle cx="${x}" cy="${y}" r="${30 + p.n * 1.5}" fill="hsla(${c.g.hue},70%,60%,.07)" stroke="hsl(${c.g.hue},70%,55%)" stroke-dasharray="3 4"/><text x="${x}" y="${y - 34 - p.n * 1.5}" text-anchor="middle" font-size="10" font-family="ui-monospace,Menlo,monospace" fill="hsl(${c.g.hue},70%,${dark ? 70 : 40}%)">${p.label} · ${p.n}</text>`; } } return s; }
+  function spawnSpecial(kind, head) { const base = { born: Date.now(), legs: 8, l1: 22, l2: 26, bodyL: 22, bodyW: 16, abdomen: 1, step: 18, speed: 1.9, palps: 2, fidget: 0.8, laser: 1, kick: 0.8, wander: 0.05, social: 0.2 };
+    const G = { blursort: { name: 'Blursort', body: 'star', hue: 300, footHue: 190, job: 'blursort', actions: ['come', 'sleep', 'hide', 'fetch'], fx: { sort: 1, blur: 0.4, hue: 0.4, poster: 0.3, shift: 0.3 }, sortThr: 0.45, sortAxis: 0 },
+      debug: { name: 'Debugger', body: 'chip', hue: 160, footHue: 330, job: 'debug', head: 'router', actions: ['come', 'sleep', 'hide', 'fetch'] },
+      sorter: { name: 'Sorter (' + (head || 'emotion') + ')', body: 'orb', hue: 40 + Math.round(Math.random() * 200), footHue: 20, job: 'sorter', head: head || 'emotion', actions: ['come', 'sleep', 'hide', 'fetch'] } }[kind];
+    const g = { ...base, ...G, id: kind + '-' + Date.now().toString(36).slice(-4), laserHue: G.hue }; const c = mk(g.name, 'sp' + Date.now().toString(36), cam.x + (Math.random() - .5) * 300, cam.y + (Math.random() - .5) * 200, { genome: g, voice: 'crawly' }); c.name = g.name; creatures.push(c); renderEvo(); speak(c, 'greet');
+    oracleComment({ blursort: 'A new one: Blursort. It sorts pixels. I have stopped asking why', debug: 'A Debugger moved in. It reads the bones of web pages and rearranges them', sorter: `A Sorter arrived. It reads words with the ${g.head} classifier and makes a pile for each feeling or topic` }[kind], 'special'); logEvent('special', { kind, head }); return c; }
   // ---------- the data lab: a team of classifier creatures (Jeffy heads) sorting a stream of messages ----------
   const DataLab = (() => {
     const msgs = [], bins = {}; let on = false, playing = true, rate = 4, stream = [], si = 0, heads = [], lastEmit = 0, stats = { in: 0, calls: 0, ms: 0, perStage: {} };
@@ -956,6 +1006,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     setInterval(() => { if (!on) return; if (playing && Date.now() - lastEmit > rate * 1000) { lastEmit = Date.now(); emit(); } for (const c of creatures) if (c.lab) work(c); renderStats(); }, 400);
     return { svg, msgs, start }; })();
   window.__lab = DataLab;
+  document.addEventListener('click', e => { const b = e.target.closest('[data-spawn]'); if (b) spawnSpecial(b.dataset.spawn, $('#sorterHead').value); });
   // ---------- lab tab (same thread as the chat page: pile_runs/lab/*.jsonl via demo_server.py, localhost only) ----------
   (() => {
     const el = $('#lab'), thread = $('#lab-thread'), text = $('#lab-text'); let seen = 0, open = false;
