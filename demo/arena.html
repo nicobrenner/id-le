@@ -732,7 +732,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       else if (a === 'new') newDraft({ ...genomes.crawly, name: 'New', id: null }, null); else if (a === 'dsave') { saveDraft(); render(); } else if (a === 'dadd') { const g = saveDraft(); release({ key: famOf(g), genome: g }); render(); } else if (a === 'dclose') { draft = null; render(); } });
     el.addEventListener('input', e => { const t = e.target, k = t.dataset && t.dataset.d; if (!k || !draft) return; draft[k] = t.type === 'checkbox' ? t.checked : t.type === 'range' ? +t.value : t.value; if (t.type === 'range' && t.nextElementSibling) t.nextElementSibling.textContent = t.value; const p = el.querySelector('.hprev'); if (p) p.innerHTML = mini(draft, 140); });
     el.addEventListener('change', e => { if (e.target.tagName === 'SELECT' && draft) { const p = el.querySelector('.hprev'); if (p) p.innerHTML = mini(draft, 140); } });
-    function toggle(on, at) { open = on == null ? !open : on; el.classList.toggle('on', open); $('#herdBtn').classList.toggle('on', open); render(); if (open && at) { const h = [...el.querySelectorAll('h4')].find(x => x.textContent.startsWith(at)); if (h) h.scrollIntoView({ block: 'start' }); } logEvent('herd_open', { on: open }); }
+    function toggle(on, at) { open = on == null ? !open : on; el.classList.toggle('on', open); $('#herdBtn').classList.toggle('on', open); render(); if (open && at) { const h = [...el.querySelectorAll('h4')].find(x => x.textContent.startsWith(at)); if (h) el.scrollTop = h.offsetTop - 40; } logEvent('herd_open', { on: open }); }
     addEventListener('keydown', e => { if (e.key === 'Escape' && open) toggle(false); });
     return { toggle, render, rest, wake, drivesOpen: () => open && secs[0].open, list: () => resting, set: r => { resting = Array.isArray(r) ? r : resting; save(); render(); }, on: () => open }; })();
   window.__herd = Herd;
@@ -1095,7 +1095,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       <div class="strip wide"><h5>Text look <small>restyles the words in place</small></h5><select data-s="font">${['serif', 'sans', 'mono'].map(f => `<option${world.font === f ? ' selected' : ''}>${f}</option>`).join('')}</select><div class="row">${fader('size', 'size', 9, 22, 1, world.size)}${fader('tilt', 'tilt', 0, 45, 1, world.tilt ?? 18, x => '±' + x + '°')}${fader('ink', 'ink', 0, 360, 1, world.ink || 0)}${fader('inkSat', 'colour', 0, 70, 1, world.inkSat || 0)}</div></div>
       <div class="strip wide"><h5>Layout <small>the only control that lays text out again</small></h5><div class="pads"><select data-s="layout">${['meaning', 'mix', 'mounds', 'spread', 'page'].map(f => `<option${world.layout === f ? ' selected' : ''}>${f}</option>`).join('')}</select> <button class="pad" data-s="relay" title="lay the last text you fed the world out again with this layout (with “add to the world” on, it is added; off, it replaces)">re-lay text</button></div></div>`; }
     function setWx(k, v, save) { const wx = { ...(world.wx || {}) }; wx[world.weather] = { ...wxP(), [k]: v }; world = { ...world, wx }; if (save) saveWorld(); else Weather.set(world.weather, world.wint ?? 0.35, wx[world.weather]); }
-    function focusEvolve() { toggle(true); const ev = el.querySelector('.ev'); if (!ev) return; ev.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); ev.classList.remove('flash'); void ev.offsetWidth; ev.classList.add('flash'); }
+    function focusEvolve() { toggle(true); const ev = el.querySelector('.ev'); if (!ev) return; el.scrollTo({ top: Math.max(0, ev.offsetTop - 50), behavior: 'smooth' }); ev.classList.remove('flash'); void ev.offsetWidth; ev.classList.add('flash'); }
     function setWorld(patch, why) { applyWorld({ ...world, ...patch, id: nid() }, why || 'studio'); }
     function restyle(prev) { const fs = world.size, font = `${fs}px/1 ${worldFont()}`, col = world.inkSat ? `hsl(${world.ink},${world.inkSat}%,55%)` : '', t0 = prev.tilt ?? 18, t1 = world.tilt ?? 18;
       for (const w of words) { if (!w.terrain) continue; w.el.style.font = font; w.el.style.color = col; w.rot = t0 > 0.5 ? (w.rot || 0) * t1 / t0 : (Math.random() - .5) * 2 * t1; place(w); }
@@ -1130,6 +1130,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     addEventListener('keydown', e => { if (e.key === 'Escape' && open) toggle(false); });
     return { toggle, evolve, undo: undoLast, render, pref, focusEvolve }; })();
   window.__studio = Studio;
+  arenaEl.addEventListener('scroll', () => { if (arenaEl.scrollLeft || arenaEl.scrollTop) arenaEl.scrollLeft = arenaEl.scrollTop = 0; });   // a panel scrolled into view while sliding in shifted the whole arena sideways
   // notes from the lab about Tiny Oracle and Jeffy (pile_runs/lab/notices.json): the newest one not dismissed, as a small pill; × hides it for good in this browser
   (() => { const el = $('#notice'), esc = t => String(t ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); let list = [], gone = new Set();
     try { gone = new Set(JSON.parse(localStorage.getItem('arena.noticesGone') || '[]')); } catch (e) {}
