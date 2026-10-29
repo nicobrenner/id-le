@@ -45,6 +45,10 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 .word.stepped{animation:stepped .9s ease-out}@keyframes stepped{0%{color:#2b5cff;text-shadow:0 0 6px #2b5cff88;translate:0 -2px}100%{text-shadow:none;translate:0 0}}
 .word.t-page{background:transparent;border:0;font:15px/1 Georgia,'Times New Roman',serif;color:inherit;opacity:.78;padding:0 1px;cursor:grab}
 #whisper{position:absolute;z-index:10;display:none;transform:translate(-50%,0);background:color-mix(in srgb,var(--floor) 85%,transparent);border:1px solid #8885;border-radius:12px;padding:6px;backdrop-filter:blur(4px)}#whisper .wrow{display:flex;gap:4px;align-items:center}#whisperIn{width:300px!important}#whisper .wacts{margin-top:5px}#ccard{font-size:11px;margin:2px 2px 6px;max-width:330px;line-height:1.45}#ccard .cn{font:600 13px system-ui;border:0;border-bottom:1px dashed #8888;background:transparent;color:inherit;width:200px;padding:0}#ccard .k,#clife .k{opacity:.6}
+#clife a.mn,#clife a.mw,#ccard a.mn{cursor:pointer;color:inherit;text-decoration:underline dotted #8889;text-underline-offset:2px}#clife a.mn{font-weight:600}#clife a:hover,#ccard a.mn:hover{color:#ffd54a}
+#clife .fe{white-space:nowrap;margin-right:4px}#clife .fe i{display:inline-block;height:4px;border-radius:2px;background:currentColor;vertical-align:middle;margin-left:2px}#clife .spark{vertical-align:middle;opacity:.8}
+#mtip{position:fixed;z-index:9999;display:none;pointer-events:none;max-width:280px;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:8px;padding:6px 8px;font:11px/1.4 system-ui;box-shadow:0 6px 20px #0006}
+#mtip .mt{display:flex;gap:6px;align-items:center}#mtip .fe{white-space:nowrap;margin-right:4px}#mtip .fe i{display:inline-block;height:4px;border-radius:2px;background:currentColor;vertical-align:middle;margin-left:2px}#mtip small{opacity:.75}#mtip .lm,#mtip .hint{display:block;margin-top:2px}#mtip .hint{opacity:.5}
 #clife{font-size:11px;margin:0 2px 6px;max-width:330px;line-height:1.45;border-top:1px dashed #8885;padding-top:4px}
 #clife ul{margin:2px 0 0;padding-left:14px}#clife li{margin:0}#clife li small{opacity:.55}
 #clife details ul{max-height:150px;overflow:auto}#clife summary{cursor:pointer;opacity:.75}#ccard .sw{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:middle}#whisper .wacts button{font-size:11px;padding:2px 7px}.mic{padding:3px 7px}.mic.on{background:#ff4d4d33;border-color:#ff4d4d}#whisper input{font:13px system-ui;padding:4px 8px;border:1px solid #2b5cff;border-radius:12px;background:var(--floor);color:inherit;width:200px}
@@ -336,7 +340,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   const creatures = [crawly, tokc]; let selected = null;
   function select(c) { selected = c; }
   const clamp = v => Math.max(0, Math.min(1, v)); const pick = a => a[Math.floor(Math.random() * a.length)];
-  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); Sound.chirp(c, t); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); return t; }
+  function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); Sound.chirp(c, t); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); if (window.__life) window.__life.said(c, key); return t; }
   function otherOf(c) { return creatures.filter(k => k !== c).sort((a, b) => dist(a, c) - dist(b, c))[0] || c; }
   function feel(c, what) { c.d.affection = clamp(c.d.affection + ({ hover: 0.05, click: 0.12, drag: 0.08, mention: 0.2, ack: 0.15 }[what] || 0)); c.d.curiosity = clamp(c.d.curiosity + 0.04); logEvent('feel', { who: c.name, what, genome: c.g.id, drives: snap(c) }); }
   function snap(c) { return { h: +c.d.hunger.toFixed(2), c: +c.d.curiosity.toFixed(2), f: +c.d.fatigue.toFixed(2), a: +c.d.affection.toFixed(2) }; }
@@ -905,7 +909,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   function openWhisper(c) { whisperTo = c; const el = $('#whisper'); el.style.display = 'block'; const { w, h } = viewSize(); const sx = w / 2 + (c.x + (c.ox || 0) - cam.x) * cam.z, sy = h / 2 + (c.y + (c.oy || 0) - cam.y) * cam.z + 30; el.style.left = sx + 'px'; el.style.top = sy + 'px'; const r = openWhisper2(c, el); fitPop(el); return r; }
   let lastWhisper = null;
   const DIET = { hoard: 'pieces and crumbs, small image tiles', vowels: 'vowels', letter: 'one letter', build: 'whole words (as bricks)', break: 'nothing, it smashes', transform: 'nothing, it rewrites', rotate: 'nothing', string: 'nothing', paint: 'nothing', grow: 'nothing', blursort: 'pixels', debug: 'web page elements', namer: 'nothing, it names', sorter: 'nothing, it files words', classify: 'messages' };
-  function renderCard(c) { const g = c.g, age = Math.round((Date.now() - (c.born || Date.now())) / 60000), company = Object.entries(c.company || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([n, s]) => `${n} (${Math.round(s / 60)} min)`).join(', ') || 'nobody yet', st = c.stats || {};
+  function renderCard(c) { const g = c.g, age = Math.round((Date.now() - (c.born || Date.now())) / 60000), company = Object.entries(c.company || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([n, s]) => `${window.__life ? window.__life.mn(n) : n} (${Math.round(s / 60)} min)`).join(', ') || 'nobody yet', st = c.stats || {};
     $('#ccard').innerHTML = `<input class="cn" value="${c.name.replace(/"/g, '&quot;')}" title="rename"> <span class="sw" style="background:hsl(${g.hue},70%,60%)"></span><br>
       <span class="k">body</span> ${g.body} · ${g.legs} legs${g.wings ? ' · wings' : ''} · size ${(c.size || 1).toFixed(2)} · <span class="k">age</span> ${age} min · <span class="k">id</span> ${g.id || c.key}<br>
       <span class="k">job</span> ${JOB_NAMES[jobOf(c)] || jobOf(c)}${g.head ? ' (' + g.head + ')' : ''} · <span class="k">can</span> ${c.options.filter(o => o !== 'greet').join(', ')}<br>
@@ -1664,8 +1668,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // mood, the one it dislikes tires it, and it says so when the weather turns.
   const Life = (() => {
     const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-    const L = c => { const l = c.life = c.life || {}; l.diary = l.diary || []; l.wx = l.wx || {}; l.place = l.place || {}; l.food = l.food || {}; l.friends = l.friends || []; l.days = l.days || 0; l.worlds = l.worlds || 0; return l; };
-    const byName = n => n && creatures.find(c => c.name === n), q = s => '“' + esc(String(s).slice(0, 24)) + '”', wxn = k => WEATHER_NAMES[k] || k;
+    const L = c => { const l = c.life = c.life || {}; l.diary = l.diary || []; l.wx = l.wx || {}; l.place = l.place || {}; l.food = l.food || {}; l.friends = l.friends || []; l.days = l.days || 0; l.worlds = l.worlds || 0; l.fe = l.fe || { fear: 0, hurt: 0, thrill: 0, you: Date.now() }; l.mh = l.mh || []; l.fl = l.fl || {}; return l; };
+    const byName = n => n && creatures.find(c => c.name === n), wxn = k => WEATHER_NAMES[k] || k;
+    // mentions: names and words in memories are links (click: go there; hover: a mini profile)
+    const mn = n => `<a class="mn" data-n="${esc(n)}">${esc(n)}</a>`, q = w => `<a class="mw" data-w="${esc(String(w).slice(0, 24))}">“${esc(String(w).slice(0, 24))}”</a>`;
     function note(c, k, x, g, w) { if (!c || !x) return; const d = L(c).diary, last = d[d.length - 1], now = Date.now(); g = g || x;
       if (last && last.g === g && now - last.t < 300000) { last.n = (last.n || 1) + 1; last.t = now; last.x = x; if (w != null) { const ws = last.ws = last.ws || []; const i = ws.findIndex(e => e[0] === w); if (i >= 0) ws[i][1]++; else if (ws.length < 6) ws.push([w, 1]); else last.more = (last.more || 0) + 1; } return; }   // the same kind of thing again soon: one memory, counted, with what it was about
       d.push(w != null ? { t: now, k, g, x, ws: [[w, 1]] } : { t: now, k, g, x }); if (d.length > 80) d.splice(0, d.length - 80); }
@@ -1673,19 +1679,33 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       task: x => x.success && x.option === 'eat' ? ['ate', 'eat', x.word] : x.success && x.option === 'fetch' ? ['fetched', 'fetch', x.word] : null,
       work: x => { const w = x.word || x.name || x.from; return [w ? (x.name ? 'named things' : 'worked with') : 'worked', 'work:' + x.job, w]; },
       spit: x => ['spat out ' + q(x.word) + ' (it dislikes that)', 'spit'], sick: () => ['ate too fast and felt sick'], eat_image: x => ['ate an image' + (x.ability ? ' and got ' + esc(x.ability) : ''), 'img'],
-      steal: x => [x.success ? `stole ${q(x.word)} from ${esc(x.from)}` : `tried to rob ${esc(x.from)} and got caught`], evolve: x => ['changed shape (' + esc(x.how || 'mutation') + ')'],
+      steal: x => [x.success ? `stole ${q(x.word)} from ${mn(x.from)}` : `tried to rob ${mn(x.from)} and got caught`], evolve: x => ['changed shape (' + esc(x.how || 'mutation') + ')'],
       metamorphosis: x => ['went through a metamorphosis (' + esc(x.kind) + ')'], wake: () => ['woke up'], picked_up: () => ['was picked up by you', 'held'],
       world_leave: x => ['left for ' + esc(x.to)], world_return: x => ['came home' + (x.souvenir ? ' with ' + q(typeof x.souvenir === 'string' ? x.souvenir : x.souvenir.text || 'a souvenir') : '')],
-      rename: x => [`was renamed from ${esc(x.from)} to ${esc(x.to)}`], feel: x => x.what === 'click' ? ['you tapped it', 'tap'] : x.what === 'mention' ? ['you talked about it', 'mention'] : null,
+      rename: x => [`was renamed from ${esc(x.from)} to ${mn(x.to)}`], feel: x => x.what === 'click' ? ['you tapped it', 'tap'] : x.what === 'mention' ? ['you talked about it', 'mention'] : null,
       whisper: () => ['you whispered to it', 'whisper'], inspector_task: x => ['you asked it to ' + esc(x.opt), 'ask:' + x.opt] };
     const DIS = { volcano: 'a volcano', tornado: 'a tornado', quake: 'an earthquake' };
+    const YOU = { feel: 'who', whisper: 'to', inspector_task: 'who', picked_up: 'who', popover_action: 'who', nudge: 'who' };
     function ev(type, x) {
+      if (YOU[type]) { const c = byName(x[YOU[type]]); if (c) { const fe = L(c).fe; fe.you = Date.now(); if (type !== 'feel' || x.what !== 'hover') fe.thrill = Math.min(1, fe.thrill + 0.25); } }
       if (type === 'disaster') { creatures.forEach(c => note(c, 'disaster', 'lived through ' + (DIS[x.k] || esc(x.k)))); return; }
       if (type === 'studio_evolve' || (type === 'world' && x.why === 'mutate')) { creatures.forEach(c => { L(c).worlds++; note(c, 'world', 'the world evolved', 'world'); }); return; }
-      if (type === 'task' && x.success && x.option === 'eat' && x.word) { const c = byName(x.who); if (c) { const f = L(c).food; f[x.word] = (f[x.word] || 0) + 1; } }
-      if (type === 'steal' && x.success) note(byName(x.from), 'robbed', `${esc(x.who)} stole ${q(x.word)} from it`);
+      if (type === 'task' && x.success && x.option === 'eat' && x.word) { const c = byName(x.who); if (c) { const l = L(c); l.food[x.word] = (l.food[x.word] || 0) + 1; l.fe.thrill = Math.min(1, l.fe.thrill + 0.1); } }
+      if (type === 'steal' && x.success) note(byName(x.from), 'robbed', `${mn(x.who)} stole ${q(x.word)} from it`);
       const f = F[type]; if (!f) return; const r = f(x); if (!r) return; note(byName(type === 'rename' ? x.from : type === 'whisper' ? x.to : x.who), type, r[0], r[1], r[2] == null ? null : String(r[2]).slice(0, 24)); }
+    // feelings, from what it already has: drives (hunger, curiosity, fatigue, affection), scares, thefts, sickness, and how long since you last paid it attention
+    function said(c, key) { const fe = L(c).fe; if (key === 'scared') fe.fear = 1; else if (key === 'robbed') fe.hurt = Math.min(1, fe.hurt + 0.6); else if (key === 'guard') fe.fear = Math.min(1, fe.fear + 0.3); }
     const joy = c => { const d = c.d || {}; return ((d.affection ?? .5) + 1 - (d.hunger ?? .5) + 1 - (d.fatigue ?? .5) + (d.curiosity ?? .5)) / 4; };
+    const FEEL = { happy: '😊', loved: '🥰', excited: '🤩', relaxed: '😌', afraid: '😨', stressed: '😰', hurt: '💔', neglected: '🥺', tired: '😴', hungry: '🍽️', sick: '🤢' };
+    const k01 = v => Math.max(0, Math.min(1, v));
+    function feelings(o) { const d = o.d || {}, fe = (o.life && o.life.fe) || { fear: 0, hurt: 0, thrill: 0, you: Date.now() }, now = Date.now(), aff = d.affection ?? .5, hun = d.hunger ?? .5, fat = d.fatigue ?? .3, cur = d.curiosity ?? .5;
+      if (!o.d) return null;   // resting creatures: no live feelings
+      const sick = o.sickUntil > now ? 1 : 0, calm = ['sleep', 'idle', 'rest'].includes(o.state) ? 1 : 0.75;
+      return { happy: k01(joy(o) * (1 - 0.5 * fe.hurt) * (1 - 0.5 * fe.fear) - 0.4 * sick), loved: k01(aff), excited: k01(0.7 * fe.thrill + 0.4 * cur * (1 - fat) - 0.1), relaxed: k01((1 - hun) * (1 - fe.fear) * (1 - fe.hurt) * (1 - sick) * calm * (0.5 + 0.5 * aff)),
+        afraid: k01(fe.fear), stressed: k01(0.5 * hun + 0.3 * fat + 0.4 * fe.fear + 0.3 * fe.hurt - 0.3 * aff), hurt: k01(fe.hurt), neglected: k01((now - fe.you) / 7200000 * (1 - 0.6 * aff)), tired: k01(fat), hungry: k01(hun), sick }; }
+    const top = (o, n) => { const f = feelings(o); return f ? Object.entries(f).sort((a, b) => b[1] - a[1]).slice(0, n || 3) : []; };
+    const SAY = { afraid: ['I don\'t like this', 'eek', 'hiding. not scared. hiding'], hurt: ['that was mine', 'rude', 'hey!'], neglected: ['hello? anyone?', 'nobody looks at me', 'still here…'], loved: ['♥', 'I like you', 'again!'], excited: ['!!', 'ooh', 'more!'], sick: ['ugh', 'too many words'], stressed: ['too much', 'need a snack'] };
+    const ONSET = { afraid: 'felt scared', hurt: 'felt hurt', neglected: 'felt left alone', loved: 'felt loved', excited: 'got excited', sick: 'felt sick', stressed: 'felt stressed' };
     function prefs(o) { const l = o.life || {}, wx = Object.entries(l.wx || {}).filter(([, v]) => v[0] >= 90).map(([k, v]) => [k, v[1] / v[0]]).sort((a, b) => b[1] - a[1]);
       const fav = wx.length >= 2 && wx[0][1] - wx[wx.length - 1][1] > 0.03 ? wx[0][0] : null, hate = fav ? wx[wx.length - 1][0] : null;
       const food = Object.entries(l.food || {}).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 3), pl = Object.entries(l.place || {}).sort((a, b) => b[1] - a[1]);
@@ -1693,29 +1713,53 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const likes = (c, t) => c.life && c.life.food && c.life.food[t] >= 2 ? 1 : 0;
     function muse(c, t) { c.bub.textContent = t; c.bub.classList.add('on'); Sound.chirp(c, t); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); }
     const placeName = () => { try { const P = window.__places; return P ? (P.title() || P.kind() || 'home') : 'home'; } catch (e) { return 'home'; } };
-    let lastWx = null, lastP = null;
-    setInterval(() => { if (document.hidden) return; const wk = world.weather, pl = String(placeName()).slice(0, 40), p = world.day ? DayCycle.phase() : null, dawn = p != null && lastP != null && p < lastP - 0.5; lastP = p;
-      for (const c of creatures) { if (c.lab || !c.d) continue; const l = L(c), w = l.wx[wk] = l.wx[wk] || [0, 0];
+    let lastWx = null, lastP = null, ticks = 0;
+    setInterval(() => { if (document.hidden) return; ticks++; const wk = world.weather, pl = String(placeName()).slice(0, 40), p = world.day ? DayCycle.phase() : null, dawn = p != null && lastP != null && p < lastP - 0.5; lastP = p;
+      for (const c of creatures) { if (c.lab || !c.d) continue; const l = L(c), w = l.wx[wk] = l.wx[wk] || [0, 0], fe = l.fe;
         if (!w[0]) note(c, 'first', 'first time in ' + wxn(wk)); w[0] += 5; w[1] += joy(c) * 5; l.place[pl] = (l.place[pl] || 0) + 5;
         if (dawn) { l.days++; note(c, 'day', 'saw the dawn (day ' + l.days + ')', 'day'); }
-        for (const [n, sec] of Object.entries(c.company || {})) if (sec >= 600 && !l.friends.includes(n) && byName(n)) { l.friends.push(n); note(c, 'friend', 'became friends with ' + esc(n)); }
-        const pr = prefs(c); if (pr.fav === wk) { c.d.affection = clamp(c.d.affection + 0.004); c.d.curiosity = clamp(c.d.curiosity + 0.003); } else if (pr.hate === wk) c.d.fatigue = clamp(c.d.fatigue + 0.004); }
-      if (lastWx && wk !== lastWx) for (const c of creatures) { const pr = prefs(c), n = wxn(wk); if ((pr.fav === wk || pr.hate === wk) && Math.random() < 0.7) setTimeout(() => muse(c, pr.fav === wk ? pick([n + '! my favourite', 'oh, ' + n + '. finally', 'I missed the ' + n]) : pick(['ugh, ' + n + ' again', 'not the ' + n + '…', 'I don\'t like the ' + n])), 300 + Math.random() * 3000); }
+        for (const [n, sec] of Object.entries(c.company || {})) if (sec >= 600 && !l.friends.includes(n) && byName(n)) { l.friends.push(n); note(c, 'friend', 'became friends with ' + mn(n)); }
+        const pr = prefs(c); if (pr.fav === wk) { c.d.affection = clamp(c.d.affection + 0.004); c.d.curiosity = clamp(c.d.curiosity + 0.003); } else if (pr.hate === wk) c.d.fatigue = clamp(c.d.fatigue + 0.004);
+        fe.fear *= c.state === 'hide' ? 0.95 : 0.75; fe.hurt *= 0.93; fe.thrill *= 0.85;
+        const f = feelings(c); for (const k in ONSET) { if (f[k] >= 0.7 && !l.fl[k]) { l.fl[k] = 1; note(c, 'feel', ONSET[k], 'feel:' + k); if (Math.random() < 0.3) setTimeout(() => muse(c, pick(SAY[k])), Math.random() * 2000); } else if (f[k] < 0.45) l.fl[k] = 0; }   // a strong feeling starting: one memory, sometimes said out loud
+        if (ticks % 12 === 0) { l.mh.push(+joy(c).toFixed(2)); if (l.mh.length > 60) l.mh.splice(0, l.mh.length - 60); } }   // mood, once a minute, last hour
+      if (lastWx && wk !== lastWx) for (const c of creatures) { const pr = prefs(c), n = wxn(wk); if (pr.fav === wk && c.life) c.life.fe.thrill = Math.min(1, c.life.fe.thrill + 0.5); if ((pr.fav === wk || pr.hate === wk) && Math.random() < 0.7) setTimeout(() => muse(c, pr.fav === wk ? pick([n + '! my favourite', 'oh, ' + n + '. finally', 'I missed the ' + n]) : pick(['ugh, ' + n + ' again', 'not the ' + n + '…', 'I don\'t like the ' + n])), 300 + Math.random() * 3000); }
       lastWx = wk; }, 5000);
     const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
     const li = e => `<li>${e.x}${e.ws ? ' ' + e.ws.map(([w, n]) => q(w) + (n > 1 ? ' ×' + n : '')).join(', ') + (e.more ? ' and ' + e.more + ' more' : '') : e.n > 1 ? ' ×' + e.n : ''} <small>${ago(e.t)}</small></li>`;
-    function brief(o) { const l = o.life; if (!l) return ''; const pr = prefs(o), f = (l.friends || []).length, out = [];
-      if (l.days) out.push(l.days + (l.days === 1 ? ' day' : ' days')); if (pr.fav) out.push('likes ' + wxn(pr.fav)); if (f) out.push(f + (f === 1 ? ' friend' : ' friends')); return out.length ? ' · ' + out.join(' · ') : ''; }
+    const spark = (mh, w, h) => { if (!mh || mh.length < 2) return ''; const pts = mh.map((v, i) => `${(i / (mh.length - 1) * w).toFixed(1)},${(h - 1 - v * (h - 2)).toFixed(1)}`).join(' ');
+      return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><line x1="0" x2="${w}" y1="${h / 2}" y2="${h / 2}" stroke="currentColor" stroke-opacity=".15"/><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`; };
+    const bars = (o, n) => top(o, n).map(([k, v]) => `<span class="fe" title="${k} ${Math.round(v * 100)}%">${FEEL[k]} ${k} <i style="width:${Math.round(6 + v * 30)}px;opacity:${(0.35 + 0.65 * v).toFixed(2)}"></i></span>`).join(' ');
+    function brief(o) { const l = o.life; const f = top(o, 1)[0], out = []; if (f && f[1] >= 0.4) out.push(FEEL[f[0]] + ' ' + f[0]); if (!l) return out.length ? ' · ' + out.join(' · ') : ''; const pr = prefs(o), fr = (l.friends || []).length;
+      if (l.days) out.push(l.days + (l.days === 1 ? ' day' : ' days')); if (pr.fav) out.push('likes ' + wxn(pr.fav)); if (fr) out.push(fr + (fr === 1 ? ' friend' : ' friends')); return out.length ? ' · ' + out.join(' · ') : ''; }
     let openDiary = false, sig = '';
-    function card(c, el) { const l = L(c), pr = prefs(c), d = l.diary, s = (c.uid || c.key) + c.name + '|' + d.length + '|' + (d.length ? d[d.length - 1].t + ':' + (d[d.length - 1].n || 1) : '') + '|' + l.days + '|' + l.friends.length + '|' + pr.fav + pr.hate + pr.food.map(f => f.join()).join();
-      if (s === sig && el.firstChild) return; sig = s; const best = l.friends.map(n => [n, (c.company || {})[n] || 0]).sort((a, b) => b[1] - a[1]).map(x => esc(x[0]));
-      el.innerHTML = `<span class="k">lived through</span> ${l.days ? l.days + (l.days === 1 ? ' day' : ' days') : 'no full day yet'}${l.worlds ? ', ' + l.worlds + ' world ' + (l.worlds === 1 ? 'change' : 'changes') : ''}${pr.places > 1 ? ', ' + pr.places + ' places' : ''}`
+    function card(c, el) { const l = L(c), pr = prefs(c), d = l.diary, tf = top(c, 3).map(([k, v]) => k + Math.round(v * 10)).join(), s = (c.uid || c.key) + c.name + '|' + d.length + '|' + (d.length ? d[d.length - 1].t + ':' + (d[d.length - 1].n || 1) : '') + '|' + l.days + '|' + l.friends.length + '|' + pr.fav + pr.hate + pr.food.map(f => f.join()).join() + '|' + tf + '|' + l.mh.length;
+      if (s === sig && el.firstChild) return; sig = s; const best = l.friends.map(n => [n, (c.company || {})[n] || 0]).sort((a, b) => b[1] - a[1]).map(x => mn(x[0]));
+      el.innerHTML = `<span class="k">feels</span> ${bars(c, 3)}${l.mh.length > 1 ? ` <span class="k" title="mood over the last ${l.mh.length} minutes">mood</span> ${spark(l.mh, 70, 14)}` : ''}<br>`
+        + `<span class="k">lived through</span> ${l.days ? l.days + (l.days === 1 ? ' day' : ' days') : 'no full day yet'}${l.worlds ? ', ' + l.worlds + ' world ' + (l.worlds === 1 ? 'change' : 'changes') : ''}${pr.places > 1 ? ', ' + pr.places + ' places' : ''}`
         + ` · <span class="k">likes</span> ${pr.fav ? wxn(pr.fav) + (pr.hate ? ` (not ${wxn(pr.hate)})` : '') : 'no weather yet'}`
         + (pr.food.length ? ` · <span class="k">favourite food</span> ${pr.food.map(([w, n]) => q(w) + ' ×' + n).join(', ')}` : '')
         + `<br><span class="k">friends</span> ${best.length ? best.slice(0, 5).join(', ') + (best.length > 5 ? ' and ' + (best.length - 5) + ' more' : '') : 'none yet'}`
         + (d.length ? `<br><span class="k">remembers</span><ul>${d.slice(-4).reverse().map(li).join('')}</ul>` + (d.length > 4 ? `<details${openDiary ? ' open' : ''}><summary>whole diary (${d.length})</summary><ul>${d.slice(0, -4).reverse().map(li).join('')}</ul></details>` : '') : '<br><span class="k">remembers</span> nothing yet');
       const det = el.querySelector('details'); if (det) det.addEventListener('toggle', () => { openDiary = det.open; }); }
-    return { ev, note, prefs, likes, brief, card, of: byName, reset: () => { sig = ''; } };
+    // the mini profile on hover, and where a click on a mention goes
+    const tip = document.createElement('div'); tip.id = 'mtip'; document.body.appendChild(tip);
+    const resting = n => (window.__herd ? window.__herd.list() : []).find(r => r.name === n);
+    const plain = h => { const t = document.createElement('div'); t.innerHTML = h; return t.textContent; };
+    function tipFor(a) { if (a.dataset.n != null) { const n = a.dataset.n, c = byName(n), r = c ? null : resting(n), o = c || r; if (!o) return `<b>${esc(n)}</b><br><small>not around any more (renamed, or in another world)</small>`;
+        const g = c ? c.g : r.genome, l = o.life || {}, last = (l.diary || []).slice(-1)[0];
+        return `<div class="mt">${miniSVG(g).replace('width="140" height="104"', 'width="64" height="48"')}<div><b>${esc(n)}</b>${r ? ' <small>· resting</small>' : ''}<br><small>${esc(JOB_NAMES[g.job] ? g.job : (c ? jobOf(c) : g.job || g.body))} · ${g.body} · ${(o.meals || 0)} meals${brief(o)}</small></div></div>`
+          + (c ? `<div>${bars(c, 3)}</div>` : '') + (last ? `<small class="lm">last: ${esc(plain(last.x))}${last.ws ? ' ' + esc(last.ws.map(e => '“' + e[0] + '”').join(', ')) : ''} · ${ago(last.t)}</small>` : '') + `<small class="hint">click to ${c ? 'go to it' : r ? 'see it in Resting' : ''}</small>`; }
+      const w = a.dataset.w, n = words.filter(x => x.text === w).length; return `<b>“${esc(w)}”</b><br><small>${n ? n + ' on the floor · click to find it' : 'not on the floor any more (eaten, carried or gone)'}</small>`; }
+    document.addEventListener('mouseover', e => { const a = e.target.closest && e.target.closest('a.mn,a.mw'); if (!a) return; tip.innerHTML = tipFor(a); tip.style.display = 'block'; const r = a.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+      tip.style.left = Math.max(8, Math.min(innerWidth - tw - 8, r.left)) + 'px'; tip.style.top = (r.bottom + th + 12 > innerHeight ? r.top - th - 6 : r.bottom + 6) + 'px'; });
+    document.addEventListener('mouseout', e => { if (e.target.closest && e.target.closest('a.mn,a.mw')) tip.style.display = 'none'; });
+    function go(x, y) { cam.x = x; cam.y = y; cam.z = Math.max(cam.z, 0.9); applyCam(); if (window.__lod) window.__lod.onCam(); }
+    document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a.mn,a.mw'); if (!a) return; e.preventDefault(); e.stopPropagation(); tip.style.display = 'none';
+      if (a.dataset.n != null) { const n = a.dataset.n, c = byName(n); if (c) { go(c.x, c.y); select(c); setTimeout(() => openWhisper(c), 60); logEvent('mention_go', { to: n }); } else if (resting(n) && window.__herd) window.__herd.toggle(true, 'Resting'); return; }
+      const w = a.dataset.w, from = lastWhisper || { x: cam.x, y: cam.y }, hit = words.filter(x => x.text === w).sort((p, q2) => dist(p, from) - dist(q2, from))[0];
+      if (hit) { go(hit.x, hit.y); hit.el.animate([{ outline: '2px solid #ffd54a', outlineOffset: '4px' }, { outline: '2px solid transparent', outlineOffset: '12px' }], { duration: 1400, iterations: 2 }); logEvent('mention_word', { word: w }); } }, true);
+    return { ev, note, said, feelings, prefs, likes, brief, card, mn, of: byName, reset: () => { sig = ''; } };
   })();
   window.__life = Life;
   $('#travelGo').addEventListener('click', () => { const v = $('#terrain').value.trim(); if (!/^https?:\/\//i.test(v)) { say('lab', 'paste a web address (https://…) and press visit', 'lab'); return; } $('#terrain').value = ''; Places.visit(v); });
