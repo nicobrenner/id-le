@@ -20,6 +20,7 @@ body{margin:0;font:15px/1.4 system-ui;background:var(--bg);color:var(--ink)}
 @media (prefers-color-scheme: dark){.pchip{background:#222e;color:#ddd;border-color:#555}.pchip.on{background:#2b5cff;color:#fff}}
 #floor{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
 .word{position:absolute;padding:2px 8px;border-radius:6px;background:#ffe9a8;color:#333;border:1px solid #d9b85a;font:13px ui-monospace,Menlo,monospace;cursor:grab;transform:translate(-50%,-50%);z-index:3}
+.word,.thing{contain:layout style}
 .word.lava{background:#ffb27a;border-color:#e0602a;color:#5a1a00}.disrow button{margin-right:4px}
 .word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px;}.word.crumb{background:#ffd6e8;border-color:#e89ab9;font-size:10px;padding:0 4px}
 .creature{position:absolute;transform:translate(-50%,-50%);z-index:5;cursor:grab;border-radius:50%;touch-action:none}.creature:active{cursor:grabbing}
@@ -201,7 +202,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     say('lab', `world grew ${d}px on the ${side}: now ${SPACE.W} × ${SPACE.H}`, 'lab'); logEvent('grow_world', { side, W: SPACE.W, H: SPACE.H }); }
   document.addEventListener('click', e => { const b = e.target.closest('#arena .grow'); if (b) { e.stopPropagation(); growWorld(b.dataset.grow); } });
   function applyCam() { const { w, h } = viewSize(); const zmin = Math.max(w / SPACE.W, h / SPACE.H); cam.z = Math.max(zmin, Math.min(2.5, cam.z)); if (window.__placeKind === 'page') { cam.z = 1; cam.x = SPACE.W / 2; cam.y = Math.min(Math.max(cam.y, h / 2), Math.max(h / 2, SPACE.H - h / 2)); } else if (window.__traveling) { const hx = w / 2 / cam.z, hy = h / 2 / cam.z; cam.x = Math.min(Math.max(cam.x, hx), Math.max(hx, SPACE.W - hx)); cam.y = Math.min(Math.max(cam.y, hy), Math.max(hy, SPACE.H - hy)); } cam.x = ((cam.x % SPACE.W) + SPACE.W) % SPACE.W; cam.y = ((cam.y % SPACE.H) + SPACE.H) % SPACE.H;
-    floor.style.transform = `translate(${w / 2 - cam.x * cam.z}px,${h / 2 - cam.y * cam.z}px) scale(${cam.z})`; words.forEach(place); if (window.__travel) window.__travel.position(); if (window.__things) window.__things.forEach(place); if (window.__lab) window.__lab.msgs.forEach(place); if (window.__snd) window.__snd.zoomAmb(); }
+    floor.style.transform = `translate(${w / 2 - cam.x * cam.z}px,${h / 2 - cam.y * cam.z}px) scale(${cam.z})`; words.forEach(place); if (window.__lod) window.__lod.onCam(); if (window.__travel) window.__travel.position(); if (window.__things) window.__things.forEach(place); if (window.__lab) window.__lab.msgs.forEach(place); if (window.__snd) window.__snd.zoomAmb(); }
   // ---------- words on the floor (the objects creatures act on) ----------
   const words = []; let dragging = null; applyCam();
   function addWord(text, x, y, piece) {
@@ -214,7 +215,38 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   function hit(w, c) { const now = performance.now(); if (now - (w.lastHit || 0) < 600) return; w.lastHit = now; const col = c.g.hlColor || HL[(c.key.length * 7 + w.text.length) % HL.length];
     w.el.animate([{ boxShadow: `0 0 0 2px ${col}`, background: col + '55' }, { boxShadow: '0 0 0 0 transparent' }], { duration: 1300, easing: 'ease-out' }); }
   function stepped(w) { if (w.el.classList.contains('stepped')) return; w.el.classList.add('stepped'); clearTimeout(w._st); w._st = setTimeout(() => w.el.classList.remove('stepped'), 900); }
-  function place(w) { w.el.style.left = near(w.x, cam.x, SPACE.W) + 'px'; w.el.style.top = near(w.y, cam.y, SPACE.H) + 'px'; w.el.style.transform = 'translate(-50%,-50%) rotate(' + (w.rot || 0).toFixed(1) + 'deg)'; }
+  let _lodDirty = true;
+  function place(w) { _lodDirty = true; const x = Math.round(near(w.x, cam.x, SPACE.W) * 10) / 10, y = Math.round(near(w.y, cam.y, SPACE.H) * 10) / 10, r = (w.rot || 0).toFixed(1);   // styles are written only when something changed:
+    if (x !== w._px) { w._px = x; w.el.style.left = x + 'px'; } if (y !== w._py) { w._py = y; w.el.style.top = y + 'px'; }                                          // a pan moves the floor, not each word
+    if (r !== w._pr) { w._pr = r; w.el.style.transform = 'translate(-50%,-50%) rotate(' + r + 'deg)'; } }
+  // a grid of the floor's words, rebuilt once a frame, so a creature only looks at the words around it (it used to check every word)
+  const WG = { cs: 64, m: new Map(), nx: 1, ny: 1 };
+  function buildWordGrid() { WG.m.clear(); WG.nx = Math.max(1, Math.ceil(SPACE.W / WG.cs)); WG.ny = Math.max(1, Math.ceil(SPACE.H / WG.cs));
+    for (const w of words) { if (w.carriedBy) continue; const i = ((Math.floor(w.x / WG.cs) % WG.nx) + WG.nx) % WG.nx, j = ((Math.floor(w.y / WG.cs) % WG.ny) + WG.ny) % WG.ny, k = i * 65536 + j; let a = WG.m.get(k); if (!a) WG.m.set(k, a = []); a.push(w); } }
+  function wordsNear(x, y, r) { const out = [], ri = Math.ceil(r / WG.cs), ci = Math.floor(x / WG.cs), cj = Math.floor(y / WG.cs);
+    for (let di = -ri; di <= ri; di++) for (let dj = -ri; dj <= ri; dj++) { const a = WG.m.get((((ci + di) % WG.nx) + WG.nx) % WG.nx * 65536 + (((cj + dj) % WG.ny) + WG.ny) % WG.ny); if (a) for (const w of a) out.push(w); } return out; }
+  // level of detail for the floor's words (Oct 28, 22:40, profiling a 3,400-word world: painting the word boxes was most of every frame).
+  // Close up, only words in or near the view are in the page at all. Zoomed out (below 45%), the words are painted in one pass on a canvas
+  // that covers the view, and the DOM words are switched off; they come back as you zoom in. Dragging a word needs the close-up view.
+  const LOD = (() => { const cv = document.createElement('canvas'); cv.id = 'farWords'; cv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:2;display:none'; floor.appendChild(cv); const g = cv.getContext('2d'); let far = false, lastCull = 0; const FAR = 0.45;
+    const vis = (w, on) => { const v = on ? '' : 'none'; if (w._vis !== v) { w._vis = v; w.el.style.display = v; } };
+    function view() { const { w: vw, h: vh } = viewSize(); return { L: cam.x - vw / 2 / cam.z, T: cam.y - vh / 2 / cam.z, W: vw / cam.z, H: vh / cam.z, vw, vh }; }
+    function cull() { const v = view(), m = 160 / cam.z; lastCull = performance.now();
+      for (const w of words) { if (w.carriedBy || w === dragging || w.el.classList.contains('locked')) { vis(w, true); continue; } const x = w._px ?? near(w.x, cam.x, SPACE.W), y = w._py ?? near(w.y, cam.y, SPACE.H); vis(w, !far && x > v.L - m && x < v.L + v.W + m && y > v.T - m && y < v.T + v.H + m); } }
+    function draw() { const v = view(), dpr = devicePixelRatio || 1, pw = Math.round(v.vw * dpr), ph = Math.round(v.vh * dpr); if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+      cv.style.left = v.L + 'px'; cv.style.top = v.T + 'px'; cv.style.width = v.W + 'px'; cv.style.height = v.H + 'px';
+      const k = dpr * cam.z; g.setTransform(k, 0, 0, k, -v.L * k, -v.T * k); g.clearRect(v.L, v.T, v.W, v.H); const text = cam.z >= 0.24, dark = isDark();
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (const w of words) { if (w.carriedBy || w === dragging) continue; const x = near(w.x, cam.x, SPACE.W), y = near(w.y, cam.y, SPACE.H); if (x < v.L - 120 || x > v.L + v.W + 120 || y < v.T - 30 || y > v.T + v.H + 30) continue;
+        const cls = w.el.className, plain = cls.includes('terrain') || cls.includes('trash'), fs = cls.includes('crumb') ? 10 : cls.includes('piece') ? 11 : plain ? 12 : 13, wdt = (w._tw ??= w.el.textContent.length * fs * 0.6 + (plain ? 6 : 16));
+        g.save(); g.translate(x, y); if (w.rot) g.rotate(w.rot * Math.PI / 180);
+        if (!plain) { g.fillStyle = cls.includes('lava') ? '#ffb27a' : cls.includes('piece') ? '#dfe8ff' : cls.includes('crumb') ? '#ffd6e8' : '#ffe9a8'; g.fillRect(-wdt / 2, -fs * 0.8, wdt, fs * 1.6); }
+        if (text || plain) { g.font = `${fs}px ${plain ? (w.el.style.fontFamily || 'Georgia,serif') : 'ui-monospace,Menlo,monospace'}`; g.fillStyle = w.el.style.color || (plain ? (dark ? '#ccc' : '#444') : '#333'); g.globalAlpha = cls.includes('trash') ? 0.55 : 1; g.fillText(w.el.textContent, 0, 1); g.globalAlpha = 1; }
+        g.restore(); } _lodDirty = false; }
+    function onCam() { const nf = cam.z < FAR; if (nf !== far) { far = nf; cv.style.display = far ? '' : 'none'; } cull(); _lodDirty = true; }
+    function frame() { if (far) { if (_lodDirty) draw(); if (performance.now() - lastCull > 1000) cull(); } else if (performance.now() - lastCull > 250) cull(); }
+    return { onCam, frame, far: () => far }; })();
+  window.__lod = LOD;
   function findWord(text, from) { const f = findWord0(text, from); if (f || !text) return f || null; const t = text.toLowerCase().trim(); return (window.__travel && window.__travel.on() && window.__travel.find(t, from)) || (window.__capture && window.__capture.on() && !window.__traveling && window.__capture.find(t, from)) || null; }
   function findWord0(text, from) { if (!text) return null; const t = text.toLowerCase().trim(), byDist = a => from ? a.sort((x, y) => dist(x, from) - dist(y, from)) : a; return byDist(words.filter(w => !w.carriedBy && w.text === t))[0] || byDist(words.filter(w => !w.carriedBy && (w.text.startsWith(t) || t.startsWith(w.text)) && Math.min(w.text.length, t.length) >= 3))[0] || null; }
   // ---------- creatures (Oct 28): spider-style bodies with IK legs planted in world space, a genome per creature, idle life, pick-up ----------
@@ -350,17 +382,18 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       if (c.until && Date.now() > c.until) { c.until = 0; if (c.state === 'sleep' || c.state === 'hide') { c.state = 'idle'; } }
     }
     // word physics: feet that land and bodies that pass kick words; words slide, spin, damp, and flash a highlight
+    buildWordGrid();
     for (const c of creatures) { if (c.state === 'hide') continue; const bodyR = Math.max(c.g.bodyL, c.g.bodyW) * 0.7 + 6, fast = Math.hypot(c.vx, c.vy);
-      if (fast > 0.3 || c.held) for (const w of words) { if (w.carriedBy || w === dragging) continue; const dx = wd(c.x, w.x, SPACE.W), dy = wd(c.y, w.y, SPACE.H), d = Math.hypot(dx, dy) || 1;
+      if (fast > 0.3 || c.held) for (const w of wordsNear(c.x, c.y, bodyR)) { if (w.carriedBy || w === dragging) continue; const dx = wd(c.x, w.x, SPACE.W), dy = wd(c.y, w.y, SPACE.H), d = Math.hypot(dx, dy) || 1;
         if (d < bodyR * 0.8 && (fast > 0.3 || c.held) && performance.now() - (w.pushed || 0) > 500) { w.pushed = performance.now(); const sp = Math.hypot(c.vx, c.vy) || 1, nx = -c.vy / sp, ny = c.vx / sp, side = (dx * nx + dy * ny) >= 0 ? 1 : -1, k = (c.held ? 2.2 : 0.9) * (c.g.kick ?? 1); w.vx += nx * side * k; w.vy += ny * side * k; w.vr += (Math.random() - .5) * 6 * k; stepped(w); } }
-      for (const L of c.legs) if (L.justLanded) { L.justLanded = false; for (const w of words) { if (w.carriedBy) continue; const dx = wd(L.foot.x, w.x, SPACE.W), dy = wd(L.foot.y, w.y, SPACE.H), d = Math.hypot(dx, dy) || 1; if (d < 14) { const k = (14 - d) / 14 * 0.9 * (c.g.kick ?? 1); w.vx += dx / d * k; w.vy += dy / d * k; w.vr += (Math.random() - .5) * 5 * k; stepped(w); Sound.step(c); } } } }
+      for (const L of c.legs) if (L.justLanded) { L.justLanded = false; for (const w of wordsNear(L.foot.x, L.foot.y, 14)) { if (w.carriedBy) continue; const dx = wd(L.foot.x, w.x, SPACE.W), dy = wd(L.foot.y, w.y, SPACE.H), d = Math.hypot(dx, dy) || 1; if (d < 14) { const k = (14 - d) / 14 * 0.9 * (c.g.kick ?? 1); w.vx += dx / d * k; w.vy += dy / d * k; w.vr += (Math.random() - .5) * 5 * k; stepped(w); Sound.step(c); } } } }
     for (const w of words) { if (w.carriedBy || w === dragging) continue; if (Math.abs(w.vx) + Math.abs(w.vy) + Math.abs(w.vr) < 0.02) continue;
       w.x += w.vx; w.y += w.vy; w.rot += w.vr; if (window.__traveling) { w.x = Math.min(SPACE.W - 10, Math.max(10, w.x)); w.y = Math.min(SPACE.H - 10, Math.max(10, w.y)); } w.vx *= 0.82; w.vy *= 0.82; w.vr *= 0.82; w.rot *= 0.97;
       place(w); }
     // targeting lasers (an evolvable trait): a beam and a ring on what the creature is going for
     for (const c of creatures) { if (!(c.g.laser || c.userTask) || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T0 = c.target, T = { x: c.x + c.ox + wd(c.x, T0.x, SPACE.W), y: c.y + c.oy + wd(c.y, T0.y, SPACE.H), text: T0.text }, hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2;
       const br = T.text.length * 4.5 + 22, rr = (t / 8) % 360; svg += `<g transform="translate(${T.x},${T.y}) rotate(${rr})" stroke="#ff3b6b" stroke-width="2" fill="none">${[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => `<path d="M${a * br},${b * (br * 0.55 - 8)} L${a * br},${b * br * 0.55} L${a * (br - 8)},${b * br * 0.55}"/>`).join('')}</g>`; svg += `<line x1="${c.x + c.ox}" y1="${c.y + c.oy}" x2="${T.x}" y2="${T.y}" stroke="hsl(${hue},95%,60%)" stroke-width="1" stroke-dasharray="3 3" opacity=".85"/><ellipse cx="${T.x}" cy="${T.y}" rx="${T.text.length * 4.2 + 14 + j}" ry="${13 + j / 2}" fill="none" stroke="hsl(${hue},95%,60%)" stroke-width="1.4"/><text x="${T.x + T.text.length * 4 + 18}" y="${T.y - 12}" font-size="9" font-family="ui-monospace,Menlo,monospace" fill="hsl(${hue},95%,${isDark() ? 70 : 38}%)">${c.name.toUpperCase()} · ${T.text.toUpperCase()}</text>`; }
-    web.innerHTML = svg; web.style.opacity = 1; creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
+    web.innerHTML = svg; web.style.opacity = 1; LOD.frame(); creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
     if ($('#workshop').open && (!animate._d || t - animate._d > 400)) { animate._d = t; drivesEl.innerHTML = '<small style="opacity:.65">their drives: they get hungrier and more curious over time, tired from moving, fond of you when you play with them; the highest need picks what they do next</small>' + creatures.map(bars).join(''); } requestAnimationFrame(animate);
   }
   requestAnimationFrame(animate);
@@ -1260,7 +1293,9 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         clean(n, el, budget); if (el.childNodes.length) out.appendChild(el); } }
     function position() { if (!page) return; const L = near(page.x + page.w / 2, cam.x, SPACE.W) - page.w / 2, Tp = near(page.y + PH / 2, cam.y, SPACE.H) - PH / 2; page.style.left = L + 'px'; page.style.top = Tp + 'px';
       const dx = cam.x >= L + page.w / 2 ? SPACE.W : -SPACE.W, dy = cam.y >= Tp + PH / 2 ? SPACE.H : -SPACE.H;   // the copies across the seams, on the side the camera is looking
-      [[dx, 0], [0, dy], [dx, dy]].forEach(([ox, oy], k) => { const m = mirror(k); if (!m) return; m.style.left = (L + ox) + 'px'; m.style.top = (Tp + oy) + 'px'; m.style.width = page.style.width; }); }
+      const { w: vw, h: vh } = viewSize(), vx0 = cam.x - vw / 2 / cam.z, vx1 = cam.x + vw / 2 / cam.z, vy0 = cam.y - vh / 2 / cam.z, vy1 = cam.y + vh / 2 / cam.z, hidden = page.style.display === 'none';
+      [[dx, 0], [0, dy], [dx, dy]].forEach(([ox, oy], k) => { const m = mirror(k); if (!m) return; const x = L + ox, y = Tp + oy, inView = !hidden && x < vx1 && x + page.w > vx0 && y < vy1 && y + PH + 60 > vy0;   // a copy is drawn only while it is in view
+        if (m._x !== x) { m._x = x; m.style.left = x + 'px'; } if (m._y !== y) { m._y = y; m.style.top = y + 'px'; } if (m.style.width !== page.style.width) m.style.width = page.style.width; const disp = inView ? '' : 'none'; if (m.style.display !== disp) m.style.display = disp; }); }
     function mirror(k) { if (!page || !page.indexed) return null; page.mirrors = page.mirrors || []; if (!page.mirrors[k]) { const m = page.cloneNode(true); m.classList.add('capMirror'); m.style.display = page.style.display; floor.insertBefore(m, floor.firstChild); page.mirrors[k] = m; } return page.mirrors[k]; }
     const sync = (sel, fn) => { for (const m of (page && page.mirrors) || []) { const e = m.querySelector(sel); if (e) fn(e); } };
     let reT = 0; function reindexSoon() { clearTimeout(reT); reT = setTimeout(index, 300); }
@@ -1306,7 +1341,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     document.addEventListener('dblclick', e => { const a = e.target.closest && e.target.closest('.capPage .plink'); if (a && a.dataset.href && /^https?:/.test(a.dataset.href)) go(a.dataset.href.split('#')[0], { x: page.x, y: page.y }); });
     function find(t, from) { const m = bits.filter(b => !b.gone && b.kind === 'word' && b.text.toLowerCase().replace(/[^\p{L}\p{N}'-]/gu, '') === t); if (!m.length) return null; const p = from ? local(from.x, from.y) : [0, 0]; m.sort((a, b) => Math.hypot(a.lx - p[0], a.ly - p[1]) - Math.hypot(b.lx - p[0], b.ly - p[1])); return pop(m[0]); }
     setTimeout(() => { try { const s = JSON.parse(localStorage.getItem('arena.capture') || 'null'); if (s && s.url) go(s.url, { x: s.x, y: s.y }, s).then(() => { if (window.__placeKind && window.__placeKind !== 'home') show(false); }); } catch (e) {} }, 1200);
-    function show(on) { if (!page) return; [page, ...(page.mirrors || [])].forEach(e => { e.style.display = on ? '' : 'none'; }); $('#capPill').style.display = on ? '' : 'none'; }
+    function show(on) { if (!page) return; page.style.display = on ? '' : 'none'; if (!on) (page.mirrors || []).forEach(e => { e.style.display = 'none'; }); else position(); $('#capPill').style.display = on ? '' : 'none'; }
     return { go, leave, show, position, find, title: () => page ? title : '', on: () => !!page, bits: () => bits.length, stats: () => ({ ...stats, bits: bits.length, gone: bits.filter(b => b.gone).length }) }; })();
   window.__capture = Capture;
   $('#captureGo').addEventListener('click', () => { const v = $('#terrain').value.trim(); if (!/^https?:\/\//i.test(v)) { say('lab', 'paste a web address (https://…) and press capture', 'lab'); return; } if (window.__placeKind && window.__placeKind !== 'home') { say('lab', 'capture brings a page into a home world; go home first', 'lab'); return; } $('#terrain').value = ''; Capture.go(v); });
@@ -1381,7 +1416,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       position.call(null); host.style.left = MX + 'px'; host.style.top = MY + 'px'; index(pg); return pg; }
     function pageText(pg) { return [...pg.root.querySelectorAll('p')].map(e => e.textContent.replace(/\[\d+\]/g, '').replace(/\s+/g, ' ').trim()).flatMap(t => t.split(/(?<=[.!?])\s+/)).filter(t => t.length > 25 && t.length < 220).slice(0, 400); }
     // ---- floors: stash in memory when you leave, save to the browser, bring back
-    const hideEl = (o, on) => { if (o && o.el) o.el.style.display = on ? 'none' : ''; };
+    const hideEl = (o, on) => { if (o && o.el) { o.el.style.display = on ? 'none' : ''; o._vis = undefined; } };
     function stash() { const carried = words.filter(w => w.carriedBy), S = { words: words.splice(0).filter(w => !w.carriedBy), things: things.splice(0), space: { ...SPACE }, cam: { ...cam }, pos: new Map() }; words.push(...carried);   // what a creature carries goes with it
       S.words.forEach(w => hideEl(w, true)); S.things.forEach(t => hideEl(t, true)); for (const c of creatures) if (!c.lab) S.pos.set(c, { x: c.x, y: c.y, tx: c.tx, ty: c.ty, home: c.home ? { ...c.home } : null }); return S; }
     function setSpace(W, H) { SPACE.W = W; SPACE.H = H; floor.style.width = W + 'px'; floor.style.height = H + 'px'; if (window.__sizeMini) window.__sizeMini(); }
