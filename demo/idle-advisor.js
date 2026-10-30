@@ -133,6 +133,8 @@
       else if (type === 'space' && x.kind === 'hermit') first('hermit', `a hermit: ${nm(x.who)} found a quiet spot all to itself`, pos(x.who));
       else if (type === 'space' && x.kind === 'crowded') first('cramped', `${nm(x.who)} felt crowded (${x.n} others within a step) and edged away`, pos(x.who));
       else if (type === 'chart_code') first('chart_code', `${nm(x.who)} broke a chart into code`, pos(x.who));
+      else if (type === 'lineage' && x.kind === 'gen' && x.gen >= 2) first('gen:' + x.gen, `a new generation: ${nm(x.who)} is generation ${x.gen} of the ${esc(x.fam || 'kin')}`, pos(x.who));   // family trees (idle-trees.js)
+      else if (type === 'lineage' && x.kind === 'great') first('greatgrand', `the first great-grandchild: ${nm(x.who)}${x.anc ? ', great-grandchild of ' + nm(x.anc) : ''}`, pos(x.who));
       else if (type === 'task' && x.diet === 'code' && x.success) first('code_meal', `${nm(x.who)} ate a piece of code`, pos(x.who));
     } catch (err) {} });
 
