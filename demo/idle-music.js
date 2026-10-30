@@ -170,8 +170,8 @@
 #djlights .s1{left:12%;--c:hsla(190,95%,60%,.45);animation:djsw 7s ease-in-out infinite alternate}#djlights .s2{left:70%;--c:hsla(320,95%,62%,.45);animation:djsw 9s ease-in-out infinite alternate-reverse}#djlights .s3{left:41%;--c:hsla(50,95%,62%,.35);animation:djsw 5s ease-in-out infinite alternate}
 #djlights.still .spot{animation:none}#djlights .strobe{background:#fff;transition:none}#djlights.keep .strobe{mix-blend-mode:difference}
 @keyframes djsw{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
-#dj{position:absolute;right:10px;top:44px;width:330px;max-height:calc(100% - 60px);overflow:auto;z-index:11;border:1px solid #8885;border-radius:12px;padding:8px 12px 12px;font:12px system-ui;background:color-mix(in srgb,var(--floor) 94%,transparent);box-shadow:0 6px 24px #0003;display:none}
-#dj.on{display:block}#dj h4{margin:10px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.7}#dj .hd{display:flex;justify-content:space-between;align-items:center}#dj .hd b{font-size:14px}
+#dj{position:fixed;right:16px;top:56px;width:330px;max-height:calc(100vh - 72px);overflow:auto;z-index:11;border:1px solid #8885;border-radius:12px;padding:8px 12px 12px;font:12px system-ui;background:color-mix(in srgb,var(--floor) 94%,transparent);box-shadow:0 6px 24px #0003;display:none}
+#dj.on{display:block}#dj h4{margin:10px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.7}#dj .hd{display:flex;justify-content:space-between;align-items:center;margin:-8px -12px 4px;padding:8px 12px 6px;position:sticky;top:-8px;z-index:2;background:var(--floor);border-bottom:1px solid #8883;cursor:grab;user-select:none;touch-action:none}#dj.drag .hd{cursor:grabbing}#dj .hd b{font-size:14px}
 #dj button{font:inherit;font-size:12px;padding:2px 8px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}#dj button.on{background:#2b5cff;color:#fff;border-color:#2b5cff}
 #dj .row{display:flex;align-items:center;gap:6px;margin:3px 0}#dj .row label{width:58px;opacity:.8}#dj input[type=range]{flex:1;min-width:0}#dj select{font:inherit;font-size:12px;background:none;color:inherit;border:1px solid #8886;border-radius:6px}
 #dj .grid{display:grid;grid-template-columns:40px repeat(16,1fr);gap:2px;margin-top:4px}#dj .grid span{opacity:.75;font-size:10px;align-self:center}#dj .grid b{height:14px;border-radius:3px;border:1px solid #8885;cursor:pointer}
@@ -179,11 +179,21 @@
 #dj .sub{opacity:.7;font-size:11px;margin:2px 0}#dj .sets div{display:flex;justify-content:space-between;align-items:center;margin:2px 0}#dj input[type=text]{font:inherit;font-size:12px;flex:1;background:none;color:inherit;border:1px solid #8886;border-radius:6px;padding:2px 6px}`;
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'dj'; ($('#arena') || document.body).appendChild(el);
+  // the deck stays where you drag it (by its header), remembered in this browser; kept inside the window
+  const posKey = 'idle.djPos', fit = (x, y) => [Math.max(0, Math.min(innerWidth - 120, x)), Math.max(0, Math.min(innerHeight - 40, y))];
+  const placeAt = (x, y) => { [x, y] = fit(x, y); el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.right = 'auto'; el.style.maxHeight = Math.max(160, innerHeight - y - 12) + 'px'; };
+  try { const p = JSON.parse(localStorage.getItem(posKey) || 'null'); if (p) placeAt(p.x, p.y); } catch (e) {}
+  addEventListener('resize', () => { if (el.style.left) placeAt(parseFloat(el.style.left), parseFloat(el.style.top)); });
+  el.addEventListener('pointerdown', e => { const hd = e.target.closest('.hd'); if (!hd || e.target.closest('button') || e.button) return;
+    const r = el.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top; el.classList.add('drag'); hd.setPointerCapture(e.pointerId); e.preventDefault();
+    const mv = ev => placeAt(ev.clientX - dx, ev.clientY - dy);
+    const up = () => { el.classList.remove('drag'); hd.removeEventListener('pointermove', mv); hd.removeEventListener('pointerup', up); hd.removeEventListener('pointercancel', up); try { localStorage.setItem(posKey, JSON.stringify({ x: parseFloat(el.style.left), y: parseFloat(el.style.top) })); } catch (err) {} };
+    hd.addEventListener('pointermove', mv); hd.addEventListener('pointerup', up); hd.addEventListener('pointercancel', up); });
   const btn = document.createElement('button'); btn.id = 'djBtn'; btn.title = 'music: background music that follows the world, and a DJ deck with lights'; btn.textContent = '🎧';
   const anchor = $('#reelsBtn'); if (anchor) anchor.after(btn, ' ');
   btn.addEventListener('click', () => { S.open = !S.open; save(); render(); });
   const pct = v => Math.round(v * 100);
-  function render() { el.classList.toggle('on', !!S.open); btn.classList.toggle('on', deck.playing); if (!S.open) return; const D = S.deck, W = world();
+  function render() { if (el.classList.contains('drag')) return; el.classList.toggle('on', !!S.open); btn.classList.toggle('on', deck.playing); if (!S.open) return; const D = S.deck, W = world();
     const mood = W.keep ? 'Gloamhold: low drones, slow bells' : 'Home: warm plucks and a pad';
     const wx = /storm/.test(W.kind) ? ', a low pulse for the storm' : /rain/.test(W.kind) ? ', softened by the rain' : /fog/.test(W.kind) ? ', slowed by the fog' : /wind/.test(W.kind) ? ', with the wind breathing' : '';
     el.innerHTML = `<div class="hd"><b>🎧 music</b><button data-x="close" title="close">✕</button></div>
