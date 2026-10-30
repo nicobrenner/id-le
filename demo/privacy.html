@@ -69,6 +69,15 @@ th{background:var(--box);font-weight:600}
 </ul>
 <p>Turn it off in <b>⚙ settings → Public helper</b>: no pages are read for that browser and linking pauses; the features that need it say so.</p>
 
+<h2>The data lab (Jeffy classifiers)</h2>
+<p>In the 🧪 data lab, creatures are real text classifiers from <a href="https://jeffyclassify.com">Jeffy</a>, a sister project by the same author. To label a message, the helper sends <b>that message's text</b> (at most 500 characters) and the classifier's name to Jeffy's public server, <code>playground.jeffyclassify.com</code>, and returns the label.</p>
+<ul>
+<li>Only the text being classified is sent, in batches from many visitors at once, through the endpoint that does not keep the text. Nothing else about you or your world is sent.</li>
+<li>Requests are limited (20 a minute per visitor, and a cap on how many are in flight) so the shared server stays responsive; when it is busy, creatures simply wait.</li>
+<li>The request comes from id-le.com's helper, not from your browser, so Jeffy's server does not see your network address; it logs that a batch arrived, as most web servers do.</li>
+</ul>
+<p>The data lab only runs when you open it. Turning off the public helper in <b>⚙ settings</b> also turns this off.</p>
+
 <h2>Hosting</h2>
 <p>id-le.com is a static site served by Cloudflare. Like any website, the hosting network handles your connection to deliver the pages; Id|le has not turned on any request logging of its own.</p>
 

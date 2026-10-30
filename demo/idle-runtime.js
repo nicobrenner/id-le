@@ -21,7 +21,7 @@
   // ⚙ settings (idle-settings.js): the public helper can be switched off in this browser; stored here so it holds from the first request
   const helperOn = () => { try { return (JSON.parse(localStorage.getItem('idle.settings') || '{}').helper) !== false; } catch (e) { return true; } };
   const HELPER_OFF = 'the public helper is off in ⚙ settings: creatures can\'t read web pages and worlds can\'t link until you turn it back on';
-  const HELPER_PATHS = ['/lab/fetch', '/lab/page', '/lab/asset', '/lab/img', '/worlds/'];
+  const HELPER_PATHS = ['/lab/fetch', '/lab/page', '/lab/asset', '/lab/img', '/worlds/', '/jeffy/'];   // /jeffy/*: the data lab's classifiers via Jeffy's public server
   const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } });
 
   // --- is there a server? (a static host answers /lab/notices with 404 or an HTML fallback page, never a JSON list)
