@@ -5,6 +5,13 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-30
 
+**Creatures have children (#33).** Good friends, close together, well fed, rested and not scared now and then have a child (6% twins); very rarely a lone creature buds a near-copy. Genes come from either parent or a blend, then a small mutation; it starts small and grows with meals. Births need food nearby and room, stop at the world's population cap (studio → Children, 60), and nobody is ever removed. Two parents in the family tree, Gazette firsts, diaries, replays, a reel ("A new arrival"), the almanac, an advisor line that says why there are none.
+- Copy of Nico's world, 4 min with chances ×30 and waits ÷50, births on vs off: population 44→57 vs 44→44; births 13 vs 0; deepest generation 1→2; fps 57.6 vs 60 (with 13 more creatures); a birth check costs ~0.1 ms every 15 s.
+- At normal rates (sampled every 15 s for 4 min): about one ready pair per check on average, bursty (0, 10, 0, 6, …), which works out to **roughly 3 births per hour of play**: the world would take hours to reach its cap.
+- What blocks births most is **food**: friends are often ready but standing where there is too little to eat (the advisor says so).
+- Flocking (sociability): parents averaged **0.375** vs **0.332** for everyone else, children 0.358, and the world's mean nudged 0.342 → 0.346. Friends breed, and friends are a little more social, so sociability can now drift upward. Too short a run to call it selection.
+- Finding along the way: the first version gave every lone creature its own budding chance, so 13 of 14 births were buds of loners and the world's flocking fell (0.342 → 0.315; budded children 0.23). Budding is now one chance a check world-wide, at a tenth of the pair rate: who reproduces decides which genes rise.
+
 **Phones (#32).** Below 500 px the top bar keeps creatures, studio, 🔔 and a ☰ sheet with everything else (labelled, 44 px targets); every window is a bottom sheet, one at a time, ✕ or swipe down to close; long press = right-click; two-finger pinch zoom (the arena had none on touch); phones start in light quality; the card no longer pops the keyboard. The guided start gets the floor: while it is on (first 5 min, then whenever a tip shows) other notices wait in 🔔, tips read "step n of 8" with an accent, phones show one pill at a time.
 - iPhone 12 mini (WebKit emulation), fresh visit: top-bar items 16 → **4**, targets under 44 px 16 → **0**, pills on screen at 30 s 2 → **1** (the tip), no horizontal scroll.
 - 375 px at 4× CPU throttle: **34–35 → 57–58 fps** (light quality from the start).
