@@ -453,12 +453,20 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c); g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
       legs(g, c, hp); body(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
-    function end(t) { const g = crit; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
+    const beams = [];
+    function laser(c, T, t) { beams.push([c, T, t]); }
+    function drawBeam(g, c, T, t) { const hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2, n = T.text.length, br = n * 4.5 + 22, rr = ((t / 8) % 360) * Math.PI / 180, col = `hsl(${hue},95%,60%)`;
+      g.save(); g.translate(T.x, T.y); g.rotate(rr); g.strokeStyle = '#ff3b6b'; g.lineWidth = 2; g.beginPath();
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { g.moveTo(a * br, b * (br * 0.55 - 8)); g.lineTo(a * br, b * br * 0.55); g.lineTo(a * (br - 8), b * br * 0.55); } g.stroke(); g.restore();
+      g.save(); g.strokeStyle = col; g.lineWidth = 1; g.globalAlpha = 0.85; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(c.x + c.ox, c.y + c.oy); g.lineTo(T.x, T.y); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+      g.lineWidth = 1.4; g.beginPath(); g.ellipse(T.x, T.y, Math.max(0, n * 4.2 + 14 + j), Math.max(0, 13 + j / 2), 0, 0, Math.PI * 2); g.stroke();
+      g.font = '9px ui-monospace,Menlo,monospace'; g.fillStyle = `hsl(${hue},95%,${isDark() ? 70 : 38}%)`; g.fillText(`${c.name.toUpperCase()} · ${T.text.toUpperCase()}`, T.x + n * 4 + 18, T.y - 12); g.restore(); }
+    function end(t) { const g = crit; for (const [c, T, tt] of beams) drawBeam(g, c, T, tt); beams.length = 0; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
     // the same drawing onto another canvas (reel replays): body, legs, hiding pose, 💤/🫣, hangry glow
     function drawTo(g, c, t, hg) { const hp = hidePose(c); g.save(); if (hg) hangryGlow(g, c, t);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
       legs(g, c, hp); body(g, c, t); g.restore(); g.save(); if (c.state === 'sleep') zz(g, c, t); else if (hp) peek(g, c, t, hp.k); g.restore(); }
-    return { begin, draw, end, hidePose, drawTo };
+    return { begin, draw, end, hidePose, laser, drawTo };
   })();
   const DEFAULT_GENOMES = {
     crawly: { id: 'crawly-0', name: 'Crawly', born: 0, parent: null, legs: 8, l1: 30, l2: 36, bodyL: 26, bodyW: 15, abdomen: 1, hue: 262, footHue: 330, step: 24, speed: 1.7, palps: 2, fidget: 0.6, wander: 0.35, body: 'chip', laser: 1, laserHue: 215, kick: 1, actions: ['fetch', 'bring', 'come', 'sleep'], job: 'hoard' },
@@ -504,17 +512,20 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const s = side * (Math.sin(Math.atan2(uy, ux) - heading) >= 0 ? 1 : -1) >= 0 ? 1 : -1; return { x: H.x + ux * a - uy * h * s, y: H.y + uy * a + ux * h * s };
   }
   function mk(name, key, x, y, opts) {
-    const el = document.createElement('div'); el.className = 'creature hit'; floor.appendChild(el);
-    const bub = document.createElement('div'); bub.className = 'bubble'; floor.appendChild(bub);
+    // its hit area and speech bubble are elements only while needed (render trim, Oct 30): the hit area while the pointer is on it
+    // or it is held, the bubble while it shows; the rest of the time a creature is just canvas (hit-tested by HitC below)
+    const el = document.createElement('div'); el.className = 'creature hit';
+    const bub = document.createElement('div'); bub.className = 'bubble';
     const g0 = opts.genome || genomes[key]; const c = { home: { x, y }, name: g0.name || name, key, voiceKey: opts.voice, visitor: !!opts.genome, userUntil: 0, el, bub, x, y, tx: x, ty: y, vx: 0, vy: 0, heading: Math.random() * 6.28, speed: g0.speed, g: g0, options: opts.options, d: { hunger: 0.5, curiosity: 0.5, fatigue: 0.1, affection: 0.3 }, carrying: null, state: 'idle', until: 0, lastDecision: 0, phase: Math.random() * 10, voice: VOICE[opts.voice], task: null, held: false, nextFidget: 0, nextShift: 0 };
     c.size = c.size || 1; c.meals = 0; c.born = Date.now(); buildLegs(c); c.options = actionsOf(c);
     let down = null;   // click vs pick-up: past 5 px of movement it is a pick-up
-    el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY, moved: false }; el.setPointerCapture(ev.pointerId); });
+    const pd = ev => { down = { x: ev.clientX, y: ev.clientY, moved: false }; c._press = true; el.setPointerCapture(ev.pointerId); }; c._pd = pd;
+    el.addEventListener('pointerdown', pd); el.addEventListener('lostpointercapture', () => { c._press = false; });
     el.addEventListener('pointermove', ev => {
       if (!down) return; if (!down.moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) { down.moved = true; c.held = true; c.state = 'held'; select(c); speak(c, 'held'); logEvent('picked_up', { who: c.name, genome: c.g.id }); feel(c, 'drag'); if (Math.random() < 0.6) oracleComment(pick(ORACLE_SEEDS.held(c.name)), 'held'); }
       if (down.moved) { const p = toWorld(ev.clientX, ev.clientY); const nx = c.x + wd(c.x, p.x, SPACE.W), ny = c.y + wd(c.y, p.y, SPACE.H); c.x = c.tx = nx; c.y = c.ty = ny; }
     });
-    el.addEventListener('pointerup', () => { if (!down) return; const moved = down.moved; down = null; if (moved) { c.held = false; c.state = 'idle'; c.legs.forEach(L => { L.swing = null; }); speak(c, 'dropped'); logEvent('put_down', { who: c.name }); } else { select(c); feel(c, 'click'); openWhisper(c); } });
+    el.addEventListener('pointerup', () => { c._press = false; c._keepT = performance.now() + 500; if (!down) return; const moved = down.moved; down = null; if (moved) { c.held = false; c.state = 'idle'; c.legs.forEach(L => { L.swing = null; }); speak(c, 'dropped'); logEvent('put_down', { who: c.name }); } else { select(c); feel(c, 'click'); openWhisper(c); } });
     el.addEventListener('pointerenter', () => feel(c, 'hover'));
     return c;
   }
@@ -568,6 +579,29 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     return s;
   }
   // ---------- movement + animation loop ----------
+  // creature hit-testing on the canvas (render trim, Oct 30): with 1,000 creatures, a positioned element per creature (hit area + bubble)
+  // restyled every frame was a large part of style, layout and commit. Now the creature under the pointer gets its element back, so
+  // hover, click, drag and the card work exactly as before; touch (no hover first) is found here and handed to the creature's own handler
+  const HitC = (() => { let hover = null, lp = null, lastPick = 0;
+    const hitR = c => Math.max(c.g.bodyL, c.g.bodyW) + 14;
+    function at(cx, cy) { const p = toWorld(cx, cy); let best = null, bd = 1e9; for (const c of creaturesNear(p.x, p.y, 90)) { if (c._off) continue; const d = Math.hypot(wd(p.x, c.x, SPACE.W), wd(p.y, c.y, SPACE.H)); if (d < hitR(c) && d < bd) { bd = d; best = c; } } return best; }
+    // the old hit areas sat above everything on the floor (z 5), so anything on the floor counts: words, things, designs, captured pages
+    const floorish = t => !!t && (t === arenaEl || (floor.contains(t) && !(t.closest && t.closest('.word.locked'))));
+    function pick() { if (!lp) return; lastPick = performance.now(); const c = lp.ok ? at(lp.x, lp.y) : null; if (c !== hover) hover = c; }
+    arenaEl.addEventListener('pointermove', e => { if (e.pointerType === 'touch') return; const fresh = !lp; lp = { x: e.clientX, y: e.clientY, ok: floorish(e.target) }; if (fresh || performance.now() - lastPick > 40) pick(); }, { passive: true });
+    arenaEl.addEventListener('pointerleave', () => { lp = null; hover = null; });
+    document.addEventListener('pointerdown', e => {   // a press that lands on a creature with no element yet (touch, or before the hover pick ran)
+      if (e.button !== 0 || !arenaEl.contains(e.target) || !floorish(e.target) || e.target.classList.contains('creature')) return; const c = at(e.clientX, e.clientY); if (!c) return;
+      e.stopImmediatePropagation(); e.preventDefault(); hover = c; attach(c, c.ox || 0, c.oy || 0); c._pd(e); }, true);
+    function attach(c, ox, oy) { if (!c.el.isConnected) { floor.appendChild(c.el); c._css = ''; } const r = hitR(c), css = `left:${(c.x + ox).toFixed(1)}px;top:${(c.y + oy).toFixed(1)}px;width:${r * 2}px;height:${r * 2}px;opacity:${c.state === 'hide' ? 0.12 : 1}`; if (css !== c._css) { c._css = css; c.el.style.cssText = css; } }
+    function frame(c, ox, oy, onScreen, t) {
+      if (onScreen && (c === hover || c.held || c._press || (c._keepT || 0) > performance.now())) attach(c, ox, oy);   // kept a moment after release, so the click lands on it too else if (c.el.isConnected) { c.el.remove(); c._css = ''; }
+      const on = c.bub.classList.contains('on') || c._bfade;
+      if (on && onScreen) { if (!c.bub.isConnected) { if (!c._bfade) { c.bub.classList.remove('on'); c._bfade = true; } floor.appendChild(c.bub); c._bx = c._by = null; } else if (c._bfade) { c._bfade = false; c.bub.classList.add('on'); }   // appended without 'on', then faded in like before
+        c._boff = 0; const bx = (c.x + ox).toFixed(1), by = (c.y + oy - c.g.bodyW - 18).toFixed(1); if (bx !== c._bx) { c._bx = bx; c.bub.style.left = bx + 'px'; } if (by !== c._by) { c._by = by; c.bub.style.top = by + 'px'; } }
+      else if (c.bub.isConnected) { if (!c._boff) c._boff = t; if (!onScreen || t - c._boff > 300) { c.bub.remove(); c._boff = 0; } } }   // kept 300 ms after it ends, for the fade out
+    return { frame, at, hover: () => hover }; })();
+  window.__hitc = HitC;
   function animate(t) {
     const away = window.__traveling; let svg = (away ? '' : featuresSVG(t) + portalsSVG(t)) + DataLab.svg(t) + specialsSVG(); if (!away) featureEffects(t);   // world features and portals belong to home
     if (window.__dis) { window.__dis.tick(t); svg += window.__dis.svg(t); }   // (Oct 30: this call had slipped into the comment above on Oct 28, so disasters never moved, spewed or fired at random)
@@ -585,11 +619,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       const ox = near(c.x, cam.x, SPACE.W) - c.x, oy = near(c.y, cam.y, SPACE.H) - c.y; c.ox = ox; c.oy = oy; const vs = viewSize(), m = 260 / cam.z, onScreen = c.held || (Math.abs(c.x + ox - cam.x) < vs.w / 2 / cam.z + m && Math.abs(c.y + oy - cam.y) < vs.h / 2 / cam.z + m);
       // brain LOD: off the view a creature still walks and decides, but its legs (IK) are not stepped and its hit area and bubble leave the page; back in view, its feet re-plant
       c.lod = onScreen ? 1 : Math.abs(c.x + ox - cam.x) < vs.w / cam.z * 1.5 && Math.abs(c.y + oy - cam.y) < vs.h / cam.z * 1.5 ? 0.5 : 0.2;
-      if (onScreen) { if (c._off) { c._off = false; c._css = ''; c.el.style.display = c.bub.style.display = ''; c.legs.forEach(L => { L.swing = null; L.lift = 0; L.foot = restSpot(c, L); }); } stepLegs(c, t); }
-      else if (!c._off) { c._off = true; c.el.style.display = c.bub.style.display = 'none'; }
+      if (onScreen) { if (c._off) { c._off = false; c.legs.forEach(L => { L.swing = null; L.lift = 0; L.foot = restSpot(c, L); }); } stepLegs(c, t); }
+      else if (!c._off) c._off = true;
       if (onScreen) { const hg = c.hangryUntil > Date.now(), jx = hg ? (Math.random() - 0.5) * 4 : 0, jy = hg ? (Math.random() - 0.5) * 4 : 0; Crit.draw(c, t, +(ox + jx).toFixed(1), +(oy + jy).toFixed(1), hg); }   // on the creature canvas; creatures off the view are simulated but not drawn
-      const hitR = Math.max(c.g.bodyL, c.g.bodyW) + 14, css = c._off ? c._css : `left:${(c.x + ox).toFixed(1)}px;top:${(c.y + oy).toFixed(1)}px;width:${hitR * 2}px;height:${hitR * 2}px;opacity:${c.state === 'hide' ? 0.12 : 1}`; if (css !== c._css) { c._css = css; c.el.style.cssText = css;
-      c.bub.style.left = (c.x + ox).toFixed(1) + 'px'; c.bub.style.top = (c.y + oy - c.g.bodyW - 18).toFixed(1) + 'px'; }   // style writes only when something moved
+      HitC.frame(c, ox, oy, onScreen, t);   // the hit area and bubble elements, only for the hovered/held creature and the ones speaking
       if (c.carrying) { c.carrying.x = c.x + 18; c.carrying.y = c.y - 26; place(c.carrying); }
       if (c.until && Date.now() > c.until) { c.until = 0; if (c.state === 'sleep' || c.state === 'hide') { c.state = 'idle'; } }
     }
@@ -603,9 +636,12 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       w.x += w.vx; w.y += w.vy; w.rot += w.vr; if (window.__traveling) { w.x = Math.min(SPACE.W - 10, Math.max(10, w.x)); w.y = Math.min(SPACE.H - 10, Math.max(10, w.y)); } w.vx *= 0.82; w.vy *= 0.82; w.vr *= 0.82; w.rot *= 0.97;
       place(w); }
     // targeting lasers (an evolvable trait): a beam and a ring on what the creature is going for
+    // targeting lasers are drawn on the creature canvas (render trim, Oct 30: as SVG they were hundreds of elements re-parsed every frame,
+    // for creatures all over the world); only beams that touch the view are drawn, and they sit on top of the creatures again
+    { const vs = viewSize(), m = 200, L = cam.x - vs.w / 2 / cam.z - m, T_ = cam.y - vs.h / 2 / cam.z - m, Rr = cam.x + vs.w / 2 / cam.z + m, B = cam.y + vs.h / 2 / cam.z + m, inV = (x, y) => x > L && x < Rr && y > T_ && y < B;
+      for (const c of creatures) { if (!(c.g.laser || c.userTask) || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T0 = c.target, T = { x: c.x + c.ox + wd(c.x, T0.x, SPACE.W), y: c.y + c.oy + wd(c.y, T0.y, SPACE.H), text: T0.text };
+        if (inV(T.x, T.y) || inV(c.x + c.ox, c.y + c.oy)) Crit.laser(c, T, t); } }
     Crit.end(t);
-    for (const c of creatures) { if (!(c.g.laser || c.userTask) || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T0 = c.target, T = { x: c.x + c.ox + wd(c.x, T0.x, SPACE.W), y: c.y + c.oy + wd(c.y, T0.y, SPACE.H), text: T0.text }, hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2;
-      const br = T.text.length * 4.5 + 22, rr = (t / 8) % 360; svg += `<g transform="translate(${T.x},${T.y}) rotate(${rr})" stroke="#ff3b6b" stroke-width="2" fill="none">${[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => `<path d="M${a * br},${b * (br * 0.55 - 8)} L${a * br},${b * br * 0.55} L${a * (br - 8)},${b * br * 0.55}"/>`).join('')}</g>`; svg += `<line x1="${c.x + c.ox}" y1="${c.y + c.oy}" x2="${T.x}" y2="${T.y}" stroke="hsl(${hue},95%,60%)" stroke-width="1" stroke-dasharray="3 3" opacity=".85"/><ellipse cx="${T.x}" cy="${T.y}" rx="${T.text.length * 4.2 + 14 + j}" ry="${13 + j / 2}" fill="none" stroke="hsl(${hue},95%,60%)" stroke-width="1.4"/><text x="${T.x + T.text.length * 4 + 18}" y="${T.y - 12}" font-size="9" font-family="ui-monospace,Menlo,monospace" fill="hsl(${hue},95%,${isDark() ? 70 : 38}%)">${c.name.toUpperCase()} · ${T.text.toUpperCase()}</text>`; }
     if (svg !== animate._svg) { animate._svg = svg; web.innerHTML = svg; } web.style.opacity = 1; LOD.frame(); creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
     if (window.__herd && window.__herd.drivesOpen() && (!animate._d || t - animate._d > 400)) { animate._d = t; drivesEl.innerHTML = '<small style="opacity:.65">their drives: they get hungrier and more curious over time, tired from moving, fond of you when you play with them; the highest need picks what they do next</small>' + creatures.map(bars).join(''); } requestAnimationFrame(animate);
   }
@@ -1113,7 +1149,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         else if (f.type === 'hole' && Math.hypot(dx, dy) < f.r && !w.terrain0) { w.x = Math.random() * SPACE.W; w.y = Math.random() * SPACE.H; w.vx = w.vy = 0; place(w); w.el.animate([{ scale: 0 }, { scale: 1.4 }, { scale: 1 }], { duration: 500 }); }   // 404: falls in, turns up somewhere else
         else if (f.type === 'cache' && Math.abs(dx) < f.w / 2 && Math.abs(dy) < f.h / 2) { w.sheltered = true; } } } }
   function featuresSVG(t) { const F = world.features || []; let s = ''; const dark = isDark(), ink = dark ? '170,190,255' : '43,92,255';
-    for (const f of F) { const x = near(f.x, cam.x, SPACE.W), y = near(f.y, cam.y, SPACE.H);
+    const vs = viewSize(), hw = vs.w / 2 / cam.z, hh = vs.h / 2 / cam.z;   // only features near the view (render trim, Oct 30)
+    for (const f of F) { const x = near(f.x, cam.x, SPACE.W), y = near(f.y, cam.y, SPACE.H), ext = (f.len || 0) / 2 + (f.r || 0) + Math.max(f.w || 0, f.h || 0) / 2 + 60; if (Math.abs(x - cam.x) > hw + ext || Math.abs(y - cam.y) > hh + ext) continue;
       if (f.type === 'stream') { const ca = Math.cos(f.a), sa = Math.sin(f.a), x1 = x - ca * f.len / 2, y1 = y - sa * f.len / 2, x2 = x + ca * f.len / 2, y2 = y + sa * f.len / 2; s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(${ink},.10)" stroke-width="${f.wdt}" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(${ink},.45)" stroke-width="2" stroke-dasharray="2 14" stroke-dashoffset="${-(t / 25) % 16}"/>`; }
       else if (f.type === 'well') { for (let k = 0; k < 3; k++) s += `<circle cx="${x}" cy="${y}" r="${f.r * (0.4 + 0.3 * k) + Math.sin(t / 600 + k) * 3}" fill="none" stroke="rgba(${ink},${0.10 + 0.05 * k})" stroke-dasharray="1 6"/>`; s += `<text x="${x}" y="${y + 4}" text-anchor="middle" font-size="10" font-family="ui-monospace,Menlo,monospace" fill="rgba(${ink},.45)">latency ${Math.round(f.r * 3)}ms</text>`; }
       else if (f.type === 'hole') s += `<circle cx="${x}" cy="${y}" r="${f.r + Math.sin(t / 200) * 1.5}" fill="${dark ? '#000' : '#222'}" opacity=".85"/><text x="${x}" y="${y + 3}" text-anchor="middle" font-size="8" font-family="ui-monospace,Menlo,monospace" fill="#ff6a6a">404</text>`;
@@ -1387,7 +1424,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         const pu = P.push ?? 1; if (pu > 0 && Math.random() < 0.3) for (const wd0 of words) if (!wd0.carriedBy && !wd0.sheltered && Math.random() < 0.012 * k * gust * pu) { const lt = wd0.built ? 0.15 : (wd0.piece || wd0.trash) ? 2.6 : 1; wd0.vx += 0.7 * k * ca * lt; wd0.vy += 0.7 * k * sa * lt; wd0.vr += (Math.random() - .5) * 2 * lt; } }   // the wind moves light things
       else if (kind === 'storm') { const sl = P.slant ?? 0.28; g.strokeStyle = `rgba(${ink},${0.18 + 0.2 * k})`; g.lineWidth = sz; for (const p of parts) { p.y += 9 * p.v * sp; p.x += 9 * p.v * sp * sl; if (p.y > h) { p.y = -10; p.x = Math.random() * w; } if (p.x > w + 10) p.x -= w + 20; else if (p.x < -10) p.x += w + 20; g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - 12 * sl, p.y - 12); g.stroke(); }
         if (Math.random() < 0.004 * (0.5 + k) * (P.bolts ?? 1)) strike(w, h); if (flashA > 0) { g.fillStyle = `rgba(255,255,255,${flashA})`; g.fillRect(0, 0, w, h); if (bolt) { g.strokeStyle = `rgba(255,255,240,${Math.min(1, flashA * 3)})`; g.lineWidth = 2.5; g.beginPath(); bolt.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); } flashA *= 0.86; if (flashA < 0.01) { flashA = 0; bolt = null; } } }
-      else if (kind === 'hum') { const a = 0.04 + 0.04 * Math.sin(t / 300 * (P.pulse ?? 1)); g.strokeStyle = `rgba(${ink},${Math.min(1, a * (0.5 + k) * (P.bright ?? 1))})`; g.lineWidth = 1; const step = (P.grid ?? 48) * cam.z; const ox = (-cam.x * cam.z) % step, oy = (-cam.y * cam.z) % step; for (let x = ox; x < w; x += step) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); } for (let y = oy; y < h; y += step) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } }
+      else if (kind === 'hum') { const a = 0.04 + 0.04 * Math.sin(t / 300 * (P.pulse ?? 1)); g.strokeStyle = `rgba(${ink},${Math.min(1, a * (0.5 + k) * (P.bright ?? 1))})`; g.lineWidth = 1; const step = (P.grid ?? 48) * cam.z; if (step > 4) { const ox = ((w / 2 - cam.x * cam.z) % step + step) % step, oy = ((h / 2 - cam.y * cam.z) % step + step) % step, px = v => Math.round(v) + 0.5;   /* Oct 30: lines on whole pixels (anti-aliased half-pixel lines shimmered while panning and zooming), anchored to the world */ g.beginPath(); for (let x = ox; x < w; x += step) { g.moveTo(px(x), 0); g.lineTo(px(x), h); } for (let y = oy; y < h; y += step) { g.moveTo(0, px(y)); g.lineTo(w, px(y)); } g.stroke(); } }
       requestAnimationFrame(draw); }
     requestAnimationFrame(draw);
     return { wind() { return kind === 'wind' ? { a: windA, f: k * gust * (P.push ?? 1) } : null; }, set(kd, kk, pp) { const changed = kd !== kind, kch = kk !== k; if (changed) parts = []; kind = kd; k = kk; P = { ...wxDefaults(kd), ...(pp || {}) }; fit(); if (changed || kch) Sound.ambient(kind, k); if (changed && typeof oracleComment === 'function' && genSession) oracleComment(pick({ clear: ['The weather cleared. Nothing falling on the floor for once'], bitrain: ['It is raining bits again. Zeros mostly', 'Bit rain. The crawler hates getting ones in its legs'], static: ['Static storm. Hold on to your words', 'Static in the air, everything crackles'], fog: ['Packet fog. I can barely see the other side of the room', 'Foggy in here, the far words are guesses'], wind: ['Data wind from the left. Light words are leaving', 'Windy. Hold on to the small words'], hum: ['The mains hum is back. Everything vibrates a little', 'Humming weather. Good for sleeping'] }[kind] || ['The weather changed']), 'weather'); }, get: () => ({ kind, k, P: { ...P }, n: parts.length, flash: flashA, bolt }) }; })();
@@ -2157,7 +2194,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const B4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];   // 4×4 Bayer: level l lights the cells below l
     let on = false, dark = null, pats = null, lw = 0, lh = 0, raf = 0, last = 0;
     function patterns(g, cap) { const out = { ink: [], paper: [] }; for (const [k, col] of [['ink', dark ? '#fff' : '#000'], ['paper', dark ? '#000' : '#fff']]) for (let l = 0; l <= 16; l++) { const c = document.createElement('canvas'); c.width = c.height = 4; const x = c.getContext('2d'); x.fillStyle = col; const e = cap && k === 'ink' ? Math.round(l * cap) : l; for (let i = 0; i < 16; i++) if (B4[i] < e) x.fillRect(i % 4, i >> 2, 1, 1); out[k].push(g.createPattern(c, 'repeat')); }
-      out.blk = dark ? out.paper : out.ink; out.wht = dark ? out.ink : out.paper; return out; }   // blk/wht: real black and white whatever the theme (doorways stay dark, torchlight stays light)
+      out.blk = dark ? out.paper : out.ink; out.wht = dark ? out.ink : out.paper; out.cap = cap || 0; return out; }   // blk/wht: real black and white whatever the theme (doorways stay dark, torchlight stays light)
     const rngOf = s => { s = s >>> 0 || 1; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
     const hash = (...a) => { let h = 2166136261; for (const v of a) { h ^= v | 0; h = Math.imul(h, 16777619) >>> 0; } return h; };
     const pk = (r, a) => a[Math.floor(r() * a.length)], cl = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -2243,17 +2280,30 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const BITS = { 0: ['111', '1.1', '1.1', '1.1', '111'], 1: ['.1.', '11.', '.1.', '.1.', '111'] };
     const SEEDW = ['candle', 'stone', 'arch', 'crypt', 'bell', 'raven', 'moth', 'lantern', 'iron', 'key', 'door', 'stair', 'hollow', 'dust', 'echo', 'wax', 'vault', 'tower', 'moat', 'whisper', 'shadow', 'owl', 'chain', 'torch', 'mist', 'oath', 'ink', 'quill', 'tome', 'rune', 'spire', 'gloom', 'cobweb', 'hinge', 'creak', 'vigil', 'dusk', 'midnight', 'toll', 'crow', 'ivy', 'thorn', 'lock', 'cellar', 'ember', 'velvet', 'gate', 'hall', 'bat', 'night'];
     function seed() { for (let k = 0; k < 150; k++) { const w = addWord(pick(SEEDW), SIDE + 80 + Math.random() * (SPACE.W - 2 * SIDE - 160), TOP + 60 + Math.random() * (SPACE.H - TOP - BOT - 120)); w.rot = (Math.random() - .5) * 8; place(w); } }
-    function size() { const { w, h } = viewSize(), a = Math.ceil(w / PX), b = Math.ceil(h / PX); if (a !== lw || b !== lh) { lw = a; lh = b; for (const c of [bg, fx]) { c.width = lw; c.height = lh; } pats = null; fx.getContext('2d')._p = null; } }
-    const S = (x, y) => [((x - cam.x) * cam.z + lw * PX / 2) / PX, ((y - cam.y) * cam.z + lh * PX / 2) / PX], Z = v => v * cam.z / PX;   // world → low-res pixels
-    function anchor(P) { const ox = -Math.round(Z(cam.x)) & 3, oy = -Math.round(Z(cam.y)) & 3, m = new DOMMatrix([1, 0, 0, 1, ox, oy]); for (const k of ['ink', 'paper']) for (const p of P[k]) p.setTransform(m); }   // the dither sticks to the stone, not the screen
+    // the canvases are exactly lw × lh low-res pixels of PX css px each (Oct 30: they were stretched to 100% of the view, so a column or row
+    // of pixels was doubled here and there by the pixelated scaling; while panning those doubled lines crawled and blinked)
+    function size() { const { w, h } = viewSize(), a = Math.ceil(w / PX), b = Math.ceil(h / PX); if (a !== lw || b !== lh) { lw = a; lh = b; for (const c of [bg, fx]) { c.width = lw; c.height = lh; c.style.width = lw * PX + 'px'; c.style.height = lh * PX + 'px'; } pats = null; fx.getContext('2d')._p = null; } }
+    // world → low-res pixels. The view's origin is snapped to whole stone pixels (SX, SY), so every line and the dither move together in
+    // whole pixels and stay in step (before, lines and dither were rounded separately and slid against each other: joints blinked in and out);
+    // the leftover fraction is made up by moving both canvases by less than a pixel, so the stone still pans smoothly with the words
+    let SX = 0, SY = 0, shiftK = '';
+    const S = (x, y) => [x * cam.z / PX - SX, y * cam.z / PX - SY], Z = v => v * cam.z / PX;
+    function anchor(P) { SX = Math.round(Z(cam.x) - lw / 2); SY = Math.round(Z(cam.y) - lh / 2); const fx0 = (Z(cam.x) - lw / 2 - SX) * PX, fy0 = (Z(cam.y) - lh / 2 - SY) * PX, k = fx0.toFixed(2) + ',' + fy0.toFixed(2);
+      if (k !== shiftK) { shiftK = k; bg.style.transform = fx.style.transform = `translate(${-fx0.toFixed(2)}px,${-fy0.toFixed(2)}px)`; }
+      const ox = -SX & 3, oy = -SY & 3, m = new DOMMatrix([1, 0, 0, 1, ox, oy]); for (const k2 of ['ink', 'paper']) for (const p of P[k2]) p.setTransform(m); }   // the dither sticks to the stone, not the screen
     function sprite(g, rows, x, y, s) { const w = rows[0].length, h = rows.length; for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) if (rows[r][c] === '1') g.fillRect(Math.round(x + (c - w / 2) * s), Math.round(y + (r - h / 2) * s), s, s); }
     const view = () => { const hw = lw * PX / 2 / cam.z, hh = lh * PX / 2 / cam.z; return [cam.x - hw, cam.y - hh, cam.x + hw, cam.y + hh]; };
     const seen = (x0, y0, x1, y1) => { const [a, b, c, d] = view(); return x1 > a && x0 < c && y1 > b && y0 < d; };
     function rect(g, x0, y0, x1, y1, fill) { const [a, b] = S(x0, y0), [c, d] = S(x1, y1); g.fillStyle = fill; g.fillRect(Math.round(a), Math.round(b), Math.round(c) - Math.round(a), Math.round(d) - Math.round(b)); }
     function frame(g, x0, y0, x1, y1, fill, line) { rect(g, x0, y0, x1, y1, line); const [a, b] = S(x0, y0), [c, d] = S(x1, y1); g.fillStyle = fill; g.fillRect(Math.round(a) + 1, Math.round(b) + 1, Math.round(c) - Math.round(a) - 2, Math.round(d) - Math.round(b) - 2); }
+    // a 1-px line filled with a sparse 4×4 dither vanishes on the dither's empty rows and columns (calm joints: 2 of 16 cells lit, so one
+    // row and one column in four had none): joints were the "gridlines" that appeared and disappeared. Lines get their own even dotting
+    function lineDots(g) { const fs = g.fillStyle; for (const P of [pats, pats && pats.full]) { if (!P) continue; for (const k of ['ink', 'paper']) { const i = P[k].indexOf(fs); if (i < 0) continue; const d = k === 'ink' && P.cap ? Math.round(i * P.cap) : i; return d >= 16 ? null : { fs, solid: P[k][16], every: d <= 0 ? 0 : Math.max(2, Math.round(8 / d)) }; } } return null; }
+    function hline(g, x, y, len, D) { if (!D) return g.fillRect(x, y, len, 1); if (!D.every) return; g.fillStyle = D.solid; const e = D.every; for (let p = x + ((-(x + SX + y + SY) % e) + e) % e; p < x + len; p += e) g.fillRect(p, y, 1, 1); g.fillStyle = D.fs; }
+    function vline(g, x, y, len, D) { if (!D) return g.fillRect(x, y, 1, len); if (!D.every) return; g.fillStyle = D.solid; const e = D.every; for (let p = y + ((-(y + SY + x + SX) % e) + e) % e; p < y + len; p += e) g.fillRect(x, p, 1, 1); g.fillStyle = D.fs; }
     function joints(g, x0, y0, x1, y1, rw, rh, off) { const [v0, w0, v1, w1] = view(); x0 = Math.max(x0, v0); y0 = Math.max(y0, w0); x1 = Math.min(x1, v1); y1 = Math.min(y1, w1); if (x0 >= x1 || y0 >= y1 || Z(rh) < 2.5) return;   // a running bond: rows of rh, joints every rw, rows offset by off (half a brick by default)
-      off = off ?? rw / 2; for (let r = Math.floor(y0 / rh); r * rh < y1; r++) { const wy = r * rh, [, b] = S(0, Math.max(wy, y0)), [, d] = S(0, Math.min(wy + rh, y1)), [a] = S(x0, 0), [c] = S(x1, 0); if (wy >= y0) g.fillRect(Math.round(a), Math.round(b), Math.round(c - a), 1);
-        const o = ((r * off) % rw + rw) % rw; for (let wx = Math.floor((x0 - o) / rw) * rw + o; wx < x1; wx += rw) if (wx > x0) g.fillRect(Math.round(S(wx, 0)[0]), Math.round(b), 1, Math.round(d - b)); } }
+      const D = lineDots(g); off = off ?? rw / 2; for (let r = Math.floor(y0 / rh); r * rh < y1; r++) { const wy = r * rh, [, b] = S(0, Math.max(wy, y0)), [, d] = S(0, Math.min(wy + rh, y1)), [a] = S(x0, 0), [c] = S(x1, 0); if (wy >= y0) hline(g, Math.round(a), Math.round(b), Math.round(c) - Math.round(a), D);
+        const o = ((r * off) % rw + rw) % rw; for (let wx = Math.floor((x0 - o) / rw) * rw + o; wx < x1; wx += rw) if (wx > x0) vline(g, Math.round(S(wx, 0)[0]), Math.round(b), Math.round(d) - Math.round(b), D); } }
     function bricks(g, x0, y0, x1, y1, lvl, P) { if (!seen(x0, y0, x1, y1)) return; if (calm) lvl = Math.min(lvl, 6); rect(g, x0, y0, x1, y1, P.ink[lvl]); g.fillStyle = P.paper[16]; joints(g, x0, y0, x1, y1, 64, 30); }
     function floorOf(g, q, P, gl) { if (!seen(q.x0, q.y0, q.x1, q.y1)) return; const l = cl(q.lvl + gl - 4, 0, 8), [x0, y0, x1, y1] = [q.x0, q.y0, q.x1, q.y1];
       if (calm) { rect(g, x0, y0, x1, y1, P.paper[16]); g.fillStyle = P.ink[5]; const sz = { flag: [300, 192], planks: [440, 66, 146], cobble: [184, 152, 92], herring: [192, 96, 64], checker: [288, 288], dirt: [360, 240] }[q.tex] || [300, 192]; joints(g, x0, y0, x1, y1, ...sz); return; }   // calm: plain floor, faint joints only
@@ -2332,7 +2382,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       if (kind === 'wind') { const wd0 = Weather.wind ? Weather.wind() : null, a = wd0 ? wd0.a : 0, f = wd0 ? wd0.f : 0.4, D = WX.drops; if (!WX.gusts) WX.gusts = []; const G = WX.gusts, n = Math.round(50 * (0.4 + k)); while (G.length < n) G.push({ x: Math.random() * lw, y: Math.random() * lh, v: 0.6 + Math.random(), len: 6 + Math.random() * 14 }); G.length = n;
         const ca = Math.cos(a), sa = Math.sin(a); for (const s of G) { const st = 5 * s.v * (0.5 + f); s.x += ca * st; s.y += sa * st; if (s.x < -30 || s.x > lw + 30 || s.y < -30 || s.y > lh + 30) { s.x = ca > 0 ? -20 : lw + 20; s.y = Math.random() * lh; } g.fillStyle = paper; for (let j = 0; j < s.len; j++) g.fillRect(Math.round(s.x - ca * j), Math.round(s.y - sa * j) - 1, 1, 3); g.fillStyle = ink; for (let j = 0; j < s.len; j++) if ((j % 7) < 5) g.fillRect(Math.round(s.x - ca * j), Math.round(s.y - sa * j), 1, 1); } }
       else if (WX.gusts) WX.gusts.length = 0;
-      if (kind === 'hum') { const pu = 0.5 + 0.5 * Math.sin(t / 300 * ((w.P && w.P.pulse) ?? 1)), st = Z((w.P && w.P.grid) ?? 96); if (st > 6) { const ox = ((-Z(cam.x) + lw / 2) % st + st) % st, oy = ((-Z(cam.y) + lh / 2) % st + st) % st; g.fillStyle = P.ink[1 + Math.round(3 * pu * (0.5 + k))]; for (let x = ox; x < lw; x += st) g.fillRect(Math.round(x), 0, 1, lh); for (let y = oy; y < lh; y += st) g.fillRect(0, Math.round(y), lw, 1); } }
+      if (kind === 'hum') { const pu = 0.5 + 0.5 * Math.sin(t / 300 * ((w.P && w.P.pulse) ?? 1)), st = Z((w.P && w.P.grid) ?? 96); if (st > 6) { const ox = ((-SX) % st + st) % st, oy = ((-SY) % st + st) % st; g.fillStyle = P.ink[1 + Math.round(3 * pu * (0.5 + k))]; for (let x = ox; x < lw; x += st) g.fillRect(Math.round(x), 0, 1, lh); for (let y = oy; y < lh; y += st) g.fillRect(0, Math.round(y), lw, 1); } }
       // lightning: when the weather strikes, the whole keep flips black for white (twice), the bolt is drawn in pixels and the floor shakes with the thunder
       const fl = w.flash || 0; if (fl > WX.lastFlash + 0.2) { WX.inv = [t, t + 110, t + 190, t + 270]; WX.bolt = (w.bolt || []).map(([x, y]) => [x / PX, y / PX]); WX.boltT = t;
         setTimeout(() => { for (const el of [floor, bg]) el.animate([{ translate: '0 0' }, { translate: '5px 2px' }, { translate: '-4px -2px' }, { translate: '3px 1px' }, { translate: '-2px 0' }, { translate: '0 0' }], { duration: 520, easing: 'ease-out' }); }, 300 + Math.random() * 500); }   // thunder comes a little after the light
