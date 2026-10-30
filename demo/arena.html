@@ -289,7 +289,12 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // ---------- words on the floor (the objects creatures act on) ----------
   const words = []; let dragging = null; applyCam();
   function addWord(text, x, y, piece) {
-    const el = document.createElement('div'); el.className = 'word' + (piece ? ' piece' : ''); el.textContent = text; const w = { text: text.toLowerCase(), el, x, y, carriedBy: null, piece: !!piece, vx: 0, vy: 0, rot: 0, vr: 0 }; words.push(w); floor.appendChild(el); place(w);
+    const el = document.createElement('div'); el.className = 'word' + (piece ? ' piece' : ''); el.textContent = text; const w = { text: text.toLowerCase(), el, x, y, carriedBy: null, piece: !!piece, vx: 0, vy: 0, rot: 0, vr: 0 }; words.push(w);
+    if (window.__lod && window.__lod.canvas()) { w._vis = 'none'; el.style.display = 'none'; }   // drawn on the words canvas; the element shows only while it needs to (hover, drag, carry, animations)
+    const anim0 = el.animate, cap0 = el.setPointerCapture;
+    el.animate = function (k, o) { const d = typeof o === 'number' ? o : (o && o.duration) || 0, it = (o && o.iterations) || 1; w._domUntil = Math.max(w._domUntil || 0, performance.now() + ((o && o.delay) || 0) + Math.min(10000, d * (isFinite(it) ? it : 4)) + 60); if (window.__lod) window.__lod.dom(w); return anim0.call(this, k, o); };
+    el.setPointerCapture = function (id) { if (window.__lod) window.__lod.dom(w); return cap0.call(this, id); };
+    floor.appendChild(el); place(w);
     el.addEventListener('pointerdown', ev => { if (w.carriedBy) return; dragging = w; el.setPointerCapture(ev.pointerId); logEvent('word_drag', { word: w.text }); });
     el.addEventListener('pointermove', ev => { if (dragging !== w) return; const p = toWorld(ev.clientX, ev.clientY); w.x = p.x; w.y = p.y; place(w); });
     el.addEventListener('pointerup', () => { const was = dragging === w; dragging = null; if (was) feedDrop(w); }); return w;
@@ -297,9 +302,9 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   const HL = ['#2b5cff', '#00b8e6', '#ffd400', '#3ddc5a', '#ff6a2b', '#b18cff'];
   function hit(w, c) { const now = performance.now(); if (now - (w.lastHit || 0) < 600) return; w.lastHit = now; const col = c.g.hlColor || HL[(c.key.length * 7 + w.text.length) % HL.length];
     w.el.animate([{ boxShadow: `0 0 0 2px ${col}`, background: col + '55' }, { boxShadow: '0 0 0 0 transparent' }], { duration: 1300, easing: 'ease-out' }); }
-  function stepped(w) { if (w.el.classList.contains('stepped')) return; w.el.classList.add('stepped'); clearTimeout(w._st); w._st = setTimeout(() => w.el.classList.remove('stepped'), 900); }
+  function stepped(w) { if (w.el.classList.contains('stepped')) return; if (window.__lod) window.__lod.dom(w); w.el.classList.add('stepped'); clearTimeout(w._st); w._st = setTimeout(() => w.el.classList.remove('stepped'), 900); }
   let _lodDirty = true;
-  function place(w) { _lodDirty = true; const x = Math.round(near(w.x, cam.x, SPACE.W) * 10) / 10, y = Math.round(near(w.y, cam.y, SPACE.H) * 10) / 10, r = (w.rot || 0).toFixed(1);   // styles are written only when something changed:
+  function place(w) { _lodDirty = true; const x = Math.round(near(w.x, cam.x, SPACE.W) * 10) / 10, y = Math.round(near(w.y, cam.y, SPACE.H) * 10) / 10, r = (w.rot || 0).toFixed(1); w._fx = x; w._fy = y; if (w._vis === 'none') { if (window.__lod) window.__lod.hidden(w); if (w._vis === 'none') return; } else if (w._dg && window.__lod) window.__lod.shown(w);   // styles are written only when something changed (and never for a hidden word):
     if (x !== w._px) { w._px = x; w.el.style.left = x + 'px'; } if (y !== w._py) { w._py = y; w.el.style.top = y + 'px'; }                                          // a pan moves the floor, not each word
     if (r !== w._pr) { w._pr = r; w.el.style.transform = 'translate(-50%,-50%) rotate(' + r + 'deg)'; } }
   // a grid of the floor's words, rebuilt once a frame, so a creature only looks at the words around it (it used to check every word)
@@ -312,10 +317,16 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // Close up, only words in or near the view are in the page at all. Zoomed out (below 45%), the words are painted in one pass on a canvas
   // that covers the view, and the DOM words are switched off; they come back as you zoom in. Dragging a word needs the close-up view.
   const LOD = (() => { const cv = document.createElement('canvas'); cv.id = 'farWords'; cv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:2;display:none'; floor.appendChild(cv); const g = cv.getContext('2d'); let far = false, lastCull = 0; const FAR = 0.45;
-    const vis = (w, on) => { const v = on ? '' : 'none'; if (w._vis !== v) { w._vis = v; w.el.style.display = v; } };
+    const vis = (w, on) => { const v = on ? '' : 'none'; if (w._vis !== v) { w._vis = v; w.el.style.display = v; if (!on) nearDirty = true; if (on) { w._px = w._py = w._pr = undefined; place(w); } } };
+    // near words (Oct 30): every floor word is drawn on one canvas with its own computed CSS look; its element is shown only while
+    // it needs to be one: hovered, dragged, carried, locked, or playing an animation. ?domwords shows every word as an element, as before
+    const CANVAS = !/[?&]domwords\b/.test(location.search), nv = document.createElement('canvas'); nv.id = 'nearWords'; nv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:3' + (CANVAS ? '' : ';display:none'); floor.insertBefore(nv, floor.firstChild); const ng = nv.getContext('2d');
+    let hoverW = null, nearDirty = true, gen = 0; const demote = [];
+    const needsDom = (w, now) => { if (w.carriedBy || w === dragging || w === hoverW || (w._domUntil || 0) > now || now - (w._moveT || 0) < 700) return true; const cn = w.el.className; return cn.includes('locked') || cn.includes('carried') || cn.includes('stepped'); };
     function view() { const { w: vw, h: vh } = viewSize(); return { L: cam.x - vw / 2 / cam.z, T: cam.y - vh / 2 / cam.z, W: vw / cam.z, H: vh / cam.z, vw, vh }; }
     function cull() { const v = view(), m = 160 / cam.z; lastCull = performance.now();
-      for (const w of words) { if (w.carriedBy || w === dragging || w.el.classList.contains('locked')) { vis(w, true); continue; } const x = w._px ?? near(w.x, cam.x, SPACE.W), y = w._py ?? near(w.y, cam.y, SPACE.H); vis(w, !far && x > v.L - m && x < v.L + v.W + m && y > v.T - m && y < v.T + v.H + m); } }
+      for (const w of words) { if (w.carriedBy || w === dragging || w.el.classList.contains('locked')) { vis(w, true); continue; } const x = w._fx ?? near(w.x, cam.x, SPACE.W), y = w._fy ?? near(w.y, cam.y, SPACE.H); const inV = !far && x > v.L - m && x < v.L + v.W + m && y > v.T - m && y < v.T + v.H + m;
+        if (CANVAS && inV && w._vis === '' && !needsDom(w, lastCull)) { if (!w._dem) { w._dem = true; demote.push(w); } continue; } vis(w, inV && (!CANVAS || needsDom(w, lastCull))); } }
     let camDirty = true, lastDraw = 0, LODV = 0;   // LODV: bumped when the text look changes, so cached word styles are read again
     function props(w) { const cls = w.el.className; if (w._lc === cls && w._lv === LODV && w._lp) return w._lp; const plain = cls.includes('terrain') || cls.includes('trash'), fs = cls.includes('crumb') ? 10 : cls.includes('piece') ? 11 : plain ? 12 : 13, text = w.el.textContent;
       w._lc = cls; w._lv = LODV; return w._lp = { plain, fs, text, wdt: text.length * fs * 0.6 + (plain ? 6 : 16), font: `${fs}px ${plain ? (w.el.style.fontFamily || 'Georgia,serif') : 'ui-monospace,Menlo,monospace'}`, color: w.el.style.color || '', bg: plain ? null : cls.includes('lava') ? '#ffb27a' : cls.includes('piece') ? '#dfe8ff' : cls.includes('crumb') ? '#ffd6e8' : '#ffe9a8', alpha: cls.includes('trash') ? 0.55 : 1 }; }
@@ -328,9 +339,62 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         if (P.bg) { if (fill !== P.bg) g.fillStyle = fill = P.bg; g.fillRect(-P.wdt / 2, -P.fs * 0.8, P.wdt, P.fs * 1.6); }
         if (text || P.plain) { if (font !== P.font) g.font = font = P.font; const col = P.color || (P.plain ? ink : '#333'); if (fill !== col) g.fillStyle = fill = col; if (alpha !== P.alpha) g.globalAlpha = alpha = P.alpha; g.fillText(P.text, 0, 1); } }
       g.globalAlpha = 1; _lodDirty = false; camDirty = false; lastDraw = performance.now(); }
-    function onCam() { const nf = cam.z < FAR; if (nf !== far) { far = nf; cv.style.display = far ? '' : 'none'; } cull(); camDirty = true; }
-    function frame() { const now = performance.now(); if (far) { if (camDirty || (_lodDirty && now - lastDraw > 100)) draw(); if (now - lastCull > 1000) cull(); } else if (now - lastCull > 250) cull(); }   // zoomed out, moving words redraw 10 times a second; the camera redraws at once
-    return { onCam, frame, far: () => far, restyled: () => { LODV++; camDirty = true; } }; })();
+
+    // the look of a word, read once per class/inline style/theme from a hidden probe element, so the canvas copies the CSS exactly
+    const SC = new Map(), px = s => parseFloat(s) || 0; let ctxKey = '';
+    try { document.fonts.addEventListener('loadingdone', () => { SC.clear(); _lodDirty = true; }); } catch (e) {}
+    function sty(w) { const el = w.el, s = el.style, key = el.className + '|' + s.color + '|' + s.font + '|' + s.fontSize + '|' + s.fontFamily + '|' + s.fontWeight + '|' + s.opacity + '|' + s.background + '|' + ctxKey; let P = SC.get(key); if (P) return P;
+      const p = document.createElement('div'); p.className = el.className.replace(/\b(locked|stepped|carried)\b/g, ''); for (const k of ['color', 'font', 'fontSize', 'fontFamily', 'fontWeight', 'opacity', 'background']) if (s[k]) p.style[k] = s[k];
+      p.style.left = '-99999px'; p.style.top = '0'; p.style.visibility = 'hidden'; p.style.animation = 'none'; p.textContent = 'Mg'; floor.appendChild(p);
+      const cs = getComputedStyle(p), cb = getComputedStyle(p, '::before'), bw = cs.borderTopStyle === 'none' ? 0 : px(cs.borderTopWidth), H = p.offsetHeight, font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      let before = null; const bc = cb.content; if (bc && bc !== 'none' && bc !== 'normal') before = { text: bc.replace(/^["']|["']$/g, ''), font: `${cb.fontStyle} ${cb.fontWeight} ${cb.fontSize} ${cb.fontFamily}`, color: cb.color };
+      let sh = null; const bs = cs.boxShadow; if (bs && bs !== 'none') { const m = bs.match(/^(rgba?\([^)]*\)|#\w+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px/); if (m) sh = { c: m[1], x: +m[2], y: +m[3] }; }
+      ng.font = font; const fm = ng.measureText('Mg'), bg = cs.backgroundColor;
+      P = { font, color: cs.color, bg: bg === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(bg) ? null : bg, bw, bc: cs.borderTopColor, rad: px(cs.borderTopLeftRadius),
+        pl: px(cs.paddingLeft), pr: px(cs.paddingRight), pt: px(cs.paddingTop), pb: px(cs.paddingBottom), H, ls: cs.letterSpacing === 'normal' ? '0px' : cs.letterSpacing, op: +cs.opacity, sh, before, und: cs.textDecorationLine.includes('underline') };
+      const lh = H - 2 * bw - P.pt - P.pb; P.base = bw + P.pt + (lh - (fm.fontBoundingBoxAscent + fm.fontBoundingBoxDescent)) / 2 + fm.fontBoundingBoxAscent; p.remove(); if (SC.size > 500) SC.clear(); SC.set(key, P); return P; }
+    function box(g, x, y, W, H, r) { g.beginPath(); if (r) g.roundRect(x, y, W, H, r); else g.rect(x, y, W, H); }
+    function drawNear(now) { const v = view(), dpr = qDPR(), pw = Math.round(v.vw * dpr), ph = Math.round(v.vh * dpr); if (nv.width !== pw || nv.height !== ph) { nv.width = pw; nv.height = ph; }
+      nv.style.left = v.L + 'px'; nv.style.top = v.T + 'px'; nv.style.width = v.W + 'px'; nv.style.height = v.H + 'px';
+      const k = dpr * cam.z, g = ng; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pw, ph); g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+      ctxKey = arenaEl.className + (isDark() ? 'd' : 'l') + (document.documentElement.dataset.theme || '') + LODV; let font = '', ls = ''; gen++;
+      for (const w of demote) { w._dem = false; if (!needsDom(w, now) && words.includes(w)) { w._vis = 'none'; w.el.style.display = 'none'; } } demote.length = 0;
+      for (const w of words) { if (w.carriedBy) continue; const x = w._fx ?? near(w.x, cam.x, SPACE.W), y = w._fy ?? near(w.y, cam.y, SPACE.H); if (x < v.L - 200 || x > v.L + v.W + 200 || y < v.T - 40 || y > v.T + v.H + 40) continue;
+        if (needsDom(w, now)) { vis(w, true); continue; } if (w._vis !== 'none') continue;
+        const P = sty(w), text = w.el.textContent; if (font !== P.font) g.font = font = P.font; if (ls !== P.ls) g.letterSpacing = ls = P.ls;
+        if (w._tt !== text || w._tf !== P) { w._tt = text; w._tf = P; w._tw = g.measureText(text).width; w._bwid = 0; if (P.before) { g.font = P.before.font; w._bwid = g.measureText(P.before.text).width; g.font = font; } }
+        const W = w._tw + w._bwid + P.pl + P.pr + 2 * P.bw, H = P.H; w._W = W; w._H = H; w._dg = gen; w._wx = w.x; w._wy = w.y; w._wr = w.rot || 0;
+        const r = w.rot ? w.rot * Math.PI / 180 : 0, c = Math.cos(r) * k, sn = Math.sin(r) * k; g.setTransform(c, sn, -sn, c, (x - v.L) * k, (y - v.T) * k);
+        g.globalAlpha = P.op; const x0 = -W / 2, y0 = -H / 2;
+        if (P.sh) { g.fillStyle = P.sh.c; box(g, x0 + P.sh.x, y0 + P.sh.y, W, H, P.rad); g.fill(); }
+        if (P.bg) { g.fillStyle = P.bg; box(g, x0, y0, W, H, P.rad); g.fill(); }
+        if (P.bw) { g.lineWidth = P.bw; g.strokeStyle = P.bc; box(g, x0 + P.bw / 2, y0 + P.bw / 2, W - P.bw, H - P.bw, P.rad ? Math.max(0, P.rad - P.bw / 2) : 0); g.stroke(); }
+        let tx = x0 + P.bw + P.pl; const by = y0 + P.base;
+        if (P.before) { g.font = P.before.font; g.fillStyle = P.before.color; g.fillText(P.before.text, tx, by); tx += w._bwid; g.font = font; }
+        const col = P.color; g.fillStyle = col; g.fillText(text, tx, by);
+        if (P.und) { g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([1, 2]); g.beginPath(); g.moveTo(tx, by + 2.5); g.lineTo(tx + w._tw, by + 2.5); g.stroke(); g.setLineDash([]); } }
+      g.globalAlpha = 1; g.setTransform(1, 0, 0, 1, 0, 0); nearDirty = false; }
+    // a drawn word that moves (kicked, carried off, pushed by wind) is an element while it moves, so the canvas only redraws when the set changes
+    function hidden(w) { if (w._dg === gen && (w.x !== w._wx || w.y !== w._wy || (w.rot || 0) !== w._wr)) { w._moveT = performance.now(); vis(w, true); nearDirty = true; } }
+    // an element over its own canvas copy (hover, footstep, flash) needs no redraw; once it moves off it, the copy is cleared
+    function shown(w) { if (w._dg === gen && !nearDirty && (w.x !== w._wx || w.y !== w._wy || (w.rot || 0) !== w._wr)) nearDirty = true; }
+    // the word under the pointer becomes an element again, so hovering, dragging and clicking it work exactly as before
+    function wordAt(cx, cy) { const p = toWorld(cx, cy); for (let i = words.length - 1; i >= 0; i--) { const w = words[i]; if (w.carriedBy || !w._W) continue; const dx = near(w.x, p.x, SPACE.W) - p.x, dy = near(w.y, p.y, SPACE.H) - p.y; if (dx > 160 || dx < -160 || dy > 40 || dy < -40) continue;
+        const r = -(w.rot || 0) * Math.PI / 180, lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r); if (Math.abs(lx) <= w._W / 2 + 1 && Math.abs(ly) <= w._H / 2 + 1) return w; } return null; }
+    const floorish = t => t === arenaEl || t === floor || (t && t.classList && t.classList.contains('word'));
+    function setHover(w) { if (w === hoverW) return; const o = hoverW; hoverW = w; if (w) vis(w, true); if (o && !needsDom(o, performance.now())) vis(o, false); }
+    let hq = null;
+    arenaEl.addEventListener('pointermove', e => { if (!CANVAS || far || e.pointerType === 'touch') return; if (hq) { hq.x = e.clientX; hq.y = e.clientY; hq.ok = floorish(e.target); return; }
+      hq = { x: e.clientX, y: e.clientY, ok: floorish(e.target) }; requestAnimationFrame(() => { const q = hq; hq = null; if (dragging) return; setHover(q.ok ? wordAt(q.x, q.y) : null); }); }, { passive: true });
+    arenaEl.addEventListener('pointerleave', () => setHover(null));
+    arenaEl.addEventListener('pointerdown', e => { if (!CANVAS || far || e.button !== 0 || !floorish(e.target) || e.target.classList.contains('word')) return; const w = wordAt(e.clientX, e.clientY); if (!w) return;   // touch, or a click with no hover before it
+      e.stopImmediatePropagation(); e.preventDefault(); setHover(w); dragging = w; logEvent('word_drag', { word: w.text });
+      const mv = ev => { if (dragging !== w) return; const p = toWorld(ev.clientX, ev.clientY); w.x = p.x; w.y = p.y; place(w); }, up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); const was = dragging === w; dragging = null; if (was) feedDrop(w); };
+      addEventListener('pointermove', mv); addEventListener('pointerup', up); }, true);
+    function onCam() { const nf = cam.z < FAR; if (nf !== far) { far = nf; cv.style.display = far ? '' : 'none'; if (CANVAS) nv.style.display = far ? 'none' : ''; } cull(); camDirty = true; }
+    function frame() { const now = performance.now(); if (far) { if (camDirty || (_lodDirty && now - lastDraw > 100)) draw(); if (now - lastCull > 1000) cull(); }
+      else { if (now - lastCull > 250) cull(); if (CANVAS && (camDirty || (nearDirty && now - lastDraw > 50) || demote.length > 40 || now - lastDraw > 500)) { drawNear(now); camDirty = false; lastDraw = now; } } }   // the canvas redraws when the camera moves or a word joins or leaves it, else twice a second (class and text changes)   // zoomed out, moving words redraw 10 times a second; the camera redraws at once
+    return { onCam, frame, far: () => far, canvas: () => CANVAS && !far, dom: w => { if (!far) vis(w, true); }, hidden, shown, wordAt, restyle: () => { nearDirty = true; }, restyled: () => { LODV++; camDirty = true; nearDirty = true; } }; })();
   window.__lod = LOD;
   function findWord(text, from) { const f = findWord0(text, from); if (f || !text) return f || null; const t = text.toLowerCase().trim(); return (window.__travel && window.__travel.on() && window.__travel.find(t, from)) || (window.__capture && window.__capture.on() && !window.__traveling && window.__capture.find(t, from)) || null; }
   function findWord0(text, from) { if (!text) return null; const t = text.toLowerCase().trim(), byDist = a => from ? a.sort((x, y) => dist(x, from) - dist(y, from)) : a; return byDist(words.filter(w => !w.carriedBy && w.text === t))[0] || byDist(words.filter(w => !w.carriedBy && (w.text.startsWith(t) || t.startsWith(w.text)) && Math.min(w.text.length, t.length) >= 3))[0] || null; }
