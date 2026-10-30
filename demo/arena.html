@@ -516,7 +516,16 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       return { k, s: 1 - 0.24 * k, a: 1 - 0.45 * k, jx: (Math.random() - .5) * 1.4 * k, jy: (Math.random() - .5) * 1.0 * k }; }
     function peek(g, c, t, k) { const top = c.y - (Math.max(c.g.bodyL, c.g.bodyW) + 10) * (c.size || 1); g.globalAlpha = 0.9 * k; emoAt(g, '🫣', c.x, top + Math.sin(t / 240) * 1.5, 16, true); g.globalAlpha = 1; }
     const marks = [];   // 💤 and 🫣 go on top of every creature, so they are drawn after all of them
-    function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c); g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t);
+    // rave mode: a beat-synced dance per body (chips bob, triangles spin, orbs bounce, long legs high-step, the rest sway); idle-rave.js sets c.dance
+    function dancePose(g, c) { const d = c.dance, R = window.__rave; if (!d || !R) return; const ph = R.phase(), k = d.k ?? 1, s = c.size || 1, hit = Math.pow(1 - ph, 3);
+      if (d.style === 'spin') { const a = (d.turn || 0) + hit * 0.9 * k; g.translate(c.x, c.y); g.rotate(a); g.translate(-c.x, -c.y); }
+      else if (d.style === 'bounce') { const y = -Math.abs(Math.sin(ph * Math.PI)) * 9 * k * s, sq = 1 + 0.12 * hit * k; g.translate(c.x, c.y + y); g.scale(sq, 2 - sq); g.translate(-c.x, -c.y); }
+      else if (d.style === 'high') { const y = -Math.max(0, Math.sin(ph * Math.PI * 2)) * 7 * k * s; g.translate(0, y); }
+      else if (d.style === 'bob') g.translate(0, hit * 5 * k * s);
+      else if (d.style === 'mosh') g.translate((Math.random() - .5) * 5 * k, hit * 4 * k);
+      else if (d.style === 'ears') g.translate((Math.random() - .5) * 1.2, 0);
+      else { const a = Math.sin(ph * Math.PI * 2) * 0.16 * k; g.translate(c.x, c.y); g.rotate(a); g.translate(-c.x, -c.y); } }
+    function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c); g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t); if (c.dance && !hp) dancePose(g, c);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
       legs(g, c, hp); body(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
     const beams = [];
@@ -531,7 +540,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function plainBeam(g, c, T, t) { const hue = c.g.laserHue ?? 200, n = T.text.length; g.strokeStyle = `hsla(${hue},95%,60%,.55)`; g.lineWidth = 1; g.beginPath(); g.moveTo(c.x + c.ox, c.y + c.oy); g.lineTo(T.x, T.y); g.moveTo(T.x + n * 4.2 + 14, T.y); g.ellipse(T.x, T.y, n * 4.2 + 14, 13, 0, 0, Math.PI * 2); g.stroke(); }
     function end(t) { const g = crit; beams.forEach(([c, T, tt], i) => i < 24 ? drawBeam(g, c, T, tt) : plainBeam(g, c, T, tt)); beams.length = 0; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
     // the same drawing onto another canvas (reel replays): body, legs, hiding pose, 💤/🫣, hangry glow
-    function drawTo(g, c, t, hg) { const hp = hidePose(c); g.save(); if (hg) hangryGlow(g, c, t);
+    function drawTo(g, c, t, hg) { const hp = hidePose(c); g.save(); if (hg) hangryGlow(g, c, t); if (c.dance && !hp) dancePose(g, c);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
       legs(g, c, hp); body(g, c, t); g.restore(); g.save(); if (c.state === 'sleep') zz(g, c, t); else if (hp) peek(g, c, t, hp.k); g.restore(); }
     return { begin, draw, end, hidePose, laser, drawTo };
@@ -720,10 +729,15 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // mind genes (the stream in the mind tab): base speed in chars/s, burstiness 0..1, glyph style; seeded from the id until mutated
   function mindGenes(g) { let h = 2166136261; for (const ch of String(g.id || g.name || 'x')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
     return { rate: g.mrate ?? 25 + (h % 1000) / 1000 * 175, burst: g.mburst ?? ((h >>> 10) % 100) / 100, glyph: g.mglyph ?? (h >>> 17) % 5 }; }
+  // music taste (rave mode, idle-rave.js): favourite tempo, how loud it can take it, and what it listens for (drums, bass, melody);
+  // seeded from the id until the first mutation, like the mind genes
+  function musicGenes(g) { g = g || {}; let h = 2166136261; for (const ch of String(g.id || g.name || 'x') + '#music') { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+    const r = k => ((h >>> k) % 1000) / 1000; return { tempo: g.mTempo ?? Math.round(80 + r(0) * 70), loud: g.mLoud ?? +(0.3 + r(3) * 0.65).toFixed(2), drums: g.mDrums ?? +r(7).toFixed(2), bass: g.mBass ?? +r(11).toFixed(2), melody: g.mMelody ?? +r(15).toFixed(2) }; }
   function mutate(key, rate, parent) {
     const p = parent || genomes[key], g = { ...p }, r = rate || 0.14; g.parent = p.id; g.id = key + '-' + Date.now().toString(36).slice(-5); g.born = Date.now(); g.name = p.name;
     const CL = { l1: [8, 60], l2: [8, 64], bodyL: [8, 46], bodyW: [6, 36], step: [6, 40], speed: [0.4, 3], fidget: [0.1, 3] };   // keep mutants creature-sized
     for (const f of ['l1', 'l2', 'bodyL', 'bodyW', 'step', 'speed', 'fidget']) g[f] = +Math.max(CL[f][0], Math.min(CL[f][1], p[f] * Math.exp(gauss() * r))).toFixed(2);
+    { const mu = musicGenes(p), cl = (v, a, b) => Math.max(a, Math.min(b, v)); g.mTempo = Math.round(cl(mu.tempo + gauss() * r * 60, 60, 170)); g.mLoud = +cl(mu.loud + gauss() * r * 0.6, 0.05, 1).toFixed(2); for (const k of ['drums', 'bass', 'melody']) g['m' + k[0].toUpperCase() + k.slice(1)] = +cl(mu[k] + gauss() * r * 0.7, 0, 1).toFixed(2); }
     { const m = mindGenes(p); g.mrate = +Math.max(8, Math.min(400, m.rate * Math.exp(gauss() * r))).toFixed(1); g.mburst = +Math.max(0, Math.min(1, m.burst + gauss() * r * 0.8)).toFixed(2); g.mglyph = Math.random() < 0.08 ? Math.floor(Math.random() * 5) : m.glyph; }
     if (Math.random() < 0.15) g.body = pick(['chip', 'box', 'orb', 'tri', 'seg', 'star'].filter(b => b !== p.body));
     if (Math.random() < 0.18) { const acts = (p.actions || DEFAULT_GENOMES[key].actions).slice(); const out = Math.floor(Math.random() * acts.length), cand = ACTION_POOL.filter(a => !acts.includes(a)); if (cand.length) acts[out] = pick(cand); g.actions = acts; }
@@ -1055,6 +1069,9 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
         c.name = 'Bench ' + i; c.bench = true; c.born = Date.now() - 1e9; creatures.push(c); made.push(c); }
       return creatures.length; },
     count: () => creatures.length };
+  window.__raveHooks = { goto, hideFor, musicGenes, inView: (c, m = 120) => { const vs = viewSize(), z = cam.z || 1; return Math.abs(wd(cam.x, c.x, SPACE.W)) < vs.w / 2 / z + m && Math.abs(wd(cam.y, c.y, SPACE.H)) < vs.h / 2 / z + m; }, cam: () => ({ x: cam.x, y: cam.y }),
+    say: (c, t) => { c.bub.textContent = t; c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2400); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); },
+    log: (type, x) => logEvent(type, x), timid: c => c.g.timid ?? 0.6 };
   window.__arena = { raw: () => creatures, sendGuestsHome: () => creatures.filter(c => c.guest).forEach(c => Connect.goHome(c)), understand: (a, i) => understand(a, i == null ? null : creatures[i]), act: (i, o, a) => act(creatures[i], o, a), genomes: () => genomes, mutate: k => applyGenome(k, mutate(k), 'mutate'), addWord, words: () => words.map(w => ({ text: w.text, carriedBy: w.carriedBy && w.carriedBy.name, piece: w.piece })), creatures: () => creatures.map(c => ({ name: c.name, state: c.state, carrying: c.carrying && c.carrying.text, drives: snap(c), x: Math.round(c.x), y: Math.round(c.y) })), handleChat, classify, select: i => select(creatures[i]), clone: i => cloneC(creatures[i]), cam: (x, y, z) => { cam.x = x; cam.y = y; if (z) cam.z = z; applyCam(); }, terrain: v => terrainFrom(v), count: () => ({ creatures: creatures.length, words: words.length, things: (typeof things !== 'undefined' ? things.length : 0) }), events: () => events.filter(e => e.page === 'arena') };
   // ---------- collection: kept creatures, compare two, release visitors into the arena ----------
   let collection = (() => { try { return JSON.parse(localStorage.getItem('arena.collection') || '[]'); } catch (e) { return []; } })();
@@ -1396,7 +1413,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     $('#ccard').innerHTML = `<input class="cn" value="${c.name.replace(/"/g, '&quot;')}" title="rename (the name you choose teaches its family's namer)"> <button class="nn" title="a new name in its family's style (${NAME_FAMS[nameFamily(g, famKey(c))] || ''})">✦</button> <span class="sw" style="background:hsl(${g.hue},70%,60%)"></span> <small class="k">${NAME_FAMS[nameFamily(g, famKey(c))] || ''}</small><br>
       <span class="k">body</span> ${g.body} · ${g.legs} legs${g.wings ? ' · wings' : ''} · size ${(c.size || 1).toFixed(2)} · <span class="k">age</span> ${age} min · <span class="k">id</span> ${g.id || c.key}<br>
       <span class="k">job</span> ${JOB_NAMES[jobOf(c)] || jobOf(c)}${g.head ? ' (' + g.head + ')' : ''} · <span class="k">can</span> ${c.options.filter(o => o !== 'greet').join(', ')}${['counter', 'math'].includes(jobOf(c)) ? ledgerLine(c) : ''}${jobOf(c) === 'designer' ? portfolioLine(c) : ''}<br>
-      <span class="k">eats</span> ${DIETS[dietOf(c)].what}${DIET[jobOf(c)] && !/^nothing/.test(DIET[jobOf(c)]) && !['hoard', 'designer', 'counter', 'math'].includes(jobOf(c)) ? ' · <span class="k">works on</span> ' + DIET[jobOf(c)] : ''} · <span class="k">dislikes</span> words with “${g.dislike || (c.voiceKey === 'crawly' ? 'z' : 'x')}” · <span class="k">meals</span> ${c.meals || 0}${c.sickUntil > Date.now() ? ' · <b>feels sick</b>' : ''}<br>
+      <span class="k">eats</span> ${DIETS[dietOf(c)].what}${DIET[jobOf(c)] && !/^nothing/.test(DIET[jobOf(c)]) && !['hoard', 'designer', 'counter', 'math'].includes(jobOf(c)) ? ' · <span class="k">works on</span> ' + DIET[jobOf(c)] : ''} · <span class="k">dislikes</span> words with “${g.dislike || (c.voiceKey === 'crawly' ? 'z' : 'x')}” · <span class="k">meals</span> ${c.meals || 0}${c.sickUntil > Date.now() ? ' · <b>feels sick</b>' : ''}<br>${window.__rave ? window.__rave.cardLine(c) : ''}
       <span class="k">done</span> ${st.work || 0} jobs, fetched ${st.fetch || 0}, stole ${st.steal || 0} · <span class="k">hangs out with</span> ${company}<br>
       <span class="k">wanderlust</span> ${g.wander ?? '–'} · <span class="k">flocking</span> ${g.social ?? '–'} · <span class="k">speed</span> ${(+g.speed).toFixed(2)} · <span class="k">loves images</span> ${imgLove(g).toFixed(2)}${(c.stats || {}).admired ? ' (looked at pictures ' + c.stats.admired + '×)' : ''}${c.carrying ? ' · <span class="k">carrying</span> “' + c.carrying.text + '”' : ''}`;
     if (window.__life) window.__life.card(c, $('#clife')); if (window.__reels) window.__reels.cardRow(c, $('#creels')); $('#ccard .cn').addEventListener('change', e => { const n = e.target.value.trim().slice(0, 28); if (!n) return; giveName(c, n, true); }); $('#ccard .nn').addEventListener('click', () => { const n = styleName(nameFamily(c.g, famKey(c))); if (n) { giveName(c, n, false); renderCard(c); } }); }
@@ -2932,7 +2949,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // Reels play the clip itself (the same creature drawing, legs and all) instead of a still scene when there is one.
   const Replay = (() => {
     const HZ = 125, PRE = 6000, POST = 4000, R = 400, MAXC = 12, MAXW = 90, KEEP = 300, KEEP_KB = 8192, HARD = 600, HARD_KB = 16384, PER_H = 40;   // Oct 30: 60 clips filled in 27 min (mostly thefts) and reels lost their replays
-    const W8 = { steal: 4, robbed: 4.5, disaster: 5, friend: 5, first: 5, hangry: 3.5, rename: 4, metamorphosis: 5, evolve: 3, picked_up: 3, feel: 2.5, chart: 3.5, scared: 3 };
+    const W8 = { dance: 3.5, steal: 4, robbed: 4.5, disaster: 5, friend: 5, first: 5, hangry: 3.5, rename: 4, metamorphosis: 5, evolve: 3, picked_up: 3, feel: 2.5, chart: 3.5, scared: 3 };
     const STRONG = new Set(Object.keys(W8));
     const ring = [], active = [], lastBy = new Map(); let lastStart = 0, lastScare = 0, lastTheft = 0, ver = 0;
     const THEFT = new Set(['steal', 'robbed']);
@@ -3127,8 +3144,8 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   const Reels = (() => {
     const esc = t => String(t ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
     const plain = h => String(h || '').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-    const REEL_KINDS = { life: "one creature's first days", friends: 'two friends', weather: 'a stretch of weather (storms, rain, fog, wind, hum, static)', disaster: 'a disaster and how everyone took it', place: 'days in another place', count: 'a day of counting', design: 'a day of designing', best: 'the best of today' };
-    const KW = { hangry: 3.5, heal: 3, first: 5, friend: 5, disaster: 5, metamorphosis: 5, evolve: 4, rename: 4, world_leave: 3, world_return: 3, robbed: 3, picked_up: 3, whisper: 3, feel: 2.5, steal: 2, pic: 3, admire: 2, eat_image: 3, work: 1.2, task: 1, day: 0.6, spit: 1.5, sick: 2.5, wake: 0.5, rest: 2, inspector_task: 2, world: 2.5 };
+    const REEL_KINDS = { life: "one creature's first days", friends: 'two friends', weather: 'a stretch of weather (storms, rain, fog, wind, hum, static)', disaster: 'a disaster and how everyone took it', place: 'days in another place', count: 'a day of counting', design: 'a day of designing', best: 'the best of today', rave: 'a rave: who danced, who left, who hid from the strobe' };
+    const KW = { dance: 3.5, hangry: 3.5, heal: 3, first: 5, friend: 5, disaster: 5, metamorphosis: 5, evolve: 4, rename: 4, world_leave: 3, world_return: 3, robbed: 3, picked_up: 3, whisper: 3, feel: 2.5, steal: 2, pic: 3, admire: 2, eat_image: 3, work: 1.2, task: 1, day: 0.6, spit: 1.5, sick: 2.5, wake: 0.5, rest: 2, inspector_task: 2, world: 2.5 };
     const WXT = { storm: ['The great storm', 'A packet storm'], static: ['Static in the air', 'Static again'], bitrain: ['Rainy days', 'Rain'], fog: ['Lost in the fog', 'Fog'], wind: ['A windy day', 'Wind'], hum: ['The day of the hum', 'Humming'] };
     const DAY = 86400000, now = () => Date.now(), dkey = t => { const d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
     const when = t => new Date(t).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }), dayName = t => new Date(t).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
@@ -3188,6 +3205,11 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       // another place (Gloamhold, a visited page): days there
       const P = {}; for (const x of E) { const p = (x.e.s || {}).pl; if (p && p !== 'home') (P[p] = P[p] || []).push(x); }
       for (const [p, xs] of Object.entries(P)) { const items = pick(xs, { min: 6, max: 10, per: 3 }); if (items) out.push({ key: 'pl:' + p, kind: 'place', title: (/gloam/i.test(p) ? 'Nights in ' : 'Days in ') + p, sub: new Set(xs.map(x => x.n)).size + ' creatures were there', items, who: [...new Set(items.map(x => x.n))] }); }
+      // raves: runs of dance memories (a gap of 20 minutes ends a run); at night it is "the night of the rave"
+      { const xs = E.filter(x => x.e.k === 'dance').sort((a, b) => a.e.t - b.e.t), runs = []; let r = []; for (const x of xs) { if (r.length && x.e.t - r[r.length - 1].e.t > 1200000) { runs.push(r); r = []; } r.push(x); } if (r.length) runs.push(r);
+        for (const r of runs) { const t0 = r[0].e.t, t1 = r[r.length - 1].e.t, near = E.filter(x => x.e.t >= t0 - 60000 && x.e.t <= t1 + 300000), items = pick(near.map(x => ({ ...x, bonus: x.e.k === 'dance' ? 3 : 0 })), { min: 5, max: 10, per: 3 }); if (!items) continue;
+          const night = ((x => { const h = new Date(x).getHours(); return h >= 20 || h < 5; })(t0)) || (r.some(x => ((x.e.s || {}).day ?? 0) > 0.55 && ((x.e.s || {}).day ?? 0) < 0.95));
+          out.push({ key: 'rave:' + Math.round(t0 / 60000), kind: 'rave', title: night ? 'The night of the rave' : 'The rave, ' + when(t0), sub: new Set(r.map(x => x.n)).size + ' danced', items, who: [...new Set(items.map(x => x.n))] }); } }
       // a day of counting, a day of designing
       for (const [k, kind, title] of [['work:count|work:sum|work:chart', 'count', 'A day of counting'], ['work:design|work:redesign|work:piece|work:gather', 'design', 'A day of designing']]) { const re = new RegExp('^(' + k + ')$'), xs = E.filter(x => dkey(x.e.t) === today && re.test(String(x.e.g)));
         const items = pick(xs.map(x => ({ ...x, sc: 2 + Math.log2(x.e.n || 1) + (x.e.ws ? 0.5 : 0) + Math.random() * 0.2 })), { min: 5, max: 9, per: 4 }); if (items) out.push({ key: kind + ':' + today, kind, title, sub: dayName(T), items, who: [...new Set(items.map(x => x.n))] }); }
@@ -3238,7 +3260,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     let cur = null, idx = -1, paused = false, timer = 0, left = 0, t0 = 0, front = 0, raf = 0, dur = 5200; const SLIDE = 5200, TITLE = 3200;
     const rpc = pl.querySelector('.rp'), RP = window.__replay ? window.__replay.player(rpc) : null;
     // stills or replays (Oct 30, Nico likes both): each kind leans one way, a slide's pick is fixed per reel, and the player has a toggle
-    const LEAN = { life: 0.35, friends: 0.85, weather: 0.9, disaster: 0.9, place: 0.6, count: 0.5, design: 0.5, best: 0.6 }, STY = ['mixed', 'replays', 'stills'];
+    const LEAN = { rave: 0.9, life: 0.35, friends: 0.85, weather: 0.9, disaster: 0.9, place: 0.6, count: 0.5, design: 0.5, best: 0.6 }, STY = ['mixed', 'replays', 'stills'];
     let style = (() => { try { const v = localStorage.getItem('arena.reelStyle'); return STY.includes(v) ? v : 'mixed'; } catch (e) { return 'mixed'; } })();
     function useClip(r, i) { if (style === 'stills') return false; if (style === 'replays') return true; let h = 2166136261; for (const ch of r.id + ':' + i) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h / 4294967296 < (LEAN[r.kind] ?? 0.6); }
     function styleBtn() { const b = pl.querySelector('[data-r=style]'); if (b) b.textContent = { mixed: '◐ mixed', replays: '▶ replays', stills: '▢ stills' }[style]; }
@@ -3378,4 +3400,4 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   })();
 })();
 </script>
-<script src="idle-ai.js"></script><script src="idle-music.js"></script></body></html>
+<script src="idle-ai.js"></script><script src="idle-music.js"></script><script src="idle-rave.js"></script></body></html>

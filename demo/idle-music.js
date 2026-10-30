@@ -24,9 +24,9 @@
     ch: { bass: { v: 0.8, m: 0.3 }, lead: { v: 0.5, m: 0.4 }, pad: { v: 0.5, m: 0.2 } }, fx: { filter: 1, echo: 0.2, crush: 0 },
     lights: { pulse: true, spots: true, strobe: false } });
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } };
-  const S = Object.assign({ bg: { on: false, vol: 0.5 }, deck: DECK0(), sets: [], open: false }, load() || {});
+  const S = Object.assign({ bg: { on: false, vol: 0.5 }, deck: DECK0(), sets: [], open: false, rave: false }, load() || {});
   S.deck = Object.assign(DECK0(), S.deck); S.deck.lights = Object.assign(DECK0().lights, S.deck.lights);
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ bg: S.bg, deck: S.deck, sets: S.sets, open: S.open })); } catch (e) {} };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ bg: S.bg, deck: S.deck, sets: S.sets, open: S.open, rave: S.rave })); } catch (e) {} };
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const world = () => { const w = (window.__weather && window.__weather.get && window.__weather.get()) || {}, pk = window.__places ? window.__places.kind() : 'home';
     return { kind: String(w.kind || 'clear'), k: w.k ?? 0.35, keep: pk === 'keep', day: window.__day ? window.__day.phase() : 0.25 }; };
@@ -75,6 +75,7 @@
   function deckStep(step, t) { const D = S.deck, G = D.grid, i = step % 16, bar = Math.floor(step / 16) % 4, sc = SCALES[D.scale] || SCALES.minor, chord = PROG[bar], spb = 60 / D.bpm / 4;
     if (dropAt && t >= dropAt.cut && t < dropAt.back) return;   // the silence before the drop
     if (G.kick[i]) { kick(t); beat(t, 1); } else if (i % 4 === 0) beat(t, 0.4);
+    if (i % 4 === 0) beatEv(t, i, G);
     if (G.snare[i]) snare(t); if (G.hat[i]) hat(t, i % 8 === 6); if (G.clap[i]) clap(t);
     const ch = D.ch, root = 36 + D.key;
     if (G.bass[i] && ch.bass.v > 0.01) tone(deckBus, t, mtof(deg(sc, root, chord) + (i % 8 === 4 ? 12 : 0)), { type: oscFor(ch.bass.m), dur: spb * 1.6, vol: 0.32 * ch.bass.v, d: 0.12, sus: 0.6, rel: 0.08, cut: 280 + ch.bass.m * 2600, q: 2 + ch.bass.m * 6 });
@@ -146,6 +147,13 @@
   ($('#arena') || document.body).appendChild(L);
   function lightsOn(on) { L.classList.toggle('on', on); syncLights(); }
   function syncLights() { const l = S.deck.lights, keep = world().keep; L.classList.toggle('keep', keep); L.classList.toggle('spots', !!l.spots && !keep && deck.playing && !(window.__quality && window.__quality.low)); L.classList.toggle('still', reduced()); }
+  // rave mode listens to the beat: one event per quarter note, fired when it sounds (idle-rave.js)
+  function beatEv(t, i, G) { const ms = Math.max(0, (t - ctx.currentTime) * 1000); setTimeout(() => { try { window.dispatchEvent(new CustomEvent('idle:beat', { detail: { bpm: S.deck.bpm, i, kick: !!G.kick[i], bass: !!G.bass[i] || !!G.bass[i + 1] } })); } catch (e) {} }, ms); }
+  // what the music is like right now, 0..1 each: how loud, how much drums, bass and melody (rave mode matches it against each creature's taste)
+  function features() { const D = S.deck, G = D.grid, n = k => G[k].reduce((a, b) => a + b, 0) / 16, ch = D.ch, f = D.fx;
+    const drums = Math.min(1, (n('kick') * 1.2 + n('snare') + n('hat') * 0.6 + n('clap') * 0.7) / 1.6), bass = Math.min(1, n('bass') * 1.6 * ch.bass.v * (0.6 + 0.4 * ch.bass.m)), melody = Math.min(1, (ch.lead.v * 0.7 + ch.pad.v * 0.5) * (0.4 + 0.6 * f.filter));
+    const loud = Math.min(1, D.vol * (0.45 + 0.25 * drums + 0.2 * bass + 0.1 * Math.max(ch.bass.m, ch.lead.m)) + f.crush * 0.25);
+    return { playing: deck.playing, bpm: D.bpm, loud: +loud.toFixed(2), drums: +drums.toFixed(2), bass: +bass.toFixed(2), melody: +melody.toFixed(2), strobe: !!(D.lights.strobe && !reduced()), name: D.setName || D.preset, rave: !!S.rave, dropping: !!dropAt }; }
   function beat(t, v) { const l = S.deck.lights; if (!deck.playing) return; const ms = Math.max(0, (t - ctx.currentTime) * 1000);
     setTimeout(() => { if (l.pulse) { const p = L.firstChild; p.style.opacity = (reduced() ? 0.08 : 0.22) * v; setTimeout(() => { p.style.opacity = 0; }, 90); }
       if (l.strobe && v >= 1) strobeHit(false); }, ms); }
@@ -182,6 +190,8 @@
 <h4>background music</h4><div class="row"><button data-x="bg" class="${S.bg.on ? 'on' : ''}">${S.bg.on ? 'on' : 'off'}</button><label style="width:auto">volume</label><input type="range" min="0" max="1" step="0.01" value="${S.bg.vol}" data-r="bgvol"></div>
 <div class="sub">${S.bg.on ? (deck.playing ? 'resting while the deck plays' : mood + wx + (isNight(W.day) ? ', quieter for the night' : '')) : 'off: turn it on for music that follows the place, the weather and the day'}</div>
 <h4>deck</h4><div class="row"><button data-x="play" class="${deck.playing ? 'on' : ''}">${deck.playing ? '■ stop' : '▶ play'}</button><select data-s="preset">${Object.keys(PRESETS).map(p => `<option ${p === D.preset ? 'selected' : ''}>${p}</option>`).join('')}</select><button data-x="roll" title="a new lead melody">↻ melody</button></div>
+<div class="row"><button data-x="rave" class="${S.rave ? 'on' : ''}" title="rave mode: the creatures near you hear the deck and react by their own taste (tempo, loudness, drums, bass, melody)">🕺 rave ${S.rave ? 'on' : 'off'}</button><span class="sub" style="margin:0">${S.rave ? (deck.playing ? 'they can hear you' : 'press play') : 'play for the creatures'}</span></div>
+<div id="ravemeter"></div>
 <div class="row"><label>tempo</label><input type="range" min="70" max="160" step="1" value="${D.bpm}" data-r="bpm"><span>${D.bpm}</span></div>
 <div class="row"><label>key</label><select data-s="key">${NOTES.map((n, i) => `<option value="${i}" ${i === D.key ? 'selected' : ''}>${n}</option>`).join('')}</select><select data-s="scale">${Object.keys(SCALES).map(s => `<option ${s === D.scale ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
 <div class="row"><label>volume</label><input type="range" min="0" max="1" step="0.01" value="${D.vol}" data-r="vol"></div>
@@ -198,8 +208,9 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
     else if (x === 'play') play(!deck.playing);
     else if (x === 'roll') { D.seed = (D.seed + 1) % 1000; rollLead(); save(); }
     else if (x === 'drop') drop();
+    else if (x === 'rave') { S.rave = !S.rave; save(); render(); try { window.dispatchEvent(new CustomEvent('idle:rave', { detail: { on: S.rave } })); } catch (e) {} }
     else if (x === 'saveset') { const n = el.querySelector('[data-n]').value.trim() || ('set ' + (S.sets.length + 1)); S.sets.push({ name: n.slice(0, 40), t: Date.now(), deck: JSON.parse(JSON.stringify(D)) }); save(); render(); }
-    else if (b.dataset.load) { const s = S.sets[+b.dataset.load]; if (s) { S.deck = Object.assign(DECK0(), JSON.parse(JSON.stringify(s.deck))); rollLead(); applyFx(); if (deck.playing && ctx) deckBus.gain.setTargetAtTime(S.deck.vol, ctx.currentTime, 0.05); save(); render(); } }
+    else if (b.dataset.load) { const s = S.sets[+b.dataset.load]; if (s) { S.deck = Object.assign(DECK0(), JSON.parse(JSON.stringify(s.deck)), { setName: s.name }); rollLead(); applyFx(); if (deck.playing && ctx) deckBus.gain.setTargetAtTime(S.deck.vol, ctx.currentTime, 0.05); save(); render(); } }
     else if (b.dataset.del) { S.sets.splice(+b.dataset.del, 1); save(); render(); }
     else if (b.dataset.l) { D.lights[b.dataset.l] = !D.lights[b.dataset.l]; save(); syncLights(); render(); }
     else if (b.dataset.g) { const [r, i] = b.dataset.g.split(':'); D.grid[r][i] = D.grid[r][i] ? 0 : 1; b.classList.toggle('x'); save(); } });
@@ -210,7 +221,7 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
     else { const [a, b, c] = r.split(':'); if (a === 'ch') D.ch[b][c] = v; if (a === 'fx') { D.fx[b] = v; applyFx(); } }
     save(); });
   el.addEventListener('change', e => { const s = e.target.dataset.s; if (!s) return; const D = S.deck, v = e.target.value;
-    if (s === 'preset') { D.preset = v; D.grid = presetGrid(v); D.bpm = PRESETS[v].bpm; applyFx(); render(); }
+    if (s === 'preset') { D.preset = v; D.setName = null; D.grid = presetGrid(v); D.bpm = PRESETS[v].bpm; applyFx(); render(); }
     if (s === 'key') D.key = +v; if (s === 'scale') D.scale = v; save(); });
   el.addEventListener('keydown', e => e.stopPropagation());   // typing a set name never reaches the game's shortcuts
   // the step now playing lights up on the grid (only while the panel is open; 8 times a second, not per frame)
@@ -220,6 +231,6 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
 
   window.__music = { playing: false, state: () => ({ bg: { ...S.bg }, deck: JSON.parse(JSON.stringify(S.deck)), sets: JSON.parse(JSON.stringify(S.sets)) }),
     merge(st) { if (!st) return; for (const s of st.sets || []) if (!S.sets.some(x => x.name === s.name && x.t === s.t)) S.sets.push(s); if (st.deck) S.deck = Object.assign(DECK0(), st.deck); save(); render(); },
-    setBg, play, drop, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _ctx: () => ctx, _deck: deck, _bg: bg };
+    setBg, play, drop, features, rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); render(); }, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _ctx: () => ctx, _deck: deck, _bg: bg };
   render();
 })();
