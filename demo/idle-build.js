@@ -167,7 +167,7 @@
   setInterval(tick, 1000);
 
   // ---------- drawing: one canvas under the words, only what is in view ----------
-  const cv = document.createElement('canvas'); cv.id = 'buildCv'; cv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:2'; H().floor.insertBefore(cv, H().floor.firstChild.nextSibling); const g = cv.getContext('2d');
+  const cv = document.createElement('canvas'); cv.id = 'buildCv'; cv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:2'; H().floor.insertBefore(cv, H().floor.firstChild.nextSibling); let g = cv.getContext('2d');   // let: picture() borrows the drawing code for a moment
   const B4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]; const pats = {};
   const dither = (lvl, col) => { const k = lvl + col; if (pats[k]) return pats[k]; const c = document.createElement('canvas'); c.width = c.height = 4; const x = c.getContext('2d'); x.fillStyle = col; for (let i = 0; i < 16; i++) if (B4[i] < lvl) x.fillRect(i % 4, i >> 2, 1, 1); return (pats[k] = g.createPattern(c, 'repeat')); };
   let key = '', last = 0, shown = false; const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
@@ -218,9 +218,10 @@
   const css = document.createElement('style'); css.textContent = `#objmenu{position:fixed;z-index:10002;display:none;gap:4px;align-items:center;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:10px;padding:4px 6px;font:12px system-ui;box-shadow:0 4px 16px #0004}#objmenu.on{display:flex}#objmenu button{font:inherit;padding:1px 7px;border-radius:7px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}#objmenu small{opacity:.7;margin-right:2px}
 #studio .objrow button{font:11px system-ui;padding:2px 7px;border-radius:7px;border:1px solid #8886;background:none;color:inherit;cursor:pointer;margin:2px 3px 2px 0}#studio .objrow small{display:block;opacity:.65;margin-top:3px}`; document.head.appendChild(css);
   let mObj = null; function menu(o, x, y) { mObj = o; if (!o) { mEl.classList.remove('on'); return; } const S = cur(), s = o.sid && S ? S.structs.find(q => q.id === o.sid) : null;
-    mEl.innerHTML = `<small>${(DEF[o.k] || {}).name || o.k}${o.word ? ' “' + o.word + '”' : ''}${s ? ' · part of ' + (s.name || A[s.kind]) : ''}</small><button data-o="pin">${o.pin ? '📌 unpin' : '📌 pin'}</button><button data-o="turn">↻ turn</button><button data-o="del" title="take it out of the world">✕ remove</button>`;
+    mEl.innerHTML = `<small>${(DEF[o.k] || {}).name || o.k}${o.word ? ' “' + o.word + '”' : ''}${s ? ' · part of ' + (s.name || A[s.kind]) : ''}</small><button data-o="pin">${o.pin ? '📌 unpin' : '📌 pin'}</button><button data-o="turn">↻ turn</button><button data-o="del" title="take it out of the world">✕ remove</button>${s && window.__collect ? `<button data-o="keep" title="put a picture of ${s.name || A[s.kind]} in your drawer">🗄 keep</button>` : ''}`;
     mEl.style.left = Math.min(innerWidth - 300, x + 8) + 'px'; mEl.style.top = Math.max(8, y - 40) + 'px'; mEl.classList.add('on'); clearTimeout(mEl._t); mEl._t = setTimeout(() => menu(null), 6000); }
   mEl.addEventListener('click', e => { const b = e.target.closest('[data-o]'), S = cur(); if (!b || !mObj || !S) return; const o = mObj, a = b.dataset.o;
+    if (a === 'keep') { if (o.sid && window.__collect) window.__collect.keepBuilding(o.sid); menu(null); return; }
     if (a === 'pin') { o.pin = !o.pin; } else if (a === 'turn') { o.rot = o.rot === 90 ? 0 : 90; o.you = true; if (o.sid) detach(S, o); } else if (a === 'del') { detach(S, o); const i = S.objs.indexOf(o); if (i >= 0) S.objs.splice(i, 1); for (const c of H().creatures()) if (c._carryO === o) c._carryO = null; }
     dirty = true; save(); H().log('object_' + a, { k: o.k }); menu(null); });
   document.addEventListener('pointerdown', e => { if (mObj && !e.target.closest('#objmenu')) setTimeout(() => { if (!drag) menu(null); }, 0); }, true);
@@ -234,7 +235,16 @@
   setInterval(() => { studioRow(); if (document.querySelector('#studio .objrow') && document.getElementById('studio').offsetParent) renderRow(); }, 2000);
 
   // ---------- the API the arena calls ----------
+  // a picture of one building (your drawer keeps it): its floor, its pieces and its name, drawn with the same code as the world
+  function picture(sid) { const S = cur(); const s = S && S.structs.find(q => q.id === sid); if (!S || !s) return null; const h = H(), keep = kind() === 'keep', dark = h.isDark(), r = (R[s.kind] || 110) + 46, q = 2;
+    const c = document.createElement('canvas'); c.width = c.height = Math.round(r * 2 * q); const pg = c.getContext('2d'), g0 = g; g = pg;
+    try { g.fillStyle = keep ? (dark ? '#000' : '#fff') : dark ? '#23232a' : '#f7f4ee'; g.fillRect(0, 0, c.width, c.height); g.setTransform(q, 0, 0, q, (r - s.x) * q, (r - s.y) * q);
+      if (s.done && s.inner) { const I = s.inner; g.fillStyle = dark ? 'rgba(240,200,140,.12)' : 'rgba(170,120,60,.12)'; if (I.rx) { g.beginPath(); g.ellipse(I.cx, I.cy, I.rx, I.ry, 0, 0, 7); g.fill(); } else g.fillRect(I.x0, I.y0, I.x1 - I.x0, I.y1 - I.y0); }
+      const mine = S.objs.filter(o => o.sid === s.id || Math.hypot(wdx(s.x, o.x), wdy(s.y, o.y)) < r - 10); for (const o of mine) drawObj(o, s.x + wdx(s.x, o.x), s.y + wdy(s.y, o.y), keep, dark, 0);
+      if (s.name) { g.font = keep ? '12px monospace' : 'italic 12px Georgia,serif'; g.textAlign = 'center'; g.fillStyle = keep ? (dark ? '#fff' : '#000') : dark ? 'rgba(230,200,150,.9)' : 'rgba(110,70,30,.9)'; g.fillText(s.name, s.x, s.y + r - 14); }
+      return { data: c.toDataURL('image/png'), id: s.id, name: s.name || A[s.kind], kind: s.kind, what: A[s.kind], by: s.by, pieces: mine.length, done: !!s.done, x: s.x, y: s.y }; } finally { g = g0; } }
   window.__build = {
+    picture,
     work, stats: () => ({ ...ST8 }), shelter: c => { const S = active() ? ST[placeId()] : null; if (!S) return 1; for (const s of S.structs) if (s.done && s.kind === 'hut' && insideS(s, c.x, c.y)) return 0.3; for (const s of S.structs) if (s.done && s.kind === 'pen' && insideS(s, c.x, c.y)) return 0.6; return 1; },
     coverFor: (c, max) => { const S = active() ? ST[placeId()] : null; if (!S) return null; let best = null, bd = max; for (const s of S.structs) { if (!s.done || s.kind !== 'hut' || !filled(S, s)) continue; const d = Math.hypot(wdx(c.x, s.x), wdy(c.y, s.y)); if (d < bd) { bd = d; best = s; } } return best ? interiorPt(best) : null; },
     shift: (dx, dy) => { const S = ST[placeId()]; if (!S) return; for (const o of S.objs) { o.x += dx; o.y += dy; } for (const s of S.structs) { s.x += dx; s.y += dy; for (const sl of s.slots) { sl.x += dx; sl.y += dy; } if (s.door) { s.door.x += dx; s.door.y += dy; } const I = s.inner; if (I) { if (I.rx) { I.cx += dx; I.cy += dy; } else { I.x0 += dx; I.x1 += dx; I.y0 += dy; I.y1 += dy; } } } for (const q of S.quarries || []) { q.x += dx; q.y += dy; } dirty = true; save(); },

@@ -45,9 +45,11 @@
   function ensure() { if (stack) return true; if (!document.body) return false; stack = document.createElement('div'); stack.id = 'ntf'; document.body.appendChild(stack);
     stack.addEventListener('click', onClick); setInterval(place, 1000); addEventListener('resize', place); place(); return true; }
 
+  // Gazette items can go in your drawer (idle-collect.js registers the 'keepnote' action)
+  const keepBtn = h => h && h.kind === 'gazette' && acts.keepnote ? ` <button data-act="keepnote" data-kt="${h.t}" title="keep this in your drawer">🗄</button>` : '';
   const live = [], queue = [], recent = new Map();
   function show(n) { const el = document.createElement('div'); el.className = 'np ' + n.kind; n.el = el; live.push(n);
-    el.innerHTML = `<span class="ic">${n.icon}</span><span class="tx">${n.html}${n.at ? ` <button data-go="${Math.round(n.at.x)},${Math.round(n.at.y)}">go ›</button>` : ''}<span class="n2"></span></span><button class="x" title="dismiss">✕</button>`;
+    el.innerHTML = `<span class="ic">${n.icon}</span><span class="tx">${n.html}${n.at ? ` <button data-go="${Math.round(n.at.x)},${Math.round(n.at.y)}">go ›</button>` : ''}${keepBtn(n.h)}<span class="n2"></span></span><button class="x" title="dismiss">✕</button>`;
     (n.actions || []).forEach((a, i) => { const b = document.createElement('button'); b.textContent = a.label; if (a.title) b.title = a.title; b.dataset.ai = i; el.querySelector('.tx').insertBefore(b, el.querySelector('.n2')); });
     try { mentions(el.querySelector('.tx')); } catch (e) {}
     el.addEventListener('mouseenter', () => { el._hold = true; }); el.addEventListener('mouseleave', () => { el._hold = false; n.until = Math.max(n.until, now() + 2500); });
@@ -79,7 +81,7 @@
   const ago = t => { const s = (now() - t) / 1000; return s < 60 ? 'now' : s < 3600 ? Math.round(s / 60) + ' min' : s < 86400 ? Math.round(s / 3600) + ' h' : Math.round(s / 86400) + ' d'; };
   function renderPanel() { const items = hist.slice().reverse();
     panel.innerHTML = `<div class="hd"><b>🔔 notices</b><span><button data-clear="1" title="empty the history">clear</button><button class="x" data-close="1" title="close">✕</button></span></div>` +
-      (items.map(h => `<div class="it${h.t > seenT ? ' new' : ''}"><small>${ago(h.t)}</small><span>${h.icon}</span><span>${h.html.replace(/<button data-act="advisor-open"[^>]*>[^<]*<\/button>/, '')}${h.at ? ` <button data-go="${Math.round(h.at.x)},${Math.round(h.at.y)}">go ›</button>` : ''}</span></div>`).join('') || '<div class="sub" style="padding:6px 0">nothing yet: notices land here as they happen</div>');
+      (items.map(h => `<div class="it${h.t > seenT ? ' new' : ''}"><small>${ago(h.t)}</small><span>${h.icon}</span><span>${h.html.replace(/<button data-act="advisor-open"[^>]*>[^<]*<\/button>/, '')}${h.at ? ` <button data-go="${Math.round(h.at.x)},${Math.round(h.at.y)}">go ›</button>` : ''}${keepBtn(h)}</span></div>`).join('') || '<div class="sub" style="padding:6px 0">nothing yet: notices land here as they happen</div>');
     try { mentions(panel); } catch (e) {} }
   function toggle(on) { if (!panel) return; on = on ?? !panel.classList.contains('on'); panel.classList.toggle('on', on); if (on) { place(); renderPanel(); seenT = now(); hist.forEach(h => h.read = true); saveHist(); try { localStorage.setItem(SEEN, String(seenT)); } catch (e) {} badge(); } }
   function mount() { if (bell || !document.body) return; const anchor = document.getElementById('advBtn') || document.getElementById('djBtn') || document.getElementById('reelsBtn'); if (!anchor) return;
