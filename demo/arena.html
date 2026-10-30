@@ -247,7 +247,15 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   let tokenizer = null, hidSession = null, genSession = null, instr = null, voices = null;
   // ---------- shared event log (same localStorage key as the chat page, so the chat page's engagement export includes the arena) ----------
   let events = []; try { events = JSON.parse(localStorage.getItem('tinyoracle.events') || '[]'); } catch (e) {}
-  function logEvent(type, extra) { events.push({ t: Date.now(), page: 'arena', type: 'arena_' + type, ...(extra || {}) }); try { window.__life && window.__life.ev(type, extra || {}); } catch (e) {} if (events.length > 5000) events = events.slice(-5000); try { localStorage.setItem('tinyoracle.events', JSON.stringify(events)); } catch (e) {} }
+  function logEvent(type, extra) { events.push({ t: Date.now(), page: 'arena', type: 'arena_' + type, ...(extra || {}) }); try { window.__life && window.__life.ev(type, extra || {}); } catch (e) {} if (events.length > 5000) events = events.slice(-5000); if (!logEvent._t) logEvent._t = setTimeout(flushEvents, 3000); }
+  function flushEvents() { clearTimeout(logEvent._t); logEvent._t = 0; try { localStorage.setItem('tinyoracle.events', JSON.stringify(events)); } catch (e) {} }   // stringifying the whole log on every event froze the page every few seconds; now at most one write per 3 s
+  addEventListener('pagehide', flushEvents); addEventListener('visibilitychange', () => { if (document.hidden) flushEvents(); });
+  // ---------- quality: 'auto' turns on a lighter mode when the world stays under 30 fps for 5 s (fewer weather particles, minimap and mind stream 4 times a second, 1 pixel per pixel); click the fps chip for auto / low / high ----------
+  const QUAL = { mode: (() => { try { return localStorage.getItem('arena.quality') || 'auto'; } catch (e) { return 'auto'; } })(), low: false, bad: 0, good: 0, back: 1 }; QUAL.low = QUAL.mode === 'low';
+  const qDPR = () => QUAL.low ? 1 : (devicePixelRatio || 1);
+  function setLow(v, why) { if (QUAL.low === v) return; QUAL.low = v; QUAL.bad = QUAL.good = 0; try { window.__wxFit && window.__wxFit(); } catch (e) {} if (why) toast(v ? 'running lighter so the world keeps moving: fewer weather particles, slower minimap (click the fps chip to change)' : 'back to full detail'); }
+  QUAL.tick = fps => { if (QUAL.mode !== 'auto') return; if (!QUAL.low) { QUAL.bad = fps < 30 ? QUAL.bad + 1 : 0; if (QUAL.bad >= 5) setLow(true, 1); } else { QUAL.good = fps >= 55 ? QUAL.good + 1 : 0; if (QUAL.good >= 30 * QUAL.back) { setLow(false, 1); QUAL.back = Math.min(8, QUAL.back * 2); } } };   // back to full only after a calm half minute, waiting longer each time it had to come back
+  window.__quality = QUAL;
   function toast(text) { let t = document.getElementById('toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; t.style.cssText = 'position:absolute;left:50%;top:46px;transform:translateX(-50%);z-index:14;font:12px system-ui;padding:5px 12px;border-radius:14px;background:color-mix(in srgb,var(--floor) 90%,transparent);border:1px solid #8886;box-shadow:0 3px 12px #0003;pointer-events:none;transition:opacity .4s;max-width:70%'; arenaEl.appendChild(t); } t.textContent = text; t.style.opacity = 1; clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = 0; }, 3500); }
   function say(who, text, cls) { if (who === 'lab' && arenaEl) { const rc = document.getElementById('roomchat'); if (!rc || rc.classList.contains('min') || rc.classList.contains('closed')) toast(text); } const d = document.createElement('div'); d.className = 'ln ' + (cls || who); d.innerHTML = '<b>' + who + ':</b> ' + text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight; }
   // ---------- space: a world 4x the view that wraps at every edge (a torus: walk off the right, come back on the left), with a camera ----------
@@ -305,7 +313,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     let camDirty = true, lastDraw = 0, LODV = 0;   // LODV: bumped when the text look changes, so cached word styles are read again
     function props(w) { const cls = w.el.className; if (w._lc === cls && w._lv === LODV && w._lp) return w._lp; const plain = cls.includes('terrain') || cls.includes('trash'), fs = cls.includes('crumb') ? 10 : cls.includes('piece') ? 11 : plain ? 12 : 13, text = w.el.textContent;
       w._lc = cls; w._lv = LODV; return w._lp = { plain, fs, text, wdt: text.length * fs * 0.6 + (plain ? 6 : 16), font: `${fs}px ${plain ? (w.el.style.fontFamily || 'Georgia,serif') : 'ui-monospace,Menlo,monospace'}`, color: w.el.style.color || '', bg: plain ? null : cls.includes('lava') ? '#ffb27a' : cls.includes('piece') ? '#dfe8ff' : cls.includes('crumb') ? '#ffd6e8' : '#ffe9a8', alpha: cls.includes('trash') ? 0.55 : 1 }; }
-    function draw() { const v = view(), dpr = devicePixelRatio || 1, pw = Math.round(v.vw * dpr), ph = Math.round(v.vh * dpr); if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+    function draw() { const v = view(), dpr = qDPR(), pw = Math.round(v.vw * dpr), ph = Math.round(v.vh * dpr); if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
       cv.style.left = v.L + 'px'; cv.style.top = v.T + 'px'; cv.style.width = v.W + 'px'; cv.style.height = v.H + 'px';
       const k = dpr * cam.z; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pw, ph); const text = cam.z >= 0.24, dark = isDark(), ink = dark ? '#ccc' : '#444';
       g.textAlign = 'center'; g.textBaseline = 'middle'; let font = '', fill = '', alpha = 1; g.globalAlpha = 1;   // canvas state is set only when it changes (setting the font per word was most of the cost)
@@ -596,7 +604,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     logEvent('steal', { who: c.name, from: victim.name, word: w.text, success: true }); oracleComment(pick([`${c.name} just took "${w.text}" from ${victim.name}. There is no law in this room`, `Theft in my room. "${w.text}" changed owners without asking`, `${victim.name} had "${w.text}". Had`]), 'steal'); return true;
   }
   async function doWork(c) {   // the creature's job, from its genome; most jobs carry or change words on the floor
-    const job = jobOf(c), free = words.filter(w => !w.carriedBy), near1 = (list) => list.sort((a, b) => dist(a, c) - dist(b, c))[0];
+    const job = jobOf(c), free = words.filter(w => !w.carriedBy), near1 = (list) => { let b, bd = Infinity; for (const x of list) { const d = dist(x, c); if (d < bd) { bd = d; b = x; } } return b; };   // one pass, not a sort of every word
     if (job === 'crawl') return window.__crawler ? window.__crawler.step(c) : false;   // the Crawler's work is on the web, not the floor
     if (!free.length) return false; c.working = job; (c.stats = c.stats || {}).work = (c.stats.work || 0) + 1;
     try {
@@ -676,7 +684,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (best === 'wander') { goto(c, c.x + (Math.random() - .5) * 700, c.y + (Math.random() - .5) * 500); speak(c, 'own', { w: free.length ? pick(free).text : '' }); }
     else if (best === 'fetch') act(c, 'fetch', pick(free).text); else if (best === 'chop') act(c, 'chop', pick(free).text); else if (best === 'bring') act(c, 'bring', 'user'); else if (best === 'hand') act(c, 'hand'); else if (best === 'work') act(c, 'work'); else if (best === 'explore') Connect.explore(c); else if (best === 'gohome') Connect.goHome(c); else if (best === 'eat') act(c, 'eat'); else if (best === 'steal') act(c, 'steal'); else if (best === 'nap') act(c, 'sleep'); else if (best === 'admire') act(c, 'admire');
   }
-  setInterval(() => creatures.forEach(c => ownThing(c, 'timer')), 7000);
+  { let i = 0, acc = 0; setInterval(() => { acc += creatures.length / 28; while (acc >= 1 && creatures.length) { acc--; ownThing(creatures[i++ % creatures.length], 'timer'); } if (!creatures.length) acc = 0; }, 250); }   // each creature still gets a turn about every 7 s, but spread out instead of all at once
   // flocking (boids): creatures of the same kind that are not busy drift together — separation, cohesion, alignment; 'social' is a gene
   setInterval(() => { for (const c of creatures) { if (c.held || c.state === 'sleep' || c.state === 'hide' || c.working || c.target || Date.now() < c.userUntil) continue;
       const kin = creatures.filter(o => o !== c && (o.g.body === c.g.body || o.voiceKey === c.voiceKey) && dist(o, c) < 260); if (!kin.length) continue; const soc = c.g.social ?? 0.5;
@@ -1125,12 +1133,12 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     function strike(w, h) { flashA = 0.55; let x = Math.random() * w, y = 0; bolt = [[x, y]]; while (y < h * (0.5 + Math.random() * 0.4)) { x += (Math.random() - .5) * 60; y += 20 + Math.random() * 30; bolt.push([x, y]); }
       const hit = toWorld(viewSize().r.left + x, viewSize().r.top + y); Sound.thunder(); for (const c of creatures) if (!c.lab && !c.held && dist(c, hit) < 700 && Math.random() < (c.g.timid ?? 0.6)) { c.state = 'hide'; c.until = Date.now() + 6000 + Math.random() * 6000; speak(c, 'scared'); setTimeout(() => Sound.shriek(c), 250 + Math.random() * 500); }
       if (Math.random() < 0.3) oracleComment(pick(['Lightning. Half the room is hiding under words', 'That was close. The crawler says it was not scared, from under a word']), 'storm'); }
-    function resize() { const { w, h } = viewSize(); cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio; g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); }
-    resize(); addEventListener('resize', () => { resize(); applyCam(); });
+    function resize() { const { w, h } = viewSize(), d = qDPR(); cv.width = w * d; cv.height = h * d; g.setTransform(d, 0, 0, d, 0, 0); }
+    resize(); addEventListener('resize', () => { resize(); applyCam(); }); window.__wxFit = () => { resize(); fit(); };
     const BASE = { bitrain: 140, static: 0, fog: 7, wind: 60, hum: 0, clear: 0, storm: 220 }; let P = wxDefaults('clear');
     function part(w, h) { return { x: Math.random() * w, y: Math.random() * h, v: 0.5 + Math.random(), c: glyph(), r: 80 + Math.random() * 160 }; }
     function glyph() { const gl = P.glyph | 0; return gl === 1 ? '0123456789abcdef'[Math.random() * 16 | 0] : gl === 2 ? 'abcdefghijklmnopqrstuvwxyz'[Math.random() * 26 | 0] : Math.random() < 0.5 ? '0' : '1'; }
-    function fit() { const { w, h } = viewSize(), n = Math.round(BASE[kind] * k * (P.amount ?? 1)); while (parts.length < n) parts.push(part(w, h)); parts.length = n; }   // more or fewer drops: the ones already falling stay where they are
+    function fit() { const { w, h } = viewSize(), n = Math.round(BASE[kind] * k * (P.amount ?? 1) * (QUAL.low ? 0.35 : 1)); while (parts.length < n) parts.push(part(w, h)); parts.length = n; }   // more or fewer drops: the ones already falling stay where they are
     function draw(t) { const { w, h } = viewSize(); g.clearRect(0, 0, w, h); const dark = isDark(), ink = dark ? '160,190,255' : '43,92,255', sp = P.speed ?? 1, sz = P.size ?? 1;
       if (kind === 'bitrain') { g.font = Math.round(11 * sz) + 'px ui-monospace,Menlo,monospace'; const sl = P.slant || 0; for (const p of parts) { p.y += 2.2 * p.v * sp; p.x += 2.2 * p.v * sp * sl; if (p.y > h) { p.y = -10; p.x = Math.random() * w; p.c = glyph(); } if (p.x > w + 10) p.x -= w + 20; else if (p.x < -10) p.x += w + 20; g.fillStyle = `rgba(${ink},${0.12 + 0.2 * p.v * k})`; g.fillText(p.c, p.x, p.y); } }
       else if (kind === 'static') { const n = Math.round(500 * k * (P.amount ?? 1)), gs = 1.5 * sz; g.fillStyle = `rgba(${dark ? '255,255,255' : '0,0,0'},${0.18 * k + 0.05})`; for (let i = 0; i < n; i++) g.fillRect(Math.random() * w, Math.random() * h, gs, gs); if (Math.random() < 0.08 * k * (P.flicker ?? 1)) { g.fillStyle = `rgba(${ink},0.08)`; g.fillRect(0, Math.random() * h, w, 2 + Math.random() * 6); } }
@@ -1153,7 +1161,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (e.target.closest && e.target.closest('#roomchat,#workshop,#herd,#studio,#team,#conn,#insp,#whisper,#notice,#lab')) return; e.preventDefault(); const before = toWorld(e.clientX, e.clientY); cam.z *= Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)); applyCam(); const after = toWorld(e.clientX, e.clientY); cam.x += before.x - after.x; cam.y += before.y - after.y; applyCam(); }, { passive: false });
     const mm = $('#minimap'), mg = mm.getContext('2d'); let MW = 190, MH, sx, sy; function sizeMini() { MW = Math.round(190 * Math.min(1.6, Math.sqrt(SPACE.W / 2400))); MH = Math.round(MW * SPACE.H / SPACE.W); if (MH > 240) { MW = Math.max(40, Math.round(MW * 240 / MH)); MH = 240; } /* a tall page gets a narrow minimap, not a tall one */ mm.width = MW * devicePixelRatio; mm.height = MH * devicePixelRatio; mm.style.width = MW + 'px'; mm.style.height = MH + 'px'; mg.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); sx = MW / SPACE.W; sy = MH / SPACE.H; placeGrow(); } window.__sizeMini = sizeMini; sizeMini();
     const wrapX = v => ((v % SPACE.W) + SPACE.W) % SPACE.W, wrapY = v => ((v % SPACE.H) + SPACE.H) % SPACE.H;
-    function drawMini() { mg.clearRect(0, 0, MW, MH); const dark = isDark(); mg.fillStyle = dark ? '#ffffff55' : '#00000040'; for (const w of words) mg.fillRect(wrapX(w.x) * sx, wrapY(w.y) * sy, 1.5, 1.5);
+    function drawMini() { const nowM = performance.now(); if (QUAL.low && nowM - (drawMini.t || 0) < 250) { requestAnimationFrame(drawMini); return; } drawMini.t = nowM; mg.clearRect(0, 0, MW, MH); const dark = isDark(); mg.fillStyle = dark ? '#ffffff55' : '#00000040'; for (const w of words) mg.fillRect(wrapX(w.x) * sx, wrapY(w.y) * sy, 1.5, 1.5);
       for (const c of creatures) { mg.fillStyle = `hsl(${c.g.hue},80%,${dark ? 70 : 50}%)`; mg.beginPath(); mg.arc(wrapX(c.x) * sx, wrapY(c.y) * sy, 3.5, 0, 7); mg.fill(); }
       if (window.__dis) { const T = performance.now(); for (const p of window.__dis.pings()) { const x = wrapX(p.x) * sx, y = wrapY(p.y) * sy, crack = p.kind === 'crack';   // sonar: rings pulse out from each disaster
         for (const o of [0, 0.5]) { const ph = ((T / (crack ? 2200 : 1300)) + o) % 1; mg.strokeStyle = `rgba(${crack ? '200,140,60' : '255,70,40'},${(1 - ph) * 0.9 * p.k})`; mg.lineWidth = 1.5; mg.beginPath(); mg.arc(x, y, 5 + ph * (crack ? 12 : 18), 0, 7); mg.stroke(); }
@@ -1302,8 +1310,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   window.__studio = Studio;
   // fps counter (topbar): average over the last second and the slowest frame, green ≥ 50, amber ≥ 30, red below
   (() => { const el = $('#fps'); let n = 0, worst = 0, t0 = performance.now(), last = t0;
-    function f(t) { const dt = t - last; last = t; n++; if (dt > worst) worst = dt; if (t - t0 >= 1000) { const fps = Math.round(n * 1000 / (t - t0)); el.textContent = fps + ' fps · ' + Math.round(worst) + ' ms'; el.className = fps >= 50 ? 'ok' : fps >= 30 ? 'meh' : 'bad'; window.__fps = { fps, worst: Math.round(worst) }; n = 0; worst = 0; t0 = t; } requestAnimationFrame(f); }
-    requestAnimationFrame(f); })();
+    function f(t) { const dt = t - last; last = t; n++; if (dt > worst) worst = dt; if (t - t0 >= 1000) { const fps = Math.round(n * 1000 / (t - t0)); QUAL.tick(fps); el.textContent = fps + ' fps · ' + Math.round(worst) + ' ms' + (QUAL.low ? ' · light' : '') + (QUAL.mode !== 'auto' ? ' · ' + QUAL.mode : ''); el.className = fps >= 50 ? 'ok' : fps >= 30 ? 'meh' : 'bad'; window.__fps = { fps, worst: Math.round(worst) }; n = 0; worst = 0; t0 = t; } requestAnimationFrame(f); }
+    requestAnimationFrame(f);
+    el.style.cursor = 'pointer'; el.title = 'quality: auto (lighter when slow) · click for low / high / auto';
+    el.addEventListener('click', () => { QUAL.mode = { auto: 'low', low: 'high', high: 'auto' }[QUAL.mode] || 'auto'; try { localStorage.setItem('arena.quality', QUAL.mode); } catch (e) {} QUAL.back = 1; setLow(QUAL.mode === 'low'); el.title = 'quality: ' + QUAL.mode + ' · click for ' + { auto: 'low', low: 'high', high: 'auto' }[QUAL.mode]; toast('quality: ' + QUAL.mode + ({ auto: ' (lighter only when slow)', low: ' (always light)', high: ' (always full detail)' })[QUAL.mode]); }); })();
   arenaEl.addEventListener('scroll', () => { if (arenaEl.scrollLeft || arenaEl.scrollTop) arenaEl.scrollLeft = arenaEl.scrollTop = 0; });   // a panel scrolled into view while sliding in shifted the whole arena sideways
   // notes from the lab about Tiny Oracle and Jeffy (pile_runs/lab/notices.json): the newest one not dismissed, as a small pill; × hides it for good in this browser
   (() => { const el = $('#notice'), esc = t => String(t ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); let list = [], gone = new Set();
@@ -1427,7 +1437,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       $('#peerLabel').textContent = `${name}: ${v.creatures.length} creatures, ${v.wordCount} words, ${WEATHER_NAMES[v.weather] || v.weather}`; }
     function shareView() { const wx = v => ((v % SPACE.W) + SPACE.W) % SPACE.W, wy = v => ((v % SPACE.H) + SPACE.H) % SPACE.H; const ws = words.filter(w => !w.carriedBy);
       post('view', { view: { W: SPACE.W, H: SPACE.H, weather: world.weather, wordCount: ws.length, words: ws.filter((_, i) => i % Math.max(1, Math.ceil(ws.length / 250)) === 0).map(w => ({ t: w.text, x: Math.round(wx(w.x)), y: Math.round(wy(w.y)) })), creatures: creatures.map(c => ({ n: c.name, x: Math.round(wx(c.x)), y: Math.round(wy(c.y)), h: c.g.hue })) } }); }
-    post('register', { name: myName }).then(poll); setInterval(poll, 2000); setInterval(shareView, 3000);
+    post('register', { name: myName }).then(poll);
+    // busy only when there is someone to talk to: links, requests, creatures away, or the panel open; otherwise a slow check for new requests
+    const busy = () => !!(state && (state.me.links.length || state.me.requests.length)) || Object.keys(away).length > 0 || $('#conn').classList.contains('on'); let lastPoll = 0;
+    setInterval(() => { if (busy() || Date.now() - lastPoll > 20000) { lastPoll = Date.now(); poll(); } }, 2000); setInterval(() => { if (state && state.me.links.length) shareView(); }, 3000);
     return { explore, goHome, _parked: {}, code: () => code }; })();
   // ---------- images and interface elements from fetched pages, and the creatures that work on them ----------
   const things = []; window.__things = things;
@@ -2378,7 +2391,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         ph += dt * (0.6 + mg.burst * 2.4); const gate = mg.burst > 0.15 ? (Math.sin(ph) + Math.sin(ph * 2.7) * 0.5 > 0.4 ? 1 + 2.5 * mg.burst : Math.max(0.03, 1 - 1.1 * mg.burst)) : 1;
         dreamTick(now, sleep); rateNow = mg.rate * act * gate; acc += rateNow * dt; let n = Math.floor(acc); if (!n) return; acc -= n; n = Math.min(n, 200);
         if (q.length < n) idle(n - q.length + 4); const chunk = q.splice(0, n); buf = chunk.concat(buf); if (buf.length > cols * rows) buf.length = cols * rows;
-        draw(); if (capEl && now - shown > 500) { shown = now; capEl.textContent = `${Math.round(rateNow)} chars/s now · ${Math.round(mg.rate)} base · ${mg.burst > 0.6 ? 'bursty' : mg.burst > 0.3 ? 'pulsing' : 'steady'} · thinks in ${GLY[mg.glyph][1]}${sleep ? ' · dreaming' : ''}`; } }
+        if (!QUAL.low || now - (draw.t || 0) > 250) { draw.t = now; draw(); } if (capEl && now - shown > 500) { shown = now; capEl.textContent = `${Math.round(rateNow)} chars/s now · ${Math.round(mg.rate)} base · ${mg.burst > 0.6 ? 'bursty' : mg.burst > 0.3 ? 'pulsing' : 'steady'} · thinks in ${GLY[mg.glyph][1]}${sleep ? ' · dreaming' : ''}`; } }
       // dream view: asleep, memory scenes and remembered words drift through the stream, slowly, half-there
       function dreamTick(now, sleep) { if (sleep !== wasSleep) { wasSleep = sleep; cv.parentElement.classList.toggle('dreaming', sleep); if (!sleep && dl) [...dl.children].forEach(x => x.classList.add('out')); dnext = now + 600; } if (!sleep || now < dnext) return; dnext = now + 1600 + Math.random() * 2000;
         if (!dl) { dl = document.createElement('div'); dl.className = 'mdream'; cv.parentElement.appendChild(dl); } if (dl.childElementCount >= 7) return;
@@ -2630,8 +2643,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     try {
       statusEl.textContent = 'loading tokenizer…'; tokenizer = new BPETokenizer(await (await fetch('tokenizer_chat_v2.json')).json());
       statusEl.textContent = 'loading the instruction model…'; instr = await (await fetch('arena_instr_v2.json')).json(); ort.env.wasm.numThreads = (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated) ? (navigator.hardwareConcurrency || 4) : 1;
-      hidSession = await ort.InferenceSession.create('oracle_v2_grown_ct2_judge_int8.onnx', { executionProviders: ['wasm'] });
-      statusEl.textContent = 'loading the Oracle…'; genSession = await ort.InferenceSession.create('oracle_v2_grown_ct2_int8.onnx', { executionProviders: ['wasm'] });
+      ort.env.wasm.proxy = true;   // the Oracle thinks in a worker, so a 28-step comment no longer freezes the world for most of a second
+      const mkSession = async f => { try { return await ort.InferenceSession.create(f, { executionProviders: ['wasm'] }); } catch (e) { if (!ort.env.wasm.proxy) throw e; console.warn('Oracle worker unavailable, running on the page', e); ort.env.wasm.proxy = false; return await ort.InferenceSession.create(f, { executionProviders: ['wasm'] }); } };
+      hidSession = await mkSession('oracle_v2_grown_ct2_judge_int8.onnx');
+      statusEl.textContent = 'loading the Oracle…'; genSession = await mkSession('oracle_v2_grown_ct2_int8.onnx');
       if (!window.__restored) ['ball', 'coffee', 'cat'].forEach((w, i) => addWord(w, 260 + i * 120, 220 + (i % 2) * 70)); statusEl.textContent = 'ready · instruction model held-out accuracy ' + instr.heldout.option_acc + ', argument ' + instr.heldout.arg_exact;
       say('Oracle', 'My room, with the pets in it. Talk to them, or drag a word in and see who wants it', 'oracle'); logEvent('load');
     } catch (e) { statusEl.textContent = 'error: ' + e.message; console.error(e); }
