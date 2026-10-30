@@ -1,0 +1,15 @@
+# Cloudflare Worker config for the Id|le helper (see README.md). Nothing here is deployed until you run `npx wrangler deploy`.
+name = "idle-helper"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://id-le.com,https://www.id-le.com,https://id-le.world"
+RATE_PER_MIN = "60"
+
+# world links survive restarts only with a KV namespace. Create it with
+#   npx wrangler kv namespace create WORLDS
+# and paste the id it prints here (then uncomment):
+# [[kv_namespaces]]
+# binding = "WORLDS"
+# id = "<paste id>"
