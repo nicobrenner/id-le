@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Id|le-pedia</title>
+<style>
+:root{--bg:#fbfaf6;--paper:#ffffff;--ink:#202122;--mut:#62666d;--rule:#d8d6cf;--link:#3366cc;--visited:#795cb2;--box:#f6f5f1;--hl:#fff3c4;--cur:#2b5cff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141518;--paper:#1b1c20;--ink:#e6e3dc;--mut:#9da0a6;--rule:#34363c;--link:#8ab4ff;--visited:#c3a6ff;--box:#222328;--hl:#4a3f12;--cur:#8ab4ff}}
+:root[data-theme="dark"]{--bg:#141518;--paper:#1b1c20;--ink:#e6e3dc;--mut:#9da0a6;--rule:#34363c;--link:#8ab4ff;--visited:#c3a6ff;--box:#222328;--hl:#4a3f12;--cur:#8ab4ff}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:12px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;overflow-x:hidden}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+h1,h2,h3{font-family:"Linux Libertine","Georgia","Times",serif;font-weight:400;line-height:1.25}
+h1{font-size:2em;margin:.2em 0 .1em;border-bottom:1px solid var(--rule);padding-bottom:.15em}
+h2{font-size:1.55em;margin:1.4em 0 .4em;border-bottom:1px solid var(--rule);padding-bottom:.1em;clear:both}
+.famsec{display:flow-root;clear:both}
+h3{font-size:1.2em;margin:1.1em 0 .3em;font-weight:700;font-family:inherit}
+code,.mono{font-family:ui-monospace,Menlo,monospace;font-size:.88em}
+code{background:var(--box);padding:0 .25em;border-radius:3px}
+#wx{position:absolute;left:0;top:0;width:100%;height:96px;pointer-events:none;opacity:.55}
+header{position:relative;display:flex;align-items:center;gap:14px;padding:14px 22px 10px;border-bottom:1px solid var(--rule);background:var(--paper)}
+.logo{font-family:Georgia,serif;font-size:28px;line-height:1;white-space:nowrap}
+.logo .bar{display:inline-block;width:2px;height:.9em;background:var(--cur);vertical-align:-.08em;margin:0 1px;animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.tag{font-family:Georgia,serif;font-style:italic;color:var(--mut);font-size:13px}
+header .sp{flex:1}
+#q{font:inherit;padding:5px 9px;border:1px solid var(--rule);border-radius:3px;background:var(--bg);color:var(--ink);width:min(260px,40vw)}
+header button{font:inherit;font-size:13px;background:none;border:1px solid var(--rule);border-radius:3px;color:var(--ink);padding:4px 8px;cursor:pointer}
+.wrap{display:flex;max-width:1180px;margin:0 auto}
+nav{width:200px;flex:none;padding:18px 10px 40px 20px;font-size:13px;position:sticky;top:0;align-self:flex-start;max-height:100vh;overflow:auto}
+nav b{display:block;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 4px;font-weight:600}
+nav a{display:block;padding:1px 0}
+nav a.sub{padding-left:12px;font-size:12.5px}
+main{flex:1;min-width:0;background:var(--paper);border-left:1px solid var(--rule);padding:14px 28px 80px;position:relative}
+.lede{color:var(--mut);font-size:13px;margin-bottom:10px}
+.ib{float:right;clear:right;width:252px;margin:0 0 14px 18px;border:1px solid var(--rule);background:var(--box);font-size:13px;line-height:1.45}
+.ib .t{text-align:center;font-weight:700;font-size:15px;padding:5px;font-family:Georgia,serif}
+.ib svg.live{display:block;width:100%;height:160px;background:var(--paper);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);cursor:pointer}
+.ib .cap{text-align:center;color:var(--mut);font-size:12px;padding:2px 6px 4px}
+.ib table{width:100%;border-collapse:collapse}
+.ib th{text-align:left;vertical-align:top;padding:3px 6px;width:38%;font-weight:600}
+.ib td{padding:3px 6px}
+.ib .hd{background:var(--rule);text-align:center;font-weight:700}
+.names{font-family:Georgia,serif}
+.names i{white-space:nowrap}
+.nx{font-size:12px;cursor:pointer;border:none;background:none;color:var(--link);padding:0 3px}
+table.wt{border-collapse:collapse;margin:8px 0 14px;font-size:13.5px}
+table.wt th,table.wt td{border:1px solid var(--rule);padding:4px 8px;text-align:left;vertical-align:top}
+table.wt th{background:var(--box)}
+.note{font-size:12.5px;color:var(--mut)}
+.hat{font-style:italic;color:var(--mut);padding-left:1.6em;margin:-.2em 0 .6em;font-size:13.5px}
+.feels span{display:inline-block;margin:0 10px 6px 0}
+.yw{border:1px solid var(--rule);background:var(--box);padding:10px 14px;margin:8px 0 12px}
+.yw .fam{margin:8px 0 2px;font-weight:600}
+.yw .who{display:inline-flex;align-items:center;gap:2px;margin:0 10px 4px 0;font-size:13.5px}
+.yw .who svg{width:34px;height:26px}
+.yw small{color:var(--mut)}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:6px 12px;border-radius:4px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:20}
+#toast.on{opacity:.92}
+#crawl{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:10}
+.floor{clear:both;margin-top:50px;border-top:1px dashed var(--rule);padding-top:10px;position:relative;height:90px;overflow:hidden}
+.floor span{position:absolute;font-family:Georgia,serif;color:var(--mut);opacity:.55;white-space:nowrap;font-size:13px}
+.err{border:1px solid #c33;padding:10px;background:var(--hl)}
+mark{background:var(--hl);color:inherit}
+@media (max-width:820px){nav{display:none}main{border-left:none;padding:12px 16px 60px}.ib{float:none;width:auto;margin:0 0 12px}header{flex-wrap:wrap;padding:12px 16px}.tag{display:none}#q{width:100%}}
+@media (prefers-reduced-motion:reduce){.logo .bar{animation:none}}
+</style>
+</head>
+<body>
+<header><canvas id="wx"></canvas>
+  <a class="logo" href="#top" style="color:inherit;text-decoration:none">Id<span class="bar"></span>le<span style="font-size:.6em;color:var(--mut)">-pedia</span></a>
+  <span class="tag">the encyclopedia of a small world, written while it happens</span>
+  <span class="sp"></span>
+  <input id="q" list="ql" placeholder="Search the Id|le-pedia" aria-label="search"><datalist id="ql"></datalist>
+  <button id="theme" title="light, dark or follow the system">◐ auto</button>
+  <a href="arena.html" target="idle-arena" title="the world itself">→ the world</a>
+</header>
+<div class="wrap"><nav id="toc"></nav><main id="top"><p class="lede">Loading the world's own source to read the facts from…</p></main></div>
+<svg id="crawl" aria-hidden="true"></svg>
+<div id="toast"></div>
+<script>
+(async () => {
+  const $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const pick = a => a[Math.floor(Math.random() * a.length)], main = $('main');
+  // ---------- theme (its own key; the arena's storage is only ever read) ----------
+  const TH = ['auto', 'light', 'dark']; let th = 'auto'; try { th = localStorage.getItem('pedia.theme') || 'auto'; } catch (e) {}
+  const applyTh = () => { if (th === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = th; $('#theme').textContent = { auto: '◐ auto', light: '☀ light', dark: '☾ dark' }[th]; };
+  applyTh(); $('#theme').onclick = () => { th = TH[(TH.indexOf(th) + 1) % 3]; try { localStorage.setItem('pedia.theme', th); } catch (e) {} applyTh(); };
+  const isDark = () => th === 'dark' || (th === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  // ---------- read the facts out of arena.html itself, so this page cannot drift from the world ----------
+  let src; try { src = await (await fetch('arena.html', { cache: 'no-store' })).text(); } catch (e) {}
+  if (!src) { main.innerHTML = '<p class="err">Could not read <code>arena.html</code>. Open this page from the same server as the world (http://localhost:8765/pedia.html).</p>'; return; }
+  const code = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).sort((a, b) => b.length - a.length)[0] || '';
+  function endOf(s, i) {   // i is at an opening bracket; skips strings, templates and comments; returns the index after its match
+    const st = []; let depth = 0;
+    for (; i < s.length; i++) { const ch = s[i], top = st[st.length - 1];
+      if (top === '`') { if (ch === '\\') { i++; continue; } if (ch === '`') st.pop(); else if (ch === '$' && s[i + 1] === '{') { st.push('${'); i++; } continue; }
+      if (top === "'" || top === '"') { if (ch === '\\') { i++; continue; } if (ch === top) st.pop(); continue; }
+      if (ch === '/' && s[i + 1] === '/') { i = s.indexOf('\n', i); if (i < 0) return -1; continue; }
+      if (ch === '/' && s[i + 1] === '*') { i = s.indexOf('*/', i) + 1; continue; }
+      if (ch === "'" || ch === '"' || ch === '`') { st.push(ch); continue; }
+      if (ch === '{' || ch === '[' || ch === '(') { if (top === '${') st.push(ch); else depth++; continue; }
+      if (ch === '}' || ch === ']' || ch === ')') { if (top === '${' && ch === '}') { st.pop(); continue; } if (st.length && (top === '{' || top === '[' || top === '(')) { st.pop(); continue; } if (--depth === 0) return i + 1; }
+    } return -1; }
+  const missing = [];
+  function lit(name, within) { const s = within || code, m = new RegExp('\\b' + name + '\\s*=\\s*(?=[\\[{])').exec(s); if (!m) { missing.push(name); return null; }
+    const a = m.index + m[0].length, b = endOf(s, a); try { return new Function('head', 'return (' + s.slice(a, b) + ')')(undefined); } catch (e) { missing.push(name); return null; } }
+  function fnSrc(name) { const i = code.indexOf('function ' + name + '('); if (i < 0) { missing.push(name); return ''; } const b = code.indexOf('{', endOf(code, code.indexOf('(', i))); return code.slice(i, endOf(code, b)); }
+  const DG = lit('DEFAULT_GENOMES') || {}, SEEDS = lit('NAME_SEEDS') || {}, FAMS = lit('NAME_FAMS') || {}, JOB_NAMES = lit('JOB_NAMES') || {}, JOBS = lit('JOBS') || [], ACTIONS = lit('ACTION_POOL') || [];
+  const WN = lit('WEATHER_NAMES') || {}, WXS = lit('WX_SPEC') || {}, FEEL = lit('FEEL') || {}, SAY = lit('SAY') || {}, ONSET = lit('ONSET') || {}, DIS = lit('DIS') || {}, TRAITS = lit('TRAITS') || [], GLY = lit('GLY') || [];
+  const spawn = fnSrc('spawnSpecial'), BASE = lit('base', spawn) || {}, SPECIAL = lit('G', spawn) || {}, mut = fnSrc('mutate'), CL = lit('CL', mut) || {};
+  const BODIES = ((/pick\(\[('chip'[^\]]*)\]/.exec(mut) || [])[1] || '').match(/'(\w+)'/g)?.map(s => s.slice(1, -1)) || [];
+  const FEATS = [...new Set(((/pick\(\[('stream'[^\]]*)\]/.exec(fnSrc('genFeatures')) || [])[1] || '').match(/'(\w+)'/g)?.map(s => s.slice(1, -1)) || [])];
+  // the creature drawing code, taken verbatim from the world (legs, inverse kinematics, gait, bodies)
+  let draw = null; try { draw = new Function('pick', 'selected', ['sizeUp', 'restSpot', 'hip', 'knee', 'buildLegs', 'stepLegs', 'legsSVG', 'bodySVG'].map(fnSrc).join('\n') + '\nreturn { buildLegs, stepLegs, legsSVG, bodySVG };')(pick, null); } catch (e) { console.warn('pedia: drawing code', e); }
+  // ---------- read-only view of your world (never written) ----------
+  const ls = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
+  const auto = ls('arena.autosave') || {}, liveG = ls('arena.genomes') || auto.genomes || {}, worldNow = ls('arena.world') || auto.world || {}, resting = ls('arena.resting') || auto.resting || [], namerSt = ls('arena.namers') || auto.namers || {};
+  const famOf = (g, fam) => { g = g || {}; return SEEDS[g.job] && g.job !== 'crawly' && g.job !== 'tok' ? g.job : fam || (g.body === 'chip' ? 'crawly' : 'tok'); };
+  const SPK = { crawl: 'crawler' }, genomeOf = fam => DG[fam] ? DG[fam] : SPECIAL[SPK[fam] || fam] ? { ...BASE, ...SPECIAL[SPK[fam] || fam] } : DG.tok;
+  // ---------- a namer of our own (same idea as the world's: order-2 chain with backoff over the family's names) ----------
+  function sample(fam, n) { const seeds = SEEDS[fam] || [], w = (namerSt[fam] && namerSt[fam].w) || Object.fromEntries(seeds.map(s => [s, 2])), T = {}; let lmin = 99, lmax = 0;
+    for (const [nm, wt] of Object.entries(w)) { const s = '^^' + nm + '$'; lmin = Math.min(lmin, nm.length); lmax = Math.max(lmax, nm.length); for (let i = 2; i < s.length; i++) for (const k of [s.slice(i - 2, i), s[i - 1]]) { const t = T[k] = T[k] || {}; t[s[i]] = (t[s[i]] || 0) + wt; } }
+    const draw1 = t => { let r = Math.random() * Object.values(t).reduce((a, b) => a + b, 0); for (const [c, v] of Object.entries(t)) if ((r -= v) <= 0) return c; return '$'; };
+    const pipe = seeds.some(s => s.includes('|')), minL = Math.max(3, Math.min(...seeds.map(s => s.length))), out = new Set(), known = new Set(Object.keys(w));
+    for (let k = 0; k < 600 && out.size < n; k++) { let s = '^^'; while (s.length < lmax + 4) { const t = Math.random() < 0.88 && T[s.slice(-2)] ? T[s.slice(-2)] : T[s.slice(-1)]; if (!t) break; const c = draw1(t); if (c === '$') break; s += c; }
+      const nm = s.slice(2); if (nm.length < minL || nm.length > lmax + 2 || known.has(nm) || /(.)\1\1/i.test(nm) || nm.includes('|') !== pipe || (nm.match(/[|_]/g) || []).length > 1 || /^[|_]|[|_]$/.test(nm)) continue; out.add(nm); }
+    return [...out]; }
+  // ---------- live creatures ----------
+  const lives = [];
+  function creature(g, size) { const c = { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0, heading: Math.random() * 6.28, state: 'idle', held: false, phase: Math.random() * 10, g, size, nextFidget: 0, rest: 0 }; draw && draw.buildLegs(c); return c; }
+  function stepC(c, t, W, H, pad) { const sp = (c.g.speed || 1) * (c.size || 1) * 0.7;
+    if (c.state === 'sleep') { if (t > c.rest) c.state = 'idle'; } else { const dx = c.tx - c.x, dy = c.ty - c.y, d = Math.hypot(dx, dy); let vx = 0, vy = 0;
+      if (d > 2) { const s = Math.min(sp, d); vx = dx / d * s; vy = dy / d * s; c.x += vx; c.y += vy; } else if (t > c.rest) { if (Math.random() < 0.06) { c.state = 'sleep'; c.rest = t + 4000; } else { c.rest = t + 600 + Math.random() * 2600; const p = c.next ? c.next() : [pad + Math.random() * (W - 2 * pad), pad + Math.random() * (H - 2 * pad)]; c.tx = p[0]; c.ty = p[1]; } }
+      c.vx = c.vx * 0.8 + vx * 0.2; c.vy = c.vy * 0.8 + vy * 0.2; if (Math.hypot(c.vx, c.vy) > 0.15) { let a = Math.atan2(c.vy, c.vx) - c.heading; a = Math.atan2(Math.sin(a), Math.cos(a)); c.heading += a * 0.08; } }
+    draw.stepLegs(c, t); return draw.legsSVG(c) + draw.bodySVG(c, t); }
+  function liveBox(svg, g) { const W = 220, H = 160, R = (g.l1 + g.l2) || 50, size = Math.min(1, 46 / R); const c = creature(g, size); c.x = c.tx = W / 2; c.y = c.ty = H / 2; draw.buildLegs(c);
+    const L = { svg, c, W, H, vis: false, last: 0 }; lives.push(L); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.addEventListener('click', () => { c.state = 'idle'; c.rest = 0; c.tx = 20 + Math.random() * (W - 40); c.ty = 20 + Math.random() * (H - 40); }); return L; }
+  // ---------- the articles ----------
+  const famKeys = Object.keys(FAMS).sort((a, b) => (b === 'crawly') - (a === 'crawly') || (b === 'tok') - (a === 'tok'));
+  const JOB_EXTRA = { crawl: 'goes out on the real web and comes back with words in its legs' }, jobKey = f => genomeOf(f).job, n = x => Math.round(x * 100) / 100;
+  const toc = [], sec = (id, title, lvl = 2) => { toc.push([id, title, lvl]); return `<h${lvl} id="${id}">${title}</h${lvl}>`; };
+  const living = []; for (const k of ['crawly', 'tok']) if (liveG[k]) living.push({ fam: k, name: liveG[k].name || DG[k].name, g: liveG[k], life: ((auto.creatures || []).find(c => c.key === k) || {}).life, orig: true });
+  for (const r of auto.residents || []) living.push({ fam: famOf(r.genome, r.key === 'crawly' || r.key === 'tok' ? r.key : null), name: r.name, g: r.genome, life: r.life });
+  const byFam = {}; for (const x of living) (byFam[x.fam] = byFam[x.fam] || []).push(x);
+  let h = `<h1>Id|le</h1><p class="lede">From the Id|le-pedia, the encyclopedia of the world it describes. ${living.length ? `Your world has <b>${living.length}</b> creatures out${resting.length ? ` and ${resting.length} resting` : ''}, in <b>${Object.keys(byFam).length}</b> families; the weather there is <b>${esc(WN[worldNow.weather] || worldNow.weather || 'unknown')}</b>.` : 'No world saved in this browser yet.'}</p>`;
+  h += `<div class="ib"><div class="t">Id|le</div><svg class="live" data-fam="tok"></svg><div class="cap">Id|le, the first tokenizer (alive; click to send it somewhere)</div><table><tr><th>Kind</th><td>a world of word-eating creatures</td></tr><tr><th>Families</th><td>${famKeys.length}</td></tr><tr><th>Jobs</th><td>${JOBS.length}</td></tr><tr><th>Bodies</th><td>${BODIES.length}</td></tr><tr><th>Weathers</th><td>${Object.keys(WN).length}</td></tr><tr><th>Feelings</th><td>${Object.keys(FEEL).length}</td></tr></table></div>`;
+  h += `<p><b>Id|le</b> (written with the bar, spelled <code>id-le</code> where a bar cannot go) is a small world whose ground is made of words. Creatures with legs walk on them, eat them, carry them, cut them into pieces, name them, count them and pile them up. Every creature has a genome that mutates, a job, drives that pick what it does next, feelings, a diary, friends, favourite weather and food, and a mind you can watch stream. The world has weather, a day, ground features, disasters and other places to visit.</p>
+  <p>The name comes from the first tokenizer, <b>Id|le</b>: a tokenizer's names are split like tokens, and the bar is where the cut falls. The world page itself is still called the arena.</p>`;
+  if (living.length) { h += sec('your-world', 'Your world'); h += `<p class="hat">Read from this browser's copy of the world when this page opened. Click a name to find it in the world.</p><div class="yw">`;
+    for (const f of famKeys.filter(f => byFam[f])) h += `<div class="fam"><a href="#fam-${f}">${esc(FAMS[f])}</a> <small>${byFam[f].length}</small></div>` + byFam[f].map(x => { const lf = x.life || {}, last = (lf.diary || []).slice(-1)[0], tip = [x.g.job ? 'job: ' + x.g.job : '', lf.days ? lf.days + ' days' : '', (lf.friends || []).length ? (lf.friends.length + ' friends') : '', last && last.k ? 'last memory: ' + last.k : ''].filter(Boolean).join(' · ');
+      return `<span class="who" title="${esc(tip)}"><svg data-mini="${esc(JSON.stringify(x.g))}" viewBox="0 0 140 104"></svg><a href="arena.html#c=${encodeURIComponent(x.name)}" data-go="${esc(x.name)}">${esc(x.name)}</a></span>`; }).join('');
+    h += `</div>`; }
+  // families
+  h += sec('families', 'Families'); h += `<p>Creatures belong to a family, and each family has its own <b>namer</b>: a tiny character model that has read every name in the family and makes new ones that sound like them. Two creatures of a family share a sound the way people from one town might. Ordinary creatures are Crawly kin (chip bodies) or Tok kin (everything else); a creature with a special job joins that job's family.</p>
+  <p>How a namer works: it is an order-2 Markov chain over letters with a little order-1 backoff, so it mostly continues a name the way its family's names continue, with an occasional surprise. Every name it gives joins what it has read; a name <i>you</i> choose counts three times; old names slowly fade (the seed names never fully), so a family's style drifts over generations but stays recognisable. Names keep their family's shape: Tok kin always carry one bar, Debuggers one underscore, nobody gets three of a letter in a row.</p>
+  <table class="wt"><tr><th>Family</th><th>Seed names</th><th>How they sound</th></tr>${famKeys.map(f => `<tr><td><a href="#fam-${f}">${esc(FAMS[f])}</a></td><td class="names">${(SEEDS[f] || []).slice(0, 6).map(esc).join(', ')}…</td><td>${esc({ crawly: 'small and skittery', tok: 'split like tokens, one bar', namer: 'wordy, label-like', blursort: 'smeared, image words', crawl: 'vowels dropped, like old web tools', debug: 'underscored, hex-ish', counter: 'numbers and arithmetic', sorter: 'shelves, piles and ranks' }[f] || '')}</td></tr>`).join('')}</table>`;
+  for (const f of famKeys) { const g = genomeOf(f), j = g.job, mine = byFam[f] || [];
+    h += '<section class="famsec">' + sec('fam-' + f, esc(FAMS[f]), 3);
+    h += `<div class="ib"><div class="t">${esc(FAMS[f])}</div><svg class="live" data-fam="${f}"></svg><div class="cap">${esc(g.name || f)}, as born (alive)</div><table>
+      <tr><th>Body</th><td>${esc(g.body)}</td></tr><tr><th>Legs</th><td>${g.legs}</td></tr><tr><th>Reach</th><td>${Math.round(g.l1 + g.l2)}</td></tr><tr><th>Speed</th><td>${g.speed}</td></tr>
+      <tr><th>Job</th><td>${esc(j)}</td></tr><tr><th>Can</th><td>${esc((g.actions || []).join(', '))}</td></tr>${f === 'crawly' || f === 'tok' ? '' : `<tr><th>Hatched</th><td>workshop → special creatures</td></tr>`}
+      <tr><td class="hd" colspan="2">Names</td></tr><tr><td colspan="2" class="names">${(SEEDS[f] || []).map(esc).join(' · ')}</td></tr>
+      <tr><td class="hd" colspan="2">It might name the next one <button class="nx" data-fam="${f}" title="ask the namer again">↻</button></td></tr><tr><td colspan="2" class="names" id="nx-${f}"></td></tr></table></div>`;
+    h += `<p><b>${esc(FAMS[f])}</b>${f === 'crawly' ? ', the family of Crawly (also called Moundy), the first crawler: eight legs, an abdomen, feelers and a targeting laser; it hoards words into a mound at home.' : f === 'tok' ? ', the family of Id|le, the first tokenizer: a box with six short legs that cuts words into pieces and collects vowels. Tok kin names are split like tokens.' : `: each one ${esc(JOB_NAMES[j] || JOB_EXTRA[j] || j)}.`}</p>`;
+    h += `<p>${mine.length ? `In your world: ${mine.slice(0, 14).map(x => `<a href="arena.html#c=${encodeURIComponent(x.name)}" data-go="${esc(x.name)}">${esc(x.name)}</a>`).join(', ')}${mine.length > 14 ? ` and ${mine.length - 14} more` : ''}.` : '<span class="note">None in your world right now.</span>'}</p>`;
+    if (f === 'counter') h += `<p>A Counter walks to a spot and counts the words, letters or creatures within reach, a small number popping over each, then drops the total on the floor as a number word. Later it carries two number words together and combines them with +, − or ×. What it likes to count, how far it looks (${SPECIAL.counter ? SPECIAL.counter.cR : 130} by default) and which sums it prefers are genes. Its card keeps a ledger.</p>`;
+    if (f === 'sorter') h += `<p>A Sorter reads words with a classifier head (emotion, topic and others) and makes a pile for each class it finds.</p>`;
+    h += '</section>'; }
+  // jobs
+  h += sec('jobs', 'Jobs'); h += `<p>Every genome carries a <code>job</code>, what a creature does with its time when no drive is pressing. Jobs mutate like anything else, so an ordinary creature can become a Counter or a Namer, and then joins that family.</p><table class="wt"><tr><th>Job</th><th>What it does</th><th>Family</th></tr>${JOBS.map(j => `<tr><td><code>${esc(j)}</code></td><td>${esc(JOB_NAMES[j] || '')}</td><td>${SEEDS[j] ? `<a href="#fam-${j}">${esc(FAMS[j])}</a>` : '<span class="note">stays in its kin</span>'}</td></tr>`).join('')}<tr><td><code>crawl</code></td><td>goes out on the real web and comes back with words in its legs</td><td><a href="#fam-crawl">${esc(FAMS.crawl || 'Crawlers')}</a></td></tr></table>
+  <p>What a creature can be asked to do (its <b>actions</b>) comes from a smaller pool: ${ACTIONS.map(a => `<code>${esc(a)}</code>`).join(', ')}, plus greet. Up to four are in its genes.</p>`;
+  // anatomy
+  h += sec('anatomy', 'Anatomy and genes'); h += `<div class="ib"><div class="t">Bodies</div><svg class="live" data-bodies="1"></svg><div class="cap">one of each body, taking turns</div><table>${BODIES.map(b => `<tr><th>${esc(b)}</th><td>${esc({ chip: 'a little circuit board, a blinking LED', box: 'a soft box with eyes and two blades', orb: 'a round core with a glowing eye', tri: 'a triangle with one red eye', seg: 'three segments that ripple', star: 'a spinning ten-point star' }[b] || '')}</td></tr>`).join('')}</table></div>
+  <p>A creature is drawn from its genome every frame: legs placed with two-bone inverse kinematics, feet that plant and swing in alternating groups, a body that breathes, and an idle life of weight shifts and tapping feet. All of it mutates. When a genome mutates, each number is multiplied by a small random factor and kept in a creature-sized range; shapes and switches flip now and then.</p>
+  <table class="wt"><tr><th>Gene</th><th>Meaning</th><th>Range</th></tr>${TRAITS.map(([k, lab]) => `<tr><td><code>${esc(k)}</code></td><td>${esc(lab)}</td><td class="note">${CL[k] ? CL[k].join(' – ') : k === 'legs' ? '4 – 12, in pairs' : k === 'body' ? BODIES.join(', ') : k === 'job' ? JOBS.length + ' jobs' : k.includes('ue') ? '0 – 360°' : ['wander', 'social', 'timid'].includes(k) ? '0 – 1' : ''}</td></tr>`).join('')}</table>
+  <h3 id="mind-genes">Mind genes</h3><p>Three genes shape the mind stream. Until a creature first mutates they are seeded from its id, so every creature already thinks differently:</p>
+  <table class="wt"><tr><th>Gene</th><th>Meaning</th><th>Range</th></tr><tr><td><code>mrate</code></td><td>how fast it thinks, in characters per second</td><td class="note">born 25 – 200; evolves within 8 – 400</td></tr><tr><td><code>mburst</code></td><td>steady, pulsing or bursty</td><td class="note">0 – 1</td></tr><tr><td><code>mglyph</code></td><td>what its idle thoughts look like</td><td class="note">${GLY.map(g => `${esc(g[1])} <span class="mono">${esc(g[0].slice(0, 6))}</span>`).join(' · ')}</td></tr></table>`;
+  // life
+  h += sec('life', 'Life'); h += `<p>Creatures have four <b>drives</b> (hungry, curious, tired, fond of you) that rise and fall with what happens; the highest need picks what they do next. Around the drives each creature keeps a life.</p>`;
+  h += sec('feelings', 'Feelings', 3) + `<p>Feelings are not stored; they are read from what a creature already has: its drives, scares, thefts, sickness, and the time since you last paid it attention. The card shows the strongest three; when one crosses a line it becomes a memory, and sometimes the creature says it out loud.</p><p class="feels">${Object.entries(FEEL).map(([k, e]) => `<span title="${esc((SAY[k] || []).join(' / '))}">${e} ${esc(k)}${ONSET[k] ? ` <small class="note">→ “${esc(ONSET[k])}”</small>` : ''}</span>`).join('')}</p><p class="note">Hover a feeling for what creatures say when it starts.</p>`;
+  h += sec('diary', 'Diary and memories', 3) + `<p>Each creature keeps a diary of up to 80 memories: meals, jobs, thefts, trips, disasters, friends made, renames and what you did to it. Repeats within five minutes fold into one memory that keeps what it was about (“ate ox ×4”). Names and words in memories are links: hover a name for a mini profile, click it to fly there.</p>
+  <p>From its days a creature learns <b>favourite and least favourite weather</b> (after enough time in at least two), <b>favourite foods</b> (eaten first), the <b>places</b> it has been, the <b>days</b> and <b>world changes</b> it has lived through, and <b>friends</b>: creatures it has spent ten minutes near.</p>`;
+  h += sec('mind', 'The mind', 3) + `<p>The <b>mind</b> tab on a creature's card shows what goes on inside it, three ways:</p><ul><li><b>stream</b>: the mind never stops. Characters pour in at the top left, wrap row after row and fall out at the bottom right. Events are the raw data; between them it keeps processing its drives, its position, its targets, in its own glyphs. Asleep, it dreams scrambled memories. It stops only when it dies.</li><li><b>thoughts</b>: first-person, newest first: what it sees, wants, feels, says, does and remembers.</li><li><b>tagged</b>: the same with a colour per kind and numbers and words highlighted.</li></ul><p>How fast it streams depends on its <a href="#mind-genes">mind genes</a> and its state: curious, excited or scared minds run fast; tired and sleeping ones slow.</p>`;
+  // world
+  h += sec('world', 'The world'); h += sec('weather', 'Weather', 3) + `<p>The world always has one weather, at some intensity. Creatures notice it: they spend time in each, learn which they like, and say so when it turns. Each weather has its own settings in the studio.</p><table class="wt"><tr><th>Weather</th><th>Settings</th></tr>${Object.entries(WN).map(([k, v]) => `<tr><td>${esc(v)}${k === worldNow.weather ? ' <small class="note">← now, in your world</small>' : ''}</td><td class="note">${(WXS[k] || []).map(s => esc(s[1])).join(', ') || '—'}</td></tr>`).join('')}</table><p>There is also a <b>day</b>: dawn, day, dusk, night and before dawn, with light to match. Creatures count the days they have lived through.</p>`;
+  h += sec('ground', 'Ground features', 3) + `<p>Under the words the ground has features, made when a world is made and reshuffled when it evolves: ${FEATS.map(f => `<b>${esc(f)}</b>${{ stream: ' (a current that carries words and creatures along)', well: ' (a latency well: everything inside moves slowly)', hole: ' (a small hole)', cache: ' (a cache, a patch where things are kept)' }[f] || ''}`).join(', ')}.</p>`;
+  h += sec('disasters', 'Disasters', 3) + `<p>From the studio you can bring ${Object.values(DIS).map(esc).join(', ').replace(/, ([^,]*)$/, ' or $1')}. Words fly, creatures are scared, and everyone present remembers it.</p>`;
+  h += sec('places', 'Places', 3) + `<p>Home is the world of words. Creatures can also travel: to a <b>captured web page</b> (its words become ground they can walk on), to the <b>data lab</b> (where classifier creatures sort a stream of messages as a team), and to <b>connected worlds</b> (other browsers' worlds, where they visit as guests). Each place keeps its own state; leaving never deletes it.</p>`;
+  h += sec('evolution', 'Evolution', 3) + `<p>Creatures evolve: a mutation copies a genome with small changes, and you choose what to keep. The world evolves too (layout, tilt, weather, ground, fonts), from the 🌦 evolve button, and you can keep worlds you like.</p>`;
+  h += sec('snapshots', 'Snapshots and saving'); h += `<p>Everything in a world can be kept: 📸 <b>snapshot</b> saves the creatures (with their genomes, lives, diaries, friends and ledgers), the residents and the resting, the namers, the world and its weather, the words, and any captured page. The world also autosaves as you play, and snapshots are mirrored to disk. Restoring or leaving never throws anything away: the old state goes into the snapshot list first.</p>`;
+  h += sec('about', 'About this encyclopedia'); h += `<p>The Id|le-pedia reads its facts straight from the world's own code when it opens (the families and their seed names, the jobs, genes, bodies, weathers, feelings and disasters), so it cannot fall behind it. The creatures in the boxes and in the margins are drawn by the world's own drawing code. What it shows of <i>your</i> world is read from this browser and never changed.</p>${missing.length ? `<p class="note">Could not read from the world this time: ${missing.map(esc).join(', ')}.</p>` : ''}`;
+  const words = (auto.words || []).map(w => w.text || w.t || w).filter(w => typeof w === 'string' && w.length < 16);
+  h += `<div class="floor" id="floor">${Array.from({ length: Math.min(40, words.length) }, () => `<span style="left:${(Math.random() * 94).toFixed(1)}%;top:${(Math.random() * 70).toFixed(0)}px;transform:rotate(${((Math.random() - .5) * 30).toFixed(0)}deg)">${esc(pick(words))}</span>`).join('')}</div>`;
+  main.innerHTML = h;
+  $('#toc').innerHTML = '<b>Contents</b>' + toc.map(([id, t, l]) => `<a class="${l > 2 ? 'sub' : ''}" href="#${id}">${t}</a>`).join('') + '<b>Elsewhere</b><a href="arena.html" target="idle-arena">the world</a>';
+  $('#ql').innerHTML = toc.map(([, t]) => `<option value="${esc(t.replace(/<[^>]+>/g, ''))}">`).join('');
+  $('#q').addEventListener('change', e => { const v = e.target.value.trim().toLowerCase(); if (!v) return; const hit = toc.find(([, t]) => t.toLowerCase() === v) || toc.find(([, t]) => t.toLowerCase().includes(v)); if (hit) { location.hash = hit[0]; return; }
+    const el = [...main.querySelectorAll('p,td,li')].find(x => x.textContent.toLowerCase().includes(v)); if (el) { el.scrollIntoView({ block: 'center' }); el.animate([{ background: 'var(--hl)' }, { background: 'transparent' }], { duration: 2000 }); } else toast('nothing about “' + v + '” yet'); });
+  const toast = t => { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); };
+  const fillNames = f => { const el = document.getElementById('nx-' + f); if (el) el.innerHTML = sample(f, 5).map(x => `<i>${esc(x)}</i>`).join(' · ') || '<span class="note">—</span>'; };
+  famKeys.forEach(fillNames); main.addEventListener('click', e => { const b = e.target.closest('.nx'); if (b) fillNames(b.dataset.fam); });
+  // names lead into the world: an open world tab takes the visit, otherwise a world opens on that creature
+  let arenaOpen = false; let bc = null; try { bc = new BroadcastChannel('idle-arena'); bc.onmessage = e => { if (e.data && e.data.pong) arenaOpen = true; }; bc.postMessage({ ping: 1 }); setInterval(() => { arenaOpen = false; bc.postMessage({ ping: 1 }); }, 5000); } catch (e) {}
+  main.addEventListener('click', e => { const a = e.target.closest('a[data-go]'); if (!a || !bc || !arenaOpen) return; e.preventDefault(); bc.postMessage({ focus: a.dataset.go }); toast('shown in your world tab: ' + a.dataset.go); });
+  if (!draw) return;
+  // static minis for your world, live boxes for families
+  for (const s of document.querySelectorAll('svg[data-mini]')) { try { const g = JSON.parse(s.dataset.mini), c = creature(g, 1); c.x = 70; c.y = 52; c.heading = -0.4; draw.buildLegs(c); s.innerHTML = draw.legsSVG(c) + draw.bodySVG(c, 0); } catch (e) {} }
+  for (const s of document.querySelectorAll('svg.live[data-fam]')) liveBox(s, genomeOf(s.dataset.fam));
+  { const s = document.querySelector('svg.live[data-bodies]'); if (s) { let i = 0; const L = liveBox(s, { ...DG.tok, body: BODIES[0] }); setInterval(() => { if (!L.vis) return; i = (i + 1) % BODIES.length; L.c.g = { ...L.c.g, body: BODIES[i], hue: (L.c.g.hue + 61) % 360 }; draw.buildLegs(L.c); }, 3200); } }
+  const io = new IntersectionObserver(es => es.forEach(e => { const L = lives.find(x => x.svg === e.target); if (L) L.vis = e.isIntersecting; })); lives.forEach(L => io.observe(L.svg));
+  // margin crawlers: a few small creatures from your world (or the families) walking the edges, sometimes across the text
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches, crawlSvg = $('#crawl'), roamers = [];
+  const pool = living.length ? living.map(x => x.g) : famKeys.map(genomeOf);
+  for (let i = 0; i < (reduce ? 0 : 4); i++) { const g = pick(pool), c = creature(g, Math.max(Math.min(0.42, 22 / ((g.l1 + g.l2) || 50)), 7 / (g.bodyW || 15))), vw = () => innerWidth, vh = () => innerHeight;
+    c.next = () => { const edge = Math.random(); if (edge < 0.12) return [Math.random() * vw(), Math.random() * vh()]; const left = Math.random() < 0.5, mx = Math.max(30, Math.min(160, (vw() - 1180) / 2 + 60)); return [left ? 12 + Math.random() * mx : vw() - 12 - Math.random() * mx, 20 + Math.random() * (vh() - 40)]; };
+    const p = c.next(); c.x = c.tx = p[0]; c.y = c.ty = p[1]; draw.buildLegs(c); c.rest = 0; roamers.push(c); }
+  let fr = 0;
+  function tick(t) { requestAnimationFrame(tick); if (document.hidden || (++fr & 1)) return;
+    for (const L of lives) if (L.vis) L.svg.innerHTML = stepC(L.c, t, L.W, L.H, 34);
+    if (roamers.length) crawlSvg.innerHTML = roamers.map(c => `<g opacity=".8">${stepC(c, t, innerWidth, innerHeight, 20)}</g>`).join('');
+    wxTick(t); }
+  // weather in the header: your world's weather, lightly
+  const cv = $('#wx'), cx = cv.getContext('2d'), wk = worldNow.weather || 'clear', parts = Array.from({ length: reduce ? 0 : 46 }, () => ({ x: Math.random(), y: Math.random(), s: 0.3 + Math.random() }));
+  function wxTick() { const W = cv.width = cv.clientWidth, H = cv.height = cv.clientHeight; cx.clearRect(0, 0, W, H); const ink = isDark() ? '200,210,255' : '40,60,140';
+    for (const p of parts) { if (wk === 'clear') break;
+      if (wk === 'bitrain' || wk === 'storm') { p.y += 0.012 * p.s * (wk === 'storm' ? 2 : 1); if (p.y > 1) { p.y = 0; p.x = Math.random(); } cx.fillStyle = `rgba(${ink},${0.25 + 0.3 * p.s})`; cx.font = '10px ui-monospace,Menlo,monospace'; cx.fillText(p.s > 0.8 ? '1' : '0', p.x * W, p.y * H); }
+      else if (wk === 'wind') { p.x += 0.004 * p.s; if (p.x > 1) { p.x = 0; p.y = Math.random(); } cx.strokeStyle = `rgba(${ink},.25)`; cx.beginPath(); cx.moveTo(p.x * W, p.y * H); cx.lineTo(p.x * W + 14 * p.s, p.y * H); cx.stroke(); }
+      else if (wk === 'static') { if (Math.random() < 0.3) { cx.fillStyle = `rgba(${ink},.4)`; cx.fillRect(Math.random() * W, Math.random() * H, 2, 2); } }
+      else if (wk === 'fog') { p.x += 0.0006 * p.s; if (p.x > 1.1) p.x = -0.1; const g = cx.createRadialGradient(p.x * W, p.y * H, 0, p.x * W, p.y * H, 40 * p.s); g.addColorStop(0, `rgba(${ink},.06)`); g.addColorStop(1, `rgba(${ink},0)`); cx.fillStyle = g; cx.fillRect(p.x * W - 50, p.y * H - 50, 100, 100); }
+      else if (wk === 'hum') { cx.strokeStyle = `rgba(${ink},.12)`; cx.beginPath(); for (let x = 0; x < W; x += 6) cx.lineTo(x, H * p.y + Math.sin(x / 18 + performance.now() / 200 + p.s * 9) * 3); cx.stroke(); if (p.s > 0.5) break; } } }
+  requestAnimationFrame(tick);
+  if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
+  window.__pedia = { missing, families: famKeys, living: living.length };
+})();
+</script>
+</body>
+</html>
