@@ -1,6 +1,8 @@
-# The arena
+# Id|le
 
-A small world of creatures with drives, jobs, feelings, memories, family names and a mind you can watch stream.
+A small world of creatures with drives, jobs, feelings, memories, family names and a mind you can watch stream. Written `Id|le` (the bar is a token split, like the Tok kin names), spelled `id-le` wherever a bar can't go: the repo, the domain (id-le.com), file names. The encyclopedia will be the Id|le-pedia.
+
+The world page is still called the arena (`demo/arena.html`).
 
 Moved out of `nicobrenner/jeffy` on 2026-10-29 with its full history (44 commits, original dates; each message notes the jeffy commit it came from).
 
