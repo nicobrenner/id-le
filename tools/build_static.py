@@ -20,7 +20,7 @@ ORT_FILES = ["ort.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded
 ORT_CDN = f"https://cdn.jsdelivr.net/npm/onnxruntime-web@{ORT_VER}/dist/"
 ORT_TAG = f'<script src="{ORT_CDN}ort.min.js"></script>'
 # the one cached model is enough; the two old ones are only a fallback for checkouts without it
-COPY = ["pedia.html", "idle-runtime.js", "sw.js", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
+COPY = ["pedia.html", "idle-runtime.js", "sw.js", "starter_world.json", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
         "arena_instr_v1.json", "arena_instr_v2.json", "arena_genomes.json", "datalab_stream.json"]
 HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
@@ -64,7 +64,8 @@ def main():
     html = html.replace(ORT_TAG, '<script src="vendor/ort/ort.min.js"></script>')
     for name in ("index.html", "arena.html"):   # index for the site root; arena.html because the pedia reads the game's own source
         open(os.path.join(out, name), "w", encoding="utf-8").write(html)
-    for f in COPY:
+    # every game module (idle-*.js) the page loads, so new ones are never left out of the build
+    for f in COPY + sorted(x for x in os.listdir(DEMO) if x.startswith('idle-') and x.endswith('.js') and x not in COPY):
         src = os.path.join(DEMO, f)
         if os.path.exists(src): shutil.copy2(src, os.path.join(out, f))
         else: print("  missing (skipped):", f)
