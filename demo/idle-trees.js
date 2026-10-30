@@ -28,7 +28,7 @@
   function mergeInto(dst, src) { if (!src || !src.cr) return 0; let n = 0; dst.since = Math.min(dst.since || now(), src.since || now());
     for (const [u, r] of Object.entries(src.cr)) { const e = dst.cr[u]; if (!e) { dst.cr[u] = JSON.parse(JSON.stringify(r)); n++; continue; }
       for (const id of r.ids || []) if (!e.ids.includes(id)) { e.ids.push(id); n++; } for (const nm of r.names || []) if (!e.names.includes(nm) && nm !== e.name) e.names.push(nm);
-      e.born = Math.min(e.born || Infinity, r.born || Infinity); e.first = Math.min(e.first || Infinity, r.first || Infinity); if (e.pf0 == null && r.pf0 != null) e.pf0 = r.pf0;
+      e.born = Math.min(e.born || Infinity, r.born || Infinity); e.first = Math.min(e.first || Infinity, r.first || Infinity); if (e.pf0 == null && r.pf0 != null) e.pf0 = r.pf0; if (e.pf1 == null && r.pf1 != null) e.pf1 = r.pf1; if (r.birth) e.birth = 1;
       const ts = new Set((e.muts || []).map(m => m.t + m.to)); for (const m of r.muts || []) if (!ts.has(m.t + m.to)) { (e.muts = e.muts || []).push(m); n++; } e.muts.sort((a, b) => a.t - b.t);
       if (!e.birthGenes && r.birthGenes) e.birthGenes = r.birthGenes; if (r.told) e.told = 1; }
     for (const [f, g] of Object.entries(src.maxGen || {})) dst.maxGen[f] = Math.max(dst.maxGen[f] || 0, g); if (src.great) dst.great = dst.great || src.great; return n; }
@@ -44,7 +44,7 @@
     return out.sort((p, q) => q[3] - p[3]); }
   const say1 = d => { if (!d) return ''; const [k, x, y] = d, L = LABEL[k] || k; if (CAT.includes(k)) return k === 'wings' ? (y ? 'grew wings' : 'lost its wings') : `${L}: ${x} → ${y}`; if (k.endsWith('ue')) return `${L} shifted`; const r = (y - x) / Math.max(1e-6, Math.abs(x)); return `${L} ${r > 0 ? '+' : ''}${Math.abs(r) < 10 ? Math.round(r * 100) + '%' : (+y).toFixed(2)}`; };
   function touch(uid, g, name, fam, born, o) { const t = now(); let R = T.cr[uid];
-    if (!R) R = T.cr[uid] = { uid, name, names: [], fam, born: born || t, first: t, ids: [], genes: G(g), birthGenes: G(g), muts: [], place: o.place, main: o.main ? 1 : 0, pf0: g.parent ?? null };
+    if (!R) R = T.cr[uid] = { uid, name, names: [], fam, born: born || t, first: t, ids: [], genes: G(g), birthGenes: G(g), muts: [], place: o.place, main: o.main ? 1 : 0, pf0: g.parent ?? null, pf1: g.parent2 ?? null, birth: g.birth ? 1 : 0 };
     if (R.name !== name && name) { if (R.name && !R.names.includes(R.name)) R.names.push(R.name); R.name = name; }
     if (fam) R.fam = fam; R.here = o.here; R.rest = o.rest; R.place = o.place; R.gone = null; R.miss = 0;
     const id = g.id || ''; if (id && !R.ids.includes(id)) { if (R.ids.length) { const d = diff(R.genes, G(g)); R.muts.push({ t, from: R.ids[R.ids.length - 1], to: id, top: d.slice(0, 3).map(x => x.slice(0, 3)) }); if (R.muts.length > 40) R.muts.splice(0, R.muts.length - 40); } R.ids.push(id); }
@@ -59,30 +59,33 @@
     resolveAll(); news(); save(); if (open) render(); }
 
   // ---------- reading the parents ----------
-  let byStrip = new Map(), genMemo = new Map(), kids = new Map();
+  let byStrip = new Map(), genMemo = new Map(), kids = new Map(), kids2 = new Map();
   function index() { byStrip = new Map(); for (const R of Object.values(T.cr)) for (const id of R.ids) { const s = strip(id); if (!byStrip.has(s)) byStrip.set(s, []); const a = byStrip.get(s); if (!a.includes(R)) a.push(R); } }
   function owner(gid, self) { const a = (byStrip.get(strip(gid)) || []).filter(R => R !== self); if (!a.length) return null;
     return a.sort((p, q) => (q.main - p.main) || ((p.ghost ? 1 : 0) - (q.ghost ? 1 : 0)) || ((p.born || 0) - (q.born || 0)))[0]; }
   function ghost(gid, pf, fam, born) { const s = strip(gid), uid = 'ghost:' + s; let R = T.cr[uid];
     if (!R) { R = T.cr[uid] = { uid, ghost: 1, name: 'an unrecorded ancestor', names: [], fam, born: born || now(), first: now(), ids: [s], genes: {}, muts: [], pf0: pf ?? null, here: 0, rest: 0, gone: 1 }; byStrip.set(s, (byStrip.get(s) || []).concat([R])); }
     R.born = Math.min(R.born, born || R.born); return R; }
-  function resolve(R) { R.parent = null; R.pg = null;
+  function resolve(R) { R.parent = null; R.pg = null; R.parent2 = null;
     if (R.main) { R.origin = 'founder'; return; }
     if (R.ghost) { const o = R.pf0 && owner(R.pf0, R); R.origin = 'ghost'; if (o) { R.parent = o.uid; R.pg = R.pf0; } return; }
     const S = strip(R.ids[0] || ''), C = cloneOf(S);
     if (C) { const o = owner(C, R) || ghost(C, R.pf0, R.fam, R.born); R.parent = o.uid; R.origin = 'clone'; R.pg = C; return; }
-    if (R.pf0) { const o = owner(R.pf0, R); R.pg = R.pf0; if (o) { R.parent = o.uid; R.origin = 'spawn'; } else R.origin = 'unknown'; return; }
+    if (R.pf0) { const o = owner(R.pf0, R); R.pg = R.pf0; if (o) { R.parent = o.uid; R.origin = R.birth ? (R.pf1 ? 'born' : 'bud') : 'spawn'; } else R.origin = 'unknown';
+      if (R.pf1) { const o2 = owner(R.pf1, R); if (o2 && o2.uid !== R.parent) R.parent2 = o2.uid; } return; }
     const k = baseKey(S); R.origin = k && k !== 'crawly' && k !== 'tok' ? 'founder' : 'unknown'; R.pg = S; }
   function gen(R, seen) { if (genMemo.has(R.uid)) return genMemo.get(R.uid); seen = seen || new Set(); if (seen.has(R.uid)) return 0; seen.add(R.uid);
     const P = R.parent && T.cr[R.parent], g = P ? gen(P, seen) + 1 : 0; genMemo.set(R.uid, g); return g; }
   function resolveAll() { index(); for (const R of Object.values(T.cr)) resolve(R); genMemo = new Map(); kids = new Map();
     for (const R of Object.values(T.cr)) { if (R.parent) { if (!kids.has(R.parent)) kids.set(R.parent, []); kids.get(R.parent).push(R); } }
+    kids2 = new Map(); for (const R of Object.values(T.cr)) if (R.parent2) { if (!kids2.has(R.parent2)) kids2.set(R.parent2, []); kids2.get(R.parent2).push(R); }
     for (const a of kids.values()) a.sort((p, q) => (p.born || 0) - (q.born || 0));
     // a ghost takes the family of its children
     for (const R of Object.values(T.cr)) if (R.ghost) { const k = kids.get(R.uid); if (k && k.length) R.fam = k[0].fam; } }
-  const childrenOf = R => kids.get(R.uid) || [], parentOf = R => R.parent ? T.cr[R.parent] : null;
+  const childrenOf = R => kids.get(R.uid) || [], parentOf = R => R.parent ? T.cr[R.parent] : null, parent2Of = R => R.parent2 ? T.cr[R.parent2] : null, allKids = R => childrenOf(R).concat(kids2.get(R.uid) || []);
+  const parentsTxt = R => { const P = parentOf(R), Q = parent2Of(R); return P ? (R.origin === 'clone' ? ' of ' : ' ') + nameOf(P) + (Q ? ' & ' + nameOf(Q) : '') : ''; };
   const alive = R => !R.ghost && !R.gone, status = R => R.ghost ? 'unrecorded' : R.gone ? 'gone' : R.rest ? 'resting' : 'here';
-  const ORIGIN = { founder: 'a founder', clone: 'a clone', spawn: 'mutated from', unknown: 'unknown origin', ghost: 'known only from its children' };
+  const ORIGIN = { born: 'child of', bud: 'budded from', founder: 'a founder', clone: 'a clone', spawn: 'mutated from', unknown: 'unknown origin', ghost: 'known only from its children' };
 
   // ---------- news: a new deepest generation in a family, the first great-grandchild (only for creatures seen being born) ----------
   function news() { const recs = Object.values(T.cr).filter(R => !R.ghost);
@@ -165,7 +168,7 @@
     el.innerHTML = `<div class="hd"><b>🌳 family trees</b><span><button data-t="x" title="close">✕</button></span></div>
 <div class="row"><select data-t="fam">${fs.map(([f, n]) => `<option value="${esc(f)}" ${f === fam ? 'selected' : ''}>${esc(f)} (${n})</option>`).join('')}</select><span class="sub">${(fs.find(f => f[0] === fam) || [0, 0])[1]} ${esc(fam || '')} in ${roots.length} tree${roots.length === 1 ? '' : 's'} (${S.real.length} creatures in those trees) · ${gens.length ? 'generations 0–' + gens[gens.length - 1] : ''}</span></div>
 <div class="cvw"><canvas></canvas><div class="tip"></div><div class="zoomb"><button data-t="zin" title="zoom in">+</button><button data-t="zout" title="zoom out">−</button><button data-t="fit" title="fit the whole tree">⤢</button></div></div>
-<div class="sub">★ founder · <b>?</b> unknown origin · faded: gone · 💤 resting · dashed: an ancestor known only from its children's ids · the label on a line: the gene that differs most from the parent · drag to pan, wheel to zoom, click a creature</div>
+<div class="sub">★ founder · <b>?</b> unknown origin · dotted pink: a child's second parent · faded: gone · 💤 resting · dashed: an ancestor known only from its children's ids · the label on a line: the gene that differs most from the parent · drag to pan, wheel to zoom, click a creature</div>
 ${P ? `<div class="sel">${selHTML(P)}</div>` : ''}
 <h4>highlights</h4><div class="hl">
 <div>★ <b>founders</b>: ${roots.filter(r => !r.ghost).slice(0, 8).map(r => nameOf(r) + (r.origin === 'unknown' ? ' <span class="sub">(unknown origin)</span>' : '')).join(', ') || '–'}${roots.length > 8 ? ' …' : ''}</div>
@@ -175,8 +178,8 @@ ${P ? `<div class="sel">${selHTML(P)}</div>` : ''}
 <div>🧬 <b>drift</b> <select data-t="gene">${numGenes.map(k => `<option value="${k}" ${k === geneK ? 'selected' : ''}>${esc(LABEL[k] || k)}</option>`).join('')}</select> average per generation ${spark(avg)} ${avg.map((v, i) => `<span class="sub">g${gens[i]}</span> ${fmt(v)}`).join(' · ')}${lineV.length > 1 ? `<br><span class="sub">down the longest line</span> ${spark(lineV)} ${lineV.map(fmt).join(' → ')}` : ''}</div></div>
 <div class="row" style="margin-top:8px"><button data-t="csv">⬇ CSV</button><button data-t="json">⬇ JSON</button><span class="sub">every creature ever recorded: id, parent, generation, genes</span></div>`;
     cv = el.querySelector('canvas'); tip = el.querySelector('.tip'); lay = layout(roots); if (view.fit) { fitView(); view.fit = false; } if (focus) { const p = lay.get(focus); if (p) { const r = cv.getBoundingClientRect(); view.x = r.width / 2 - p.x * view.z; view.y = r.height / 2 - p.y * view.z; } focus = null; } draw(); }
-  function selHTML(R) { const P = parentOf(R), ks = childrenOf(R), d = P && P.genes ? diff(P.genes, R.birthGenes || R.genes) : [];
-    return `${R.ghost ? '<b>an unrecorded ancestor</b>' : mn(R.name)}${R.names.length ? ` <span class="sub">(once ${R.names.slice(-3).map(esc).join(', ')})</span>` : ''} · <b>generation ${gen(R)}</b> · ${esc(ORIGIN[R.origin] || R.origin)}${P ? ' ' + (R.origin === 'clone' ? 'of ' : R.origin === 'spawn' ? '' : '') + nameOf(P) : ''} · ${status(R)}<br>
+  function selHTML(R) { const P = parentOf(R), ks = allKids(R), d = P && P.genes ? diff(P.genes, R.birthGenes || R.genes) : [];
+    return `${R.ghost ? '<b>an unrecorded ancestor</b>' : mn(R.name)}${R.names.length ? ` <span class="sub">(once ${R.names.slice(-3).map(esc).join(', ')})</span>` : ''} · <b>generation ${gen(R)}</b> · ${esc(ORIGIN[R.origin] || R.origin)}${parentsTxt(R)} · ${status(R)}<br>
 <span class="sub">${R.ghost ? `its genome ${esc(R.ids[0])} is named by ${ks.length} clone${ks.length === 1 ? '' : 's'}, but nobody recorded who carried it` : `born ${new Date(R.born).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${R.gone && R.gone !== 1 ? ' · gone since ' + new Date(R.gone).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''} · genome ${esc(R.ids[R.ids.length - 1] || '')}`}${R.origin === 'unknown' && R.pg ? ` · carries genome ${esc(R.pg)}; how it got here was never recorded` : ''}</span>
 ${d.length ? `<br>differs from its parent: ${d.slice(0, 4).map(say1).map(esc).join(', ')}` : ''}${(R.muts || []).length ? `<br>changed ${R.muts.length}× since: ${R.muts.slice(-3).map(m => m.top.length ? esc(say1(m.top[0])) : 'a small change').join(', ')}` : ''}
 ${ks.length ? `<br>children (${ks.length}): ${ks.slice(0, 12).map(nameOf).join(', ')}${ks.length > 12 ? ' …' : ''}` : ''}`; }
@@ -188,6 +191,7 @@ ${ks.length ? `<br>children (${ks.length}): ${ks.slice(0, 12).map(nameOf).join('
     const maxY = Math.max(0, ...[...lay.values()].map(p => p.y)); void maxY;
     for (const p of lay.values()) { const P = p.R.parent && lay.get(p.R.parent); if (!P) continue; g.strokeStyle = dark ? '#fff6' : '#0005'; g.lineWidth = 1.4 / Math.max(0.6, view.z); g.setLineDash(P.R.ghost ? [5, 4] : []); g.beginPath(); if (p.wrap) { const top = P.y + ROWH - 44; g.moveTo(P.x, P.y + 26); g.lineTo(P.x, top); g.lineTo(p.x, top); g.lineTo(p.x, p.y - 26); } else { g.moveTo(P.x, P.y + 26); g.bezierCurveTo(P.x, P.y + 60, p.x, p.y - 50, p.x, p.y - 26); } g.stroke(); g.setLineDash([]);
       if (view.z > 0.7 && !P.R.ghost && P.R.genes) { const d = diff(P.R.genes, p.R.birthGenes || p.R.genes)[0]; if (d) { g.fillStyle = dark ? '#9ab8ff' : '#2b5cff'; g.font = '9px system-ui'; g.textAlign = 'center'; g.fillText(say1(d).slice(0, 22), p.wrap ? p.x : (P.x + p.x) / 2, p.wrap ? p.y - 30 : (P.y + p.y) / 2 + 4); } } }
+    for (const p of lay.values()) { const Q = p.R.parent2 && lay.get(p.R.parent2); if (!Q) continue; g.strokeStyle = dark ? '#ff9ec488' : '#d0457a88'; g.lineWidth = 1.4 / Math.max(0.6, view.z); g.setLineDash([2, 4]); g.beginPath(); g.moveTo(Q.x, Q.y + 26); g.bezierCurveTo(Q.x, (Q.y + p.y) / 2, p.x, (Q.y + p.y) / 2, p.x, p.y - 26); g.stroke(); g.setLineDash([]); }   // the other parent of a child born to two
     for (const p of lay.values()) { const R = p.R; g.globalAlpha = R.ghost ? 0.5 : R.gone ? 0.35 : 1;
       g.beginPath(); g.arc(p.x, p.y, 24, 0, 7); g.fillStyle = dark ? '#2a2a33' : '#fff'; g.fill(); g.lineWidth = (R.uid === picked ? 3 : 1) / Math.max(0.6, view.z); g.strokeStyle = R.uid === picked ? '#2b5cff' : (dark ? '#fff5' : '#0004'); g.setLineDash(R.ghost ? [4, 3] : []); g.stroke(); g.setLineDash([]);
       if (R.ghost) { g.fillStyle = ink; g.font = '16px system-ui'; g.textAlign = 'center'; g.fillText('?', p.x, p.y + 6); } else { g.save(); g.beginPath(); g.arc(p.x, p.y, 23, 0, 7); g.clip(); g.drawImage(portrait(R), p.x - 30, p.y - 30, 60, 60); g.restore(); }
@@ -212,9 +216,9 @@ ${ks.length ? `<br>children (${ks.length}): ${ks.slice(0, 12).map(nameOf).join('
 
   // ---------- research export ----------
   function exportRows() { const recs = Object.values(T.cr), keys = NUM.concat(CAT);
-    const head = ['uid', 'name', 'other_names', 'family', 'origin', 'parent_uid', 'parent_name', 'generation', 'status', 'born', 'first_seen', 'gone', 'genomes', 'changes'].concat(keys);
+    const head = ['uid', 'name', 'other_names', 'family', 'origin', 'parent_uid', 'parent_name', 'parent2_uid', 'parent2_name', 'generation', 'status', 'born', 'first_seen', 'gone', 'genomes', 'changes'].concat(keys);
     const iso = t => t && t > 1 ? new Date(t).toISOString() : '';
-    return [head].concat(recs.map(R => { const P = parentOf(R); return [R.uid, R.ghost ? '' : R.name, R.names.join(' / '), R.fam || '', R.origin || '', R.parent || '', P ? (P.ghost ? '(unrecorded)' : P.name) : '', gen(R), status(R), iso(R.born), iso(R.first), iso(R.gone), R.ids.join(' '), (R.muts || []).length].concat(keys.map(k => (R.genes || {})[k] ?? '')); })); }
+    return [head].concat(recs.map(R => { const P = parentOf(R); return [R.uid, R.ghost ? '' : R.name, R.names.join(' / '), R.fam || '', R.origin || '', R.parent || '', P ? (P.ghost ? '(unrecorded)' : P.name) : '', R.parent2 || '', parent2Of(R) ? parent2Of(R).name : '', gen(R), status(R), iso(R.born), iso(R.first), iso(R.gone), R.ids.join(' '), (R.muts || []).length].concat(keys.map(k => (R.genes || {})[k] ?? '')); })); }
   function exportFile(kind) { const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
     const body = kind === 'json' ? JSON.stringify({ exported: d.toISOString(), note: 'Id|le lineage: one record per creature ever seen; parent links read from genome ids (see idle-trees.js)', records: Object.values(T.cr).map(R => ({ ...R, generation: gen(R) })) }, null, 1)
       : exportRows().map(r => r.map(v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');
@@ -222,8 +226,8 @@ ${ks.length ? `<br>children (${ks.length}): ${ks.slice(0, 12).map(nameOf).join('
 
   // ---------- the card: a family line in the friends tab ----------
   function cardRow(c, box) { if (!box) return; const h = H(); if (!c || c.guest || c.lab) { box.innerHTML = ''; return; } const R = T.cr[h.uidOf(c)]; if (!R) { box.innerHTML = ''; return; }
-    const P = parentOf(R), ks = childrenOf(R), sib = P ? childrenOf(P).filter(x => x !== R) : [];
-    box.innerHTML = `🌳 <b>family</b> · ${esc(R.fam || '')} · generation ${gen(R)} · ${esc(ORIGIN[R.origin] || '')}${P ? (R.origin === 'clone' ? ' of ' : ' ') + nameOf(P) : ''}${ks.length ? ` · children: ${ks.slice(0, 6).map(nameOf).join(', ')}${ks.length > 6 ? ` +${ks.length - 6}` : ''}` : ''}${sib.length ? ` · ${sib.length} sibling${sib.length === 1 ? '' : 's'}` : ''} <button data-tree="${esc(R.uid)}" title="open its family tree">↗ tree</button>`; }
+    const P = parentOf(R), ks = allKids(R), sib = P ? childrenOf(P).filter(x => x !== R) : [];
+    box.innerHTML = `🌳 <b>family</b> · ${esc(R.fam || '')} · generation ${gen(R)} · ${esc(ORIGIN[R.origin] || '')}${parentsTxt(R)}${ks.length ? ` · children: ${ks.slice(0, 6).map(nameOf).join(', ')}${ks.length > 6 ? ` +${ks.length - 6}` : ''}` : ''}${sib.length ? ` · ${sib.length} sibling${sib.length === 1 ? '' : 's'}` : ''} <button data-tree="${esc(R.uid)}" title="open its family tree">↗ tree</button>`; }
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#cfamily [data-tree]'); if (!b) return; toggle(true, b.dataset.tree); });
 
   setInterval(reconcile, 10000);

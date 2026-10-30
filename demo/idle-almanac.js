@@ -49,6 +49,7 @@
   addEventListener('idle:ev', e => { const { type, extra: x = {} } = e.detail || {};
     try {
       if (type === 'rename' && x.to) { const w = W(); if (w.members[x.from] && !w.members[x.to]) { w.members[x.to] = { ...w.members[x.from], aka: x.from }; w.members[x.from].z = w.members[x.from].z || now(); w.members[x.from].renamed = x.to; } hints[x.to] = 'renamed'; ev('name', `${mn(x.from || 'someone')} is now called ${mn(x.to)}`, { who: x.to, at: posOf(x.to) }); }
+      else if (type === 'birth') { hints[x.who] = x.bud ? 'budded from ' + x.a : 'born to ' + x.a + ' & ' + x.b; if (x.twin) hints[x.twin] = hints[x.who]; ev('birth', x.bud ? `${mn(x.who)} budded from ${mn(x.a)}` : `${mn(x.who)}${x.twin ? ' and ' + mn(x.twin) : ''} born to ${mn(x.a)} & ${mn(x.b)}`, { who: x.who, at: x.at }); }
       else if (type === 'hangry' && !x.end) ev('hangry', `${mn(x.who)} went hangry`, { who: x.who, at: posOf(x.who), every: 10 * MIN });
       else if (type === 'steal' && x.success !== false) ev('theft', `${mn(x.who)} stole from ${mn(x.from)}`, { who: x.who, at: posOf(x.who), every: 20 * MIN });
       else if (type === 'graze') ev('graze', `${mn(x.who)} grazed on a chart`, { who: x.who, every: 30 * MIN });
