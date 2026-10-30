@@ -9,7 +9,7 @@
 (() => {
   const KINDS = { gazette: { icon: '📰', ttl: 12000 }, reel: { icon: '🎞', ttl: 14000 }, system: { icon: '⚙️', ttl: 7000 }, music: { icon: '🎧', ttl: 4000 },
     disaster: { icon: '🌩', ttl: 10000 }, lab: { icon: '🧪', ttl: 6500 }, advisor: { icon: '📊', ttl: 14000 }, world: { icon: '🌍', ttl: 6000 }, trail: { icon: '🧭', ttl: 30000 } };
-  const MAX = 3, HKEY = 'idle.notify.hist', SEEN = 'idle.notify.seen', esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const MAX = 3, PHONE = matchMedia('(max-width: 500px)'), cap = () => PHONE.matches ? 1 : MAX, HKEY = 'idle.notify.hist', SEEN = 'idle.notify.seen', esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // lab chatter in the first seconds after a load ("your last session is back"…) goes to 🔔 only
   const now = () => Date.now(), acts = {}, born = Date.now(); let hist = [], seenT = 0, stack = null, bell = null, panel = null, uid = 0;
   try { hist = JSON.parse(localStorage.getItem(HKEY) || '[]'); seenT = +localStorage.getItem(SEEN) || 0; } catch (e) {}
@@ -18,7 +18,7 @@
 #ntf{position:fixed;left:16px;bottom:16px;z-index:9997;display:flex;flex-direction:column-reverse;gap:6px;pointer-events:none;max-width:min(440px,calc(100vw - 32px));transition:left .3s,bottom .3s}
 #ntf .np{pointer-events:auto;display:flex;gap:7px;align-items:flex-start;background:var(--floor,#fff);color:var(--ink,#222);border:1px solid #8886;border-radius:12px;padding:7px 8px 7px 10px;font:12px/1.4 system-ui;box-shadow:0 6px 22px #0005;animation:ntfin .35s ease-out;overflow-wrap:anywhere}
 #ntf .np.out{opacity:0;transform:translateY(30%);transition:opacity .35s,transform .35s}#ntf .np .ic{flex:none}#ntf .np .tx{flex:1;min-width:0}
-#ntf .np.disaster{border-color:#e0703a}#ntf .np.advisor{border-color:#e5484d99}#ntf .np .n2{opacity:.6;font-size:11px;margin-left:4px}
+#ntf .np.disaster{border-color:#e0703a}#ntf .np.trail{border:2px solid #2b5cff;background:color-mix(in srgb,#2b5cff 9%,var(--floor,#fff));box-shadow:0 8px 28px #2b5cff33}#ntf .np.trail .stp{display:block;font:700 10px system-ui;letter-spacing:.08em;text-transform:uppercase;color:#2b5cff;margin-bottom:2px}#ntf .np.advisor{border-color:#e5484d99}#ntf .np .n2{opacity:.6;font-size:11px;margin-left:4px}
 #ntf .np .x,#ntfpanel .x{flex:none;cursor:pointer;opacity:.55;padding:0 2px;background:none;border:0;color:inherit;font:inherit}#ntf .np .x:hover{opacity:1}
 #ntf button:not(.x),#ntfpanel button:not(.x){font:12px system-ui;margin-left:6px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit;cursor:pointer;padding:1px 7px}
 #ntf .gz,#ntfpanel .gz{font:italic 600 11px Georgia,serif;opacity:.75;margin-right:4px}
@@ -27,7 +27,8 @@
 #ntfpanel{position:fixed;left:16px;bottom:16px;z-index:9998;display:none;width:min(420px,calc(100vw - 32px));max-height:60vh;overflow:auto;background:var(--floor,#fff);color:var(--ink,#222);border:1px solid #8886;border-radius:12px;padding:0 10px 8px;box-shadow:0 8px 28px #0006;font:12px/1.4 system-ui;box-sizing:border-box}
 #ntfpanel.on{display:block}#ntfpanel .hd{display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--floor,#fff);padding:8px 0 6px;border-bottom:1px solid #8883;margin-bottom:4px}
 #ntfpanel .it{display:flex;gap:7px;padding:4px 0;border-bottom:1px solid #8882;overflow-wrap:anywhere}#ntfpanel .it small{opacity:.55;flex:none;width:44px}#ntfpanel .it.new{font-weight:500}#ntfpanel .sub{opacity:.6}
-@media (prefers-reduced-motion: reduce){#ntf .np{animation:none}}`;
+@media (prefers-reduced-motion: reduce){#ntf .np{animation:none}}
+@media (max-width: 500px){#ntf .np{font-size:13px}#ntf button:not(.x){min-height:38px;padding:0 12px;margin:4px 6px 0 0}#ntf .np .x{min-width:36px;min-height:36px}#ntfpanel{left:0!important;right:0;bottom:0!important;width:100%;border-radius:16px 16px 0 0}}`;
   document.head.appendChild(css);
 
   // creature names as mentions (the arena's hover mini-card and click-to-find work on any a.mn[data-n])
@@ -48,7 +49,9 @@
   // Gazette items can go in your drawer (idle-collect.js registers the 'keepnote' action)
   const keepBtn = h => h && h.kind === 'gazette' && acts.keepnote ? ` <button data-act="keepnote" data-kt="${h.t}" title="keep this in your drawer">🗄</button>` : '';
   const live = [], queue = [], recent = new Map();
-  function show(n) { const el = document.createElement('div'); el.className = 'np ' + n.kind; n.el = el; live.push(n);
+  const calm = () => { try { return !!(window.__first5 && window.__first5.calm && window.__first5.calm()); } catch (e) { return false; } };
+  function show(n) { if (n.kind === 'trail') { for (const q of live.slice()) if (q.kind !== 'trail') close(q, 'timeout'); for (let i = queue.length - 1; i >= 0; i--) if (queue[i].kind !== 'trail') queue.splice(i, 1); }
+    const el = document.createElement('div'); el.className = 'np ' + n.kind; n.el = el; live.push(n);
     el.innerHTML = `<span class="ic">${n.icon}</span><span class="tx">${n.html}${n.at ? ` <button data-go="${Math.round(n.at.x)},${Math.round(n.at.y)}">go ›</button>` : ''}${keepBtn(n.h)}<span class="n2"></span></span><button class="x" title="dismiss">✕</button>`;
     (n.actions || []).forEach((a, i) => { const b = document.createElement('button'); b.textContent = a.label; if (a.title) b.title = a.title; b.dataset.ai = i; el.querySelector('.tx').insertBefore(b, el.querySelector('.n2')); });
     try { mentions(el.querySelector('.tx')); } catch (e) {}
@@ -56,7 +59,7 @@
     n.until = now() + n.ttl; stack.appendChild(el); place(); }
   function close(n, how) { const i = live.indexOf(n); if (i < 0) { const q = queue.indexOf(n); if (q >= 0) queue.splice(q, 1); return; } live.splice(i, 1); n.h.read = n.h.read || how !== 'timeout';
     if (how !== 'timeout') { n.h.read = true; saveHist(); badge(); } if (how === 'dismiss' && n.onDismiss) try { n.onDismiss(); } catch (e) {} n.el.classList.add('out'); setTimeout(() => n.el.remove(), 380); setTimeout(pump, 200); }
-  function pump() { while (live.length < MAX && queue.length) show(queue.shift()); }
+  function pump() { while (live.length < cap() && queue.length) show(queue.shift()); }
   setInterval(() => { const t = now(); for (const n of live.slice()) if (n.ttl > 0 && !n.el._hold && t > n.until) close(n, 'timeout'); }, 500);
 
   function notify(o) { o = o || {}; const K = KINDS[o.kind] || KINDS.system, kind = KINDS[o.kind] ? o.kind : 'system'; const html = o.html != null ? String(o.html) : esc(o.text || '');
@@ -65,7 +68,8 @@
     const h = { t: now(), kind, icon: o.icon || K.icon, html, at: o.at || null }; hist.push(h); if (hist.length > 50) hist = hist.slice(-50); saveHist(); badge();
     const n = { kind, icon: h.icon, html, at: h.at, actions: o.actions, ttl: o.ttl ?? K.ttl, h, onDismiss: o.onDismiss }; recent.set(key, { t: now(), n }); if (recent.size > 200) recent.delete(recent.keys().next().value);
     if (kind === 'lab' && o.ttl !== 0 && now() - born < 8000) o.quiet = true;
-    if (o.quiet || !ensure()) return { close: () => {} }; if (live.length < MAX) show(n); else { queue.push(n); if (queue.length > 6) { const i = queue.findIndex(q => ['lab', 'music', 'system', 'world'].includes(q.kind) && q.ttl > 0); queue.splice(i >= 0 ? i : 0, 1); } } if (panel && panel.classList.contains('on')) renderPanel(); return { close: () => close(n, 'code') }; }
+    if (kind !== 'trail' && !o.loud && calm()) o.quiet = true;   // the guided start has the floor: everything else waits in 🔔
+    if (o.quiet || !ensure()) return { close: () => {} }; if (live.length < cap()) show(n); else { queue.push(n); if (queue.length > 6) { const i = queue.findIndex(q => ['lab', 'music', 'system', 'world'].includes(q.kind) && q.ttl > 0); queue.splice(i >= 0 ? i : 0, 1); } } if (panel && panel.classList.contains('on')) renderPanel(); return { close: () => close(n, 'code') }; }
 
   function fly(x, y) { if (window.__notifyFly) window.__notifyFly(x, y); else if (window.__advHooks && window.__advHooks.flyTo) window.__advHooks.flyTo(x, y, 1.3); }
   function onClick(e) { const pill = e.target.closest('.np, .it'); const n = pill && live.find(q => q.el === pill);
