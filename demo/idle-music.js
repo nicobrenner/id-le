@@ -189,13 +189,19 @@
 
   // ---------- on/off, handover ----------
   function setBg(on) { S.bg.on = on; save(); if (on) { ensure(); ctx.resume(); bg.next = Math.max(bg.next, ctx.currentTime + 0.05); fadeBg(); run(); } else if (ctx) { bgBus.gain.setTargetAtTime(0, ctx.currentTime, 0.4); windPad(0); release(bg, 0.4); } render(); }
-  function fadeBg() { if (!ctx) return; bgBus.gain.setTargetAtTime(S.bg.on && !deck.playing ? S.bg.vol : 0, ctx.currentTime, deck.playing ? 0.5 : 1.2); }
+  // ducking: while something else speaks (a reel playing, later others) the music steps back to about a fifth, keyed by who asked;
+  // a live rave set is never ducked (the creatures are dancing to it)
+  const ducks = new Set(), duckF = () => ducks.size ? 0.2 : 1, bgVol = () => S.bg.vol * duckF(), deckVol = () => S.deck.vol * (S.rave ? 1 : duckF());
+  addEventListener('idle:duck', e => { const d = e.detail || {}; if (!d.who) return; if (d.on) ducks.add(d.who); else ducks.delete(d.who); reDuck(); });
+  function reDuck() { if (!ctx) return; const now = ctx.currentTime, tc = ducks.size ? 0.35 : 0.8; if (S.bg.on && !deck.playing) { bgBus.gain.cancelScheduledValues(now); bgBus.gain.setTargetAtTime(bgVol(), now, tc); }
+    if (deck.playing) { deckBus.gain.cancelScheduledValues(now); deckBus.gain.setTargetAtTime(deckVol(), now, tc); } }
+  function fadeBg() { if (!ctx) return; bgBus.gain.setTargetAtTime(S.bg.on && !deck.playing ? bgVol() : 0, ctx.currentTime, deck.playing ? 0.5 : 1.2); }
   // a change of style, key, scale or variation: a short dip, the long notes let go, and the new music starts on its first chord
   function bgRestart() { save(); if (!ctx || !S.bg.on || deck.playing) return; const now = ctx.currentTime; release(bg, 0.3); bg.lastKey = null;
-    bgBus.gain.cancelScheduledValues(now); bgBus.gain.setTargetAtTime(S.bg.vol * 0.3, now, 0.12); bgBus.gain.setTargetAtTime(S.bg.vol, now + 0.5, 0.6); bg.step = 0; bg.next = Math.max(bg.next, now + 0.35); }
+    bgBus.gain.cancelScheduledValues(now); bgBus.gain.setTargetAtTime(bgVol() * 0.3, now, 0.12); bgBus.gain.setTargetAtTime(bgVol(), now + 0.5, 0.6); bg.step = 0; bg.next = Math.max(bg.next, now + 0.35); }
   function play(on) { ensure(); ctx.resume(); deck.playing = on; const now = ctx.currentTime;
     if (on) { deck.step = 0; deck.t0 = deck.next = now + 0.08; release(deck.tst); deck.tst = newTst(); deck.out = null; [laneA, laneB].forEach(l => { l.gain.cancelScheduledValues(now); l.gain.setValueAtTime(l === laneA ? 1 : 0, now); }); curLane = OUT = laneA;
-      deckBus.gain.setTargetAtTime(S.deck.vol, now, 0.05); lightsOn(true); run(); }
+      deckBus.gain.setTargetAtTime(deckVol(), now, 0.05); lightsOn(true); run(); }
     else { deckBus.gain.setTargetAtTime(0, now, 0.15); dropAt = null; lightsOn(false); bg.next = now + 0.6; deck.q = null; deck.out = null; release(deck.tst, 0.2); }
     fadeBg(); window.__music.playing = on; render(); }
   // ---------- sets and the set list ----------
@@ -203,7 +209,7 @@
   function loadSet(s) { if (!s) return;
     if (s.kind === 'bg') S.deck = Object.assign(DECK0(), { track: copy(s.bg), bpm: clampBpm(trackTempo(s.bg, null)), setName: s.name, preset: 'empty', grid: presetGrid('empty'), vol: S.deck.vol, lights: S.deck.lights, fx: { filter: 1, echo: 0.1, crush: 0 } });
     else S.deck = Object.assign(DECK0(), copy(s.deck), { setName: s.name, track: null });
-    rollLead(); applyFx(); if (deck.playing && ctx) deckBus.gain.setTargetAtTime(S.deck.vol, ctx.currentTime, 0.05); save(); render(); }
+    rollLead(); applyFx(); if (deck.playing && ctx) deckBus.gain.setTargetAtTime(deckVol(), ctx.currentTime, 0.05); save(); render(); }
   function bgFromTrack(s) { Object.assign(S.bg, copy(s.bg)); S.bg.voices = Object.assign(BG0().voices, S.bg.voices); if (!S.bg.on) setBg(true); bgRestart(); render(); }
   const qItems = () => S.queue.map(id => S.sets.find(s => s.t === id)).filter(Boolean);
   function qPlay() { const it = qItems(); if (!it.length) return; loadSet(it[0]); if (!deck.playing) play(true); deck.q = { i: 0, next: ctx.currentTime + S.qo.each * 60 }; toast('set list: ' + it[0].name); render(); }
@@ -323,7 +329,7 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
     else if (x === 'play') play(!deck.playing);
     else if (x === 'roll') { D.seed = (D.seed + 1) % 1000; rollLead(); save(); }
     else if (x === 'drop') drop();
-    else if (x === 'rave') { S.rave = !S.rave; save(); render(); try { window.dispatchEvent(new CustomEvent('idle:rave', { detail: { on: S.rave } })); } catch (e) {} }
+    else if (x === 'rave') { S.rave = !S.rave; save(); reDuck(); render(); try { window.dispatchEvent(new CustomEvent('idle:rave', { detail: { on: S.rave } })); } catch (e) {} }
     else if (x === 'saveset') { const n = el.querySelector('[data-n="1"]').value.trim() || ('set ' + (S.sets.length + 1)); S.sets.push({ name: n.slice(0, 40), t: Date.now(), kind: 'deck', deck: copy(D) }); save(); render(); }
     else if (x === 'savetrack') { const T = trackOf(S.bg, world()), n = el.querySelector('[data-n="bg"]').value.trim() || ((PROF[T.style] || PROF.home).name + (T.seed !== 1 ? ' ' + T.seed : '') + ' track'); S.sets.push({ name: n.slice(0, 40), t: Date.now(), kind: 'bg', bg: T }); save(); render(); toast('🌙 saved: ' + n.slice(0, 40)); }
     else if (x === 'bgvar') { S.bg.seed = 2 + Math.floor(Math.random() * 9998); bgRestart(); render(); }
@@ -347,7 +353,7 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
     else if (r === 'bg:bright') { S.bg.bright = v; if (ctx && S.bg.on) bgFilt.frequency.setTargetAtTime(brightCut(v), ctx.currentTime, 0.1); }
     else if (r.startsWith('bgv:')) S.bg.voices[r.slice(4)] = v;
     else if (r === 'bpm') { D.bpm = v; e.target.nextElementSibling.textContent = v; applyFx(); }
-    else if (r === 'vol') { D.vol = v; if (ctx && deck.playing) deckBus.gain.setTargetAtTime(v, ctx.currentTime, 0.05); }
+    else if (r === 'vol') { D.vol = v; if (ctx && deck.playing) deckBus.gain.setTargetAtTime(deckVol(), ctx.currentTime, 0.05); }
     else { const [a, b, c] = r.split(':'); if (a === 'ch') D.ch[b][c] = v; if (a === 'fx') { D.fx[b] = v; applyFx(); } }
     save(); });
   el.addEventListener('change', e => { const s = e.target.dataset.s; if (!s) return; const D = S.deck, v = e.target.value;
@@ -367,6 +373,6 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
       if (st.bg) { S.bg = Object.assign(BG0(), st.bg, { on: S.bg.on }); S.bg.voices = Object.assign(BG0().voices, S.bg.voices); }
       if (st.queue && !S.queue.length) S.queue = st.queue.filter(id => S.sets.some(s => s.t === id)); if (st.qo) S.qo = Object.assign(S.qo, st.qo); save(); render(); },
     bgTrack: () => trackOf(S.bg, world()), bgSet: o => { Object.assign(S.bg, o); bgRestart(); render(); }, loadSet, bgFromTrack, qPlay, qNext, styles: Object.keys(STYLES), _q: () => deck.q, _out: () => deck.out,
-    setBg, play, drop, features, rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); render(); }, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _ctx: () => ctx, _deck: deck, _bg: bg };
+    setBg, play, drop, features, rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); reDuck(); render(); }, _ducks: () => [...ducks], _gains: () => ctx && { bg: +bgBus.gain.value.toFixed(3), deck: +deckBus.gain.value.toFixed(3) }, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _ctx: () => ctx, _deck: deck, _bg: bg };
   render();
 })();
