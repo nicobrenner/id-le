@@ -7,7 +7,7 @@
 //                   scared less, but it makes friends more slowly.
 //   dazzle herds    shy kin moving together share a stripe pattern, so the herd reads as one moving mass; thieves lose
 //                   track of its members more often.
-// For you: when the view is busy every creature gets a faint halo under it so it separates from the word-bricks; the hovered
+// For you: when the view is busy every plain creature gets a faint halo under it so it separates from the word-bricks; the hovered
 // creature always gets a clear ring; "highlight creatures" (⚙ settings, the ✨ button on phones, or hold / press H) rings
 // every creature, camouflaged or not. All drawing is on the creature canvas; ripples are pooled; light quality drops them.
 //   window.__looks: pre, post, dazzle, step, end (renderer hooks), scareMul, targetMul, slip, bond (gameplay), cardLine,
@@ -28,15 +28,17 @@
   const GLOW = {}, SZ = 64;
   function glowSprite(hue) { const b = Math.round(((hue % 360) + 360) % 360 / 15) % 24; if (GLOW[b]) return GLOW[b];
     const cv = document.createElement('canvas'); cv.width = cv.height = SZ; const x = cv.getContext('2d'), gr = x.createRadialGradient(SZ / 2, SZ / 2, 0, SZ / 2, SZ / 2, SZ / 2);
-    gr.addColorStop(0, `hsla(${b * 15},95%,62%,.55)`); gr.addColorStop(0.45, `hsla(${b * 15},95%,60%,.22)`); gr.addColorStop(1, `hsla(${b * 15},95%,60%,0)`); x.fillStyle = gr; x.fillRect(0, 0, SZ, SZ); return GLOW[b] = cv; }
+    gr.addColorStop(0, `hsla(${b * 15},95%,62%,.7)`); gr.addColorStop(0.5, `hsla(${b * 15},95%,60%,.32)`); gr.addColorStop(1, `hsla(${b * 15},95%,60%,0)`); x.fillStyle = gr; x.fillRect(0, 0, SZ, SZ); return GLOW[b] = cv; }
   const HALO = {}; function haloSprite(dark) { const k = dark ? 'd' : 'l'; if (HALO[k]) return HALO[k];
     const cv = document.createElement('canvas'); cv.width = cv.height = SZ; const x = cv.getContext('2d'), gr = x.createRadialGradient(SZ / 2, SZ / 2, 0, SZ / 2, SZ / 2, SZ / 2), c = dark ? '20,22,30' : '255,253,246';
     gr.addColorStop(0, `rgba(${c},.95)`); gr.addColorStop(0.55, `rgba(${c},.7)`); gr.addColorStop(1, `rgba(${c},0)`); x.fillStyle = gr; x.fillRect(0, 0, SZ, SZ); return HALO[k] = cv; }
   const rad = c => Math.max(c.g.bodyL, c.g.bodyW) * (c.size || 1);
 
   // ---------- renderer hooks (Crit.draw / Crit.drawTo), in world coordinates with the creature's wrap offset applied
-  function pre(g, c, t, replay) { if (!c.g) return; const s = showOf(c), r = rad(c), hp = c.state === 'hide';
-    if (!replay && busy > 0.02 && !H().keep()) { const R = r * 1.9 + 10; g.save(); g.globalAlpha *= 0.55 * busy; g.drawImage(haloSprite(H().isDark()), c.x - R, c.y - R, R * 2, R * 2); g.restore(); }
+  function pre(g, c, t, replay) { if (!c.g) return; const s = showOf(c), r = rad(c), hp = c.state === 'hide', low = H().qual().low;
+    if (low) { if (s <= 0.34 && !hilited(c)) g.globalAlpha *= 1 - 0.5 * (0.34 - s) / 0.34; return; }   // light quality (phones): only the camouflage, no glow, halo or ripples
+    if (!replay && busy > 0.02 && !H().keep() && s > 0.34 && s < 0.66) {   // the halo is for plain ones: showy ones glow, shy ones are meant to blend in
+       const R = r * 1.9 + 10; g.save(); g.globalAlpha *= 0.55 * busy; g.drawImage(haloSprite(H().isDark()), c.x - R, c.y - R, R * 2, R * 2); g.restore(); }
     if (s >= 0.66 && !hp && c.state !== 'sleep') { const happy = c.dance ? 1 : clamp(((c.life && c.life.fe && c.life.fe.joy) || 0.5)), pulse = 1 + 0.12 * Math.sin(t / (c.dance ? 120 : 420) + (c.phase || 0)) * (0.5 + happy),
       R = (r * 1.6 + 14) * pulse * (0.75 + 0.5 * (s - 0.66) / 0.34); g.save(); g.globalAlpha *= 0.55 + 0.45 * (s - 0.66) / 0.34; g.drawImage(glowSprite((c.gs || c.g).hue), c.x - R, c.y - R, R * 2, R * 2); g.restore(); }
     if (s <= 0.34 && !hilited(c)) g.globalAlpha *= 1 - 0.5 * (0.34 - s) / 0.34 * (c.state === 'move' ? 0.8 : 1); }   // camouflage: fades toward the floor (less while it walks)
@@ -45,7 +47,7 @@
     const r = rad(c) * 0.95 + 9, z = H().cam().z || 1, lw = Math.max(1.2, 2 / z), hue = (c.gs || c.g).hue || 200;
     g.save(); g.beginPath(); g.arc(c.x, c.y, r, 0, Math.PI * 2); g.lineWidth = lw + 2 / z; g.strokeStyle = H().isDark() ? 'rgba(0,0,0,.7)' : 'rgba(255,255,255,.85)'; g.stroke();
     g.lineWidth = lw; g.strokeStyle = H().keep() ? (H().isDark() ? '#fff' : '#000') : `hsl(${hue},100%,${H().isDark() ? 62 : 45}%)`; g.stroke(); g.restore(); }
-  function dazzle(g, c, L, W) { const a = c._dz || 0; g.save(); g.beginPath(); g.ellipse(0, 0, Math.max(1, L * 0.62), Math.max(1, W * 0.62), 0, 0, Math.PI * 2); g.clip();
+  function dazzle(g, c, L, W) { if (H().qual().low) return; const a = c._dz || 0; g.save(); g.beginPath(); g.ellipse(0, 0, Math.max(1, L * 0.62), Math.max(1, W * 0.62), 0, 0, Math.PI * 2); g.clip();
     g.rotate(a); g.strokeStyle = H().keep() ? '#000' : 'rgba(15,15,20,.55)'; g.lineWidth = 2.2; const R = Math.max(L, W); g.beginPath(); for (let x = -R; x <= R; x += 5) { g.moveTo(x, -R); g.lineTo(x, R); } g.stroke(); g.restore(); }
 
   // ripples: pooled rings where a showy creature's feet land
