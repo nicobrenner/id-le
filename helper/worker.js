@@ -71,12 +71,51 @@ async function worlds(req, env, path) {   // the same relay as demo_server.py, s
   await save(d); return json(res);
 }
 
+// anonymous stats (#34, POST /lab/stats from idle-stats.js): only daily totals are kept, in the STATS KV namespace, never a
+// single visit and never an address. Each isolate adds visits to a small buffer and writes it at most every 20 s (one
+// read-modify-write of its own shard key, stats:<UTC day>:<shard>), so a busy day stays well inside KV's write limits.
+const SHARD = Math.floor(Math.random() * 16).toString(16), FEATS = /^[a-z0-9_-]{1,24}$/, BUCKETS = ['<20', '20-40', '40-55', '55+'];
+let statBuf = {}, statTimer = null;
+const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
+function addStats(p) {
+  const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || { visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, batches: 0 };
+  d.batches++;
+  if (p.visit === 1) { d.visits++; if (p.back === 1) d.back++; if (p.ios === 1) d.ios++; if ([0, 1, 2].includes(p.safe)) bump(d.safe, String(p.safe)); if (p.dev === 'phone' || p.dev === 'desktop') bump(d.dev, p.dev); }
+  if (BUCKETS.includes(p.fps)) bump(d.fps, p.fps);
+  if (Array.isArray(p.feat)) for (const f of p.feat.slice(0, 30)) if (FEATS.test(f)) bump(d.feat, f);
+  if (p.m && typeof p.m === 'object') for (const [k, sec] of Object.entries(p.m).slice(0, 12)) { if (!FEATS.test(k) || !(sec >= 0 && sec < 86400 * 30)) continue;
+    const x = d.m[k] = d.m[k] || { n: 0, sum: 0, b: {} }; x.n++; x.sum += Math.round(sec); bump(x.b, sec < 60 ? '<1m' : sec < 180 ? '1-3m' : sec < 600 ? '3-10m' : '10m+'); }
+  if (p.f5 === 'finished' || p.f5 === 'skipped') bump(d.f5, p.f5);
+  if (Array.isArray(p.err)) for (const e of p.err.slice(0, 5)) if (typeof e === 'string') bump(d.err, e.slice(0, 160));
+}
+async function flushStats(env) {
+  statTimer = null; const buf = statBuf; statBuf = {}; if (!env.STATS) return;
+  for (const [day, add] of Object.entries(buf)) {
+    const key = `stats:${day}:${SHARD}`, cur = JSON.parse(await env.STATS.get(key) || 'null') || { visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, batches: 0, writes: 0 };
+    cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches; cur.writes = (cur.writes || 0) + 1;
+    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5']) for (const [a, n] of Object.entries(add[k])) bump(cur[k], a, n);
+    for (const [k, x] of Object.entries(add.m)) { const c = cur.m[k] = cur.m[k] || { n: 0, sum: 0, b: {} }; c.n += x.n; c.sum += x.sum; for (const [b, n] of Object.entries(x.b)) bump(c.b, b, n); }
+    for (const [e, n] of Object.entries(add.err)) if (cur.err[e] || Object.keys(cur.err).length < 60) bump(cur.err, e, n);
+    await env.STATS.put(key, JSON.stringify(cur), { expirationTtl: 60 * 60 * 24 * 400 });
+  }
+}
+async function stats(req, env, ctx) {
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+  const txt = await req.text(); if (txt.length > 8000) return json({ error: 'too big' }, 413);
+  let p; try { p = JSON.parse(txt); } catch (e) { return json({ error: 'not JSON' }, 400); }
+  if (!p || p.v !== 1) return json({ error: 'unknown format' }, 400);
+  addStats(p);
+  if (!statTimer) { statTimer = new Promise(r => setTimeout(r, 20000)).then(() => flushStats(env)).catch(() => { statTimer = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(statTimer); else await statTimer; }
+  return new Response(null, { status: 204 });
+}
+
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return cors(env, req, new Response(null, { status: 204 }));
     const url = new URL(req.url), path = url.pathname, ip = req.headers.get('CF-Connecting-IP') || 'local', min = Math.floor(Date.now() / 60000);
     const k = ip + '|' + min, n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (+env.RATE_PER_MIN || 60)) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
+    if (path === '/lab/stats') return stats(req, env, ctx);   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {
       if (path === '/lab/fetch') return cors(env, req, json(await readPage(u, env)));

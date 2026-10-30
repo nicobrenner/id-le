@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Id|le privacy</title>
+<meta name="description" content="What Id|le keeps in your browser, what it sends, and how to turn each thing off.">
+<style>
+:root{--bg:#fbfaf6;--paper:#ffffff;--ink:#202122;--mut:#62666d;--rule:#d8d6cf;--link:#3366cc;--box:#f6f5f1;--cur:#2b5cff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141518;--paper:#1b1c20;--ink:#e6e3dc;--mut:#9da0a6;--rule:#34363c;--link:#8ab4ff;--box:#222328;--cur:#8ab4ff}}
+:root[data-theme="dark"]{--bg:#141518;--paper:#1b1c20;--ink:#e6e3dc;--mut:#9da0a6;--rule:#34363c;--link:#8ab4ff;--box:#222328;--cur:#8ab4ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+h1,h2{font-family:"Linux Libertine","Georgia","Times",serif;font-weight:400;line-height:1.25}
+h1{font-size:2em;margin:.2em 0 .1em;border-bottom:1px solid var(--rule);padding-bottom:.15em}
+h2{font-size:1.4em;margin:1.4em 0 .4em;border-bottom:1px solid var(--rule);padding-bottom:.1em}
+code{font-family:ui-monospace,Menlo,monospace;font-size:.88em;background:var(--box);padding:0 .25em;border-radius:3px}
+header{display:flex;align-items:center;gap:14px;padding:14px 22px 10px;border-bottom:1px solid var(--rule);background:var(--paper)}
+.logo{font-family:Georgia,serif;font-size:28px;line-height:1;white-space:nowrap;color:var(--ink)}
+.logo .bar{display:inline-block;width:2px;height:.9em;background:var(--cur);vertical-align:-.08em;margin:0 1px}
+.tag{font-family:Georgia,serif;font-style:italic;color:var(--mut);font-size:13px}
+main{max-width:760px;margin:0 auto;background:var(--paper);border-left:1px solid var(--rule);border-right:1px solid var(--rule);padding:14px 28px 60px;min-height:100vh}
+.lede{color:var(--mut)}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:.4em 0 1em}
+td,th{border:1px solid var(--rule);padding:5px 8px;text-align:left;vertical-align:top}
+th{background:var(--box);font-weight:600}
+.box{background:var(--box);border:1px solid var(--rule);padding:8px 12px;margin:1em 0}
+@media (max-width:600px){main{padding:10px 16px 40px;border:0}header{padding:12px 16px 8px}}
+</style>
+</head>
+<body>
+<header><a class="logo" href="./">Id<span class="bar"></span>le</a><span class="tag">privacy</span></header>
+<main>
+<h1>Privacy</h1>
+<p class="lede">What Id|le keeps, what it sends, and how to turn each thing off. This page describes what the game's code actually does; if the code changes, this page changes with it.</p>
+
+<div class="box"><b>In short:</b> your worlds, your drawer and any AI keys stay in your browser. The site counts a few anonymous things (no cookies, nothing about you or your world), and it can read public web pages for your creatures. Both can be switched off in <b>⚙ settings</b>.</div>
+
+<h2>Kept in your browser, not sent</h2>
+<ul>
+<li><b>Your worlds</b>: the creatures, words, pictures, buildings, snapshots, the almanac's history and the family trees are stored in this browser (its local storage and IndexedDB). Clearing the site's data in your browser removes them, so save a backup file now and then (the snapshot menu does that).</li>
+<li><b>Your drawer</b>: the things you keep are stored in this browser too.</li>
+<li><b>The chat and your AI keys</b>: if you connect an AI in the chat, your key is stored in this browser and is sent only to the provider you chose (for example <code>api.anthropic.com</code>, or the address you typed for an OpenAI-compatible or local model). It never goes to id-le.com, and it is never put in a world file or a snapshot. What you type in the chat goes to that provider too, under their terms, and nowhere else.</li>
+</ul>
+
+<h2>Anonymous stats</h2>
+<p>To see how new players get on, the public site sends a few counts from each visit. On by default; turn it off in <b>⚙ settings → Anonymous stats</b>, and nothing more is sent from that browser.</p>
+<table>
+<tr><th>What</th><th>Why</th></tr>
+<tr><td>That a visit happened, and whether this browser had been here before (a yes/no, not an identifier)</td><td>to count visits and returning players</td></tr>
+<tr><td>Phone or desktop, and whether it's an iPhone/iPad (yes/no)</td><td>to know where to put the effort</td></tr>
+<tr><td>Whether the game had to start in a lighter "safe" mode because the page crashed while loading last time (0, 1 or 2)</td><td>to see how often phones run out of memory</td></tr>
+<tr><td>A rough frame-rate bucket (under 20, 20–40, 40–55, 55+ frames a second)</td><td>to see whether the world runs smoothly on people's devices</td></tr>
+<tr><td>Which parts of the game were opened (advisor, music, drawer, reels…), once each</td><td>to see what people find</td></tr>
+<tr><td>The guided start: which first moments were reached (opened a card, watched a dream…) and how many seconds each took, and whether it was finished or skipped</td><td>to make the first five minutes better</td></tr>
+<tr><td>Error messages, with quoted text and long numbers blanked out, and the file and line they came from (at most five a visit)</td><td>to find bugs</td></tr>
+</table>
+<p><b>Not sent:</b> anything from your world (names, words, pictures, buildings), your chats, AI keys, your address, or an identifier that follows you between visits. Id|le sets no cookies.</p>
+<p><b>Where it goes:</b> to id-le.com itself, which only adds the counts to <b>daily totals</b> (for example "41 visits, 30 on phones"). Single visits are not stored, and neither are addresses. The totals are kept for about a year. Stats are only counted on the public site: never on a copy you run yourself.</p>
+
+<h2>The public helper (reading web pages)</h2>
+<p>Some creatures read real web pages (Crawlers, and travel mode). A web page isn't allowed to fetch other sites by itself, so id-le.com does it for you: it fetches the public page you or your creatures asked for and hands it back to your browser.</p>
+<ul>
+<li>Only public <code>http</code>/<code>https</code> addresses; private and local network addresses are refused.</li>
+<li>It identifies itself to the site as the Id|le helper. Page sizes are capped and each visitor is limited to 60 requests a minute (that count lives in memory for a minute and is never stored).</li>
+<li>What is fetched is not logged. The hosting network may briefly cache a fetched public page (up to about ten minutes) to be quicker the second time.</li>
+<li><b>Linking worlds</b> (optional, in 🌐 connect): to link two worlds, the helper keeps what linking needs, which is your world's code and the name you give it, the links you approve, the creatures and souvenirs on their way between linked worlds, and when each world was last open.</li>
+</ul>
+<p>Turn it off in <b>⚙ settings → Public helper</b>: no pages are read for that browser and linking pauses; the features that need it say so.</p>
+
+<h2>Hosting</h2>
+<p>id-le.com is a static site served by Cloudflare. Like any website, the hosting network handles your connection to deliver the pages; Id|le has not turned on any request logging of its own.</p>
+
+<h2>Questions</h2>
+<p>Write to <a href="mailto:privacy@id-le.com">privacy@id-le.com</a>, or open an issue on the project's repository.</p>
+<p class="lede">Last updated 2026-10-30.</p>
+</main>
+</body>
+</html>

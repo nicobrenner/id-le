@@ -5,6 +5,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-30
 
+**Settings, privacy page, anonymous stats (#34).** ⚙ settings (a gear on desktop, ⚙ in the ☰ sheet on phones) with two switches: the public helper (off: Crawlers, travel and world links say so, and nothing is fetched) and anonymous stats. id-le.com/privacy says in plain words what stays in the browser, what is sent and how to turn it off. Stats: visit (and a yes/no "been here before"), phone/desktop, an fps bucket, features opened, first-five-minutes moments with seconds, finished/skipped, up to 5 scrubbed errors; the server keeps only daily totals per shard key; `tools/stats.py` prints them.
+- Two test beacons became 1 KV write (20 s batching per isolate); off switch → 0 beacons; localhost and `?fresh` → 0 beacons.
+- Finding (not fixed here): every open tab polls `/worlds/state` every ~20 s and each poll rewrites the `worlds` KV document, so world presence alone could use KV's 1,000 free writes a day in about 6 tab-hours. Stats share that account-wide limit.
+
 **Creatures have children (#33).** Good friends, close together, well fed, rested and not scared now and then have a child (6% twins); very rarely a lone creature buds a near-copy. Genes come from either parent or a blend, then a small mutation; it starts small and grows with meals. Births need food nearby and room, stop at the world's population cap (studio → Children, 60), and nobody is ever removed. Two parents in the family tree, Gazette firsts, diaries, replays, a reel ("A new arrival"), the almanac, an advisor line that says why there are none.
 - Copy of Nico's world, 4 min with chances ×30 and waits ÷50, births on vs off: population 44→57 vs 44→44; births 13 vs 0; deepest generation 1→2; fps 57.6 vs 60 (with 13 more creatures); a birth check costs ~0.1 ms every 15 s.
 - At normal rates (sampled every 15 s for 4 min): about one ready pair per check on average, bursty (0, 10, 0, 6, …), which works out to **roughly 3 births per hour of play**: the world would take hours to reach its cap.

@@ -21,7 +21,7 @@
   .grow{display:none!important}
   #cline{display:none!important}
   #soundBtn,#lab-toggle,#rc-open{display:none!important}
-  #advpanel,#dj,#reelpanel,#drawer,#trees,#ntfpanel,#conn,#team,#whisper,#objmenu{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;max-height:72dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;margin:0!important}
+  #advpanel,#dj,#reelpanel,#drawer,#trees,#settings,#ntfpanel,#conn,#team,#whisper,#objmenu{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;max-height:72dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;margin:0!important}
   #herd,#studio,#lab{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;height:78dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;transform:translateY(105%)!important;transition:transform .22s!important;border:0!important}
   #herd.on,#studio.on,#lab.open{transform:none!important}
   #almanac{padding:0!important;align-items:flex-end!important}#almanac .bx{border-radius:16px 16px 0 0!important;max-height:88dvh;overflow:auto}
@@ -34,6 +34,7 @@
   #mSheet .mg button{min-height:64px;border:1px solid #8886;border-radius:12px;background:transparent;color:inherit;font:12px system-ui;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 4px}
   #mSheet .mg button b{font-size:20px;font-weight:400;line-height:1}
   #mSheet .mx{min-height:44px;min-width:44px;border:0;background:none;color:inherit;font-size:18px}
+  #mSheet .mnote{font:12px/1.4 system-ui;opacity:.75;margin:10px 2px 0}#mSheet .mnote a,#mSheet .mlink{color:inherit}#mSheet .mlink{border:0;background:none;padding:0;font:inherit;text-decoration:underline;min-height:0}
   .mgrab{display:block;width:40px;height:5px;border-radius:3px;background:#8888;margin:0 auto 8px}
 }`;
   document.head.appendChild(css);
@@ -41,7 +42,7 @@
   // ---------- ☰ more: every top-bar button that isn't kept on the bar, plus the chats and sound
   const LABELS = { labBtn: ['🧪', 'data lab'], connBtn: ['🌐', 'connect'], snapBtn: ['📸', 'snapshot'], evolveWorldBtn: ['🌦', 'evolve'], reelsBtn: ['🎞', 'reels'], pediaBtn: ['📖', 'pedia'],
     djBtn: ['🎧', 'music'], advBtn: ['📊', 'advisor'], drawerBtn: ['🗄', 'drawer'], treesBtn: ['🌳', 'family trees'], almanacBtn: ['🌊', 'almanac'], keepDetail: ['🏰', 'detail'],
-    'rc-open': ['💬', 'room chat'], 'lab-toggle': ['🤖', 'chat'], soundBtn: ['🔊', 'sound'] };
+    'rc-open': ['💬', 'room chat'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': ['🤖', 'chat'], soundBtn: ['🔊', 'sound'] };
   const KEEP = ['herdBtn', 'ntfBtn', 'studioBtn', 'mMore'];
   let sheet = null, more = null;
   function mount() {
@@ -60,12 +61,13 @@
     const wx = ($('#weatherLabel') || {}).textContent || '', fps = ($('#fps') || {}).textContent || '';
     sheet.innerHTML = `<span class="mgrab"></span><div class="mh"><b>Id|le</b><small>${esc(wx)}${wx && fps ? ' · ' : ''}${esc(fps)}</small><button class="mx" title="close">✕</button></div><div class="mg">` +
       ids.map(id => { const el = document.getElementById(id), L = LABELS[id] || [el.textContent.trim().slice(0, 2), (el.title || id).split(':')[0].slice(0, 16)];
-        const icon = id === 'soundBtn' ? el.textContent.trim() : L[0]; return `<button data-for="${id}"><b>${icon}</b>${esc(L[1])}</button>`; }).join('') + '</div>';
+        const icon = id === 'soundBtn' ? el.textContent.trim() : L[0]; return `<button data-for="${id}"><b>${icon}</b>${esc(L[1])}</button>`; }).join('') + '</div>' + (window.__settings && window.__settings.noticeLine() ? `<p class="mnote">${esc(window.__settings.noticeLine())} <a href="privacy.html" target="_blank" rel="noopener">privacy</a> · <button data-for="settingsBtn" class="mlink">⚙ settings</button></p>` : '');
+    if (sheet.querySelector('.mnote')) window.__settings.markNotice();   // the stats notice is shown once: here or as a pill
   }
   const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   // ---------- one sheet at a time
-  const SHEETS = ['#advpanel', '#dj', '#reelpanel', '#drawer', '#trees', '#ntfpanel', '#conn', '#team', '#whisper', '#herd', '#studio', '#lab', '#almanac', '#objmenu'];
+  const SHEETS = ['#advpanel', '#dj', '#reelpanel', '#drawer', '#trees', '#settings', '#ntfpanel', '#conn', '#team', '#whisper', '#herd', '#studio', '#lab', '#almanac', '#objmenu'];
   const CLOSE = '[data-a=close],[data-x=close],[data-s=close],[data-h=close],[data-d=close],[data-close],#lab-close,#connClose,#teamClose,.cx,button[title^="close"],.x';
   const isOpen = el => { if (!el || !el.isConnected) return false; const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return false; const r = el.getBoundingClientRect(); return r.height > 0 && r.top < innerHeight - 24; };
   function closeSheet(el) { if (el.id === 'whisper') { const b = el.querySelector('.cx'); if (b) b.click(); else el.style.display = 'none'; return; }

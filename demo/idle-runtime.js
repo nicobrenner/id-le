@@ -18,6 +18,9 @@
   window.__isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const CFG = Object.assign({ mode: 'auto', helper: '' }, window.IDLE_CFG || {});
   const realFetch = window.fetch.bind(window), SANDBOX = /[?&]fresh\b/.test(location.search);
+  // ⚙ settings (idle-settings.js): the public helper can be switched off in this browser; stored here so it holds from the first request
+  const helperOn = () => { try { return (JSON.parse(localStorage.getItem('idle.settings') || '{}').helper) !== false; } catch (e) { return true; } };
+  const HELPER_OFF = 'the public helper is off in ⚙ settings: creatures can\'t read web pages and worlds can\'t link until you turn it back on';
   const HELPER_PATHS = ['/lab/fetch', '/lab/page', '/lab/asset', '/lab/img', '/worlds/'];
   const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -46,7 +49,9 @@
 
   async function local(path, init) {   // static mode: answer a /lab or /worlds or /jeffy call here
     const method = ((init && init.method) || 'GET').toUpperCase(), body = init && init.body ? (() => { try { return JSON.parse(init.body); } catch (e) { return {}; } })() : {};
-    if (CFG.helper && HELPER_PATHS.some(p => path.startsWith(p))) return realFetch(CFG.helper.replace(/\/$/, '') + path, init);
+    if (CFG.helper && HELPER_PATHS.some(p => path.startsWith(p))) {
+      if (!helperOn()) return path.startsWith('/worlds/state') ? json({ me: { name: '', links: [], requests: [], inbox: [] }, peers: {}, offline: HELPER_OFF }) : json({ ok: false, error: HELPER_OFF });
+      return realFetch(CFG.helper.replace(/\/$/, '') + path, init); }
     if (path.startsWith('/lab/sync')) { await sync(body); return json({ ok: true, where: 'this browser' }); }
     if (path.startsWith('/lab/world')) return json({ arena_autosave: (await get('arena_autosave')) || null, arena_snapshots: (await get('arena_snapshots')) || null });
     if (path.startsWith('/lab/notes')) { const n = (await get('notes')) || []; if (method === 'POST') { n.push({ t: Date.now() / 1000, who: 'you', ...body }); await put('notes', n.slice(-500)); return json({ ok: true }); } return json(n); }
@@ -71,7 +76,7 @@
   // --- static mode only: model cache + cross-origin isolation through a service worker, and world files
   function setup() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('sw.js', { scope: './' }).then(reg => { reg.active && reg.active.postMessage({ helper: CFG.helper }); }).catch(() => {});
+      navigator.serviceWorker.register('sw.js', { scope: './' }).then(reg => { reg.active && reg.active.postMessage({ helper: helperOn() ? CFG.helper : '' }); }).catch(() => {});
       navigator.serviceWorker.addEventListener('controllerchange', () => { try { if (!crossOriginIsolated && !sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); location.reload(); } } catch (e) {} });
       if (navigator.serviceWorker.controller && !crossOriginIsolated) { try { if (!sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); location.reload(); } } catch (e) {} }
     }
@@ -111,5 +116,5 @@
       if (t.value.trim()) localStorage.setItem(K(t.id), t.value); else localStorage.removeItem(K(t.id)); } catch (e) {} } };
     document.addEventListener('input', e => { if (e.target.matches && e.target.matches(SEL) && seen.has(e.target)) sync(); });
     addEventListener('pagehide', sync); setInterval(sync, 1000); if (document.readyState !== 'loading') sync(); else addEventListener('DOMContentLoaded', sync); })();
-  window.__idle = { mode: () => modeP, cfg: CFG, download, backups: () => tx('backups', 'readonly', s => s.getAll()), kv: { get, put } };   // kv: the almanac keeps its history here (served or static)
+  window.__idle = { mode: () => modeP, cfg: CFG, helperOn, sandbox: SANDBOX, swHelper: () => { try { const c = navigator.serviceWorker && navigator.serviceWorker.controller; if (c) c.postMessage({ helper: helperOn() ? CFG.helper : '' }); } catch (e) {} }, download, backups: () => tx('backups', 'readonly', s => s.getAll()), kv: { get, put } };   // kv: the almanac keeps its history here (served or static)
 })();
