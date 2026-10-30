@@ -20,7 +20,7 @@
   const GAUGES = [
     { k: 'fear', label: 'fear', icon: '🫣', bad: 1 , what: 'share of them hiding or scared · lower is better' }, { k: 'hunger', label: 'hunger', icon: '🍽️', bad: 1 , what: 'average hunger · lower is better' }, { k: 'hurt', label: 'hurt', icon: '🤕', bad: 1 , what: 'average hurt · lower is better' },
     { k: 'tired', label: 'tiredness', icon: '😴', bad: 1 , what: 'average tiredness · lower is better' }, { k: 'crowd', label: 'togetherness', icon: '🫂', bad: 0 , what: 'share with four or more others within a step · neither good nor bad, they flock on purpose' }, { k: 'food', label: 'food supply', icon: '🥣', bad: -1 , what: 'food on the floor per eater, for the diet that has least (8 bites each = full) · higher is better' },
-    { k: 'mood', label: 'mood', icon: '😊', bad: -1 , what: 'average happiness · higher is better' }, { k: 'friends', label: 'friendships', icon: '🤝', bad: -1 , what: 'friends per creature (5 or more = full) · higher is better' }, { k: 'music', label: 'dancefloor', icon: '🕺', bad: -1, opt: 1 , what: 'share of the crowd dancing · higher is better' }];
+    { k: 'mood', label: 'mood', icon: '😊', bad: -1 , what: 'average happiness · higher is better' }, { k: 'friends', label: 'friendships', icon: '🤝', bad: -1 , what: 'friends per creature (5 or more = full) · higher is better' }, { k: 'music', label: 'dancefloor', icon: '🕺', bad: -1, opt: 1 , what: 'share of the crowd dancing · higher is better' }, { k: 'lake', label: 'lake level', icon: '🌊', bad: 0, opt: 1, what: 'how full this world\'s lake is · rain fills it, clear days lower it' }];
   function measure() { const h = H(), cs = h.creatures().filter(c => !c.lab && !c.guest && c.d && c.name), n = cs.length || 1, ws = h.words();
     let fear = 0, hun = 0, hurt = 0, tired = 0, mood = 0, fr = 0; const hiders = [];
     for (const c of cs) { const f = h.feelings(c) || {}; const sc = c.state === 'hide' || (f.afraid || 0) > 0.5; if (sc) { fear++; hiders.push(c); } hun += c.d.hunger || 0; hurt += f.hurt || 0; tired += c.d.fatigue || 0; mood += f.happy || 0; fr += Math.min(5, ((c.life && c.life.friends) || []).length) / 5; }
@@ -33,7 +33,7 @@
     const sm = cs.length > 150 ? cs.filter((_, i) => i % Math.ceil(cs.length / 150) === 0) : cs, sp = h.space(); let packed = 0;
     for (const a of sm) { let k = 0; for (const b of cs) { if (a === b) continue; if (Math.hypot(h.wd(a.x, b.x, sp.W), h.wd(a.y, b.y, sp.H)) < 120 && ++k >= 4) break; } if (k >= 4) packed++; }
     const rs = window.__rave && window.__rave.active() && window.__raveStats, music = rs ? clamp((rs.dance || 0) / Math.max(1, (rs.dance || 0) + (rs.bored || 0) + (rs.leave || 0))) : null;
-    return { t: now(), n: cs.length, cs, hiders, per, v: { fear: fear / n, hunger: hun / n, hurt: hurt / n, tired: tired / n, crowd: packed / Math.max(1, sm.length), food: foodG, mood: mood / n, friends: fr / n, music } }; }
+    return { t: now(), n: cs.length, cs, hiders, per, v: { fear: fear / n, hunger: hun / n, hurt: hurt / n, tired: tired / n, crowd: packed / Math.max(1, sm.length), food: foodG, mood: mood / n, friends: fr / n, music, lake: window.__lake ? window.__lake.level() : null } }; }
 
   // ---------- issues: thresholds with hysteresis, plain causes, one-click actions, a wry line ----------
   const fmtMin = ms => { const m = Math.round(ms / 60000); return m < 1 ? 'a moment' : m === 1 ? '1 min' : m < 90 ? m + ' min' : Math.round(m / 60) + ' h'; };
@@ -43,7 +43,7 @@
       cause(g) { const w = H().world(), nm = H().WEATHER_NAMES[w.weather] || w.weather, d = H().disasters(), live = (d && d.live) || [], rs = M() && M().playing && M().features && M().features().strobe;
         const bits = []; if (ROUGH.includes(w.weather)) { const d = now() - (wxSince[where()] || now()); bits.push(d < 60000 ? nm : `${nm} for ${fmtMin(d)}`); } if (live.length) bits.push(live.map(x => 'a ' + x.type).join(' and ') + ' nearby'); if (rs) bits.push('the strobe');
         return `${g.hiders.length} of ${g.n} are hiding` + (bits.length ? ': ' + bits.join(', ') : ''); },
-      acts(g) { const a = [], w = H().world(); if (w.weather !== 'clear') a.push({ id: 'calm', label: '☀️ calm the weather' }); if (M() && M().playing) a.push({ id: 'hush', label: '🔇 stop the music' }); a.push({ id: 'nap', label: '💤 let the scared ones nap' }); return a.slice(0, 3); },
+      acts(g) { const a = [], w = H().world(); if (w.weather !== 'clear') a.push({ id: 'calm', label: '☀️ calm the weather' }); if (M() && M().playing) a.push({ id: 'hush', label: '🔇 stop the music' }); if (window.__lake && window.__lake.lake()) a.push({ id: 'lake', label: '🌊 walk the scared ones to the lake' }); a.push({ id: 'nap', label: '💤 let the scared ones nap' }); return a.slice(0, 3); },
       wry: ['{n} has filed a formal complaint about the sky', '{n} is reading the weather report under a chart', 'morale is under the furniture', '{n} would like to speak to the manager of clouds'] },
     hunger: { on: 0.62, off: 0.45, title: 'they are hungry',
       cause(g) { const p = g.per[0]; return p ? `${p.eat} eat ${H().dietWhat(p.k).split(',')[0]}, and only ${p.have} are on the floor` : 'the floor is bare'; },
@@ -86,6 +86,7 @@
     else if (id === 'spread' && window.__raveHooks) { const sp = h.space(), cs = g.cs.filter(c => !c.held && c.state !== 'sleep'); let k = 0;
       for (const a of cs) { let m = 0; for (const o of cs) if (o !== a && Math.hypot(h.wd(a.x, o.x, sp.W), h.wd(a.y, o.y, sp.H)) < 120) m++; if (m < 3) continue; const ang = Math.random() * 6.283, r = 260 + Math.random() * 420; window.__raveHooks.goto(a, a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r); a.userUntil = Date.now() + 9000; k++; }
       done = k ? `${k} creatures wandered off to find some room` : 'nobody needed to move'; }
+    else if (id === 'lake' && window.__lake) { const names = window.__lake.gather(g.hiders.concat(g.cs.filter(c => ((c.life && c.life.fe) || {}).fear > 0.35 && !g.hiders.includes(c))).slice(0, 30)); done = names.length ? `${names.length} scared creatures are walking to the lake to calm down` : ''; }
     else if (id === 'rave' && M()) { M().setRave(true); M().play(true); done = 'the deck is playing, rave on: watch the dancefloor gauge'; un = () => { M().play(false); M().setRave(false); }; }
     if (!done) return; h.log('advisor_action', { id }); undo[w] = un ? { un, t: now(), what: done } : null; flash(done, !!un); if (S.open) render(); }
   function flash(t, canUndo) { const el = $('#advpanel .did'); if (el) el.innerHTML = `✓ ${esc(t)}` + (canUndo ? ` <button data-a="undo">undo</button>` : ''); else if (window.__musicToast) window.__musicToast('📊 ' + t); }

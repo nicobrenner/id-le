@@ -92,5 +92,5 @@
     location.reload();
   }
   const alertish = t => { const el = document.createElement('div'); el.textContent = t; el.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);background:#222;color:#fff;padding:6px 12px;border-radius:8px;z-index:99999;font:13px system-ui'; document.body.appendChild(el); setTimeout(() => el.remove(), 3500); };
-  window.__idle = { mode: () => modeP, cfg: CFG, download, backups: () => tx('backups', 'readonly', s => s.getAll()) };
+  window.__idle = { mode: () => modeP, cfg: CFG, download, backups: () => tx('backups', 'readonly', s => s.getAll()), kv: { get, put } };   // kv: the almanac keeps its history here (served or static)
 })();
