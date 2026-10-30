@@ -117,6 +117,7 @@
       else if (type === 'reels_made') first('reel', 'the world made a memory reel', null);
       else if (type === 'work' && x.job === 'counter' && x.n) { record('count', x.n, `${nm(x.who)} counted ${x.n} at once`, pos(x.who)); }
       else if (type === 'work' && x.job === 'math') { if (!S.firsts.chart) first('chart', `${nm(x.who)} plotted a chart`, pos(x.who)); else if (x.vis && CHART_KINDS[x.vis]) first('chart:' + x.vis, `${CHART_KINDS[x.vis]}: ${nm(x.who)} plotted ${esc(x.formula || '')}${x.exp ? ' (an experiment)' : ''}`, pos(x.who)); }
+      else if (type === 'built' && x.kind) { if (!S.firsts.built) first('built', `${nm(x.who)} finished the first building: ${esc(x.name || 'a ' + x.kind)}`, x.at || pos(x.who)); else first('built:' + x.kind, `the first ${esc(x.kind)}: ${nm(x.who)} built ${esc(x.name || '')}`, x.at || pos(x.who)); }
       else if (type === 'chart_code') first('chart_code', `${nm(x.who)} broke a chart into code`, pos(x.who));
       else if (type === 'task' && x.diet === 'code' && x.success) first('code_meal', `${nm(x.who)} ate a piece of code`, pos(x.who));
     } catch (err) {} });
