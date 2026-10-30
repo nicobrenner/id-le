@@ -109,9 +109,47 @@ async function stats(req, env, ctx) {
   return new Response(null, { status: 204 });
 }
 
+// the data lab's classifiers, through Jeffy's public server (playground.jeffyclassify.com, run by the Jeffy side; agreed 2026-10-30).
+// Its asks: only capabilities and predict (an allowlist here), capabilities cached hard, predictions through /v1/predict/batch (which
+// doesn't log the text), and a ceiling on requests in flight, because it is one 2-vCPU box that also serves jeffyclassify.com.
+// So: one text per call through the batch endpoint, at most 2 calls in flight per isolate (the rest wait up to 8 s), a queue of 48,
+// and 20 predictions a minute per visitor; above that the answer is 'busy' and the creature waits.
+const JEFFY = 'https://playground.jeffyclassify.com';
+const jq = { caps: null, capsT: 0, inflight: 0, queued: 0, hits: new Map() };
+async function jeffyCaps(ctx) {
+  if (jq.caps && Date.now() - jq.capsT < 6 * 3600e3) return jq.caps;
+  const cache = caches.default, key = new Request(JEFFY + '/v1/capabilities');
+  let r = await cache.match(key);
+  if (!r) { r = await fetch(key, { headers: { 'User-Agent': UA } }); if (!r.ok) throw new Error('Jeffy answered ' + r.status); r = new Response(await r.text(), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=21600' } }); ctx && ctx.waitUntil(cache.put(key, r.clone())); }
+  jq.caps = await r.json(); jq.capsT = Date.now(); return jq.caps;
+}
+async function jeffyPredict(task, text) {   // each request waits its own turn: a Worker can't safely answer one visitor's request from another's fetch
+  if (jq.queued >= 48) return { error: 'busy' };
+  jq.queued++;
+  try {
+    const t0 = Date.now(); while (jq.inflight >= 2) { if (Date.now() - t0 > 8000) return { error: 'busy' }; await new Promise(r => setTimeout(r, 120)); }
+    jq.inflight++;
+    try {
+      const r = await fetch(JEFFY + '/v1/predict/batch', { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': UA }, body: JSON.stringify({ texts: [String(text || '').slice(0, 500)], task }) });
+      if (r.status === 429 || r.status >= 500) return { error: 'busy' };
+      const d = r.ok ? await r.json() : null, P = d && d.predictions && d.predictions[0];
+      return P ? { label: P.label, confidence: P.confidence, margin: P.margin, out_of_scope: P.out_of_scope, probabilities: P.probabilities } : { error: 'Jeffy answered ' + r.status };
+    } catch (e) { return { error: 'busy' }; } finally { jq.inflight--; }
+  } finally { jq.queued--; }
+}
+async function jeffy(req, path, ip, ctx) {
+  if (path === '/jeffy/capabilities') return json(await jeffyCaps(ctx));
+  if (path !== '/jeffy/predict' || req.method !== 'POST') return json({ error: 'not available' }, 404);   // allowlist: never train, feedback, events or anything else
+  const k = ip + '|' + Math.floor(Date.now() / 60000), n = (jq.hits.get(k) || 0) + 1; jq.hits.set(k, n); if (jq.hits.size > 5000) jq.hits.clear();
+  if (n > 20) return json({ error: 'busy' }, 429);
+  const q = await req.json().catch(() => ({})); if (!q.text || !q.task) return json({ error: 'text and task needed' }, 400);
+  const r = await jeffyPredict(String(q.task).slice(0, 80), q.text); return json(r, r.error ? 503 : 200);
+}
+
 export default {
   async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return cors(env, req, new Response(null, { status: 204 }));
+    if (new URL(req.url).pathname.startsWith('/jeffy/')) { try { return cors(env, req, await jeffy(req, new URL(req.url).pathname, req.headers.get('CF-Connecting-IP') || 'local', ctx)); } catch (e) { return cors(env, req, json({ error: String(e.message || e).slice(0, 120) }, 502)); } }
     const url = new URL(req.url), path = url.pathname, ip = req.headers.get('CF-Connecting-IP') || 'local', min = Math.floor(Date.now() / 60000);
     const k = ip + '|' + min, n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (+env.RATE_PER_MIN || 60)) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));

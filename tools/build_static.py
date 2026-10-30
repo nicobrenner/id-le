@@ -78,7 +78,7 @@ def main():
 export default {
   async fetch(req, env, ctx) {
     const p = new URL(req.url).pathname;
-    if (p.startsWith('/lab/') || p.startsWith('/worlds/')) return helper.fetch(req, env, ctx);
+    if (p.startsWith('/lab/') || p.startsWith('/worlds/') || p.startsWith('/jeffy/')) return helper.fetch(req, env, ctx);
     return env.ASSETS.fetch(req);
   },
 };
