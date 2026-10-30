@@ -51,6 +51,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--helper", default="", help="base URL of the deployed helper worker (page fetch + world links); empty = without")
     ap.add_argument("--out", default=os.path.join(ROOT, "dist"))
+    ap.add_argument("--pages-helper", action="store_true", help="also write _worker.js so Cloudflare Pages serves the helper on the same origin (/lab/*, /worlds/*); use with --helper https://<your domain>")
     a = ap.parse_args()
     out = a.out
     if os.path.exists(out): shutil.rmtree(out)
@@ -69,6 +70,19 @@ def main():
         else: print("  missing (skipped):", f)
     sums = vendor_ort(out)
     open(os.path.join(out, "_headers"), "w").write(HEADERS)
+    if a.pages_helper:   # Pages advanced mode: static files as usual, the helper (helper/worker.js) on the same origin
+        w = open(os.path.join(ROOT, "helper", "worker.js"), encoding="utf-8").read()
+        assert w.count("export default {") == 1
+        w = w.replace("export default {", "const helper = {") + """
+export default {
+  async fetch(req, env, ctx) {
+    const p = new URL(req.url).pathname;
+    if (p.startsWith('/lab/') || p.startsWith('/worlds/')) return helper.fetch(req, env, ctx);
+    return env.ASSETS.fetch(req);
+  },
+};
+"""
+        open(os.path.join(out, "_worker.js"), "w", encoding="utf-8").write(w)
     size = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(out) for f in fs)
     json.dump({"ort": ORT_VER, "ort_sha256_16": sums, "helper": a.helper, "bytes": size}, open(os.path.join(out, "build.json"), "w"), indent=1)
     print(f"dist ready: {out} ({size / 1e6:.1f} MB). Try: python3 -m http.server 8776 -d {os.path.relpath(out)}")
