@@ -198,6 +198,6 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   }
   // take over the lab's send button and Cmd+Enter while an AI brain is chosen; the relay keeps the arena's own path
   sendBtn.addEventListener('click', e => { if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
-  text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
+  text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
   window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo };
 })();
