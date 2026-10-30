@@ -239,8 +239,9 @@ svg.onebit{float:right;margin:0 0 8px 14px;border:1px solid #000;shape-rendering
       ${fr.length ? `<div class="row"><span class="k">friends</span> ${fr.map(f => `<a href="#" data-go="${esc(f)}">${esc(f)}</a>`).join(', ')}</div>` : ''}
       ${d.length ? `<div class="row k">remembers</div><ul>${d.map(m => `<li>${memHTML(m.x)}${(m.ws || []).length ? ' ' + m.ws.map(([w, k]) => `<i>“${esc(w)}”</i>${k > 1 ? ' ×' + k : ''}`).join(', ') : m.n > 1 ? ' ×' + m.n : ''} <span class="k">· ${ago(m.t)}</span></li>`).join('')}</ul>` : '<div class="row k">no memories saved yet</div>'}
       ${x.rest ? '' : `<button class="go" data-open="${esc(x.name)}">open in arena ↗</button><div class="hint">switches to your world tab and opens its card</div>`}`;
-    if (draw) try { const c = creature(x.g, 1); c.x = 70; c.y = 54; c.heading = -0.4; draw.buildLegs(c); pop.querySelector('svg').innerHTML = draw.legsSVG(c) + draw.bodySVG(c, 0); } catch (e) {}
+    if (draw) try { const c = creature(x.g, 1); c.x = 70; c.y = 54; c.heading = -0.4; draw.buildLegs(c); const sv = pop.querySelector('svg'); sv.innerHTML = draw.legsSVG(c) + draw.bodySVG(c, 0); } catch (e) {}
     const r = anchor.getBoundingClientRect(); pop.classList.add('on');
+    try { const sv = pop.querySelector('svg'), b = sv.getBBox(); if (b.width) { const pad = 10, w = Math.max(b.width, b.height * 140 / 104) + pad * 2, h = w * 104 / 140; sv.setAttribute('viewBox', `${b.x + b.width / 2 - w / 2} ${b.y + b.height / 2 - h / 2} ${w} ${h}`); } } catch (e) {}   // fit the whole creature, legs included
     pop.style.left = Math.max(8, Math.min(r.left + scrollX, scrollX + innerWidth - pop.offsetWidth - 8)) + 'px';
     pop.style.top = (r.bottom + pop.offsetHeight + 8 > innerHeight ? Math.max(scrollY + 8, r.top + scrollY - pop.offsetHeight - 6) : r.bottom + scrollY + 6) + 'px'; }
   function openInArena(name) {   // a visible switch: name the tab that opened this page, then navigate and focus it by that name
