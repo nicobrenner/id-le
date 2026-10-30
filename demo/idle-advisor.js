@@ -19,7 +19,7 @@
   // ---------- gauges (higher = more of it) ----------
   const GAUGES = [
     { k: 'fear', label: 'fear', icon: '🫣', bad: 1 , what: 'share of them hiding or scared · lower is better' }, { k: 'hunger', label: 'hunger', icon: '🍽️', bad: 1 , what: 'average hunger · lower is better' }, { k: 'hurt', label: 'hurt', icon: '🤕', bad: 1 , what: 'average hurt · lower is better' },
-    { k: 'tired', label: 'tiredness', icon: '😴', bad: 1 , what: 'average tiredness · lower is better' }, { k: 'crowd', label: 'togetherness', icon: '🫂', bad: 0 , what: 'share with four or more others within a step · neither good nor bad, they flock on purpose' }, { k: 'food', label: 'food supply', icon: '🥣', bad: -1 , what: 'food on the floor per eater, for the diet that has least (8 bites each = full) · higher is better' },
+    { k: 'tired', label: 'tiredness', icon: '😴', bad: 1 , what: 'average tiredness · lower is better' }, { k: 'crowd', label: 'togetherness', icon: '🫂', bad: 0 , what: 'share with four or more others within a step · neither good nor bad on its own: social ones enjoy it, loners only up to their personal space' }, { k: 'food', label: 'food supply', icon: '🥣', bad: -1 , what: 'food on the floor per eater, for the diet that has least (8 bites each = full) · higher is better' },
     { k: 'mood', label: 'mood', icon: '😊', bad: -1 , what: 'average happiness · higher is better' }, { k: 'friends', label: 'friendships', icon: '🤝', bad: -1 , what: 'friends per creature (5 or more = full) · higher is better' }, { k: 'music', label: 'dancefloor', icon: '🕺', bad: -1, opt: 1 , what: 'share of the crowd dancing · higher is better' }, { k: 'lake', label: 'lake level', icon: '🌊', bad: 0, opt: 1, what: 'how full this world\'s lake is · rain fills it, clear days lower it' }];
   function measure() { const h = H(), cs = h.creatures().filter(c => !c.lab && !c.guest && c.d && c.name), n = cs.length || 1, ws = h.words();
     let fear = 0, hun = 0, hurt = 0, tired = 0, mood = 0, fr = 0; const hiders = [];
@@ -33,7 +33,9 @@
     const sm = cs.length > 150 ? cs.filter((_, i) => i % Math.ceil(cs.length / 150) === 0) : cs, sp = h.space(); let packed = 0;
     for (const a of sm) { let k = 0; for (const b of cs) { if (a === b) continue; if (Math.hypot(h.wd(a.x, b.x, sp.W), h.wd(a.y, b.y, sp.H)) < 120 && ++k >= 4) break; } if (k >= 4) packed++; }
     const rs = window.__rave && window.__rave.active() && window.__raveStats, music = rs ? clamp((rs.dance || 0) / Math.max(1, (rs.dance || 0) + (rs.bored || 0) + (rs.leave || 0))) : null;
-    return { t: now(), n: cs.length, cs, hiders, per, v: { fear: fear / n, hunger: hun / n, hurt: hurt / n, tired: tired / n, crowd: packed / Math.max(1, sm.length), food: foodG, mood: mood / n, friends: fr / n, music, lake: window.__lake ? window.__lake.level() : null } }; }
+    // personal space (#27): loners packed past their comfort (the arena keeps c._sp per creature)
+    const cramped = cs.filter(c => c._sp && c._sp.dis > 0.45 && c.state !== 'sleep');
+    return { t: now(), n: cs.length, cs, hiders, per, cramped, v: { fear: fear / n, hunger: hun / n, hurt: hurt / n, tired: tired / n, crowd: packed / Math.max(1, sm.length), food: foodG, mood: mood / n, friends: fr / n, music, lake: window.__lake ? window.__lake.level() : null } }; }
 
   // ---------- issues: thresholds with hysteresis, plain causes, one-click actions, a wry line ----------
   const fmtMin = ms => { const m = Math.round(ms / 60000); return m < 1 ? 'a moment' : m === 1 ? '1 min' : m < 90 ? m + ' min' : Math.round(m / 60) + ' h'; };
@@ -57,7 +59,11 @@
       cause(g) { const loud = M() && M().playing ? ', and the music is still playing' : ''; return `average tiredness ${Math.round(g.v.tired * 100)}%` + loud; },
       acts() { const a = [{ id: 'nap:tired', label: '💤 quiet hours: the tiredest nap' }]; if (M() && M().playing) a.push({ id: 'hush', label: '🔇 stop the music' }); return a; },
       wry: ['{n} fell asleep mid-sentence', 'yawns are spreading faster than words', '{n} is counting sheep and getting 41'] },
-    // no crowding issue: being close costs them nothing yet (they flock on purpose), so togetherness is shown, never flagged
+    // togetherness itself is never flagged (they flock on purpose); only loners stressed by a crowd are
+    cramped: { on: 0.08, off: 0.04, metric: g => g.cramped.length >= 3 ? g.cramped.length / Math.max(1, g.n) : 0, title: 'loners are stressed in a crowd',
+      cause(g) { return `${g.cramped.length} loners have more company than they like (personal space), and it is stressing them`; },
+      acts() { return [{ id: 'room', label: '🫧 give the loners room' }, { id: 'spread', label: '↔️ spread them out' }]; },
+      wry: ['{n} is pretending to be a lamp so nobody talks to it', '{n} has drawn a small circle around itself in chalk', 'a support group for loners met. nobody came'] },
     mood: { on: 0.75, off: 0.6, metric: g => 1 - g.v.mood, title: 'spirits are low',
       cause(g) { return `average happiness ${Math.round(g.v.mood * 100)}%`; },
       acts() { return M() ? [{ id: 'rave', label: '🕺 throw a rave' }] : []; },
@@ -86,6 +92,11 @@
     else if (id === 'spread' && window.__raveHooks) { const sp = h.space(), cs = g.cs.filter(c => !c.held && c.state !== 'sleep'); let k = 0;
       for (const a of cs) { let m = 0; for (const o of cs) if (o !== a && Math.hypot(h.wd(a.x, o.x, sp.W), h.wd(a.y, o.y, sp.H)) < 120) m++; if (m < 3) continue; const ang = Math.random() * 6.283, r = 260 + Math.random() * 420; window.__raveHooks.goto(a, a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r); a.userUntil = Date.now() + 9000; k++; }
       done = k ? `${k} creatures wandered off to find some room` : 'nobody needed to move'; }
+    else if (id === 'room' && window.__raveHooks) { const sp = h.space(), others = g.cs, names = [];
+      for (const c of g.cramped.filter(c => !c.held).slice(0, 12)) { let best = null, bd = -1;   // a quiet spot: the farthest from anyone among a few tries nearby, or the lake's shore
+        const sh = window.__lake && window.__lake.shoreFor(c, 900); for (let i = 0; i < 14; i++) { const a = Math.random() * 6.283, r = 300 + Math.random() * 600, x = c.x + Math.cos(a) * r, y = c.y + Math.sin(a) * r; let m = 1e9; for (const o of others) if (o !== c) m = Math.min(m, Math.hypot(h.wd(x, o.x, sp.W), h.wd(y, o.y, sp.H))); if (m > bd) { bd = m; best = { x, y }; } }
+        const to = sh && Math.random() < 0.3 ? sh : best; if (!to) continue; window.__raveHooks.goto(c, to.x, to.y); c.userUntil = Date.now() + 12000; c._spUntil = Date.now() + 20000; names.push(c.name); }
+      done = names.length ? `${names.length} loners went off to quieter spots` : 'no loner needed room'; }
     else if (id === 'lake' && window.__lake) { const names = window.__lake.gather(g.hiders.concat(g.cs.filter(c => ((c.life && c.life.fe) || {}).fear > 0.35 && !g.hiders.includes(c))).slice(0, 30)); done = names.length ? `${names.length} scared creatures are walking to the lake to calm down` : ''; }
     else if (id === 'rave' && M()) { M().setRave(true); M().play(true); done = 'the deck is playing, rave on: watch the dancefloor gauge'; un = () => { M().play(false); M().setRave(false); }; }
     if (!done) return; h.log('advisor_action', { id }); undo[w] = un ? { un, t: now(), what: done } : null; flash(done, !!un); if (S.open) render(); }
@@ -117,6 +128,9 @@
       else if (type === 'reels_made') first('reel', 'the world made a memory reel', null);
       else if (type === 'work' && x.job === 'counter' && x.n) { record('count', x.n, `${nm(x.who)} counted ${x.n} at once`, pos(x.who)); }
       else if (type === 'work' && x.job === 'math') { if (!S.firsts.chart) first('chart', `${nm(x.who)} plotted a chart`, pos(x.who)); else if (x.vis && CHART_KINDS[x.vis]) first('chart:' + x.vis, `${CHART_KINDS[x.vis]}: ${nm(x.who)} plotted ${esc(x.formula || '')}${x.exp ? ' (an experiment)' : ''}`, pos(x.who)); }
+      else if (type === 'space' && x.kind === 'party') first('party', `a party: ${nm(x.who)} loved a crowd of ${(x.n || 0) + 1}`, pos(x.who));
+      else if (type === 'space' && x.kind === 'hermit') first('hermit', `a hermit: ${nm(x.who)} found a quiet spot all to itself`, pos(x.who));
+      else if (type === 'space' && x.kind === 'crowded') first('cramped', `${nm(x.who)} felt crowded (${x.n} others within a step) and edged away`, pos(x.who));
       else if (type === 'chart_code') first('chart_code', `${nm(x.who)} broke a chart into code`, pos(x.who));
       else if (type === 'task' && x.diet === 'code' && x.success) first('code_meal', `${nm(x.who)} ate a piece of code`, pos(x.who));
     } catch (err) {} });
