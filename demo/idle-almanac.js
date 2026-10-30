@@ -119,7 +119,7 @@
   const csvq = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const iso = t => new Date(t).toISOString();
   function exportAs(kind) { const ws = Object.values(D.worlds);
-    if (kind === 'json') return dl(`idle-almanac-${stamp()}.json`, JSON.stringify({ format: 'idle-almanac', v: 1, exported: iso(now()), fields: F, notes: 'min rows: [t, ...fields]; hr/day buckets: t (start), c (samples), m (mean), lo, hi per field, ev (counts by kind)', ...D }, null, 1), 'application/json');
+    if (kind === 'json') return dl(`idle-almanac-${stamp()}.json`, JSON.stringify({ format: 'idle-almanac', v: 1, exported: iso(now()), fields: F, notes: 'min rows: [t, ...fields]; hr/day buckets: t (start), c (samples), m (mean), lo, hi per field, ev (counts by kind); firstFive: when each first happened on a first visit, seconds from the first load (kept only in this browser)', ...D, firstFive: window.__first5 ? window.__first5.stats() : null }, null, 1), 'application/json');
     let rows;
     if (kind === 'min') rows = [['world', 'time', ...F]].concat(...ws.map(w => w.min.map(r => [w.name, iso(r[0]), ...r.slice(1)])));
     else if (kind === 'hr' || kind === 'day') rows = [['world', 'start', 'samples', ...F.map(f => f + '_mean'), ...F.map(f => f + '_min'), ...F.map(f => f + '_max'), 'events']].concat(...ws.map(w => w[kind].map(b => [w.name, iso(b.t), b.c, ...b.m, ...b.lo, ...b.hi, Object.entries(b.ev || {}).map(([k, n]) => k + ':' + n).join(' ')])));
@@ -199,6 +199,7 @@
     if (!tabs.length) { bx.innerHTML = h + '<div class="sub">nothing kept yet: the first sample comes about 20 seconds after the world loads, then one a minute.</div>'; return; }
     h += wid === 'ocean' ? ocean(rg) : one(D.worlds[wid] || tabs[0], rg);
     h += `<h4>research export</h4><div class="row"><span class="sub">raw history, saved on this computer (nothing is uploaded):</span><button data-ex="json">all as JSON</button><button data-ex="min">minutes CSV</button><button data-ex="hr">hours CSV</button><button data-ex="day">days CSV</button><button data-ex="ev">events CSV</button><button data-ex="members">members CSV</button></div>`;
+    { const f5 = window.__first5 && window.__first5.statsLine(); if (f5) h += `<div class="sub" style="margin-top:6px">${esc(f5)}</div>`; }
     h += `<div class="sub" style="margin-top:6px">Kept: minutes for 2 days, hours for 90 days, days for good, the last 4,000 events per world (every event is still counted in its day). Time is real time. Stored in this browser (IndexedDB) and in snapshots; the disk copy updates once a minute.</div>`;
     const sc = bx.querySelector('.list.ev'), st = sc ? sc.scrollTop : 0, fq = document.activeElement && document.activeElement.matches && document.activeElement.matches('#almanac input[type=search]');
     bx.innerHTML = h; if (fq) { const i = bx.querySelector('input[type=search]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } const sc2 = bx.querySelector('.list.ev'); if (sc2) sc2.scrollTop = st; }

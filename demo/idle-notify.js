@@ -8,7 +8,7 @@
 // with __notify.on(name, fn)) are handled by delegation, so they work in the history too.
 (() => {
   const KINDS = { gazette: { icon: '📰', ttl: 12000 }, reel: { icon: '🎞', ttl: 14000 }, system: { icon: '⚙️', ttl: 7000 }, music: { icon: '🎧', ttl: 4000 },
-    disaster: { icon: '🌩', ttl: 10000 }, lab: { icon: '🧪', ttl: 6500 }, advisor: { icon: '📊', ttl: 14000 }, world: { icon: '🌍', ttl: 6000 } };
+    disaster: { icon: '🌩', ttl: 10000 }, lab: { icon: '🧪', ttl: 6500 }, advisor: { icon: '📊', ttl: 14000 }, world: { icon: '🌍', ttl: 6000 }, trail: { icon: '🧭', ttl: 30000 } };
   const MAX = 3, HKEY = 'idle.notify.hist', SEEN = 'idle.notify.seen', esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // lab chatter in the first seconds after a load ("your last session is back"…) goes to 🔔 only
   const now = () => Date.now(), acts = {}, born = Date.now(); let hist = [], seenT = 0, stack = null, bell = null, panel = null, uid = 0;

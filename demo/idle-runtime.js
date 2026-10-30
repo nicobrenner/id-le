@@ -8,7 +8,7 @@
 // Config: set window.IDLE_CFG = { mode: 'auto' | 'server' | 'static', helper: 'https://…' } before this file (the static build does).
 (() => {
   const CFG = Object.assign({ mode: 'auto', helper: '' }, window.IDLE_CFG || {});
-  const realFetch = window.fetch.bind(window);
+  const realFetch = window.fetch.bind(window), SANDBOX = /[?&]fresh\b/.test(location.search);
   const HELPER_PATHS = ['/lab/fetch', '/lab/page', '/lab/asset', '/lab/img', '/worlds/'];
   const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -54,6 +54,8 @@
     const url = typeof input === 'string' ? input : input && input.url;
     let path = null; try { const u = new URL(url, location.href); if (u.origin === location.origin && /^\/(lab|worlds|jeffy)\//.test(u.pathname)) path = u.pathname + u.search; } catch (e) {}
     if (!path) return realFetch(input, init);
+    // ?fresh (a first visit replayed in a private window): never write to the lab folder on disk, whatever the server
+    if (SANDBOX && /^\/lab\/(sync|world|notes|recover)\b/.test(path) && init && /post/i.test(init.method || '')) return json({ ok: true, sandbox: true });
     return (await modeP) === 'server' ? realFetch(input, init) : local(path, init);
   };
 
