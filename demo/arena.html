@@ -1702,6 +1702,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       <div class="strip"><h5>Day</h5>${led('day', 'day cycle', world.day)}<div class="row">${fader('dayLen', 'day length', 2, 30, 1, world.dayLen || 8, x => x + "'")}</div></div>
       <div class="strip"><h5>Ground</h5><div class="row">${fader('featureCount', 'features', 0, 12, 1, world.featureCount ?? 5)}</div><button class="pad" data-s="reshuffle" title="new streams, wells, 404 holes and caches">reshuffle</button></div>
       <div class="strip"><h5>Disasters</h5>${led('disasters', 'now and then', world.disasters)}<div class="pads"><button class="pad" data-s="volcano" title="volcano">🌋</button><button class="pad" data-s="tornado" title="tornado">🌪</button><button class="pad" data-s="quake" title="earthquake">〰</button></div></div>
+      <div class="strip"><h5>Children</h5>${led('births', 'creatures have children', world.births !== false, 'well-fed, rested friends sometimes have a child; births stop at the cap, nobody is ever removed')}<div class="row">${fader('popCap', 'population cap', 10, 150, 5, world.popCap || 60)}</div></div>
       <div class="strip"><h5>Sound</h5>${led('sound', 'on', soundOn())}<div class="row">${fader('amb', 'ambience', 0, 1.5, 0.05, v.ambVol, x => Math.round(x * 100))}${fader('fx', 'effects', 0, 1.5, 0.05, v.fxVol, x => Math.round(x * 100))}</div></div>
       <div class="strip wide"><h5>Text look <small>restyles the words in place</small></h5><select data-s="font">${['serif', 'sans', 'mono'].map(f => `<option${world.font === f ? ' selected' : ''}>${f}</option>`).join('')}</select><div class="row">${fader('size', 'size', 9, 22, 1, world.size)}${fader('tilt', 'tilt', 0, 45, 1, world.tilt ?? 18, x => '±' + x + '°')}${fader('ink', 'ink', 0, 360, 1, world.ink || 0)}${fader('inkSat', 'colour', 0, 70, 1, world.inkSat || 0)}</div></div>
       <div class="strip wide"><h5>Layout <small>the only control that lays text out again</small></h5><div class="pads"><select data-s="layout">${['meaning', 'mix', 'mounds', 'spread', 'page'].map(f => `<option${world.layout === f ? ' selected' : ''}>${f}</option>`).join('')}</select> <button class="pad" data-s="relay" title="lay the last text you fed the world out again with this layout (with “add to the world” on, it is added; off, it replaces)">re-lay text</button></div></div>`; }
@@ -1726,7 +1727,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function undoLast() { if (!last) { say('lab', 'nothing to undo', 'lab'); return; } applyWorld({ ...last.world }, 'studio'); if (last.keep && window.__keep) window.__keep.load(last.keep); if (last.styles) for (const [w, f, c, r] of last.styles) { w.el.style.font = f; w.el.style.color = c; w.rot = r; place(w); } if (window.__lod) window.__lod.restyled(); for (const c of last.mutated) if (creatures.includes(c)) evolveC(c, 'revert'); last = null; render(); }
     el.addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (!b) return; const k = b.dataset.s;
       if (k === 'close') toggle(false); else if (k === 'day' || k === 'disasters') { setWorld({ [k]: !world[k] }); if ($('#wcDis')) $('#wcDis').checked = !!world.disasters; render(); }
-      else if (k === 'sound') { Sound.toggle(); render(); } else if (['env', 'obj', 'cre'].includes(k)) { pref[k] = !pref[k]; savePref(); render(); }
+      else if (k === 'births') { setWorld({ births: world.births === false }); render(); } else if (k === 'sound') { Sound.toggle(); render(); } else if (['env', 'obj', 'cre'].includes(k)) { pref[k] = !pref[k]; savePref(); render(); }
       else if (k === 'wxreset') { const wx = { ...(world.wx || {}) }; delete wx[world.weather]; world = { ...world, wx }; saveWorld(); render(); }
       else if (k === 'keepworld') { $('#worldKeep').click(); }
       else if (k === 'reshuffle' && window.__placeKind === 'keep' && window.__keep) { window.__keep.reshuffle(); say('lab', '🕯️ Gloamhold: every room refurnished', 'lab'); }
@@ -3155,6 +3156,12 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     spawn: kind => spawnSpecial(kind), jobOf: c => jobOf(c), fe: c => window.__life ? (window.__life.feelings(c), c.life && c.life.fe) : null, keepRooms: () => window.__keep && window.__keep.rooms ? window.__keep.rooms() : [], restoredOrFresh: () => !!window.__restoredOrFresh,
     namer: () => creatures.find(c => jobOf(c) === 'namer'), wind: () => window.__weather && window.__weather.wind(), flyTo: (x, y, z) => Disasters.flyTo(x, y, z) };
   // your drawer (demo/idle-collect.js, issue #29): copies of what you keep, and what it needs from the world to draw, place and credit them
+  // natural reproduction (demo/idle-babies.js, issue #33): parents' genes mixed and mutated with the evolution machinery, a child released as a resident
+  window.__babyHooks = { creatures: () => creatures, world: () => world, mutate: (k, r, p) => mutate(k, r, p), famKey: c => famKey(c), famName: c => NAME_FAMS[nameFamily(c.g, famKey(c))] || 'kin', jobOf: c => jobOf(c),
+    birth(fam, g, x, y) { const before = creatures.length; release({ key: fam, genome: g }, true); const n = creatures[creatures.length - 1]; if (creatures.length === before || !n) return null;
+      n.x = n.tx = x; n.y = n.ty = y; n.size = 0.55; buildLegs(n); sizeUp(n); n.born = Date.now(); n.flash = { how: 'keep', until: performance.now() + 1200 }; saveResidents(); renderEvo(); return n; },
+    wordsNear: (x, y, r) => wordsNear(x, y, r), edible: (c, w) => edibleOn(c, w), log: (t, x) => logEvent(t, x), comment: (t, k) => oracleComment(t, k), wd, space: () => SPACE,
+    feelings: c => Life.feelings(c), note: (c, k, x, g) => Life.note(c, k, x, g), mn: n => Life.mn(n), evoFx: (c, how) => evoFx(c, how), speak: (c, t) => window.__raveHooks && window.__raveHooks.say(c, t), traveling: () => !!window.__traveling, placeId: () => (window.__places ? window.__places.cur() : 'home') };
   window.__treeHooks = { creatures: () => creatures, genomes: () => genomes, lineage: () => lineage, resting: () => (window.__herd ? window.__herd.list() : []), TRAITS, buildLegs, drawTo: (g, c, t) => Crit.drawTo(g, c, t, false), isDark: () => isDark(),
     uidOf: c => (!c.visitor ? 'main:' + c.key : (c.uid || indOf(c).uid)), famName: c => NAME_FAMS[nameFamily(c.g, famKey(c))] || 'kin', famNameG: g => NAME_FAMS[nameFamily(g, g && g.body === 'chip' ? 'crawly' : 'tok')] || 'kin',
     defaultId: k => (DEFAULT_GENOMES[k] || {}).id, placeId: () => (window.__places ? window.__places.cur() : 'home'), traveling: () => !!window.__traveling, logEvent };   // family trees (idle-trees.js)
@@ -3178,7 +3185,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // Reels play the clip itself (the same creature drawing, legs and all) instead of a still scene when there is one.
   const Replay = (() => {
     const HZ = 125, PRE = 6000, POST = 4000, R = 400, MAXC = 12, MAXW = 90, KEEP = 300, KEEP_KB = 8192, HARD = 600, HARD_KB = 16384, PER_H = 40;   // Oct 30: 60 clips filled in 27 min (mostly thefts) and reels lost their replays
-    const W8 = { built: 4.5, dance: 3.5, steal: 4, robbed: 4.5, disaster: 5, friend: 5, first: 5, hangry: 3.5, rename: 4, metamorphosis: 5, evolve: 3, picked_up: 3, feel: 2.5, chart: 3.5, scared: 3 };
+    const W8 = { birth: 5, built: 4.5, dance: 3.5, steal: 4, robbed: 4.5, disaster: 5, friend: 5, first: 5, hangry: 3.5, rename: 4, metamorphosis: 5, evolve: 3, picked_up: 3, feel: 2.5, chart: 3.5, scared: 3 };
     const STRONG = new Set(Object.keys(W8));
     const ring = [], active = [], lastBy = new Map(); let lastStart = 0, lastScare = 0, lastTheft = 0, ver = 0;
     const THEFT = new Set(['steal', 'robbed']);
@@ -3374,7 +3381,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     const esc = t => String(t ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
     const plain = h => String(h || '').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
     const REEL_KINDS = { life: "one creature's first days", friends: 'two friends', weather: 'a stretch of weather (storms, rain, fog, wind, hum, static)', disaster: 'a disaster and how everyone took it', place: 'days in another place', count: 'a day of counting', design: 'a day of designing', best: 'the best of today', rave: 'a rave: who danced, who left, who hid from the strobe' };
-    const KW = { dance: 3.5, hangry: 3.5, heal: 3, first: 5, friend: 5, disaster: 5, metamorphosis: 5, evolve: 4, rename: 4, world_leave: 3, world_return: 3, robbed: 3, picked_up: 3, whisper: 3, feel: 2.5, steal: 2, pic: 3, admire: 2, eat_image: 3, work: 1.2, task: 1, day: 0.6, spit: 1.5, sick: 2.5, wake: 0.5, rest: 2, inspector_task: 2, world: 2.5 };
+    const KW = { birth: 5.5, dance: 3.5, hangry: 3.5, heal: 3, first: 5, friend: 5, disaster: 5, metamorphosis: 5, evolve: 4, rename: 4, world_leave: 3, world_return: 3, robbed: 3, picked_up: 3, whisper: 3, feel: 2.5, steal: 2, pic: 3, admire: 2, eat_image: 3, work: 1.2, task: 1, day: 0.6, spit: 1.5, sick: 2.5, wake: 0.5, rest: 2, inspector_task: 2, world: 2.5 };
     const WXT = { storm: ['The great storm', 'A packet storm'], static: ['Static in the air', 'Static again'], bitrain: ['Rainy days', 'Rain'], fog: ['Lost in the fog', 'Fog'], wind: ['A windy day', 'Wind'], hum: ['The day of the hum', 'Humming'] };
     const DAY = 86400000, now = () => Date.now(), dkey = t => { const d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
     const when = t => new Date(t).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }), dayName = t => new Date(t).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
@@ -3397,7 +3404,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       return out.length >= min ? out.sort((a, b) => a.e.t - b.e.t) : null; }
     // a caption in the creature's own voice, from the diary line
     const pickOf = (arr, t) => arr[Math.abs(Math.floor(t / 1000)) % arr.length];
-    const FL = { hangry: ['Do not talk to me.', 'Everything looked delicious.', 'I regret nothing.'], heal: ['Better now.', 'That helped.'], friend: ['I liked that.', 'Best day.', 'We get along.'], day: ['A new day.', 'Morning again.', 'Up with the light.'], steal: ['Sorry.', 'It was shiny.', ''], robbed: ['Rude.', 'I wanted that one.', 'Hmph.'],
+    const FL = { birth: ['Small and new.', 'Everything was big.', 'Welcome.'], hangry: ['Do not talk to me.', 'Everything looked delicious.', 'I regret nothing.'], heal: ['Better now.', 'That helped.'], friend: ['I liked that.', 'Best day.', 'We get along.'], day: ['A new day.', 'Morning again.', 'Up with the light.'], steal: ['Sorry.', 'It was shiny.', ''], robbed: ['Rude.', 'I wanted that one.', 'Hmph.'],
       disaster: ['The ground shook.', 'We all ran.', 'I stayed close to the others.'], first: ['Everything was new.', 'So this is what it\'s like.'], task: ['Yum.', 'Tasty.', ''], work: ['', 'Good work.', 'Busy, busy.'],
       evolve: ['I felt different after.', 'New me.'], metamorphosis: ['I am someone else now. Mostly.'], world_return: ['Home is home.'], world_leave: ['Off I go.'], picked_up: ['Whee.', 'Up high!'], whisper: ['It was nice to hear.'], pic: ['I keep looking at them.'], eat_image: ['It tasted like colours.'], admire: ['I could look at it all day.'], sick: ['Never again. Probably.'] };
     function voice(e) { let t = plain(e.x).trim(); const k = kb(e);
@@ -3439,6 +3446,10 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
         for (const r of runs) { const t0 = r[0].e.t, t1 = r[r.length - 1].e.t, near = E.filter(x => x.e.t >= t0 - 60000 && x.e.t <= t1 + 300000), items = pick(near.map(x => ({ ...x, bonus: x.e.k === 'dance' ? 3 : 0 })), { min: 5, max: 10, per: 3 }); if (!items) continue;
           const night = ((x => { const h = new Date(x).getHours(); return h >= 20 || h < 5; })(t0)) || (r.some(x => ((x.e.s || {}).day ?? 0) > 0.55 && ((x.e.s || {}).day ?? 0) < 0.95));
           out.push({ key: 'rave:' + Math.round(t0 / 60000), kind: 'rave', title: night ? 'The night of the rave' : 'The rave, ' + when(t0), sub: new Set(r.map(x => x.n)).size + ' danced', items, who: [...new Set(items.map(x => x.n))] }); } }
+      // a new arrival: the birth as the parents and the child remember it, and the child's first moments
+      for (const b of E.filter(x => x.e.g === 'birth:child')) { const ps = (b.e.par || []).filter(Boolean), names = new Set([b.n, ...ps]), t0 = b.e.t;
+        const near = E.filter(x => names.has(x.n) && x.e.t >= t0 - 120000 && x.e.t <= t0 + 1800000), items = pick(near.map(x => ({ ...x, bonus: kb(x.e) === 'birth' ? 4 : x.n === b.n ? 1 : 0 })), { min: 4, max: 9, per: 4 }); if (!items) continue;
+        out.push({ key: 'arrival:' + b.n, kind: 'arrival', title: 'A new arrival: ' + b.n, sub: ps.length > 1 ? 'born to ' + ps.join(' & ') : ps.length ? 'budded from ' + ps[0] : when(t0), items, who: [...names] }); }
       // a day of counting, a day of designing
       for (const [k, kind, title] of [['work:count|work:sum|work:chart', 'count', 'A day of counting'], ['work:design|work:redesign|work:piece|work:gather', 'design', 'A day of designing']]) { const re = new RegExp('^(' + k + ')$'), xs = E.filter(x => dkey(x.e.t) === today && re.test(String(x.e.g)));
         const items = pick(xs.map(x => ({ ...x, sc: 2 + Math.log2(x.e.n || 1) + (x.e.ws ? 0.5 : 0) + Math.random() * 0.2 })), { min: 5, max: 9, per: 4 }); if (items) out.push({ key: kind + ':' + today, kind, title, sub: dayName(T), items, who: [...new Set(items.map(x => x.n))] }); }
@@ -3497,7 +3508,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     let cur = null, idx = -1, paused = false, timer = 0, left = 0, t0 = 0, front = 0, raf = 0, dur = 5200; const SLIDE = 5200, TITLE = 3200;
     const rpc = pl.querySelector('.rp'), RP = window.__replay ? window.__replay.player(rpc) : null;
     // stills or replays (Oct 30, Nico likes both): each kind leans one way, a slide's pick is fixed per reel, and the player has a toggle
-    const LEAN = { rave: 0.9, life: 0.35, friends: 0.85, weather: 0.9, disaster: 0.9, place: 0.6, count: 0.5, design: 0.5, best: 0.6 }, STY = ['mixed', 'replays', 'stills'];
+    const LEAN = { arrival: 0.85, rave: 0.9, life: 0.35, friends: 0.85, weather: 0.9, disaster: 0.9, place: 0.6, count: 0.5, design: 0.5, best: 0.6 }, STY = ['mixed', 'replays', 'stills'];
     let style = (() => { try { const v = localStorage.getItem('arena.reelStyle'); return STY.includes(v) ? v : 'mixed'; } catch (e) { return 'mixed'; } })();
     function useClip(r, i) { if (style === 'stills') return false; if (style === 'replays') return true; let h = 2166136261; for (const ch of r.id + ':' + i) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0; h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0; h = (h ^ (h >>> 16)) >>> 0; return h / 4294967296 < (LEAN[r.kind] ?? 0.6); }   // finalizer: FNV alone put whole reels on one side
     function styleBtn() { const b = pl.querySelector('[data-r=style]'); if (b) b.textContent = { mixed: '◐ mixed', replays: '▶ replays', stills: '▢ stills' }[style]; }
@@ -3639,4 +3650,4 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   })();
 })();
 </script>
-<script src="idle-ai.js"></script><script src="idle-music.js"></script><script src="idle-rave.js"></script><script src="idle-advisor.js"></script><script src="idle-almanac.js"></script><script src="idle-lake.js"></script><script src="idle-build.js"></script><script src="idle-collect.js"></script><script src="idle-trees.js"></script><script src="idle-first5.js"></script></body></html>
+<script src="idle-ai.js"></script><script src="idle-music.js"></script><script src="idle-rave.js"></script><script src="idle-advisor.js"></script><script src="idle-almanac.js"></script><script src="idle-lake.js"></script><script src="idle-build.js"></script><script src="idle-collect.js"></script><script src="idle-trees.js"></script><script src="idle-babies.js"></script><script src="idle-first5.js"></script></body></html>
