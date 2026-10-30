@@ -53,7 +53,7 @@ def main():
     if not ns:
         sys.exit(f"no KV namespace titled {NS_TITLE!r}")
     nsid = ns[0]["id"]
-    since = (dt.datetime.utcnow().date() - dt.timedelta(days=a.days - 1)).isoformat()
+    since = (dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=a.days - 1)).isoformat()
     keys, cursor = [], ""
     while True:
         q = f"/accounts/{acct}/storage/kv/namespaces/{nsid}/keys?prefix=stats:&limit=1000" + (f"&cursor={urllib.parse.quote(cursor)}" if cursor else "")
