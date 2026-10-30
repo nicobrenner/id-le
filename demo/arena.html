@@ -3286,7 +3286,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     // stills or replays (Oct 30, Nico likes both): each kind leans one way, a slide's pick is fixed per reel, and the player has a toggle
     const LEAN = { rave: 0.9, life: 0.35, friends: 0.85, weather: 0.9, disaster: 0.9, place: 0.6, count: 0.5, design: 0.5, best: 0.6 }, STY = ['mixed', 'replays', 'stills'];
     let style = (() => { try { const v = localStorage.getItem('arena.reelStyle'); return STY.includes(v) ? v : 'mixed'; } catch (e) { return 'mixed'; } })();
-    function useClip(r, i) { if (style === 'stills') return false; if (style === 'replays') return true; let h = 2166136261; for (const ch of r.id + ':' + i) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h / 4294967296 < (LEAN[r.kind] ?? 0.6); }
+    function useClip(r, i) { if (style === 'stills') return false; if (style === 'replays') return true; let h = 2166136261; for (const ch of r.id + ':' + i) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0; h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0; h = (h ^ (h >>> 16)) >>> 0; return h / 4294967296 < (LEAN[r.kind] ?? 0.6); }   // finalizer: FNV alone put whole reels on one side
     function styleBtn() { const b = pl.querySelector('[data-r=style]'); if (b) b.textContent = { mixed: '◐ mixed', replays: '▶ replays', stills: '▢ stills' }[style]; }
     const clipOf = x => { if (!window.__replay) return null; let c = x.clip ? window.__replay.get(x.clip) : null; if (!c && !x.clip) { c = window.__replay.find(x.n, x.e.t); if (c) { x.clip = c.id; save(); } } return c; };
     const noRP = () => { if (RP) RP.stop(); rpc.classList.remove('on'); };
@@ -3296,7 +3296,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       const rx = new RegExp('(^|[^\\w|])(' + found.map(n => esc(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?=$|[^\\w|])', 'g');
       return h.replace(rx, (m0, a, n) => a + mn(n.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))); }
     const fk = e => kb(e) === 'feel' ? String(e.g || '').split(':')[1] : (e.s || {}).f;
-    function play(r) { cur = r; idx = -1; paused = false; pl.classList.remove('peek'); pl.querySelector('[data-r=pause]').textContent = '⏸'; r.seen = true; save(); renderList(); pl.classList.add('on'); pl.querySelector('.tt').innerHTML = linkNames(r.title); starBtn(); musicBtn(); styleBtn();
+    function play(r) { dispatchEvent(new CustomEvent('idle:duck', { detail: { who: 'reel', on: true } })); cur = r; idx = -1; paused = false; pl.classList.remove('peek'); pl.querySelector('[data-r=pause]').textContent = '⏸'; r.seen = true; save(); renderList(); pl.classList.add('on'); pl.querySelector('.tt').innerHTML = linkNames(r.title); starBtn(); musicBtn(); styleBtn();
       const FC = window.__life.FCOL || {}; bar.innerHTML = r.items.map((x, i) => `<i data-i="${i}" style="--c:${FC[fk(x.e)] || '#9aa4b2'}"><b></b></i>`).join('');
       show(); if (music.on) music.start(); logEvent('reel_play', { key: r.key, n: r.items.length }); }
     function starBtn() { const b = pl.querySelector('[data-r=star]'); b.textContent = cur && cur.star ? '★ kept' : '☆ keep'; }
@@ -3314,11 +3314,12 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       im.style.animation = 'none'; void im.offsetWidth; im.style.animation = `kb ${(title ? TITLE : SLIDE) + 1400}ms linear forwards`; im.style.animationPlayState = paused ? 'paused' : 'running'; L.classList.add('on'); O.classList.remove('on'); }
     function tick() { cancelAnimationFrame(raf); if (!cur || !pl.classList.contains('on')) return; const i = idx, el = bar.querySelector(`i[data-i="${i}"] b`); bar.querySelectorAll('i b').forEach((b, j) => { if (j !== i) b.style.width = j < i ? '100%' : '0'; });
       if (el && left !== Infinity) { const f = paused ? (dur - left) / dur : Math.min(1, (dur - left + performance.now() - t0) / dur); el.style.width = (f * 100).toFixed(1) + '%'; } raf = requestAnimationFrame(tick); }
-    function next() { if (!cur) return; idx = Math.min(cur.items.length, idx + 1); show(); }
-    function prev() { if (!cur) return; idx = Math.max(-1, idx - 1); show(); }
+    const skipStill = i => style === 'replays' && RP && i >= 0 && i < cur.items.length && !clipOf(cur.items[i]) && cur.items.some(x => clipOf(x));   // replays mode: only the moments that were recorded
+    function next() { if (!cur) return; idx = Math.min(cur.items.length, idx + 1); while (skipStill(idx)) idx++; show(); }
+    function prev() { if (!cur) return; idx = Math.max(-1, idx - 1); while (skipStill(idx)) idx--; show(); }
     function pause(p) { if (p === paused) return; paused = p ?? !paused; if (RP) RP.pause(paused); pl.querySelector('[data-r=pause]').textContent = paused ? '▶' : '⏸'; lays.forEach(L => { const im = L.querySelector('img'); im.style.animationPlayState = paused ? 'paused' : 'running'; });
       if (paused) { clearTimeout(timer); left = Math.max(0, left - (performance.now() - t0)); } else { t0 = performance.now(); if (left !== Infinity) timer = setTimeout(next, left); } if (music.on) paused ? music.stop() : music.start(); }
-    function close() { clearTimeout(timer); cancelAnimationFrame(raf); pl.classList.remove('on', 'peek'); music.stop(); noRP(); cur = null; hoverPaused = false; const f = from; from = null;
+    function close() { dispatchEvent(new CustomEvent('idle:duck', { detail: { who: 'reel', on: false } })); clearTimeout(timer); cancelAnimationFrame(raf); pl.classList.remove('on', 'peek'); music.stop(); noRP(); cur = null; hoverPaused = false; const f = from; from = null;
       if (f && f.k === 'card' && f.c && creatures.includes(f.c)) { cam.x = f.c.x; cam.y = f.c.y; cam.z = Math.max(cam.z, 0.9); applyCam(); if (window.__lod) window.__lod.onCam(); openWhisper(f.c); const w = $('#whisper'); if (w._setTab) w._setTab(f.tab, true); }
       else if (f && f.k === 'list') toggleList(true); }
     // a name clicked in the reel: the reel pauses and waits small in the corner while their card is open; closing the card brings it back
