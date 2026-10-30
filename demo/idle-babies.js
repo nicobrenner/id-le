@@ -24,10 +24,10 @@
   const GROWN = 0.85, AGE = 5 * MIN, COOL = 12 * MIN, GAP = 90000;
   function ready(c, t) { if (c.held || c.state === 'hide' || (c.size || 1) < GROWN) return 'young';
     if (t - (c.born || 0) < AGE * cfg.cool) return 'young'; if (t - (S.cool[uid(c)] || 0) < COOL * cfg.cool) return 'resting';
-    const d = c.d, f = H().feelings(c) || {}; if (d.hunger > 0.5) return 'hungry'; if (d.fatigue > 0.6) return 'tired'; if ((f.afraid || 0) > 0.35 || (f.hurt || 0) > 0.5) return 'scared';
+    const d = c.d, f = H().feelings(c) || {}; if (d.hunger > 0.6) return 'hungry'; if (d.fatigue > 0.6) return 'tired'; if ((f.afraid || 0) > 0.35 || (f.hurt || 0) > 0.5) return 'scared';
     return ''; }
   const crowded = c => { const sp = c._sp; return sp && (sp.dis > 0.5 || sp.n > 7); };
-  function food(cs, x, y) { let n = 0; const ws = H().wordsNear(x, y, 360); for (const w of ws) { if (w.carriedBy) continue; for (const c of cs) if (H().edible(c, w)) { n++; break; } if (n >= 6) break; } return n; }
+  function food(cs, x, y) { let n = 0; const ws = H().wordsNear(x, y, 500); for (const w of ws) { if (w.carriedBy) continue; for (const c of cs) if (H().edible(c, w)) { n++; break; } if (n >= 6) break; } return n; }
 
   // ---------- the child's genes ----------
   const HUE = new Set(['hue', 'footHue', 'laserHue', 'paintHue']), INT = new Set(['palps', 'abdomen', 'laser', 'mTempo', 'mglyph', 'dzStyle', 'dzMax', 'voicePitch', 'sortAxis']);
@@ -74,12 +74,12 @@
     const why = {}, rd = new Map(); for (const c of cs) { const r = ready(c, t); rd.set(c, r); if (r) why[r] = (why[r] || 0) + 1; }
     const ok = cs.filter(c => !rd.get(c)), pairs = [], seen = new Set(); let tooCrowded = 0, noFood = 0;
     for (const a of ok) for (const n of (a.life && a.life.friends) || []) { const b = ok.find(o => o.name === n); if (!b || b === a) continue; const k = [a.name, b.name].sort().join('|'); if (seen.has(k)) continue; seen.add(k);
-      if (dist(a, b) > 260) continue; if (crowded(a) || crowded(b)) { tooCrowded++; continue; } if (food([a, b], (a.x + b.x) / 2, (a.y + b.y) / 2) < 4) { noFood++; continue; } pairs.push([a, b]); }
+      if (dist(a, b) > 420) continue; if (crowded(a) || crowded(b)) { tooCrowded++; continue; } if (food([a, b], (a.x + b.x) / 2, (a.y + b.y) / 2) < (a.d.hunger < 0.35 && b.d.hunger < 0.35 ? 1 : 2)) { noFood++; continue; } pairs.push([a, b]); }
     status = { t, pairs: pairs.length, why: pairs.length ? '' : ok.length < 2 ? (Object.entries(why).sort((p, q) => q[1] - p[1]).map(([k, n]) => `${n} ${k}`).slice(0, 3).join(', ') || 'nobody ready') : tooCrowded ? 'friends are ready but too crowded' : noFood ? 'friends are ready but there is too little food nearby' : 'no friends close together and ready' };
     for (const [a, b] of pairs.sort(() => Math.random() - 0.5)) if (force || Math.random() < 0.012 * cfg.rate) return deliver(a, b, Math.random() < 0.06);
-    // budding: a rare loner with no friend about, well fed and alone
-    for (const a of ok) { if ((a.life && a.life.friends || []).some(n => ok.some(o => o.name === n)) || crowded(a) || (a._sp && a._sp.n > 2)) continue; if (food([a], a.x, a.y) < 3) continue;
-      if (Math.random() < 0.0015 * cfg.rate) return deliver(a, null, false); }
+    // budding: rare, and world-wide (one candidate a check, not one chance per loner): a creature alone, well fed, with no friend about
+    if (Math.random() < 0.001 * cfg.rate) { const lone = ok.filter(a => !(a.life && a.life.friends || []).some(n => ok.some(o => o.name === n)) && !crowded(a) && !(a._sp && a._sp.n > 2)), a = lone.length ? pick(lone) : null;
+      if (a && food([a], a.x, a.y) >= 3) return deliver(a, null, false); }
     return null; }
   setInterval(() => { try { tick(false); } catch (e) { console.warn('babies', e); } }, cfg.every);
 

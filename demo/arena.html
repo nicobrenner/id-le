@@ -3467,7 +3467,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     // look for new reels: a key not made yet, or a better version of an old one (not starred, made over an hour ago, at least 3 new moments)
     let notes = [];
     function refresh(quiet) { let c; try { c = candidates(); } catch (e) { console.warn('reels', e); return 0; } const fresh = [];
-      const ORD = { friends: 0, disaster: 1, weather: 2, place: 3, best: 4, life: 5, count: 6, design: 7 }, q = k => k.items.reduce((a, x) => a + score(x.e), 0) / k.items.length;
+      const ORD = { arrival: -1, friends: 0, disaster: 1, weather: 2, place: 3, best: 4, life: 5, count: 6, design: 7 }, q = k => k.items.reduce((a, x) => a + score(x.e), 0) / k.items.length;
       c.out.sort((a, b) => (ORD[a.kind] ?? 9) - (ORD[b.kind] ?? 9) || q(b) - q(a));
       for (const k of c.out) { if (fresh.length >= 4) break; const ex = st.list.filter(r => r.key === k.key), live = ex.find(r => !r.star);
         const sig = r => new Set(r.items.map(x => x.n + ':' + x.e.t));
