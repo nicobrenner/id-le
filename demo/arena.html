@@ -1515,7 +1515,9 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   })();
   // room chat overlay: collapse, close, reopen
   $('#rc-min').addEventListener('click', () => { $('#roomchat').classList.toggle('min'); $('#rc-min').textContent = $('#roomchat').classList.contains('min') ? '▴' : '▾'; });
-  $('#rc-close').addEventListener('click', () => $('#roomchat').classList.add('closed')); $('#rc-open').addEventListener('click', () => $('#roomchat').classList.remove('closed'));
+  const rcSave = () => { try { const r = $('#roomchat'); localStorage.setItem('arena.roomchat', r.classList.contains('closed') ? 'closed' : r.classList.contains('min') ? 'min' : 'open'); } catch (e) {} };   // the room chat keeps its state across reloads; closed on a first visit
+  { let st = 'closed'; try { st = localStorage.getItem('arena.roomchat') || 'closed'; } catch (e) {} const r = $('#roomchat'); r.classList.toggle('closed', st === 'closed'); r.classList.toggle('min', st === 'min'); $('#rc-min').textContent = st === 'min' ? '▴' : '▾'; }
+  $('#rc-min').addEventListener('click', rcSave); $('#rc-close').addEventListener('click', () => { $('#roomchat').classList.add('closed'); rcSave(); }); $('#rc-open').addEventListener('click', () => { $('#roomchat').classList.remove('closed'); rcSave(); });
   $('#evolveWorldBtn').addEventListener('click', () => window.__studio.focusEvolve()); $('#studioBtn').addEventListener('click', () => window.__studio.toggle());
   { const v = Sound.vols(); $('#wcAmb').value = v.ambVol; $('#wcFx').value = v.fxVol; $('#wcAmb').addEventListener('input', e => Sound.vols(null, +e.target.value)); $('#wcFx').addEventListener('input', e => Sound.vols(+e.target.value, null)); }
   // day cycle: a clock for the world; light shifts from dawn to noon to dusk to night, and nights make creatures sleepy
@@ -2148,7 +2150,8 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
         thread.innerHTML = ''; all.slice(-60).forEach(x => thread.appendChild(row(x))); if (atEnd) thread.scrollTop = thread.scrollHeight; } catch (e) {} }
     const poll = loadThread; loadThread();
     setInterval(() => { if (open) poll(); }, 4000);
-    const show = on => { open = on; el.classList.toggle('open', on); if (on) poll(); };
+    const show = on => { open = on; el.classList.toggle('open', on); if (on) poll(); try { localStorage.setItem('arena.labOpen', on ? '1' : '0'); } catch (e) {} };   // remembers open/closed across reloads; closed by default
+    try { if (localStorage.getItem('arena.labOpen') === '1') setTimeout(() => show(true), 0); } catch (e) {}
     $('#lab-toggle').addEventListener('click', () => show(!open)); $('#lab-close').addEventListener('click', () => show(false)); $('#lab-send').addEventListener('click', send);
     text.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.preventDefault(); send(); } else if (e.key === 'Escape') { e.preventDefault(); text.blur(); } });
     const grow = () => { text.style.height = 'auto'; text.style.height = Math.min(text.scrollHeight + 2, 8 * 18 + 14) + 'px'; }; text.addEventListener('input', grow); setInterval(() => { if (!text.value && text.style.height) text.style.height = ''; }, 1000);   // shrinks back after sending
