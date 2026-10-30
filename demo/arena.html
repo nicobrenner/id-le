@@ -578,7 +578,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     logEvent('steal', { who: c.name, from: victim.name, word: w.text, success: true }); oracleComment(pick([`${c.name} just took "${w.text}" from ${victim.name}. There is no law in this room`, `Theft in my room. "${w.text}" changed owners without asking`, `${victim.name} had "${w.text}". Had`]), 'steal'); return true;
   }
   async function doWork(c) {   // the creature's job, from its genome; most jobs carry or change words on the floor
-    const job = jobOf(c), free = words.filter(w => !w.carriedBy), near1 = (list) => list.sort((a, b) => dist(a, c) - dist(b, c))[0];
+    const job = jobOf(c), free = words.filter(w => !w.carriedBy), near1 = (list) => { let b, bd = Infinity; for (const x of list) { const d = dist(x, c); if (d < bd) { bd = d; b = x; } } return b; };   // one pass, not a sort of every word
     if (job === 'crawl') return window.__crawler ? window.__crawler.step(c) : false;   // the Crawler's work is on the web, not the floor
     if (!free.length) return false; c.working = job; (c.stats = c.stats || {}).work = (c.stats.work || 0) + 1;
     try {
@@ -658,7 +658,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (best === 'wander') { goto(c, c.x + (Math.random() - .5) * 700, c.y + (Math.random() - .5) * 500); speak(c, 'own', { w: free.length ? pick(free).text : '' }); }
     else if (best === 'fetch') act(c, 'fetch', pick(free).text); else if (best === 'chop') act(c, 'chop', pick(free).text); else if (best === 'bring') act(c, 'bring', 'user'); else if (best === 'hand') act(c, 'hand'); else if (best === 'work') act(c, 'work'); else if (best === 'explore') Connect.explore(c); else if (best === 'gohome') Connect.goHome(c); else if (best === 'eat') act(c, 'eat'); else if (best === 'steal') act(c, 'steal'); else if (best === 'nap') act(c, 'sleep'); else if (best === 'admire') act(c, 'admire');
   }
-  setInterval(() => creatures.forEach(c => ownThing(c, 'timer')), 7000);
+  { let i = 0, acc = 0; setInterval(() => { acc += creatures.length / 28; while (acc >= 1 && creatures.length) { acc--; ownThing(creatures[i++ % creatures.length], 'timer'); } if (!creatures.length) acc = 0; }, 250); }   // each creature still gets a turn about every 7 s, but spread out instead of all at once
   // flocking (boids): creatures of the same kind that are not busy drift together — separation, cohesion, alignment; 'social' is a gene
   setInterval(() => { for (const c of creatures) { if (c.held || c.state === 'sleep' || c.state === 'hide' || c.working || c.target || Date.now() < c.userUntil) continue;
       const kin = creatures.filter(o => o !== c && (o.g.body === c.g.body || o.voiceKey === c.voiceKey) && dist(o, c) < 260); if (!kin.length) continue; const soc = c.g.social ?? 0.5;
