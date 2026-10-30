@@ -122,6 +122,7 @@
   window.addEventListener('idle:ev', e => { const { type, extra: x } = e.detail || {}; if (!x || S.mode === 'off') return;
     try {
       if (type === 'birth') { first('baby', x.bud ? `${nm(x.who)} budded from ${nm(x.a)}` : `a baby: ${nm(x.who)}, born to ${nm(x.a)} & ${nm(x.b)}`, x.at); if (x.twin) first('twins', `twins: ${nm(x.who)} and ${nm(x.twin)}`, x.at); if (x.b && x.famA !== x.famB) first('mixed', `a child of two families: ${nm(x.who)} (${esc(x.famA)} × ${esc(x.famB)})`, x.at); }
+      else if (type === 'looks' && x.kind === 'dazzle') first('dazzle', `a dazzle herd: ${nm(x.who)} and ${x.n - 1} kin, striped alike so no one of them stands out`, x.at);
       else if (type === 'hangry' && !x.end) first('hangry', `${nm(x.who)} went hangry`, pos(x.who));
       else if (type === 'rename' && x.to) first('name', `${nm(x.from || 'someone')} is now called ${nm(x.to)}`, pos(x.to));
       else if (type === 'steal' && x.success !== false) first('theft', `${nm(x.who)} stole from ${nm(x.from)}`, pos(x.who));
