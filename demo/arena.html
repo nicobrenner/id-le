@@ -1653,6 +1653,8 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
             w.vx += (-dy / r) * f - dx / r * f * 0.25; w.vy += (dx / r) * f - dy / r * f * 0.25; w.vr += 6 * f; if (r < 40 && Math.random() < 0.03) { w.vx += dx / r * 12; w.vy += dy / r * 12; } }   // circles in, and now and then flings one out
           for (const c of creatures) { if (c.held || c.lab) continue; const dx = wd(d.x, c.x, SPACE.W), dy = wd(d.y, c.y, SPACE.H), r = Math.hypot(dx, dy) || 1; if (r > 180) continue; const f = (1 - r / 180) * 2.2;
             c.x += (-dy / r) * f; c.y += (dx / r) * f; c.heading += 0.12 * f; if (!d.held.has(c)) { d.held.add(c); scare(c, 1, 'the tornado'); } }
+          for (const t of things) { if (t.d && t.d.pinned) continue; const dx = wd(d.x, t.x, SPACE.W), dy = wd(d.y, t.y, SPACE.H), r = Math.hypot(dx, dy) || 1; if (r > 200) continue; const f = (1 - r / 200) * 1.4;   // pictures, page pieces and designs ride the wind too (pinned ones hold)
+            t.x += (-dy / r) * f - dx / r * f * 0.15; t.y += (dx / r) * f - dy / r * f * 0.15; if (r < 50 && Math.random() < 0.01) { t.x += dx / r * 160; t.y += dy / r * 160; } place(t); }
           if (Math.random() < 0.02) Sound.rumble(0.8, 300 + Math.random() * 400, 0.12 * Sound.hear(d, 'voice')); }
         if (d.type === 'quake' && Math.random() < 0.35) for (const w of words) if (!w.carriedBy && w !== dragging && Math.random() < 0.08) { w.vx += (Math.random() - .5) * 4; w.vy += (Math.random() - .5) * 4; w.vr += (Math.random() - .5) * 20; } }
       for (let i = cracks.length - 1; i >= 0; i--) if (now - cracks[i].t0 > 90000) cracks.splice(i, 1); }
