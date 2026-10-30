@@ -105,7 +105,7 @@
   $('#ai-gear').addEventListener('click', () => { set.classList.toggle('on'); renderSet(); });
   $('#ai-new').addEventListener('click', () => { convo = []; thread.innerHTML = ''; add('page', 'new conversation'); });
   brainSel.value = cfg.brain;
-  const applyBrain = () => { lab.classList.toggle('ai', cfg.brain !== 'relay'); text.placeholder = cfg.brain === 'relay' ? 'notes to the lab: what to change about the creatures, the arena… (Cmd+Enter)' : 'talk to your AI about the world, ask it to do things… (Cmd+Enter)'; renderSet(); };
+  const applyBrain = () => { lab.classList.toggle('ai', cfg.brain !== 'relay'); text.placeholder = cfg.brain === 'relay' ? 'notes to the lab: what to change about the creatures, the arena… (⌘+Enter sends)' : 'talk to your AI about the world, ask it to do things… (⌘+Enter sends)'; renderSet(); };
   brainSel.addEventListener('change', () => { cfg.brain = brainSel.value; saveCfg(); convo = []; applyBrain(); if (cfg.brain !== 'relay' && !ready()) set.classList.add('on'); });
   applyBrain();
 
@@ -198,6 +198,6 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   }
   // take over the lab's send button and Cmd+Enter while an AI brain is chosen; the relay keeps the arena's own path
   sendBtn.addEventListener('click', e => { if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
-  text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
+  text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
   window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo };
 })();
