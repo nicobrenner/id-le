@@ -383,9 +383,10 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     let hoverW = null, nearDirty = true, gen = 0; const demote = [];
     const needsDom = (w, now) => { if (w.carriedBy || w === dragging || w === hoverW || (w._domUntil || 0) > now || now - (w._moveT || 0) < 700) return true; const cn = w.el.className; return cn.includes('locked') || cn.includes('carried') || cn.includes('stepped'); };
     function view() { const { w: vw, h: vh } = viewSize(); return { L: cam.x - vw / 2 / cam.z, T: cam.y - vh / 2 / cam.z, W: vw / cam.z, H: vh / cam.z, vw, vh }; }
-    function cull() { const v = view(), m = 160 / cam.z; lastCull = performance.now();
+    let shownN = 0;   // words currently shown as elements (moving, hovered, animating), counted by cull
+    function cull() { const v = view(), m = 160 / cam.z; lastCull = performance.now(); shownN = 0;
       for (const w of words) { if (w.carriedBy || w === dragging || w.el.classList.contains('locked')) { vis(w, true); continue; } const x = w._fx ?? near(w.x, cam.x, SPACE.W), y = w._fy ?? near(w.y, cam.y, SPACE.H); const inV = !far && x > v.L - m && x < v.L + v.W + m && y > v.T - m && y < v.T + v.H + m;
-        if (CANVAS && inV && w._vis === '' && !needsDom(w, lastCull)) { if (!w._dem) { w._dem = true; demote.push(w); } continue; } vis(w, inV && (!CANVAS || needsDom(w, lastCull))); } }
+        if (CANVAS && inV && w._vis === '' && !needsDom(w, lastCull)) { if (!w._dem) { w._dem = true; demote.push(w); } continue; } vis(w, inV && (!CANVAS || needsDom(w, lastCull))); if (w._vis === '') shownN++; } }
     let camDirty = true, lastDraw = 0, LODV = 0;   // LODV: bumped when the text look changes, so cached word styles are read again
     function props(w) { const cls = w.el.className; if (w._lc === cls && w._lv === LODV && w._lp) return w._lp; const plain = cls.includes('terrain') || cls.includes('trash'), fs = cls.includes('crumb') ? 10 : cls.includes('piece') ? 11 : plain ? 12 : 13, text = w.el.textContent;
       w._lc = cls; w._lv = LODV; return w._lp = { plain, fs, text, wdt: text.length * fs * 0.6 + (plain ? 6 : 16), font: `${fs}px ${plain ? (w.el.style.fontFamily || 'Georgia,serif') : 'ui-monospace,Menlo,monospace'}`, color: w.el.style.color || '', bg: plain ? null : cls.includes('lava') ? '#ffb27a' : cls.includes('piece') ? '#dfe8ff' : cls.includes('crumb') ? '#ffd6e8' : '#ffe9a8', alpha: cls.includes('trash') ? 0.55 : 1 }; }
@@ -453,7 +454,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       addEventListener('pointermove', mv); addEventListener('pointerup', up); }, true);
     function onCam() { const nf = cam.z < FAR; if (nf !== far) { far = nf; cv.style.display = far ? '' : 'none'; if (CANVAS) nv.style.display = far ? 'none' : ''; } cull(); camDirty = true; }
     function frame() { const now = performance.now(); if (far) { if (camDirty || (_lodDirty && now - lastDraw > 100)) draw(); if (now - lastCull > 1000) cull(); }
-      else { if (now - lastCull > 250) cull(); if (CANVAS && (camDirty || (nearDirty && now - lastDraw > 50) || demote.length > 40 || now - lastDraw > 500)) { drawNear(now); camDirty = false; lastDraw = now; } } }   // the canvas redraws when the camera moves or a word joins or leaves it, else twice a second (class and text changes)   // zoomed out, moving words redraw 10 times a second; the camera redraws at once
+      else { if (now - lastCull > 250) cull(); if (CANVAS && (camDirty || (nearDirty && now - lastDraw > (shownN > 30 ? 200 : 50)) || demote.length > 40 || now - lastDraw > 500)) { drawNear(now); camDirty = false; lastDraw = now; } } }   // the canvas redraws when the camera moves or a word joins or leaves it, else twice a second (class and text changes)   // zoomed out, moving words redraw 10 times a second; the camera redraws at once
     return { onCam, frame, far: () => far, canvas: () => CANVAS && !far, dom: w => { if (!far) vis(w, true); }, hidden, shown, wordAt, restyle: () => { nearDirty = true; }, restyled: () => { LODV++; camDirty = true; nearDirty = true; } }; })();
   window.__lod = LOD;
   function findWord(text, from) { const f = findWord0(text, from); if (f || !text) return f || null; const t = text.toLowerCase().trim(); return (window.__travel && window.__travel.on() && window.__travel.find(t, from)) || (window.__capture && window.__capture.on() && !window.__traveling && window.__capture.find(t, from)) || null; }
@@ -503,12 +504,17 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       g.restore(); }
     function hangryGlow(g, c, t) { const r = (Math.max(c.g.bodyL, c.g.bodyW) + 26) * (c.size || 1) * (1 + 0.15 * Math.sin(t / 80)), gr = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
       gr.addColorStop(0, 'rgba(255,74,18,.6)'); gr.addColorStop(0.6, 'rgba(255,122,31,.25)'); gr.addColorStop(1, 'rgba(255,122,31,0)'); circ(g, c.x, c.y, r); g.fillStyle = gr; g.fill(); }
+    // 💤 and 🫣 as pre-rendered sprites (render trim, Oct 30): an emoji fillText per sleeper per frame was slow without a GPU
+    const EMO = {}; function emo(ch) { let e = EMO[ch]; if (e) return e; const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S; const x = cv.getContext('2d'); x.font = `${S * 0.78}px system-ui,sans-serif`; x.textBaseline = 'alphabetic'; x.textAlign = 'center'; x.fillStyle = '#000'; x.fillText(ch, S / 2, S * 0.8);
+      return EMO[ch] = { cv, S }; }   // drawn as if by fillText at (x, baseline) with the given px size: the glyph box sits from 0.8 em above the baseline
+    function emoAt(g, ch, x, y, px, center) { if (window.__emojiText) { g.font = `${px}px system-ui,sans-serif`; g.fillStyle = '#000'; if (center) g.textAlign = 'center'; g.fillText(ch, x, y); if (center) g.textAlign = 'start'; return; }
+      const e = emo(ch), k = px / (e.S * 0.78), w = e.S * k, cx = center ? x : x + px * 0.6; g.drawImage(e.cv, cx - w / 2, y - e.S * 0.8 * k, w, w); }   // start-aligned text: the glyph's middle is about 0.6 em right of x
     function zz(g, c, t) { const top = c.y - (Math.max(c.g.bodyL, c.g.bodyW) + 14) * (c.size || 1), ph = ((t / 2600) + (c.g.hue || 0) / 360) % 1;
-      for (const o of [0, 0.5]) { const p = (ph + o) % 1; g.globalAlpha = +(Math.sin(p * Math.PI) * 0.9).toFixed(2); g.font = `${(15 + p * 7).toFixed(1)}px system-ui,sans-serif`; g.fillStyle = '#000'; g.fillText('💤', c.x + 8 + p * 10, top - p * 22); } g.globalAlpha = 1; }
+      for (const o of [0, 0.5]) { const p = (ph + o) % 1; g.globalAlpha = +(Math.sin(p * Math.PI) * 0.9).toFixed(2); emoAt(g, '💤', c.x + 8 + p * 10, top - p * 22, 15 + p * 7, false); } g.globalAlpha = 1; }
     // hiding: the one pose for every renderer (k fades in over 0.6 s once it reaches cover): legs and body pulled in, dimmer, trembling
     function hidePose(c) { if (c.state !== 'hide' || c.dashUntil > Date.now()) return null; const k = Math.max(0, Math.min(1, (Date.now() - Math.max(c.dashUntil || 0, c.hideT || 0)) / 600));
       return { k, s: 1 - 0.24 * k, a: 1 - 0.45 * k, jx: (Math.random() - .5) * 1.4 * k, jy: (Math.random() - .5) * 1.0 * k }; }
-    function peek(g, c, t, k) { const top = c.y - (Math.max(c.g.bodyL, c.g.bodyW) + 10) * (c.size || 1); g.globalAlpha = 0.9 * k; g.font = '16px system-ui,sans-serif'; g.textAlign = 'center'; g.fillStyle = '#000'; g.fillText('🫣', c.x, top + Math.sin(t / 240) * 1.5); g.textAlign = 'start'; g.globalAlpha = 1; }
+    function peek(g, c, t, k) { const top = c.y - (Math.max(c.g.bodyL, c.g.bodyW) + 10) * (c.size || 1); g.globalAlpha = 0.9 * k; emoAt(g, '🫣', c.x, top + Math.sin(t / 240) * 1.5, 16, true); g.globalAlpha = 1; }
     const marks = [];   // 💤 and 🫣 go on top of every creature, so they are drawn after all of them
     function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c); g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
@@ -521,7 +527,9 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       g.save(); g.strokeStyle = col; g.lineWidth = 1; g.globalAlpha = 0.85; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(c.x + c.ox, c.y + c.oy); g.lineTo(T.x, T.y); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
       g.lineWidth = 1.4; g.beginPath(); g.ellipse(T.x, T.y, Math.max(0, n * 4.2 + 14 + j), Math.max(0, 13 + j / 2), 0, 0, Math.PI * 2); g.stroke();
       g.font = '9px ui-monospace,Menlo,monospace'; g.fillStyle = `hsl(${hue},95%,${isDark() ? 70 : 38}%)`; g.fillText(`${c.name.toUpperCase()} · ${T.text.toUpperCase()}`, T.x + n * 4 + 18, T.y - 12); g.restore(); }
-    function end(t) { const g = crit; for (const [c, T, tt] of beams) drawBeam(g, c, T, tt); beams.length = 0; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
+    // crowds: past 24 beams in view, a plain beam and ring (no dashes, brackets or labels)
+    function plainBeam(g, c, T, t) { const hue = c.g.laserHue ?? 200, n = T.text.length; g.strokeStyle = `hsla(${hue},95%,60%,.55)`; g.lineWidth = 1; g.beginPath(); g.moveTo(c.x + c.ox, c.y + c.oy); g.lineTo(T.x, T.y); g.moveTo(T.x + n * 4.2 + 14, T.y); g.ellipse(T.x, T.y, n * 4.2 + 14, 13, 0, 0, Math.PI * 2); g.stroke(); }
+    function end(t) { const g = crit; beams.forEach(([c, T, tt], i) => i < 24 ? drawBeam(g, c, T, tt) : plainBeam(g, c, T, tt)); beams.length = 0; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
     // the same drawing onto another canvas (reel replays): body, legs, hiding pose, 💤/🫣, hangry glow
     function drawTo(g, c, t, hg) { const hp = hidePose(c); g.save(); if (hg) hangryGlow(g, c, t);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
@@ -1203,12 +1211,14 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     w.size = Math.max(11, Math.min(20, Math.round(g(world.size, 0.12)))); w.line = Math.max(1.2, Math.min(2.4, g(world.line, 0.12))); w.margin = Math.max(16, Math.min(90, Math.round(g(world.margin, 0.25))));
     w.density = Math.max(0.5, Math.min(1.6, g(world.density, 0.2))); w.featureCount = Math.max(0, Math.min(12, (world.featureCount ?? 5) + Math.round(gauss() * 2))); w.features = genFeatures(w); if (Math.random() < 0.4) { w.inkSat = w.inkSat ? 0 : 45; } w.ink = Math.round((world.ink + gauss() * 60 + 360) % 360); return w; }
   // feature effects on words (called every frame from the animation loop)
-  function featureEffects(t) { const F = world.features || []; if (!F.length) return;
-    for (const w of words) { if (w.carriedBy || w === dragging) continue; w.sheltered = false;
-      for (const f of F) { const dx = wd(f.x, w.x, SPACE.W), dy = wd(f.y, w.y, SPACE.H);
+  // render trim (Oct 30): each feature looks only at the words near it (the word grid), not every word against every feature every frame
+  const _shelt = [];
+  function featureEffects(t) { for (const w of _shelt) w.sheltered = false; _shelt.length = 0; const F = world.features || []; if (!F.length) return;
+    for (const f of F) { const R = f.type === 'stream' ? Math.hypot(f.len / 2, f.wdt / 2) : f.type === 'cache' ? Math.hypot(f.w / 2, f.h / 2) : (f.r || 0); if (f.type !== 'stream' && f.type !== 'hole' && f.type !== 'cache') continue;
+      for (const w of wordsNear(f.x, f.y, R + 4)) { if (w.carriedBy || w === dragging) continue; const dx = wd(f.x, w.x, SPACE.W), dy = wd(f.y, w.y, SPACE.H);
         if (f.type === 'stream') { const ca = Math.cos(f.a), sa = Math.sin(f.a), along = dx * ca + dy * sa, across = -dx * sa + dy * ca; if (Math.abs(along) < f.len / 2 && Math.abs(across) < f.wdt / 2) { w.vx += ca * 0.12; w.vy += sa * 0.12; if (along > f.len / 2 - 8) { w.x -= ca * f.len * 0.98; w.y -= sa * f.len * 0.98; } } }   // packet stream: a conveyor that loops
         else if (f.type === 'hole' && Math.hypot(dx, dy) < f.r && !w.terrain0) { w.x = Math.random() * SPACE.W; w.y = Math.random() * SPACE.H; w.vx = w.vy = 0; place(w); w.el.animate([{ scale: 0 }, { scale: 1.4 }, { scale: 1 }], { duration: 500 }); }   // 404: falls in, turns up somewhere else
-        else if (f.type === 'cache' && Math.abs(dx) < f.w / 2 && Math.abs(dy) < f.h / 2) { w.sheltered = true; } } } }
+        else if (f.type === 'cache' && Math.abs(dx) < f.w / 2 && Math.abs(dy) < f.h / 2) { if (!w.sheltered) _shelt.push(w); w.sheltered = true; } } } }
   function featuresSVG(t) { const F = world.features || []; let s = ''; const dark = isDark(), ink = dark ? '170,190,255' : '43,92,255';
     const vs = viewSize(), hw = vs.w / 2 / cam.z, hh = vs.h / 2 / cam.z;   // only features near the view (render trim, Oct 30)
     for (const f of F) { const x = near(f.x, cam.x, SPACE.W), y = near(f.y, cam.y, SPACE.H), ext = (f.len || 0) / 2 + (f.r || 0) + Math.max(f.w || 0, f.h || 0) / 2 + 60; if (Math.abs(x - cam.x) > hw + ext || Math.abs(y - cam.y) > hh + ext) continue;
