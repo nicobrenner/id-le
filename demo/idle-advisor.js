@@ -99,10 +99,12 @@
   function pill(item) { const rn = document.getElementById('reelnote'); pillEl.style.bottom = rn && rn.classList.contains('on') ? '70px' : '16px';
     pillEl.innerHTML = `<span class="gz">Id|le gazette</span> ${item.text}` + (item.at ? ` <button data-go="${item.at.x},${item.at.y}">go ›</button>` : '') + `<span class="x" title="dismiss">✕</span>`; pillEl.classList.add('on'); clearTimeout(pillEl._t); pillEl._t = setTimeout(() => pillEl.classList.remove('on'), 12000); }
   pillEl.addEventListener('click', e => { if (e.target.closest('.x')) { pillEl.classList.remove('on'); return; } const b = e.target.closest('[data-go]'); if (b) { const [x, y] = b.dataset.go.split(',').map(Number); H().flyTo(x, y, 1.3); pillEl.classList.remove('on'); } });
+  pillEl.addEventListener('mouseenter', () => clearTimeout(pillEl._t)); pillEl.addEventListener('mouseleave', () => { clearTimeout(pillEl._t); pillEl._t = setTimeout(() => pillEl.classList.remove('on'), 6000); });   // reading a name's mini card keeps the pill up
   const first = (k, text, at) => { if (S.firsts[k]) return; S.firsts[k] = now(); save(); news('🎉 first ever: ' + text, at); };
   const record = (k, v, text, at) => { if (!(v > (S.records[k] || 0))) return; const old = S.records[k]; S.records[k] = v; save(); if (old) news('🏆 new record: ' + text, at); };
   const pos = who => { const c = who && H().creatures().find(c => c.name === who); return c ? { x: Math.round(c.x), y: Math.round(c.y) } : null; };
-  const nm = s => `<b>${esc(s)}</b>`;
+  const CHART_KINDS = { bar: 'a bar chart', scatter: 'a scatter plot', area: 'an area chart', step: 'a step chart', pie: 'a pie chart', donut: 'a donut chart', radar: 'a radar chart', hist: 'a histogram', mixed: 'a bars-and-line chart' };   // the first of each kind is news (line charts were the first chart)
+  const nm = s => window.__mnLink && s !== 'you' ? window.__mnLink(s) : `<b>${esc(s)}</b>`, ln = h => window.__linkNames ? window.__linkNames(h) : h;   // names are mentions (hover: mini card; click: go to it)
   window.addEventListener('idle:ev', e => { const { type, extra: x } = e.detail || {}; if (!x || S.mode === 'off') return;
     try {
       if (type === 'hangry' && !x.end) first('hangry', `${nm(x.who)} went hangry`, pos(x.who));
@@ -111,7 +113,9 @@
       else if (type === 'graze') first('graze', `${nm(x.who)} grazed on a chart`, pos(x.who));
       else if (type === 'reels_made') first('reel', 'the world made a memory reel', null);
       else if (type === 'work' && x.job === 'counter' && x.n) { record('count', x.n, `${nm(x.who)} counted ${x.n} at once`, pos(x.who)); }
-      else if (type === 'work' && x.job === 'math') first('chart', `${nm(x.who)} plotted a chart`, pos(x.who));
+      else if (type === 'work' && x.job === 'math') { if (!S.firsts.chart) first('chart', `${nm(x.who)} plotted a chart`, pos(x.who)); else if (x.vis && CHART_KINDS[x.vis]) first('chart:' + x.vis, `${CHART_KINDS[x.vis]}: ${nm(x.who)} plotted ${esc(x.formula || '')}${x.exp ? ' (an experiment)' : ''}`, pos(x.who)); }
+      else if (type === 'chart_code') first('chart_code', `${nm(x.who)} broke a chart into code`, pos(x.who));
+      else if (type === 'task' && x.diet === 'code' && x.success) first('code_meal', `${nm(x.who)} ate a piece of code`, pos(x.who));
     } catch (err) {} });
 
   // ---------- the tick ----------
@@ -120,7 +124,7 @@
     const g = G = measure(); const hh = hist[w] = hist[w] || []; hh.push({ t: g.t, v: g.v }); while (hh.length > 120) hh.shift();
     if (++tickN > 2) { const fresh = evalIssues(g);   // let a few ticks settle after a load
       if (fresh.length && S.mode !== 'off' && now() - lastAlert > 90000) { lastAlert = now(); const k = fresh[0], I = ISSUES[k]; const at = k === 'fear' && g.hiders[0] ? { x: Math.round(g.hiders[0].x), y: Math.round(g.hiders[0].y) } : null;
-        news(`⚠️ ${esc(I.title)}: ${esc(I.cause(g))}. <i>${esc(wryOf(k, g))}</i> <button data-open="1">📊 advisor</button>`, at, true); }
+        news(`⚠️ ${esc(I.title)}: ${ln(esc(I.cause(g)))}. <i>${ln(esc(wryOf(k, g)))}</i> <button data-open="1">📊 advisor</button>`, at, true); }
       const rs = window.__raveStats; if (rs && window.__rave && window.__rave.active()) { if (rs.conga >= 3) first('conga', `a conga line of ${rs.conga}`, null); record('conga', rs.conga || 0, `a conga line of ${rs.conga}`, null); }
       const sh = g.per[0]; if (sh && sh.have === 0 && sh.eat >= 3) { const kk = 'short:' + w + ':' + sh.k; if (!alerts[kk] || now() - alerts[kk] > 900000) { alerts[kk] = now(); news(`🥣 food shortage: no ${esc(H().dietWhat(sh.k).split(',')[0])} left for ${sh.eat} creatures`, null); } }
       if (g.n) record('pop', g.n, `${g.n} creatures live here now`, null); }
@@ -171,7 +175,7 @@
     let h = `<div class="hd"><b>📊 advisor · ${esc(keepTxt)}</b><button data-a="close" title="close">✕</button></div><div class="sub">${g.n} creatures · updated every 5 s · trends over the last minute, lines over 10 min</div>`;
     h += '<h4>how they are doing</h4><div class="legend"><span style="color:#3a8">■</span> good <span style="color:#f0a020">■</span> watch <span style="color:#e5484d">■</span> bad <span style="color:#5b8def">■</span> just a fact · the first four fill up as things get worse, food, mood and friends as they get better · hover a bar for what it measures</div>' + GAUGES.filter(x => !(x.opt && g.v[x.k] == null)).map(x => { const v = g.v[x.k] ?? 0; return `<div class="g" title="${x.label}: ${Math.round(v * 100)}% · ${x.what || ''}"><span>${x.icon}</span><span>${x.label}</span><span class="bar"><i style="width:${Math.round(v * 100)}%;background:${col(v, x.bad)}"></i></span>${spark(x.k, x.bad)}${trend(x.k, x.bad)}</div>`; }).join('');
     h += `<div class="sub" style="margin-top:3px">food by diet: ${g.per.map(p => `${esc(p.k)} ${p.have} for ${p.eat}`).join(' · ') || '—'}</div>`;
-    const ks = Object.keys(A).filter(k => ISSUES[k]); h += `<h4>issues ${ks.length ? '(' + ks.length + ')' : ''}</h4>` + (ks.length ? ks.map(k => { const I = ISSUES[k]; return `<div class="iss"><b>${esc(I.title)}</b> <small class="sub">for ${fmtMin(now() - A[k].since)}</small><div>${esc(I.cause(g))}</div><i>${esc(wryOf(k, g))}</i><div class="acts">${I.acts(g).map(a => `<button data-act="${esc(a.id)}">${esc(a.label)}</button>`).join('')}</div></div>`; }).join('') : '<div class="sub">nothing worrying right now. ☕</div>');
+    const ks = Object.keys(A).filter(k => ISSUES[k]); h += `<h4>issues ${ks.length ? '(' + ks.length + ')' : ''}</h4>` + (ks.length ? ks.map(k => { const I = ISSUES[k]; return `<div class="iss"><b>${esc(I.title)}</b> <small class="sub">for ${fmtMin(now() - A[k].since)}</small><div>${ln(esc(I.cause(g)))}</div><i>${ln(esc(wryOf(k, g)))}</i><div class="acts">${I.acts(g).map(a => `<button data-act="${esc(a.id)}">${esc(a.label)}</button>`).join('')}</div></div>`; }).join('') : '<div class="sub">nothing worrying right now. ☕</div>');
     const u = undo[where()]; h += `<div class="did">${didHTML || (u && now() - u.t < 120000 ? `✓ ${esc(u.what)} <button data-a="undo">undo</button>` : '')}</div>`;
     h += '<h4>Id|le gazette</h4><div class="news">' + (S.news.slice(-8).reverse().map(n => `<div><small>${ago(n.t)}</small>${n.text.replace(/<button data-open="1">[^<]*<\/button>/, '')}${n.at ? ` <button data-go="${n.at.x},${n.at.y}">go ›</button>` : ''}</div>`).join('') || '<div class="sub">no news yet</div>') + '</div>';
     h += `<h4>alerts</h4><div class="modes">${['on', 'quiet', 'off'].map(m => `<button data-mode="${m}" class="${S.mode === m ? 'on' : ''}" title="${m === 'on' ? 'news and alerts pop up' : m === 'quiet' ? 'no pop-ups, just the red dot on 📊' : 'no news or alerts'}">${m}</button>`).join('')}</div>`;
