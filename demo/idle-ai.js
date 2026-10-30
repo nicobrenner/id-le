@@ -108,6 +108,11 @@
   const applyBrain = () => { lab.classList.toggle('ai', cfg.brain !== 'relay'); text.placeholder = cfg.brain === 'relay' ? 'notes to the lab: what to change about the creatures, the arena… (⌘+Enter sends)' : 'talk to your AI about the world, ask it to do things… (⌘+Enter sends)'; renderSet(); };
   brainSel.addEventListener('change', () => { cfg.brain = brainSel.value; saveCfg(); convo = []; applyBrain(); if (cfg.brain !== 'relay' && !ready()) set.classList.add('on'); });
   applyBrain();
+  // on a public site (no local server) there is no lab relay: the chat is the player's own AI, and says how to connect one
+  (window.__idle ? window.__idle.mode() : Promise.resolve('server')).then(m => { if (m !== 'static') return;
+    const o = brainSel.querySelector('option[value=relay]'); if (o) o.remove(); if (cfg.brain === 'relay') { cfg.brain = 'anthropic'; brainSel.value = 'anthropic'; }
+    $('#lab-head b').textContent = 'chat · your AI'; const cap = $('#lab-form small'); if (cap) cap.textContent = 'talks to the AI you bring; it can look at the world and use the game\'s own actions';
+    applyBrain(); if (!ready() && !thread.childElementCount) add('page', 'This chat talks to an AI you bring: Claude or any OpenAI-compatible API with your own key, or a local model (Ollama, LM Studio). Pick one above and press ⚙ to connect it. Your key stays in this browser.'); });
 
   function add(who, msg, cls) { const d = document.createElement('div'); d.className = 'ai-row ' + (cls || who); d.innerHTML = '<b>' + esc(who) + '</b> ' + esc(msg); thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   function chip(t, err) { const d = document.createElement('div'); d.className = 'ai-chip' + (err ? ' err' : ''); d.textContent = t; thread.appendChild(d); thread.scrollTop = 1e9; return d; }
