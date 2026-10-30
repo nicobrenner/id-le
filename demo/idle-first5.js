@@ -27,8 +27,8 @@
     { k: 'name', text: () => `Every creature can carry a name you choose. Open a card and <b>type over its name</b>.`, who: () => meta().counter || (live()[0] || {}).name },
     { k: 'feed', text: () => `${mn(meta().hungry)} is hungry. <b>Drag a word onto it</b> to feed it.`, who: () => meta().hungry },
     { k: 'dream', text: () => `${mn(sleeperName())} is asleep. Open its card: the mind tab becomes <b>dream 💤</b>.`, who: () => sleeperName() },
-    { k: 'gazette', text: () => `That 📰 pill was the <b>Id|le Gazette</b>: firsts, records and disasters. Press its <b>go ›</b> to see where it happened.`, ready: () => gazetteSeen(), kind: 'trail' },
-    { k: 'weather', text: () => `Weather changes their mood. Open <b>🎛 studio</b> and try another weather (storms scare the timid ones).`, kind: 'advisor', go: () => { const b = $('#studioBtn'); if (b) b.click(); } },
+    { k: 'gazette', text: () => `The 📰 <b>Id|le Gazette</b> reports firsts, records and disasters. Open <b>🔔</b> and press <b>go ›</b> on one to see where it happened.`, ready: () => gazetteSeen(), kind: 'trail' },
+    { k: 'weather', text: () => `Weather changes their mood. Open <b>🎛 studio</b> and try another weather (storms scare the timid ones).`, kind: 'trail', go: () => { const b = $('#studioBtn'); if (b) b.click(); } },
     { k: 'reel', text: () => `The world made its first <b>memory reel</b> out of what they lived through. Open 🎞 and play it.`, ready: () => reelCount() > 0, go: () => { const b = $('#reelsBtn'); if (b) b.click(); } },
     { k: 'keep', text: () => `Like something? Right-click a chart, a word or a picture and <b>keep a copy</b> in your 🗄 drawer.`, who: () => meta().math }];
   const mn = n => n ? `<a class="mn" data-n="${esc(n)}">${esc(n)}</a>` : 'someone';
@@ -65,7 +65,8 @@
     if (step.k === 'feed') actions[0].run = () => { if (c && window.__dis) window.__dis.flyTo(c.x, c.y, 1.4); };
     if (step.k === 'gazette') actions[0].run = () => { if (window.__notify) window.__notify.toggle(true); };
     S.shown[step.k] = (S.shown[step.k] || 0) + 1; save();
-    const h = N({ kind: step.kind || 'trail', icon: step.kind === 'advisor' ? '📊' : '🧭', key: 'first5:' + step.k + ':' + S.shown[step.k], html: step.text(), actions, ttl: 30000, gap: 1000 });
+    const nth = STEPS.filter(s => S.done[s.k]).length + 1;
+    const h = N({ kind: 'trail', icon: '🧭', key: 'first5:' + step.k + ':' + S.shown[step.k], html: `<span class="stp">step ${nth} of ${STEPS.length}</span>` + step.text(), actions, ttl: 30000, gap: 1000 });
     cur = { k: step.k, h, t: now() }; }
   function tick() { if (!S || document.hidden) return; if (!active() && S.backupAsked) return; S.play += 2; if (S.play % 20 === 0) save();
     // a backup after about ten minutes of play, even when the tips were skipped or are done (a world in browser storage is easy to lose)
@@ -113,7 +114,9 @@
   function stats() { if (!S) return null; return { started: new Date(S.t0).toISOString(), finished: S.finished ? new Date(S.finished).toISOString() : null, skipped: S.skipped ? new Date(S.skipped).toISOString() : null, play_s: S.play, aha_s: Object.fromEntries(Object.entries(S.aha).map(([k, v]) => [k, Math.round(v / 1000)])) }; }
   function statsLine() { if (!S) return ''; const e = Object.entries(S.aha).sort((a, b) => a[1] - b[1]); if (!e.length) return ''; const f = ms => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
     return 'your first visit: ' + e.map(([k, v]) => `${LABEL[k] || k} at ${f(v)}`).join(' · '); }
-  window.__first5 = { _play: s => { if (S) S.play = s; }, boot, resume, stats, statsLine, skip, state: () => S && JSON.parse(JSON.stringify(S)), steps: STEPS.map(s => s.k), _tick: tick };
+  // while the guided start is on (the first five minutes, and after that whenever a tip is showing) other notices wait in 🔔
+  const calm = () => !!(active() && (now() - S.t0 < 5 * 60000 || cur));
+  window.__first5 = { calm, _play: s => { if (S) S.play = s; }, boot, resume, stats, statsLine, skip, state: () => S && JSON.parse(JSON.stringify(S)), steps: STEPS.map(s => s.k), _tick: tick };
   // ?fresh in a browser that already keeps a world: say why nothing happens (the world is never replaced)
   if (Q.has('fresh') && (() => { try { return !!localStorage.getItem('arena.autosave'); } catch (e) { return false; } })()) setTimeout(() => N({ kind: 'system', ttl: 12000, key: 'first5:fresh-refused', html: `<b>?fresh</b> only works in a browser with no saved world (open it in a private window). Your world is untouched.` }), 3500);
   if (window.__pendingFirst5) boot(window.__pendingFirst5.fresh0);   // the arena got there before this file loaded

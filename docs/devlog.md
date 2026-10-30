@@ -5,6 +5,11 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-30
 
+**Phones (#32).** Below 500 px the top bar keeps creatures, studio, 🔔 and a ☰ sheet with everything else (labelled, 44 px targets); every window is a bottom sheet, one at a time, ✕ or swipe down to close; long press = right-click; two-finger pinch zoom (the arena had none on touch); phones start in light quality; the card no longer pops the keyboard. The guided start gets the floor: while it is on (first 5 min, then whenever a tip shows) other notices wait in 🔔, tips read "step n of 8" with an accent, phones show one pill at a time.
+- iPhone 12 mini (WebKit emulation), fresh visit: top-bar items 16 → **4**, targets under 44 px 16 → **0**, pills on screen at 30 s 2 → **1** (the tip), no horizontal scroll.
+- 375 px at 4× CPU throttle: **34–35 → 57–58 fps** (light quality from the start).
+- Touch: tap opens the card, pinch zoom 1.2 → 2.5, one-finger pan, long press opens the inspector (a short tap doesn't), drag-a-word-to-feed works. Desktop unchanged (same top bar, same window positions).
+
 **id-le.com is live (#5, 70a0228).** Cloudflare Pages project `id-le`; the helper runs inside it as `_worker.js`, so page fetching and world links are same-origin (`/lab/*`, `/worlds/*`), with its own KV (`id-le-worlds`). First visit ≈ 13.5 MB compressed (Oracle 9.7 MB, ORT wasm 3.0 MB, the game ~0.7 MB), then cached.
 - Finding: the static build had silently dropped 10 of the 11 game modules (advisor, music, drawer…): its copy list predated them. It now copies every `idle-*.js` plus the starter world.
 - A first-time visitor on the live site gets the starter world (12 creatures, 136 words) and the nudge trail; no page errors, no failed requests.
