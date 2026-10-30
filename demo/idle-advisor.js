@@ -1,5 +1,5 @@
 // idle-advisor.js: the population advisor (issue #3). A 📊 panel with gauges for how the creatures of this world are doing
-// (fear, hunger, hurt, tiredness, crowding, food per diet, mood, friendships, and the dancefloor while a rave is on), each with a
+// (fear, hunger, hurt, tiredness, togetherness, food per diet, mood, friendships, and the dancefloor while a rave is on), each with a
 // trend arrow and a 10-minute sparkline; an issues list that says what's wrong in plain words, why, and offers one-click fixes
 // that use the game's own verbs (calm the weather, feed them, let them nap, rest a few, throw a rave), with undo where it can;
 // and the Id|le gazette, a gentle stream of news (firsts, records, disasters, shortages) in the same pill as the reels.
@@ -19,7 +19,7 @@
   // ---------- gauges (higher = more of it) ----------
   const GAUGES = [
     { k: 'fear', label: 'fear', icon: '🫣', bad: 1 }, { k: 'hunger', label: 'hunger', icon: '🍽️', bad: 1 }, { k: 'hurt', label: 'hurt', icon: '🤕', bad: 1 },
-    { k: 'tired', label: 'tiredness', icon: '😴', bad: 1 }, { k: 'crowd', label: 'crowding', icon: '🐜', bad: 1 }, { k: 'food', label: 'food supply', icon: '🥣', bad: -1 },
+    { k: 'tired', label: 'tiredness', icon: '😴', bad: 1 }, { k: 'crowd', label: 'togetherness', icon: '🫂', bad: 0 }, { k: 'food', label: 'food supply', icon: '🥣', bad: -1 },
     { k: 'mood', label: 'mood', icon: '😊', bad: -1 }, { k: 'friends', label: 'friendships', icon: '🤝', bad: -1 }, { k: 'music', label: 'dancefloor', icon: '🕺', bad: -1, opt: 1 }];
   function measure() { const h = H(), cs = h.creatures().filter(c => !c.lab && !c.guest && c.d && c.name), n = cs.length || 1, ws = h.words();
     let fear = 0, hun = 0, hurt = 0, tired = 0, mood = 0, fr = 0; const hiders = [];
@@ -29,7 +29,7 @@
     const free = ws.filter(w => !w.carriedBy && !w.terrain && !w.lava); for (const k of Object.keys(eaters)) { let m = 0; for (const w of free) { if (h.dietOk(k, w)) { m++; if (m > 400) break; } } food[k] = m; }
     const per = Object.keys(eaters).map(k => ({ k, eat: eaters[k], have: food[k], r: food[k] / eaters[k] })).sort((a, b) => a.r - b.r);
     const foodG = per.length ? clamp(Math.min(...per.map(p => p.r)) / 8) : 1;
-    // crowding: share of creatures with four or more others within 120 px (sampled)
+    // togetherness: share of creatures with four or more others within 120 px (sampled)
     const sm = cs.length > 150 ? cs.filter((_, i) => i % Math.ceil(cs.length / 150) === 0) : cs, sp = h.space(); let packed = 0;
     for (const a of sm) { let k = 0; for (const b of cs) { if (a === b) continue; if (Math.hypot(h.wd(a.x, b.x, sp.W), h.wd(a.y, b.y, sp.H)) < 120 && ++k >= 4) break; } if (k >= 4) packed++; }
     const rs = window.__rave && window.__rave.active() && window.__raveStats, music = rs ? clamp((rs.dance || 0) / Math.max(1, (rs.dance || 0) + (rs.bored || 0) + (rs.leave || 0))) : null;
@@ -57,10 +57,7 @@
       cause(g) { const loud = M() && M().playing ? ', and the music is still playing' : ''; return `average tiredness ${Math.round(g.v.tired * 100)}%` + loud; },
       acts() { const a = [{ id: 'nap:tired', label: '💤 quiet hours: the tiredest nap' }]; if (M() && M().playing) a.push({ id: 'hush', label: '🔇 stop the music' }); return a; },
       wry: ['{n} fell asleep mid-sentence', 'yawns are spreading faster than words', '{n} is counting sheep and getting 41'] },
-    crowd: { on: 0.38, off: 0.22, title: 'it is getting crowded',
-      cause(g) { return `${Math.round(g.v.crowd * 100)}% of them have four neighbours or more within a step`; },
-      acts() { return [{ id: 'spread', label: '↔️ spread them out' }, { id: 'rest', label: '🛏️ put three to rest (undo wakes them)' }]; },
-      wry: ['{n} has been stepped on by eleven legs at once', 'personal space is now a rumour', 'a queue has formed for the queue'] },
+    // no crowding issue: being close costs them nothing yet (they flock on purpose), so togetherness is shown, never flagged
     mood: { on: 0.75, off: 0.6, metric: g => 1 - g.v.mood, title: 'spirits are low',
       cause(g) { return `average happiness ${Math.round(g.v.mood * 100)}%`; },
       acts() { return M() ? [{ id: 'rave', label: '🕺 throw a rave' }] : []; },
@@ -165,15 +162,15 @@
     return `<svg width="58" height="14" viewBox="0 0 58 14"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".7"/></svg>`; }
   function trend(k, bad) { const hh = (hist[where()] || []).map(p => p.v[k]).filter(v => v != null); if (hh.length < 6) return '<span class="tr" style="opacity:.4">·</span>';
     const a = hh.slice(-3).reduce((s, v) => s + v, 0) / 3, b = hh.slice(-15, -10).length ? hh.slice(-15, -10).reduce((s, v) => s + v, 0) / hh.slice(-15, -10).length : hh[0], d = a - b;
-    if (Math.abs(d) < 0.03) return '<span class="tr" style="opacity:.5">→</span>'; const worse = d * bad > 0; return `<span class="tr" style="color:${worse ? '#e5484d' : '#3a8'}">${d > 0 ? '↑' : '↓'}</span>`; }
-  const col = (v, bad) => { const x = bad > 0 ? v : 1 - v; return x > 0.6 ? '#e5484d' : x > 0.35 ? '#f0a020' : '#3a8'; };
+    if (Math.abs(d) < 0.03) return '<span class="tr" style="opacity:.5">→</span>'; const worse = d * bad > 0; return `<span class="tr" style="color:${!bad ? '#5b8def' : worse ? '#e5484d' : '#3a8'}">${d > 0 ? '↑' : '↓'}</span>`; }
+  const col = (v, bad) => { if (!bad) return '#5b8def'; const x = bad > 0 ? v : 1 - v; return x > 0.6 ? '#e5484d' : x > 0.35 ? '#f0a020' : '#3a8'; };
   const ago = t => { const m = Math.round((now() - t) / 60000); return m < 1 ? 'now' : m < 60 ? m + 'm' : Math.round(m / 60) + 'h'; };
   function render() { if (panel.classList.contains('drag')) return; panel.classList.toggle('on', !!S.open); btn.classList.toggle('on', !!S.open); if (!S.open) return; const g = G || measure(), A = alerts[where()] || {}, keepTxt = keep() ? 'Gloamhold' : (P() && P().title && P().title()) || 'Home';
     const did = panel.querySelector('.did'); const didHTML = did ? did.innerHTML : '';
     let h = `<div class="hd"><b>📊 advisor · ${esc(keepTxt)}</b><button data-a="close" title="close">✕</button></div><div class="sub">${g.n} creatures · updated every 5 s · trends over the last minute, lines over 10 min</div>`;
     h += '<h4>how they are doing</h4>' + GAUGES.filter(x => !(x.opt && g.v[x.k] == null)).map(x => { const v = g.v[x.k] ?? 0; return `<div class="g" title="${x.label}: ${Math.round(v * 100)}%"><span>${x.icon}</span><span>${x.label}</span><span class="bar"><i style="width:${Math.round(v * 100)}%;background:${col(v, x.bad)}"></i></span>${spark(x.k, x.bad)}${trend(x.k, x.bad)}</div>`; }).join('');
     h += `<div class="sub" style="margin-top:3px">food by diet: ${g.per.map(p => `${esc(p.k)} ${p.have} for ${p.eat}`).join(' · ') || '—'}</div>`;
-    const ks = Object.keys(A); h += `<h4>issues ${ks.length ? '(' + ks.length + ')' : ''}</h4>` + (ks.length ? ks.map(k => { const I = ISSUES[k]; return `<div class="iss"><b>${esc(I.title)}</b> <small class="sub">for ${fmtMin(now() - A[k].since)}</small><div>${esc(I.cause(g))}</div><i>${esc(wryOf(k, g))}</i><div class="acts">${I.acts(g).map(a => `<button data-act="${esc(a.id)}">${esc(a.label)}</button>`).join('')}</div></div>`; }).join('') : '<div class="sub">nothing worrying right now. ☕</div>');
+    const ks = Object.keys(A).filter(k => ISSUES[k]); h += `<h4>issues ${ks.length ? '(' + ks.length + ')' : ''}</h4>` + (ks.length ? ks.map(k => { const I = ISSUES[k]; return `<div class="iss"><b>${esc(I.title)}</b> <small class="sub">for ${fmtMin(now() - A[k].since)}</small><div>${esc(I.cause(g))}</div><i>${esc(wryOf(k, g))}</i><div class="acts">${I.acts(g).map(a => `<button data-act="${esc(a.id)}">${esc(a.label)}</button>`).join('')}</div></div>`; }).join('') : '<div class="sub">nothing worrying right now. ☕</div>');
     const u = undo[where()]; h += `<div class="did">${didHTML || (u && now() - u.t < 120000 ? `✓ ${esc(u.what)} <button data-a="undo">undo</button>` : '')}</div>`;
     h += '<h4>Id|le gazette</h4><div class="news">' + (S.news.slice(-8).reverse().map(n => `<div><small>${ago(n.t)}</small>${n.text.replace(/<button data-open="1">[^<]*<\/button>/, '')}${n.at ? ` <button data-go="${n.at.x},${n.at.y}">go ›</button>` : ''}</div>`).join('') || '<div class="sub">no news yet</div>') + '</div>';
     h += `<h4>alerts</h4><div class="modes">${['on', 'quiet', 'off'].map(m => `<button data-mode="${m}" class="${S.mode === m ? 'on' : ''}" title="${m === 'on' ? 'news and alerts pop up' : m === 'quiet' ? 'no pop-ups, just the red dot on 📊' : 'no news or alerts'}">${m}</button>`).join('')}</div>`;
