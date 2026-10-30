@@ -59,6 +59,17 @@ table.wt th{background:var(--box)}
 .yw small{color:var(--mut)}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:6px 12px;border-radius:4px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:20}
 #toast.on{opacity:.92}
+#pop{position:absolute;z-index:30;width:290px;background:var(--paper);border:1px solid var(--rule);box-shadow:0 6px 24px rgba(0,0,0,.18);font-size:13px;line-height:1.45;padding:0 0 8px;display:none}
+#pop.on{display:block}
+#pop .t{font-family:Georgia,serif;font-weight:700;font-size:16px;padding:6px 10px 2px;display:flex;align-items:center;gap:6px}
+#pop .t button{margin-left:auto;border:none;background:none;color:var(--mut);font-size:16px;cursor:pointer}
+#pop svg{display:block;width:100%;height:110px;background:var(--box);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+#pop .row{padding:2px 10px}#pop .k{color:var(--mut)}
+#pop .bar{display:inline-block;height:6px;background:var(--link);vertical-align:middle;margin-left:4px;border-radius:1px}
+#pop ul{margin:2px 0 4px;padding:0 10px 0 26px}
+#pop .go{display:block;margin:8px 10px 0;font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--link);color:var(--link);background:none;border-radius:3px;cursor:pointer;text-align:center;width:calc(100% - 20px)}
+#pop .go:hover{background:var(--link);color:var(--paper)}
+#pop .hint{padding:2px 10px;color:var(--mut);font-size:11.5px;text-align:center}
 #crawl{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:10}
 .floor{clear:both;margin-top:50px;border-top:1px dashed var(--rule);padding-top:10px;position:relative;height:90px;overflow:hidden}
 .floor span{position:absolute;font-family:Georgia,serif;color:var(--mut);opacity:.55;white-space:nowrap;font-size:13px}
@@ -152,7 +163,7 @@ svg.onebit{float:right;margin:0 0 8px 14px;border:1px solid #000;shape-rendering
   h += `<div class="ib"><div class="t">Id|le</div><svg class="live" data-fam="tok"></svg><div class="cap">Id|le, the first tokenizer (alive; click to send it somewhere)</div><table><tr><th>Kind</th><td>a world of word-eating creatures</td></tr><tr><th>Families</th><td>${famKeys.length}</td></tr><tr><th>Jobs</th><td>${JOBS.length}</td></tr><tr><th>Bodies</th><td>${BODIES.length}</td></tr><tr><th>Weathers</th><td>${Object.keys(WN).length}</td></tr><tr><th>Feelings</th><td>${Object.keys(FEEL).length}</td></tr></table></div>`;
   h += `<p><b>Id|le</b> (written with the bar, spelled <code>id-le</code> where a bar cannot go) is a small world whose ground is made of words. Creatures with legs walk on them, eat them, carry them, cut them into pieces, name them, count them and pile them up. Every creature has a genome that mutates, a job, drives that pick what it does next, feelings, a diary, friends, favourite weather and food, and a mind you can watch stream. The world has weather, a day, ground features, disasters and other places to visit.</p>
   <p>The name comes from the first tokenizer, <b>Id|le</b>: a tokenizer's names are split like tokens, and the bar is where the cut falls. The world page itself is still called the arena.</p>`;
-  if (living.length) { h += sec('your-world', 'Your world'); h += `<p class="hat">Read from this browser's copy of the world when this page opened. Click a name to find it in the world.</p><div class="yw">`;
+  if (living.length) { h += sec('your-world', 'Your world'); h += `<p class="hat">Read from this browser's copy of the world when this page opened. Click a name for its profile here; the profile has a button that takes you to it in the world.</p><div class="yw">`;
     for (const f of famKeys.filter(f => byFam[f])) h += `<div class="fam"><a href="#fam-${f}">${esc(FAMS[f])}</a> <small>${byFam[f].length}</small></div>` + byFam[f].map(x => { const lf = x.life || {}, last = (lf.diary || []).slice(-1)[0], tip = [x.g.job ? 'job: ' + x.g.job : '', lf.days ? lf.days + ' days' : '', (lf.friends || []).length ? (lf.friends.length + ' friends') : '', last && last.k ? 'last memory: ' + last.k : ''].filter(Boolean).join(' · ');
       return `<span class="who" title="${esc(tip)}"><svg data-mini="${esc(JSON.stringify(x.g))}" viewBox="0 0 140 104"></svg><a href="arena.html#c=${encodeURIComponent(x.name)}" data-go="${esc(x.name)}">${esc(x.name)}</a></span>`; }).join('');
     h += `</div>`; }
@@ -210,9 +221,40 @@ svg.onebit{float:right;margin:0 0 8px 14px;border:1px solid #000;shape-rendering
   const toast = t => { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); };
   const fillNames = f => { const el = document.getElementById('nx-' + f); if (el) el.innerHTML = sample(f, 5).map(x => `<i>${esc(x)}</i>`).join(' · ') || '<span class="note">—</span>'; };
   famKeys.forEach(fillNames); main.addEventListener('click', e => { const b = e.target.closest('.nx'); if (b) fillNames(b.dataset.fam); });
-  // names lead into the world: an open world tab takes the visit, otherwise a world opens on that creature
-  let arenaOpen = false; let bc = null; try { bc = new BroadcastChannel('idle-arena'); bc.onmessage = e => { if (e.data && e.data.pong) arenaOpen = true; }; bc.postMessage({ ping: 1 }); setInterval(() => { arenaOpen = false; bc.postMessage({ ping: 1 }); }, 5000); } catch (e) {}
-  main.addEventListener('click', e => { const a = e.target.closest('a[data-go]'); if (!a || !bc || !arenaOpen) return; e.preventDefault(); bc.postMessage({ focus: a.dataset.go }); toast('shown in your world tab: ' + a.dataset.go); });
+  // names stay in the pedia: a click opens the creature's profile here. Only its "open in arena" button touches the world,
+  // and it brings the world tab to the front first (the pedia never drives a world tab you cannot see)
+  const pop = document.createElement('div'); pop.id = 'pop'; document.body.appendChild(pop);
+  const memHTML = x => { const t = document.createElement('template'); t.innerHTML = String(x || ''); let o = '';
+    const walk = nd => { for (const k of nd.childNodes) { if (k.nodeType === 3) o += esc(k.textContent); else if (k.nodeType === 1) { if (k.matches('a.mn')) o += `<a href="#" data-go="${esc(k.dataset.n || k.textContent)}">${esc(k.textContent)}</a>`; else if (k.matches('a.mw')) o += `<i>${esc(k.textContent)}</i>`; else walk(k); } } };
+    walk(t.content); return o; };
+  const ago = t => { const m = (Date.now() - t) / 60000; return m < 1 ? 'just now' : m < 60 ? Math.round(m) + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+  function profile(name, anchor) { const x = living.find(y => y.name === name) || resting.map(r => ({ name: r.name, g: r.genome || r.g || {}, life: r.life, fam: famOf(r.genome || r.g, null), rest: true })).find(y => y.name === name);
+    if (!x) { toast(name + ' is not in your saved world'); return; }
+    const lf = x.life || {}, fe = lf.fe || {}, d = (lf.diary || []).slice(-4).reverse(), fr = (lf.friends || []).slice(0, 5);
+    const bars = [['afraid', fe.fear], ['hurt', fe.hurt], ['excited', fe.thrill]].filter(([, v]) => v > 0.05).map(([k, v]) => `${k}<span class="bar" style="width:${Math.round(Math.min(1, v) * 60)}px"></span>`).join(' &nbsp;');
+    pop.innerHTML = `<div class="t">${esc(x.name)}<button title="close" data-x>×</button></div><svg viewBox="0 0 140 104"></svg>
+      <div class="row"><span class="k">family</span> <a href="#fam-${x.fam}">${esc(FAMS[x.fam] || x.fam)}</a>${x.g.job ? ` · <span class="k">job</span> ${esc(x.g.job)}` : ''}${x.rest ? ' · resting' : ''}</div>
+      ${lf.days ? `<div class="row"><span class="k">lived</span> ${lf.days} day${lf.days === 1 ? '' : 's'}</div>` : ''}
+      ${bars ? `<div class="row"><span class="k">feels</span> ${bars}</div>` : ''}
+      ${fr.length ? `<div class="row"><span class="k">friends</span> ${fr.map(f => `<a href="#" data-go="${esc(f)}">${esc(f)}</a>`).join(', ')}</div>` : ''}
+      ${d.length ? `<div class="row k">remembers</div><ul>${d.map(m => `<li>${memHTML(m.x)}${(m.ws || []).length ? ' ' + m.ws.map(([w, k]) => `<i>“${esc(w)}”</i>${k > 1 ? ' ×' + k : ''}`).join(', ') : m.n > 1 ? ' ×' + m.n : ''} <span class="k">· ${ago(m.t)}</span></li>`).join('')}</ul>` : '<div class="row k">no memories saved yet</div>'}
+      ${x.rest ? '' : `<button class="go" data-open="${esc(x.name)}">open in arena ↗</button><div class="hint">switches to your world tab and opens its card</div>`}`;
+    if (draw) try { const c = creature(x.g, 1); c.x = 70; c.y = 54; c.heading = -0.4; draw.buildLegs(c); pop.querySelector('svg').innerHTML = draw.legsSVG(c) + draw.bodySVG(c, 0); } catch (e) {}
+    const r = anchor.getBoundingClientRect(); pop.classList.add('on');
+    pop.style.left = Math.max(8, Math.min(r.left + scrollX, scrollX + innerWidth - pop.offsetWidth - 8)) + 'px';
+    pop.style.top = (r.bottom + pop.offsetHeight + 8 > innerHeight ? Math.max(scrollY + 8, r.top + scrollY - pop.offsetHeight - 6) : r.bottom + scrollY + 6) + 'px'; }
+  function openInArena(name) {   // a visible switch: name the tab that opened this page, then navigate and focus it by that name
+    try { if (window.opener && !window.opener.closed && window.opener.location.pathname.endsWith('/arena.html')) window.opener.name = 'idle-arena'; } catch (e) {}
+    const w = window.open('arena.html#c=' + encodeURIComponent(name), 'idle-arena'); if (!w) return; try { w.focus(); } catch (e) {}
+    // an already-open world only changed its #hash (no reload), so tell that one tab, now in front, to go to the creature
+    // (the same path as clicking a name in a memory there: fly to it, select it, open its card)
+    try { if (w.document.readyState === 'complete' && w.__arena) { const m = w.document.createElement('a'); m.className = 'mn'; m.dataset.n = name; m.style.display = 'none';
+      w.document.body.appendChild(m); m.click(); m.remove(); w.history.replaceState(null, '', w.location.pathname); } } catch (e) {} }
+  document.addEventListener('click', e => { const a = e.target.closest('a[data-go]');
+    if (a) { e.preventDefault(); profile(a.dataset.go, a); return; }
+    const o = e.target.closest('[data-open]'); if (o) { openInArena(o.dataset.open); return; }
+    if (e.target.closest('[data-x]') || !e.target.closest('#pop')) pop.classList.remove('on'); });
+  addEventListener('keydown', e => { if (e.key === 'Escape') pop.classList.remove('on'); });
   if (!draw) return;
   // static minis for your world, live boxes for families
   for (const s of document.querySelectorAll('svg[data-mini]')) { try { const g = JSON.parse(s.dataset.mini), c = creature(g, 1); c.x = 70; c.y = 52; c.heading = -0.4; draw.buildLegs(c); s.innerHTML = draw.legsSVG(c) + draw.bodySVG(c, 0); } catch (e) {} }
