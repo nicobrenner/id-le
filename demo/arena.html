@@ -453,8 +453,16 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c); g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
       legs(g, c, hp); body(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
-    function end(t) { const g = crit; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
-    return { begin, draw, end, hidePose };
+    const beams = [];
+    function laser(c, T, t) { beams.push([c, T, t]); }
+    function drawBeam(g, c, T, t) { const hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2, n = T.text.length, br = n * 4.5 + 22, rr = ((t / 8) % 360) * Math.PI / 180, col = `hsl(${hue},95%,60%)`;
+      g.save(); g.translate(T.x, T.y); g.rotate(rr); g.strokeStyle = '#ff3b6b'; g.lineWidth = 2; g.beginPath();
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { g.moveTo(a * br, b * (br * 0.55 - 8)); g.lineTo(a * br, b * br * 0.55); g.lineTo(a * (br - 8), b * br * 0.55); } g.stroke(); g.restore();
+      g.save(); g.strokeStyle = col; g.lineWidth = 1; g.globalAlpha = 0.85; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(c.x + c.ox, c.y + c.oy); g.lineTo(T.x, T.y); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+      g.lineWidth = 1.4; g.beginPath(); g.ellipse(T.x, T.y, Math.max(0, n * 4.2 + 14 + j), Math.max(0, 13 + j / 2), 0, 0, Math.PI * 2); g.stroke();
+      g.font = '9px ui-monospace,Menlo,monospace'; g.fillStyle = `hsl(${hue},95%,${isDark() ? 70 : 38}%)`; g.fillText(`${c.name.toUpperCase()} · ${T.text.toUpperCase()}`, T.x + n * 4 + 18, T.y - 12); g.restore(); }
+    function end(t) { const g = crit; for (const [c, T, tt] of beams) drawBeam(g, c, T, tt); beams.length = 0; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
+    return { begin, draw, end, hidePose, laser };
   })();
   const DEFAULT_GENOMES = {
     crawly: { id: 'crawly-0', name: 'Crawly', born: 0, parent: null, legs: 8, l1: 30, l2: 36, bodyL: 26, bodyW: 15, abdomen: 1, hue: 262, footHue: 330, step: 24, speed: 1.7, palps: 2, fidget: 0.6, wander: 0.35, body: 'chip', laser: 1, laserHue: 215, kick: 1, actions: ['fetch', 'bring', 'come', 'sleep'], job: 'hoard' },
@@ -624,9 +632,12 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       w.x += w.vx; w.y += w.vy; w.rot += w.vr; if (window.__traveling) { w.x = Math.min(SPACE.W - 10, Math.max(10, w.x)); w.y = Math.min(SPACE.H - 10, Math.max(10, w.y)); } w.vx *= 0.82; w.vy *= 0.82; w.vr *= 0.82; w.rot *= 0.97;
       place(w); }
     // targeting lasers (an evolvable trait): a beam and a ring on what the creature is going for
+    // targeting lasers are drawn on the creature canvas (render trim, Oct 30: as SVG they were hundreds of elements re-parsed every frame,
+    // for creatures all over the world); only beams that touch the view are drawn, and they sit on top of the creatures again
+    { const vs = viewSize(), m = 200, L = cam.x - vs.w / 2 / cam.z - m, T_ = cam.y - vs.h / 2 / cam.z - m, Rr = cam.x + vs.w / 2 / cam.z + m, B = cam.y + vs.h / 2 / cam.z + m, inV = (x, y) => x > L && x < Rr && y > T_ && y < B;
+      for (const c of creatures) { if (!(c.g.laser || c.userTask) || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T0 = c.target, T = { x: c.x + c.ox + wd(c.x, T0.x, SPACE.W), y: c.y + c.oy + wd(c.y, T0.y, SPACE.H), text: T0.text };
+        if (inV(T.x, T.y) || inV(c.x + c.ox, c.y + c.oy)) Crit.laser(c, T, t); } }
     Crit.end(t);
-    for (const c of creatures) { if (!(c.g.laser || c.userTask) || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T0 = c.target, T = { x: c.x + c.ox + wd(c.x, T0.x, SPACE.W), y: c.y + c.oy + wd(c.y, T0.y, SPACE.H), text: T0.text }, hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2;
-      const br = T.text.length * 4.5 + 22, rr = (t / 8) % 360; svg += `<g transform="translate(${T.x},${T.y}) rotate(${rr})" stroke="#ff3b6b" stroke-width="2" fill="none">${[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => `<path d="M${a * br},${b * (br * 0.55 - 8)} L${a * br},${b * br * 0.55} L${a * (br - 8)},${b * br * 0.55}"/>`).join('')}</g>`; svg += `<line x1="${c.x + c.ox}" y1="${c.y + c.oy}" x2="${T.x}" y2="${T.y}" stroke="hsl(${hue},95%,60%)" stroke-width="1" stroke-dasharray="3 3" opacity=".85"/><ellipse cx="${T.x}" cy="${T.y}" rx="${T.text.length * 4.2 + 14 + j}" ry="${13 + j / 2}" fill="none" stroke="hsl(${hue},95%,60%)" stroke-width="1.4"/><text x="${T.x + T.text.length * 4 + 18}" y="${T.y - 12}" font-size="9" font-family="ui-monospace,Menlo,monospace" fill="hsl(${hue},95%,${isDark() ? 70 : 38}%)">${c.name.toUpperCase()} · ${T.text.toUpperCase()}</text>`; }
     if (svg !== animate._svg) { animate._svg = svg; web.innerHTML = svg; } web.style.opacity = 1; LOD.frame(); creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
     if (window.__herd && window.__herd.drivesOpen() && (!animate._d || t - animate._d > 400)) { animate._d = t; drivesEl.innerHTML = '<small style="opacity:.65">their drives: they get hungrier and more curious over time, tired from moving, fond of you when you play with them; the highest need picks what they do next</small>' + creatures.map(bars).join(''); } requestAnimationFrame(animate);
   }
@@ -1134,7 +1145,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
         else if (f.type === 'hole' && Math.hypot(dx, dy) < f.r && !w.terrain0) { w.x = Math.random() * SPACE.W; w.y = Math.random() * SPACE.H; w.vx = w.vy = 0; place(w); w.el.animate([{ scale: 0 }, { scale: 1.4 }, { scale: 1 }], { duration: 500 }); }   // 404: falls in, turns up somewhere else
         else if (f.type === 'cache' && Math.abs(dx) < f.w / 2 && Math.abs(dy) < f.h / 2) { w.sheltered = true; } } } }
   function featuresSVG(t) { const F = world.features || []; let s = ''; const dark = isDark(), ink = dark ? '170,190,255' : '43,92,255';
-    for (const f of F) { const x = near(f.x, cam.x, SPACE.W), y = near(f.y, cam.y, SPACE.H);
+    const vs = viewSize(), hw = vs.w / 2 / cam.z, hh = vs.h / 2 / cam.z;   // only features near the view (render trim, Oct 30)
+    for (const f of F) { const x = near(f.x, cam.x, SPACE.W), y = near(f.y, cam.y, SPACE.H), ext = (f.len || 0) / 2 + (f.r || 0) + Math.max(f.w || 0, f.h || 0) / 2 + 60; if (Math.abs(x - cam.x) > hw + ext || Math.abs(y - cam.y) > hh + ext) continue;
       if (f.type === 'stream') { const ca = Math.cos(f.a), sa = Math.sin(f.a), x1 = x - ca * f.len / 2, y1 = y - sa * f.len / 2, x2 = x + ca * f.len / 2, y2 = y + sa * f.len / 2; s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(${ink},.10)" stroke-width="${f.wdt}" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(${ink},.45)" stroke-width="2" stroke-dasharray="2 14" stroke-dashoffset="${-(t / 25) % 16}"/>`; }
       else if (f.type === 'well') { for (let k = 0; k < 3; k++) s += `<circle cx="${x}" cy="${y}" r="${f.r * (0.4 + 0.3 * k) + Math.sin(t / 600 + k) * 3}" fill="none" stroke="rgba(${ink},${0.10 + 0.05 * k})" stroke-dasharray="1 6"/>`; s += `<text x="${x}" y="${y + 4}" text-anchor="middle" font-size="10" font-family="ui-monospace,Menlo,monospace" fill="rgba(${ink},.45)">latency ${Math.round(f.r * 3)}ms</text>`; }
       else if (f.type === 'hole') s += `<circle cx="${x}" cy="${y}" r="${f.r + Math.sin(t / 200) * 1.5}" fill="${dark ? '#000' : '#222'}" opacity=".85"/><text x="${x}" y="${y + 3}" text-anchor="middle" font-size="8" font-family="ui-monospace,Menlo,monospace" fill="#ff6a6a">404</text>`;
