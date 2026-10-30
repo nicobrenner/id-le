@@ -1,6 +1,6 @@
 # BYO-AI: the in-game chat with your own AI
 
-Status: design note, no code yet (2026-10-29).
+Status: v1 built (2026-10-29): demo/idle-ai.js (the chat, the brains, the tools) and window.__idleWorld in arena.html (the verbs). Not yet: the idle-bridge relay script for players, Tiny Oracle as a brain, `instruct` and `snapshot` tools, undo chips.
 
 Nico (2026-10-29): "that would be one of the main features! BYO-AI, you can use either a subscription like you, or API, or local model... (eventually use TO)".
 
@@ -18,7 +18,7 @@ The game runs the tool calls itself and sends the results back, so the AI never 
 
 | Brain | How it connects | Notes |
 |---|---|---|
-| **API key** (Anthropic, or any OpenAI-compatible provider) | browser → the provider's API directly, with the player's key | The key is stored only in this browser (IndexedDB, never in snapshots or world files) and sent only to the provider's host. Anthropic needs its direct-browser-access opt-in header for CORS (the TS SDK's `dangerouslyAllowBrowser`); check the exact header name in the live docs before building. Default model `claude-opus-5-5` with adaptive thinking at `low` effort, since this is chat; the player can pick another model. Use strict tools with `tool_choice: auto` (forced tool choice is rejected on current models). |
+| **API key** (Anthropic, or any OpenAI-compatible provider) | browser → the provider's API directly, with the player's key | The key is stored only in this browser (IndexedDB, never in snapshots or world files) and sent only to the provider's host. Anthropic's direct-browser-access opt-in header is `anthropic-dangerous-direct-browser-access: true` (what the TS SDK sends for `dangerouslyAllowBrowser`; checked in the SDK source 2026-10-29). Default model `claude-opus-5-5` with adaptive thinking at `low` effort, since this is chat; the player can pick another model. Use strict tools with `tool_choice: auto` (forced tool choice is rejected on current models). |
 | **Local model** (Ollama, LM Studio, llama.cpp server) | browser → `http://localhost:11434` (or the port the player sets) | The local server must allow the game's origin (`OLLAMA_ORIGINS=https://id-le.com`), and the README will say so. With COEP on, a localhost response also needs `Cross-Origin-Resource-Policy`, or the game makes the call from a non-isolated helper iframe. Tool calling depends on the model; models without it get a JSON-in-text fallback that the game parses and validates. |
 | **Subscription agent** (Claude Code or a similar CLI the player already pays for) | the agent runs on the player's machine and joins through a tiny localhost relay, exactly like today's notes/replies files | Ship `idle-bridge`, a ~100-line script: it serves `/notes` and `/replies` on localhost and writes them to two files the player's agent watches. Today's manager setup becomes the reference. Players get the relay from the README, not from the site. |
 | **Tiny Oracle** (later; "BO" if it outgrows the name) | in the page, through the same ONNX worker that already writes the Oracle's comments | No key, no network. It needs a tool-use fine-tune first; until then the Oracle keeps commenting and the chat says "bring an AI to talk". |
