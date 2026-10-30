@@ -351,8 +351,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const ell = (g, x, y, rx, ry) => { g.beginPath(); g.ellipse(x, y, Math.max(0, rx), Math.max(0, ry), 0, 0, Math.PI * 2); };
     const rrect = (g, x, y, w, h, r) => { w = Math.max(0, w); h = Math.max(0, h); g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2))); else g.rect(x, y, w, h); };
     function fs(g, fill, stroke, lw) { if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw ?? 1; g.stroke(); } }
-    function legs(g, c) { const G = c.gs || c.g; g.lineJoin = 'round'; g.lineCap = 'round';
-      for (const L of c.legs) { const H = hip(c, L), F = L.foot, K = knee(H, F, G.l1, G.l2, L.side, c.heading), lift = L.lift || 0, Kx = K.x + (K.x - H.x) * 0.12 * lift, Ky = K.y + (K.y - H.y) * 0.12 * lift;
+    function legs(g, c, hp) { const G = c.gs || c.g; g.lineJoin = 'round'; g.lineCap = 'round';
+      for (const L of c.legs) { const H = hip(c, L), F0 = L.foot, F = hp ? { x: H.x + (F0.x - H.x) * (1 - 0.6 * hp.k), y: H.y + (F0.y - H.y) * (1 - 0.6 * hp.k) } : F0, K = knee(H, F, G.l1, G.l2, L.side, c.heading), lift = L.lift || 0, Kx = K.x + (K.x - H.x) * 0.12 * lift, Ky = K.y + (K.y - H.y) * 0.12 * lift;
         g.beginPath(); g.moveTo(H.x, H.y); g.lineTo(Kx, Ky); g.lineTo(F.x, F.y); g.strokeStyle = `hsl(${G.hue},70%,${c.state === 'sleep' ? 55 : 76}%)`; g.lineWidth = 1.5 + 0.4 * lift; g.stroke();
         circ(g, F.x, F.y, 1.8 + 1.4 * lift); g.fillStyle = `hsl(${G.footHue},90%,72%)`; g.fill(); }
       g.lineJoin = 'miter'; g.lineCap = 'butt'; }
@@ -388,7 +388,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const marks = [];   // 💤 and 🫣 go on top of every creature, so they are drawn after all of them
     function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c); g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
-      legs(g, c); body(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
+      legs(g, c, hp); body(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
     function end(t) { const g = crit; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
     return { begin, draw, end, hidePose };
   })();
@@ -652,6 +652,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     if (c._grazed !== t) { c._grazed = t; logEvent('graze', { who: c.name, formula: d.f.expr }); }
     logEvent('task', { who: c.name, option: 'eat', success: true, word: n, diet: 'numbers', graze: true });
     if (P.length <= 2) { const ex = d.f.expr; designDo(t, 'apart'); logEvent('graze', { who: c.name, formula: ex, folded: true }); } else { renderDesign(t); place(t); } return true; }
+  window.__chartTest = (x, y, play) => { const f = formulaOf('square', 3, 4); return addDesign({ dk: 'chart', title: f.expr, f, items: [{ t: 'num', w: '3', cls: 'word num' }, { t: 'num', w: '4', cls: 'word num' }], recipe: ['num', 'num'], style: 'soft', hue: 200, by: 'test', done: true, np: f.pts.length, play: play ?? 1300 }, x, y); };   // test hook
   async function doEat(c, obj) {   // a meal from its diet (or what you hand it)
     if (!obj && dietOf(c) === 'numbers') { let ch = null, bd = 900; for (const t of things) if (grazeable(t)) { const d = dist(t, c); if (d < bd) { bd = d; ch = t; } } if (ch && (Math.random() < 0.45 || !words.some(w => edibleOn(c, w)))) return graze(c, ch); }
     const D = DIETS[dietOf(c)], handed = !!(obj && !obj.thing && c._handed === obj);
