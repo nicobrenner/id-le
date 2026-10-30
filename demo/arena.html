@@ -1363,7 +1363,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       $('#peerLabel').textContent = `${name}: ${v.creatures.length} creatures, ${v.wordCount} words, ${WEATHER_NAMES[v.weather] || v.weather}`; }
     function shareView() { const wx = v => ((v % SPACE.W) + SPACE.W) % SPACE.W, wy = v => ((v % SPACE.H) + SPACE.H) % SPACE.H; const ws = words.filter(w => !w.carriedBy);
       post('view', { view: { W: SPACE.W, H: SPACE.H, weather: world.weather, wordCount: ws.length, words: ws.filter((_, i) => i % Math.max(1, Math.ceil(ws.length / 250)) === 0).map(w => ({ t: w.text, x: Math.round(wx(w.x)), y: Math.round(wy(w.y)) })), creatures: creatures.map(c => ({ n: c.name, x: Math.round(wx(c.x)), y: Math.round(wy(c.y)), h: c.g.hue })) } }); }
-    post('register', { name: myName }).then(poll); setInterval(poll, 2000); setInterval(shareView, 3000);
+    post('register', { name: myName }).then(poll);
+    // busy only when there is someone to talk to: links, requests, creatures away, or the panel open; otherwise a slow check for new requests
+    const busy = () => !!(state && (state.me.links.length || state.me.requests.length)) || Object.keys(away).length > 0 || $('#conn').classList.contains('on'); let lastPoll = 0;
+    setInterval(() => { if (busy() || Date.now() - lastPoll > 20000) { lastPoll = Date.now(); poll(); } }, 2000); setInterval(() => { if (state && state.me.links.length) shareView(); }, 3000);
     return { explore, goHome, _parked: {}, code: () => code }; })();
   // ---------- images and interface elements from fetched pages, and the creatures that work on them ----------
   const things = []; window.__things = things;
