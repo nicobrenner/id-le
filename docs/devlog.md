@@ -5,6 +5,8 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-30
 
+**KV writes throttled (74271bf).** Found while adding stats: every open tab polled `/worlds/state` every ~20 s and each poll rewrote the worlds document, and linked worlds shared their view every 3 s. KV's free plan allows 1,000 writes a day **for the whole Cloudflare account**, jeffy's mind-reader included, so about 6 tab-hours of Id|le could have used it up. Now a poll writes only for a new world or every 10 min, and a view at most once a minute: 30 polls + 20 views went from 50 writes to 2 (fake-KV test).
+
 **Settings, privacy page, anonymous stats (#34).** ⚙ settings (a gear on desktop, ⚙ in the ☰ sheet on phones) with two switches: the public helper (off: Crawlers, travel and world links say so, and nothing is fetched) and anonymous stats. id-le.com/privacy says in plain words what stays in the browser, what is sent and how to turn it off. Stats: visit (and a yes/no "been here before"), phone/desktop, an fps bucket, features opened, first-five-minutes moments with seconds, finished/skipped, up to 5 scrubbed errors; the server keeps only daily totals per shard key; `tools/stats.py` prints them.
 - Two test beacons became 1 KV write (20 s batching per isolate); off switch → 0 beacons; localhost and `?fresh` → 0 beacons.
 - Finding (not fixed here): every open tab polls `/worlds/state` every ~20 s and each poll rewrites the `worlds` KV document, so world presence alone could use KV's 1,000 free writes a day in about 6 tab-hours. Stats share that account-wide limit.
