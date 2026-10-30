@@ -2597,6 +2597,42 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     return { ev, note, said, feelings, prefs, likes, brief, card, mn, think, scene, of: byName, FCOL, FEEL, reset: () => { sig = ''; } };
   })();
   window.__life = Life;
+  // ---------- the BYO-AI chat's door into the world (demo/idle-ai.js): a compact summary to read, and verbs the game already has ----------
+  window.__idleWorld = (() => {
+    const near = (x, y) => creatures.filter(c => !c.lab).sort((a, b) => Math.hypot(wd(a.x, x, SPACE.W), wd(a.y, y, SPACE.H)) - Math.hypot(wd(b.x, x, SPACE.W), wd(b.y, y, SPACE.H)));
+    const find = n => { const t = String(n || '').trim().toLowerCase(); return creatures.find(c => !c.lab && c.name && c.name.toLowerCase() === t) || creatures.find(c => !c.lab && c.name && c.name.toLowerCase().startsWith(t)) || null; };
+    const at = v => { if (v && typeof v === 'object' && isFinite(v.x)) return { x: +v.x, y: +v.y }; const c = v ? find(v) : null; return c ? { x: c.x, y: c.y } : { x: cam.x, y: cam.y }; };
+    const top = c => { const f = Life.feelings(c); return f ? Object.entries(f).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => k + ' ' + v.toFixed(2)) : []; };
+    const brief = c => ({ name: c.name, family: NAME_FAMS[nameFamily(c.g)] || nameFamily(c.g), job: jobOf(c), state: c.state, feels: top(c), carrying: c.carrying ? c.carrying.text : undefined, hangry: c.hangryUntil > Date.now() || undefined });
+    const P = () => window.__places || null;
+    function summary(o) { const p = at(o && o.near), list = near(p.x, p.y), fam = {};
+      for (const c of creatures) if (!c.lab) { const f = NAME_FAMS[nameFamily(c.g)] || nameFamily(c.g); fam[f] = (fam[f] || 0) + 1; }
+      const ws = words.filter(w => !w.carriedBy && Math.hypot(wd(w.x, p.x, SPACE.W), wd(w.y, p.y, SPACE.H)) < ((o && o.radius) || 600)).slice(0, 40).map(w => w.text);
+      const ds = things.filter(t => t.kind === 'design' && t.d).map(t => ({ kind: t.d.dk, by: t.d.by, pinned: !!t.d.pinned, formula: t.d.f || undefined })).slice(-12);
+      return { place: P() ? { id: P().cur(), kind: P().kind() } : null, weather: { kind: world.weather, name: WEATHER_NAMES[world.weather], strength: world.wint ?? 0.35 }, kinds_of_weather: WEATHERS,
+        counts: { creatures: creatures.filter(c => !c.lab).length, words: words.length, things: things.length, asleep: creatures.filter(c => c.state === 'sleep').length, hiding: creatures.filter(c => c.state === 'hide').length },
+        families: fam, nearby_creatures: list.slice(0, (o && o.limit) || 25).map(brief), nearby_words: ws, designs_and_charts: ds,
+        disasters: (Disasters.state().live || []).map(d => ({ type: d.type, x: Math.round(d.x || 0), y: Math.round(d.y || 0) })), recent_events: events.filter(e => e.page === 'arena').slice(-12).map(e => ({ type: e.type, who: e.who, what: e.option || e.w || e.what || undefined })) }; }
+    function card(n) { const c = find(n); if (!c) return null; const l = c.life || {};
+      return { ...brief(c), drives: snap(c), diet: typeof dietOf === 'function' ? dietOf(c) : undefined, meals: c.meals || 0, genes: { legs: c.g.legs, body: c.g.body, speed: c.g.speed, hue: c.g.hue, timid: c.g.timid }, friends: (l.friends || []).slice(0, 8), days: l.days || 0,
+        diary: (l.diary || []).slice(-6).map(d => { const t = document.createElement('div'); t.innerHTML = d.x || ''; return t.textContent; }) }; }
+    function sayAs(n, text) { const c = find(n); if (!c) return null; const t = String(text || '').slice(0, 140); c.bub.textContent = t; c.bub.classList.add('on'); Sound.chirp(c, t); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 3200); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); Life.said(c, 'ai', t); logEvent('ai_say', { who: c.name }); return c.name; }
+    function setWeather(kind, strength) { if (!WEATHERS.includes(kind)) return null; applyWorld({ ...world, weather: kind, wint: strength == null ? (world.wint ?? 0.35) : Math.max(0.1, Math.min(1, +strength)), id: 'world-' + Date.now().toString(36).slice(-4) }, 'studio'); try { Studio.render(); } catch (e) {} logEvent('ai_weather', { kind }); return WEATHER_NAMES[kind]; }
+    const SPECIAL = ['namer', 'blursort', 'crawler', 'debug', 'designer', 'counter', 'math', 'sorter'];
+    function spawn(kind) { const n0 = creatures.length;
+      if (kind === 'crawly' || kind === 'tok') release({ key: kind, genome: mutate(kind, 0.14) }); else if (SPECIAL.includes(kind)) spawnSpecial(kind); else return null;
+      const c = creatures.length > n0 ? creatures[creatures.length - 1] : null; if (c) logEvent('ai_spawn', { kind, who: c.name }); return c ? c.name : null; }
+    function rename(n, nn) { const c = find(n); if (!c || !nn) return null; giveName(c, String(nn).slice(0, 24), false); return c.name; }
+    function evolve(n, how) { how = how === 'big' ? 'big' : 'mutate'; if (n === 'world') { Studio.evolve(1); return 'world'; } const c = find(n); if (!c) return null; evolveC(c, how); return c.name; }
+    function placeWords(list, nearTo) { const p = at(nearTo); const out = (Array.isArray(list) ? list : []).slice(0, 12).map(w => String(w).slice(0, 24)).filter(Boolean); out.forEach((w, i) => addWord(w, p.x + (Math.random() - .5) * 220, p.y + (Math.random() - .5) * 160)); if (out.length) logEvent('ai_words', { n: out.length }); return out.length; }
+    function disaster(type, nearTo) { const p = at(nearTo); if (type === 'quake') Disasters.quake(); else if (type === 'volcano') Disasters.volcano(p.x, p.y); else if (type === 'tornado') Disasters.tornado(p.x - 400, p.y); else return null; logEvent('ai_disaster', { type }); return type; }
+    function hangry(n) { if (!n || n === 'all') { frenzy(); return 'all'; } const c = find(n); return c && goHangry(c, false) ? c.name : null; }
+    function openCard(n) { const c = find(n); if (!c) return null; Disasters.flyTo(c.x, c.y, Math.max(cam.z, 1.1)); select(c); setTimeout(() => { if (creatures.includes(c)) openWhisper(c); }, 700); return c.name; }
+    function takeApart(nearTo) { const p = at(nearTo), t = things.filter(t => t.kind === 'design' && t.d && t.d.done !== false && !t.d.pinned).sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0]; if (!t) return null; const k = t.d.dk; return designDo(t, 'apart') ? k : null; }
+    function rest(n) { const c = find(n); if (!c || !window.__herd) return null; window.__herd.rest(c); return creatures.includes(c) ? null : c.name; }
+    function note(text) { say('ai', String(text || '').slice(0, 400), 'lab'); return true; }
+    return { summary, card, sayAs, setWeather, spawn, rename, evolve, placeWords, disaster, hangry, openCard, takeApart, rest, note, find: n => (find(n) || {}).name || null, weathers: () => WEATHERS.slice(), specials: () => SPECIAL.slice() };
+  })();
   // memory reels: now and then the world puts a few memories together into a short film, the way a photo app makes "memories" from
   // your pictures. It looks through every creature's diary for strong moments (firsts, friendships, disasters, strong feelings,
   // milestones; variety over repeats) and groups them: one creature's first days, two friends, a storm, rainy days, a disaster,
@@ -2823,4 +2859,5 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     } catch (e) { statusEl.textContent = 'error: ' + e.message; console.error(e); }
   })();
 })();
-</script></body></html>
+</script>
+<script src="idle-ai.js"></script></body></html>
