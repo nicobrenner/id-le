@@ -5,6 +5,15 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-30
 
+**Solid objects and buildings (#28).** Objects in each world's style (crates of bits, word-bricks, data boulders, server racks at Home; stones, crates, bricks, pillars in 1-bit in Gloamhold) are solid: creatures slide along them and steer round them on a spatial grid (no pathfinding), with a short detour when stuck. Small ones get carried and pushed (big creatures, strong wind, tornado, volcano); big ones stay. Nico can drag any object (a moved one stays put) and pin, turn or remove it; the studio places more. **Architects**, a new family (one moves into each world), carry loose objects into huts with a door (shelter), pens (quiet room for loners), walls (windbreak) and benches by the lake, press long words into bricks when the quarries run dry, and repair gaps. Each world starts with 3 quarries (~20 small objects) and 5 big ones (~26 objects).
+- Walking through solids: creature-seconds spent inside an object over 30 s (44 creatures, ~130 racks placed in their paths) **291 → 1**.
+- One Architect from scratch: first hut (10 pieces) finished in **6 min**. Work outcomes over that time: 10 placed, 5 fetch failures, 1 carry failure, 4 times no free material, 1 word pressed into a brick.
+- Fear 15 s after a scare, inside a hut vs away: **0.02 / 0.02** vs 0.50–0.68 (two runs); nobody inside was still hiding (vs 3–7 of 8 away).
+- Cost at 1,000 creatures: ~1 ms per frame for the collision pass; fps with vs without solids was within noise (24–30, on a loaded machine).
+- Finding: the first Architect was **stuck at 5–8 of 10 pieces for minutes**: crates inside a quarry pile couldn't be reached, because the solids kept the builder out, and it kept retrying the same one. Measuring reach to an object's *edge* and skipping unreachable ones for a minute fixed it (≈ one piece per 20–30 s after).
+- Finding: routing to a door looped. A creature at the door was re-sent to the door every frame. The first version also gave scared creatures only their ~2 s dash, too short to go round a hut. Dash time now scales with the path. One traced creature went round and in (240 px north → inside in ~9 s). A batch of 6 scared creatures in the test still showed 0 inside at 10 s: **not yet explained**.
+- Not done: Gloamhold's room walls stay walk-through (some rooms have no doors, so solid walls without pathfinding would trap creatures); the pantry and dance floor spaces.
+
 **Personal space (#27, 66f90ba).** Each creature has a comfortable number of neighbours from its flocking gene (1–2 for loners, up to 8–10 for the most social). Loners packed past it get stressed and edge away, sometimes to the lake; social ones get a small lift in company and feel left out after ~3 min alone; crowds make hunger rise up to 30% faster and hungry creatures steal more.
 - Packed loners' stress 0.24/0.28 → **0.70/0.59** (two runs); isolated loners unchanged (0.25/0.32). Social ones in company: happiness 0.47/0.50 → 0.53/0.55 (small).
 - Thefts in 5 min 13 → 31: the crowd steal bonus was then halved (0.25 → 0.12), not re-measured.
