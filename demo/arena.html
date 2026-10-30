@@ -3632,7 +3632,9 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   (async () => {
     try {
       statusEl.textContent = 'loading tokenizer…'; tokenizer = new BPETokenizer(await (await fetch('tokenizer_chat_v2.json')).json());
-      statusEl.textContent = 'loading the instruction model…'; instr = await (await fetch('arena_instr_v2.json')).json(); ort.env.wasm.numThreads = (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated) ? (navigator.hardwareConcurrency || 4) : 1;
+      statusEl.textContent = 'loading the instruction model…'; instr = await (await fetch('arena_instr_v2.json')).json(); ort.env.wasm.numThreads = (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && !window.__isIOS && !window.__safeLevel) ? Math.min(4, navigator.hardwareConcurrency || 4) : 1;   // iOS: one thread (threaded wasm reserves shared memory iOS Safari kills tabs over)
+      if (window.__safeLevel) { setLow(true); const t = window.__safeLevel >= 2 ? 'This page crashed while loading, so it is running safely: the Oracle is off on this device (creatures still live; they just say less).' : 'This page crashed while loading, so it is running lighter: the Oracle on one thread, light graphics.'; setTimeout(() => window.__notify ? window.__notify({ kind: 'system', text: t, ttl: 20000 }) : say('lab', t, 'lab'), 4000); }
+      if (window.__safeLevel >= 2) throw new Error('the Oracle is off on this device (safe mode after a crash)');
       ort.env.wasm.proxy = true;   // the Oracle thinks in a worker, so a 28-step comment no longer freezes the world for most of a second
       const mkSession = async f => { try { return await ort.InferenceSession.create(f, { executionProviders: ['wasm'] }); } catch (e) { if (!ort.env.wasm.proxy) throw e; console.warn('Oracle worker unavailable, running on the page', e); ort.env.wasm.proxy = false; return await ort.InferenceSession.create(f, { executionProviders: ['wasm'] }); } };
       statusEl.textContent = 'loading the Oracle…';

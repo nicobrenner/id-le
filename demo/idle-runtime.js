@@ -7,6 +7,15 @@
 //   research only /lab/recover, /lab/notices, /lab/replies, /lab/embed, /jeffy/*  -> empty answers; the game already falls back
 // Config: set window.IDLE_CFG = { mode: 'auto' | 'server' | 'static', helper: 'https://…' } before this file (the static build does).
 (() => {
+  // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) never
+  // fires pagehide, so its record stays 'alive: false'. The next load sees it and starts safer: level 1 = the Oracle on one
+  // thread and light quality, level 2 = no Oracle at all. Surviving 40 s or leaving normally resets it.
+  try { const G = 'idle.bootGuard', prev = JSON.parse(localStorage.getItem(G) || 'null'), died = prev && prev.alive === false ? prev.n : 0;
+    window.__safeLevel = died >= 2 ? 2 : died >= 1 ? 1 : 0; localStorage.setItem(G, JSON.stringify({ n: died + 1, alive: false }));
+    const ok = () => { try { localStorage.setItem(G, JSON.stringify({ n: 0, alive: true })); } catch (e) {} };
+    setTimeout(ok, 40000); addEventListener('pagehide', ok);
+  } catch (e) { window.__safeLevel = 0; }
+  window.__isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const CFG = Object.assign({ mode: 'auto', helper: '' }, window.IDLE_CFG || {});
   const realFetch = window.fetch.bind(window), SANDBOX = /[?&]fresh\b/.test(location.search);
   const HELPER_PATHS = ['/lab/fetch', '/lab/page', '/lab/asset', '/lab/img', '/worlds/'];
