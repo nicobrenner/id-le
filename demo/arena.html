@@ -99,7 +99,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 #conn .crow{display:flex;gap:4px;margin:6px 0}#conn input{flex:1;font:12px system-ui;padding:3px 6px;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit}#conn button{font-size:11px;padding:2px 7px}#conn .peer{border:1px solid #8885;border-radius:8px;padding:5px 7px;margin:5px 0}#conn .dot{display:inline-block;width:7px;height:7px;border-radius:4px;margin-right:4px}#conn select{font-size:11px}#peerView{display:none;width:100%;border-radius:8px;border:1px solid #8885;margin-top:6px}#myName{border-bottom:1px dashed #8888;padding:0 3px}
 #daylight{position:absolute;inset:0;pointer-events:none;z-index:5;transition:background 3s linear}
 #arena.keep{--k-ink:#000;--k-paper:#fff;background:var(--k-paper)}@media (prefers-color-scheme:dark){#arena.keep{--k-ink:#fff;--k-paper:#000}}
-#arena.keep #floor,#arena.keep #web{filter:grayscale(1) contrast(1.35)}#arena.keep #weather,#arena.keep #daylight{display:none}
+#arena.keep #floor,#arena.keep #web,#arena.keep #crit{filter:grayscale(1) contrast(1.35)}#arena.keep #weather,#arena.keep #daylight{display:none}
 #arena.keep .word{background:var(--k-paper)!important;color:var(--k-ink)!important;border:1px solid var(--k-ink)!important;border-radius:0!important;box-shadow:2px 2px 0 var(--k-ink);font-family:Silkscreen,ui-monospace,Menlo,monospace!important;text-shadow:none!important;-webkit-font-smoothing:none}
 #distoast{position:absolute;left:50%;top:84px;transform:translateX(-50%) translateY(-8px);z-index:31;font:12px system-ui;padding:5px 14px;border-radius:14px;background:#fff6ee;color:#7a2a10;border:1px solid #e0703a;box-shadow:0 3px 12px #0003;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s}#distoast.on{opacity:1;pointer-events:auto;transform:translateX(-50%)}@media (prefers-color-scheme:dark){#distoast{background:#2a1a12;color:#ffb48a;border-color:#a8502a}}#arena.keep #distoast{background:var(--k-paper);color:var(--k-ink);border-color:var(--k-ink);border-radius:0;font-family:Silkscreen,ui-monospace,monospace}.dgo{color:#e0703a;cursor:pointer;text-decoration:none;font-weight:600}
 #keepDetail{display:none}#arena.keep #keepDetail{display:inline-block}
@@ -335,6 +335,51 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   // rest spot by more than a step threshold, then swings ahead; two-bone IK for the knee; alternating groups so it never lifts neighbours.
   const NS = 'http://www.w3.org/2000/svg';
   const web = document.createElementNS(NS, 'svg'); web.setAttribute('id', 'web'); web.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;overflow:visible'; floor.appendChild(web);
+  // creatures are drawn on one canvas (the svg above was rebuilt with innerHTML every frame, legs and bodies for every creature: the main per-frame cost on slow machines)
+  const critCv = document.createElement('canvas'); critCv.id = 'crit'; critCv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:4'; floor.appendChild(critCv); const crit = critCv.getContext('2d');
+  const Crit = (() => { let key = '', dpr = 1;
+    function begin() { const vs = viewSize(), z = cam.z; dpr = QUAL.low ? 1 : Math.min(2, devicePixelRatio || 1);
+      const x0 = cam.x - vs.w / 2 / z, y0 = cam.y - vs.h / 2 / z, W = Math.ceil(vs.w * dpr), H = Math.ceil(vs.h * dpr), k = `${W}x${H}|${(vs.w / z).toFixed(2)}|${x0.toFixed(2)},${y0.toFixed(2)}`;
+      if (critCv.width !== W || critCv.height !== H) { critCv.width = W; critCv.height = H; }
+      if (k !== key) { key = k; critCv.style.width = (vs.w / z) + 'px'; critCv.style.height = (vs.h / z) + 'px'; critCv.style.left = x0 + 'px'; critCv.style.top = y0 + 'px'; }
+      crit.setTransform(1, 0, 0, 1, 0, 0); crit.clearRect(0, 0, W, H); crit.setTransform(dpr * z, 0, 0, dpr * z, -x0 * dpr * z, -y0 * dpr * z); }
+    const circ = (g, x, y, r) => { g.beginPath(); g.arc(x, y, Math.max(0, r), 0, Math.PI * 2); };
+    const ell = (g, x, y, rx, ry) => { g.beginPath(); g.ellipse(x, y, Math.max(0, rx), Math.max(0, ry), 0, 0, Math.PI * 2); };
+    const rrect = (g, x, y, w, h, r) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2))); else g.rect(x, y, w, h); };
+    function fs(g, fill, stroke, lw) { if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw ?? 1; g.stroke(); } }
+    function legs(g, c) { const G = c.gs || c.g; g.lineJoin = 'round'; g.lineCap = 'round';
+      for (const L of c.legs) { const H = hip(c, L), F = L.foot, K = knee(H, F, G.l1, G.l2, L.side, c.heading), lift = L.lift || 0, Kx = K.x + (K.x - H.x) * 0.12 * lift, Ky = K.y + (K.y - H.y) * 0.12 * lift;
+        g.beginPath(); g.moveTo(H.x, H.y); g.lineTo(Kx, Ky); g.lineTo(F.x, F.y); g.strokeStyle = `hsl(${G.hue},70%,${c.state === 'sleep' ? 55 : 76}%)`; g.lineWidth = 1.5 + 0.4 * lift; g.stroke();
+        circ(g, F.x, F.y, 1.8 + 1.4 * lift); g.fillStyle = `hsl(${G.footHue},90%,72%)`; g.fill(); }
+      g.lineJoin = 'miter'; g.lineCap = 'butt'; }
+    function body(g, c, t) {   // the same shapes as bodySVG (kept for cards, the pedia and miniSVG)
+      const G = c.gs || c.g, breathe = 1 + (c.state === 'sleep' ? 0.05 : 0.025) * Math.sin(t / (c.state === 'sleep' ? 900 : 380) + c.phase), L = G.bodyL * breathe, W = G.bodyW * breathe;
+      const sw = c.held ? Math.sin(t / 60) * 12 : Math.sin(t / 700 + c.phase) * 2.5; g.save(); g.translate(c.x, c.y); g.rotate(c.heading + sw * Math.PI / 180);
+      if (G.abdomen) { ell(g, -L * 0.95, 0, L * 0.55, W * 0.55); fs(g, `hsl(${G.hue},25%,18%)`, `hsl(${G.hue},60%,72%)`, 0.8); }
+      g.lineCap = 'round'; for (let p = 0; p < (G.palps || 0); p++) { const sd = p ? 1 : -1, a = 0.35 + 0.25 * Math.sin(t / 160 + p * 2 + c.phase); g.beginPath(); g.moveTo(L * 0.5, sd * W * 0.2); g.lineTo(L * 0.5 + 9 * Math.cos(a * sd), sd * W * 0.2 + sd * 9 * Math.sin(a)); g.strokeStyle = `hsl(${G.hue},70%,78%)`; g.lineWidth = 1.4; g.stroke(); } g.lineCap = 'butt';
+      if (c.boost && c.boost.what === 'glow' && c.boost.until > Date.now()) { circ(g, 0, 0, Math.max(L, W) * 1.3); fs(g, `hsla(${G.hue},90%,65%,${0.18 + 0.08 * Math.sin(t / 150)})`); }
+      if (c.sickUntil > Date.now()) { g.font = '12px system-ui,sans-serif'; g.textAlign = 'center'; g.fillStyle = '#000'; g.fillText('🤢', 0, -W - 6); g.textAlign = 'start'; }
+      if (c.flash && performance.now() < c.flash.until) { const k = (c.flash.until - performance.now()) / 900; circ(g, 0, 0, Math.max(L, W) * (1.6 - k * 0.6)); fs(g, `hsla(${c.flash.how === 'big' ? 345 : c.flash.how === 'keep' ? 330 : 225},90%,60%,${0.35 * k})`); }
+      if (G.wings) { const flap = Math.sin(t / (c.state === 'move' ? 45 : 160)) * 0.35 + 0.65; for (const sd of [-1, 1]) { g.save(); g.rotate(sd * 18 * Math.PI / 180); ell(g, -L * 0.1, sd * W * 0.9, L * 0.7, W * 0.9 * flap); fs(g, `hsla(${G.hue},80%,80%,.35)`, `hsl(${G.hue},70%,70%)`, 0.6); g.restore(); } }
+      if (G.body === 'orb') { circ(g, 0, 0, Math.max(L, W) * 0.55); fs(g, `hsl(${G.hue},45%,22%)`, `hsl(${G.hue},70%,72%)`); circ(g, L * 0.18, 0, W * 0.22); fs(g, `hsl(${G.footHue},90%,70%)`); }
+      else if (G.body === 'tri') { g.beginPath(); g.moveTo(L * 0.6, 0); g.lineTo(-L * 0.5, -W * 0.6); g.lineTo(-L * 0.5, W * 0.6); g.closePath(); fs(g, `hsl(${G.hue},40%,25%)`, `hsl(${G.hue},70%,72%)`); circ(g, L * 0.15, 0, 2.2); fs(g, '#ff5e5e'); }
+      else if (G.body === 'seg') { for (let k = 2; k >= 0; k--) { circ(g, -k * L * 0.42, Math.sin(t / 200 + k) * 2, W * (0.5 - k * 0.08)); fs(g, `hsl(${G.hue},40%,${22 + k * 6}%)`, `hsl(${G.hue},70%,72%)`, 0.8); } circ(g, L * 0.15, 0, 2); fs(g, '#ff5e5e'); }
+      else if (G.body === 'star') { g.save(); g.rotate((t / 30 % 360) * Math.PI / 180); g.beginPath(); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, R = k % 2 ? W * 0.3 : Math.max(L, W) * 0.6; const x = +(Math.cos(a) * R).toFixed(1), y = +(Math.sin(a) * R).toFixed(1); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); fs(g, `hsl(${G.hue},50%,30%)`, `hsl(${G.hue},80%,75%)`); g.restore(); }
+      else if (G.body === 'chip') { rrect(g, -L / 2, -W / 2, L, W, 2); fs(g, '#2e2e33', `hsl(${G.hue},60%,72%)`, 0.8); rrect(g, -L / 2 + 4, -W / 2 + 3, L * 0.45, W - 6, 1); fs(g, '#9fe3c5');
+        const dur = c.state === 'sleep' ? 3000 : 1200, u = (performance.now() % dur) / dur; g.globalAlpha = 1 - 0.7 * (1 - Math.abs(1 - 2 * u)); circ(g, L / 2 - 4, 0, 2.2); fs(g, c.state === 'sleep' ? '#553' : '#ff5e5e'); g.globalAlpha = 1; }   // the status light blinks (1 → .3 → 1)
+      else { const blink = (Math.floor(t / 2600 + c.phase) % 5 === 0 && (t % 2600) < 140) || c.state === 'sleep'; rrect(g, -L / 2, -W / 2, L, W, 4); fs(g, `hsl(${G.hue},90%,82%)`, `hsl(${G.hue},55%,48%)`);
+        if (blink) { g.beginPath(); g.moveTo(L * 0.05, -W * 0.18); g.lineTo(L * 0.05 + 4, -W * 0.18); g.moveTo(L * 0.05, W * 0.18 - 2); g.lineTo(L * 0.05 + 4, W * 0.18 - 2); g.strokeStyle = '#333'; g.lineWidth = 1.3; g.stroke(); }
+        else { circ(g, L * 0.1, -W * 0.18, 2.2); fs(g, '#333'); circ(g, L * 0.1, W * 0.18, 2.2); fs(g, '#333'); }
+        g.save(); g.translate(L / 2, 0); g.rotate((c.chopUntil > t ? Math.sin(t / 30) * 20 : 0) * Math.PI / 180); g.beginPath(); g.moveTo(0, -W * 0.25); g.lineTo(7, -W * 0.25 - 5); g.moveTo(0, W * 0.25); g.lineTo(7, W * 0.25 + 5); g.strokeStyle = `hsl(${G.hue},60%,32%)`; g.lineWidth = 2.2; g.lineCap = 'round'; g.stroke(); g.lineCap = 'butt'; g.restore(); }
+      if (c === selected) { circ(g, 0, 0, Math.max(L, W) * 0.9 + 6); g.setLineDash([4, 4]); g.globalAlpha = 0.8; fs(g, null, '#2b5cff', 1.2); g.setLineDash([]); g.globalAlpha = 1; }
+      g.restore(); }
+    function hangryGlow(g, c, t) { const r = (Math.max(c.g.bodyL, c.g.bodyW) + 26) * (c.size || 1) * (1 + 0.15 * Math.sin(t / 80)), gr = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
+      gr.addColorStop(0, 'rgba(255,74,18,.6)'); gr.addColorStop(0.6, 'rgba(255,122,31,.25)'); gr.addColorStop(1, 'rgba(255,122,31,0)'); circ(g, c.x, c.y, r); g.fillStyle = gr; g.fill(); }
+    function zz(g, c, t) { const top = c.y - (Math.max(c.g.bodyL, c.g.bodyW) + 14) * (c.size || 1), ph = ((t / 2600) + (c.g.hue || 0) / 360) % 1;
+      for (const o of [0, 0.5]) { const p = (ph + o) % 1; g.globalAlpha = +(Math.sin(p * Math.PI) * 0.9).toFixed(2); g.font = `${(15 + p * 7).toFixed(1)}px system-ui,sans-serif`; g.fillStyle = '#000'; g.fillText('💤', c.x + 8 + p * 10, top - p * 22); } g.globalAlpha = 1; }
+    function draw(c, t, ox, oy, hg) { const g = crit; g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t); legs(g, c); body(g, c, t); if (c.state === 'sleep') zz(g, c, t); g.restore(); }
+    return { begin, draw };
+  })();
   const DEFAULT_GENOMES = {
     crawly: { id: 'crawly-0', name: 'Crawly', born: 0, parent: null, legs: 8, l1: 30, l2: 36, bodyL: 26, bodyW: 15, abdomen: 1, hue: 262, footHue: 330, step: 24, speed: 1.7, palps: 2, fidget: 0.6, wander: 0.35, body: 'chip', laser: 1, laserHue: 215, kick: 1, actions: ['fetch', 'bring', 'come', 'sleep'], job: 'hoard' },
     tok: { id: 'tok-0', name: 'Id|le', born: 0, parent: null, legs: 6, l1: 15, l2: 19, bodyL: 22, bodyW: 30, abdomen: 0, hue: 44, footHue: 24, step: 15, speed: 1.15, palps: 0, fidget: 0.9, wander: 0.12, body: 'box', laser: 0, laserHue: 50, kick: 1.3, actions: ['chop', 'hand', 'come', 'sleep'], job: 'vowels' },
@@ -446,7 +491,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
   function animate(t) {
     const away = window.__traveling; let svg = (away ? '' : featuresSVG(t) + portalsSVG(t)) + DataLab.svg(t) + specialsSVG(); if (!away) featureEffects(t);   // world features and portals belong to home
     if (window.__dis) { window.__dis.tick(t); svg += window.__dis.svg(t); }   // (Oct 30: this call had slipped into the comment above on Oct 28, so disasters never moved, spewed or fired at random)
-    let anyHg = false;
+    let anyHg = false; Crit.begin();
     for (const c of creatures) {
       c.speed = c.g.speed * (c.sickUntil > Date.now() ? 0.5 : 1) * (c.boost && c.boost.what === 'speed' && c.boost.until > Date.now() ? 1.6 : 1) * (c.hangryUntil > Date.now() ? 1.7 : 1); let vx = 0, vy = 0;
       if (!c.held && c.state !== 'sleep' && c.state !== 'hide') { const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.hypot(dx, dy); if (dist > 1.5) { const sp = Math.min(c.speed, dist); vx = dx / dist * sp; vy = dy / dist * sp; c.x += vx; c.y += vy; } }
@@ -458,8 +503,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       else if (!c.held && c.state !== 'sleep') c.heading += Math.sin(t / 1300 + c.phase) * 0.003;   // looking around
       if (!c.held && c.state === 'idle' && t > c.nextShift && Math.hypot(c.tx - c.x, c.ty - c.y) < 2) { c.nextShift = t + 2500 + Math.random() * 4000; c.tx = c.x + (Math.random() - .5) * 46; c.ty = c.y + (Math.random() - .5) * 46; }   // weight shifts: creatures rarely stay still
       stepLegs(c, t); const ox = near(c.x, cam.x, SPACE.W) - c.x, oy = near(c.y, cam.y, SPACE.H) - c.y; c.ox = ox; c.oy = oy; const vs = viewSize(), m = 260 / cam.z, onScreen = Math.abs(c.x + ox - cam.x) < vs.w / 2 / cam.z + m && Math.abs(c.y + oy - cam.y) < vs.h / 2 / cam.z + m;
-      if (onScreen) { const hg = c.hangryUntil > Date.now(), jx = hg ? (Math.random() - 0.5) * 4 : 0, jy = hg ? (Math.random() - 0.5) * 4 : 0; if (hg && !anyHg) { anyHg = true; svg += HG_DEFS; }
-        svg += `<g transform="translate(${(ox + jx).toFixed(1)},${(oy + jy).toFixed(1)})">` + (hg ? `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${((Math.max(c.g.bodyL, c.g.bodyW) + 26) * (c.size || 1) * (1 + 0.15 * Math.sin(t / 80))).toFixed(1)}" fill="url(#hgl)"/>` : '') + legsSVG(c) + bodySVG(c, t) + (c.state === 'sleep' ? zzz(c, t) : '') + '</g>'; }   // creatures off the view are simulated but not drawn
+      if (onScreen) { const hg = c.hangryUntil > Date.now(), jx = hg ? (Math.random() - 0.5) * 4 : 0, jy = hg ? (Math.random() - 0.5) * 4 : 0; Crit.draw(c, t, +(ox + jx).toFixed(1), +(oy + jy).toFixed(1), hg); }   // on the creature canvas; creatures off the view are simulated but not drawn
       const hitR = Math.max(c.g.bodyL, c.g.bodyW) + 14, css = `left:${(c.x + ox).toFixed(1)}px;top:${(c.y + oy).toFixed(1)}px;width:${hitR * 2}px;height:${hitR * 2}px;opacity:${c.state === 'hide' ? 0.12 : 1}`; if (css !== c._css) { c._css = css; c.el.style.cssText = css;
       c.bub.style.left = (c.x + ox).toFixed(1) + 'px'; c.bub.style.top = (c.y + oy - c.g.bodyW - 18).toFixed(1) + 'px'; }   // style writes only when something moved
       if (c.carrying) { c.carrying.x = c.x + 18; c.carrying.y = c.y - 26; place(c.carrying); }
@@ -477,7 +521,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     // targeting lasers (an evolvable trait): a beam and a ring on what the creature is going for
     for (const c of creatures) { if (!(c.g.laser || c.userTask) || !c.target || !words.includes(c.target) || c.target.carriedBy) continue; const T0 = c.target, T = { x: c.x + c.ox + wd(c.x, T0.x, SPACE.W), y: c.y + c.oy + wd(c.y, T0.y, SPACE.H), text: T0.text }, hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2;
       const br = T.text.length * 4.5 + 22, rr = (t / 8) % 360; svg += `<g transform="translate(${T.x},${T.y}) rotate(${rr})" stroke="#ff3b6b" stroke-width="2" fill="none">${[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => `<path d="M${a * br},${b * (br * 0.55 - 8)} L${a * br},${b * br * 0.55} L${a * (br - 8)},${b * br * 0.55}"/>`).join('')}</g>`; svg += `<line x1="${c.x + c.ox}" y1="${c.y + c.oy}" x2="${T.x}" y2="${T.y}" stroke="hsl(${hue},95%,60%)" stroke-width="1" stroke-dasharray="3 3" opacity=".85"/><ellipse cx="${T.x}" cy="${T.y}" rx="${T.text.length * 4.2 + 14 + j}" ry="${13 + j / 2}" fill="none" stroke="hsl(${hue},95%,60%)" stroke-width="1.4"/><text x="${T.x + T.text.length * 4 + 18}" y="${T.y - 12}" font-size="9" font-family="ui-monospace,Menlo,monospace" fill="hsl(${hue},95%,${isDark() ? 70 : 38}%)">${c.name.toUpperCase()} · ${T.text.toUpperCase()}</text>`; }
-    web.innerHTML = svg; web.style.opacity = 1; LOD.frame(); creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
+    if (svg !== animate._svg) { animate._svg = svg; web.innerHTML = svg; } web.style.opacity = 1; LOD.frame(); creatures.forEach(c => { if (c.state === 'hide') web.style.opacity = 1; });
     if (window.__herd && window.__herd.drivesOpen() && (!animate._d || t - animate._d > 400)) { animate._d = t; drivesEl.innerHTML = '<small style="opacity:.65">their drives: they get hungrier and more curious over time, tired from moving, fond of you when you play with them; the highest need picks what they do next</small>' + creatures.map(bars).join(''); } requestAnimationFrame(animate);
   }
   requestAnimationFrame(animate);
