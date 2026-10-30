@@ -58,7 +58,7 @@ async function worlds(req, env, path) {   // the same relay as demo_server.py, s
   const save = async d => { if (env.WORLDS) await env.WORLDS.put('worlds', JSON.stringify(d)); else mem.worlds = d; };
   const W = (d, c) => d.worlds[c] || (d.worlds[c] = { name: c, links: [], requests: [], inbox: [], view: null, seen: 0 });
   const d = await load(), now = Date.now() / 1000;
-  if (path === '/worlds/state') { const code = new URL(req.url).searchParams.get('code') || ''; const me = W(d, code); me.seen = now; await save(d);
+  if (path === '/worlds/state') { const code = new URL(req.url).searchParams.get('code') || ''; const fresh = !d.worlds[code], me = W(d, code), stale = now - (me.seen || 0) > 600; me.seen = now; if (fresh || stale) await save(d);   // KV writes are scarce (1,000 a day on the free plan, shared by the whole account): a poll writes only for a new world or when 'seen' is 10 min old
     return json({ me: { name: me.name, links: me.links, requests: me.requests, inbox: me.inbox }, peers: Object.fromEntries(me.links.concat(me.requests).map(c => [c, { name: (d.worlds[c] || {}).name || c, seen: (d.worlds[c] || {}).seen || 0, view: (d.worlds[c] || {}).view || null }])) }); }
   const q = await req.json().catch(() => ({})), act = path.split('/')[2], me = W(d, q.code || ''); let res = { ok: true };
   if (act === 'register') { me.name = String(q.name || me.name).slice(0, 40); me.seen = now; }
@@ -67,7 +67,7 @@ async function worlds(req, env, path) {   // the same relay as demo_server.py, s
   else if (act === 'unlink') { me.links = me.links.filter(x => x !== q.other); if (d.worlds[q.other]) d.worlds[q.other].links = d.worlds[q.other].links.filter(x => x !== q.code); }
   else if (act === 'send') { if (me.links.includes(q.to) && d.worlds[q.to]) { d.worlds[q.to].inbox.push({ ...(q.item || {}), from: q.code, t: now }); d.worlds[q.to].inbox = d.worlds[q.to].inbox.slice(-50); } else res = { ok: false, error: 'not linked' }; }
   else if (act === 'ack') { const ids = new Set(q.ids || []); me.inbox = me.inbox.filter(i => !ids.has(i.id)); }
-  else if (act === 'view') { me.view = q.view; me.seen = now; }
+  else if (act === 'view') { if (now - (me.viewAt || 0) < 60) return json(res); me.view = q.view; me.viewAt = me.seen = now; }   // linked views are shared at most once a minute (the page offers one every 3 s)
   await save(d); return json(res);
 }
 
