@@ -2531,8 +2531,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     try {
       statusEl.textContent = 'loading tokenizer…'; tokenizer = new BPETokenizer(await (await fetch('tokenizer_chat_v2.json')).json());
       statusEl.textContent = 'loading the instruction model…'; instr = await (await fetch('arena_instr_v2.json')).json(); ort.env.wasm.numThreads = (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated) ? (navigator.hardwareConcurrency || 4) : 1;
-      hidSession = await ort.InferenceSession.create('oracle_v2_grown_ct2_judge_int8.onnx', { executionProviders: ['wasm'] });
-      statusEl.textContent = 'loading the Oracle…'; genSession = await ort.InferenceSession.create('oracle_v2_grown_ct2_int8.onnx', { executionProviders: ['wasm'] });
+      ort.env.wasm.proxy = true;   // the Oracle thinks in a worker, so a 28-step comment no longer freezes the world for most of a second
+      const mkSession = async f => { try { return await ort.InferenceSession.create(f, { executionProviders: ['wasm'] }); } catch (e) { if (!ort.env.wasm.proxy) throw e; console.warn('Oracle worker unavailable, running on the page', e); ort.env.wasm.proxy = false; return await ort.InferenceSession.create(f, { executionProviders: ['wasm'] }); } };
+      hidSession = await mkSession('oracle_v2_grown_ct2_judge_int8.onnx');
+      statusEl.textContent = 'loading the Oracle…'; genSession = await mkSession('oracle_v2_grown_ct2_int8.onnx');
       if (!window.__restored) ['ball', 'coffee', 'cat'].forEach((w, i) => addWord(w, 260 + i * 120, 220 + (i % 2) * 70)); statusEl.textContent = 'ready · instruction model held-out accuracy ' + instr.heldout.option_acc + ', argument ' + instr.heldout.arg_exact;
       say('Oracle', 'My room, with the pets in it. Talk to them, or drag a word in and see who wants it', 'oracle'); logEvent('load');
     } catch (e) { statusEl.textContent = 'error: ' + e.message; console.error(e); }
