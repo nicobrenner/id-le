@@ -138,7 +138,7 @@
 #advnote.on{transform:none;opacity:1;pointer-events:auto}#advnote .gz{font:italic 600 11px Georgia,serif;opacity:.75;margin-right:4px}#advnote .x{margin-left:8px;cursor:pointer;opacity:.6}
 #advnote button,#advpanel button{font:12px system-ui;margin-left:6px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit;cursor:pointer;padding:1px 7px}
 #advpanel{position:fixed;right:16px;top:56px;z-index:9996;display:none;width:min(400px,calc(100vw - 32px));max-height:76vh;overflow:auto;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px #0006;font:12px system-ui;box-sizing:border-box}
-#advpanel.on{display:block}#advpanel .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}#advpanel h4{margin:8px 0 3px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+#advpanel.on{display:block}#advpanel .hd{display:flex;justify-content:space-between;align-items:center;margin:-8px -10px 4px;padding:8px 10px 6px;position:sticky;top:-8px;z-index:2;background:var(--floor);border-bottom:1px solid #8883;cursor:grab;user-select:none;touch-action:none}#advpanel.drag .hd{cursor:grabbing}#advpanel h4{margin:8px 0 3px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
 #advpanel .g{display:grid;grid-template-columns:20px 84px 1fr 58px 16px;align-items:center;gap:4px;margin:2px 0}#advpanel .bar{height:6px;border-radius:3px;background:#8883;overflow:hidden}#advpanel .bar i{display:block;height:100%}
 #advpanel .tr{text-align:center}#advpanel .sub{opacity:.7;font-size:11px}#advpanel .iss{border:1px solid #8885;border-radius:10px;padding:6px 8px;margin:5px 0}#advpanel .iss b{font-size:12.5px}#advpanel .iss i{opacity:.8}
 #advpanel .acts{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px}#advpanel .acts button{margin:0}#advpanel .did{min-height:16px;margin:4px 0;color:#3a8}#advpanel .news div{margin:3px 0}#advpanel .news small{opacity:.6;margin-right:4px}
@@ -146,6 +146,16 @@
   document.head.appendChild(css);
   const $ = q => document.querySelector(q);
   const panel = document.createElement('div'); panel.id = 'advpanel'; document.body.appendChild(panel);
+  // the panel stays where you drag it (by its header), remembered in this browser; kept inside the window
+  const posKey = 'idle.advPos', fit = (x, y) => [Math.max(0, Math.min(innerWidth - 120, x)), Math.max(0, Math.min(innerHeight - 40, y))];
+  const placeAt = (x, y) => { [x, y] = fit(x, y); panel.style.left = x + 'px'; panel.style.top = y + 'px'; panel.style.right = 'auto'; panel.style.maxHeight = Math.max(160, Math.min(innerHeight * 0.76, innerHeight - y - 12)) + 'px'; };
+  try { const p = JSON.parse(localStorage.getItem(posKey) || 'null'); if (p) placeAt(p.x, p.y); } catch (e) {}
+  addEventListener('resize', () => { if (panel.style.left) placeAt(parseFloat(panel.style.left), parseFloat(panel.style.top)); });
+  panel.addEventListener('pointerdown', e => { const hd = e.target.closest('.hd'); if (!hd || e.target.closest('button') || e.button) return;
+    const r = panel.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top; panel.classList.add('drag'); hd.setPointerCapture(e.pointerId); e.preventDefault();
+    const mv = ev => placeAt(ev.clientX - dx, ev.clientY - dy);
+    const up = () => { panel.classList.remove('drag'); hd.removeEventListener('pointermove', mv); hd.removeEventListener('pointerup', up); hd.removeEventListener('pointercancel', up); try { localStorage.setItem(posKey, JSON.stringify({ x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) })); } catch (err) {} };
+    hd.addEventListener('pointermove', mv); hd.addEventListener('pointerup', up); hd.addEventListener('pointercancel', up); });
   const btn = document.createElement('button'); btn.id = 'advBtn'; btn.title = 'advisor: how your creatures are doing, what is wrong and what you can do'; btn.textContent = '📊';
   const anchor = $('#djBtn') || $('#reelsBtn'); if (anchor) anchor.after(btn, ' ');
   btn.addEventListener('click', () => { S.open = !S.open; save(); if (S.open) tick(); render(); });
@@ -158,7 +168,7 @@
     if (Math.abs(d) < 0.03) return '<span class="tr" style="opacity:.5">→</span>'; const worse = d * bad > 0; return `<span class="tr" style="color:${worse ? '#e5484d' : '#3a8'}">${d > 0 ? '↑' : '↓'}</span>`; }
   const col = (v, bad) => { const x = bad > 0 ? v : 1 - v; return x > 0.6 ? '#e5484d' : x > 0.35 ? '#f0a020' : '#3a8'; };
   const ago = t => { const m = Math.round((now() - t) / 60000); return m < 1 ? 'now' : m < 60 ? m + 'm' : Math.round(m / 60) + 'h'; };
-  function render() { panel.classList.toggle('on', !!S.open); btn.classList.toggle('on', !!S.open); if (!S.open) return; const g = G || measure(), A = alerts[where()] || {}, keepTxt = keep() ? 'Gloamhold' : (P() && P().title && P().title()) || 'Home';
+  function render() { if (panel.classList.contains('drag')) return; panel.classList.toggle('on', !!S.open); btn.classList.toggle('on', !!S.open); if (!S.open) return; const g = G || measure(), A = alerts[where()] || {}, keepTxt = keep() ? 'Gloamhold' : (P() && P().title && P().title()) || 'Home';
     const did = panel.querySelector('.did'); const didHTML = did ? did.innerHTML : '';
     let h = `<div class="hd"><b>📊 advisor · ${esc(keepTxt)}</b><button data-a="close" title="close">✕</button></div><div class="sub">${g.n} creatures · updated every 5 s · trends over the last minute, lines over 10 min</div>`;
     h += '<h4>how they are doing</h4>' + GAUGES.filter(x => !(x.opt && g.v[x.k] == null)).map(x => { const v = g.v[x.k] ?? 0; return `<div class="g" title="${x.label}: ${Math.round(v * 100)}%"><span>${x.icon}</span><span>${x.label}</span><span class="bar"><i style="width:${Math.round(v * 100)}%;background:${col(v, x.bad)}"></i></span>${spark(x.k, x.bad)}${trend(x.k, x.bad)}</div>`; }).join('');
