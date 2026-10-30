@@ -2921,22 +2921,30 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // (a theft, a disaster, a new friend, a first, hangry, a chart, a name, a scare) it keeps a ~10 s clip around it: ~6 s before, ~4 s after.
   // Reels play the clip itself (the same creature drawing, legs and all) instead of a still scene when there is one.
   const Replay = (() => {
-    const HZ = 125, PRE = 6000, POST = 4000, R = 400, MAXC = 12, MAXW = 90, KEEP = 60;
+    const HZ = 125, PRE = 6000, POST = 4000, R = 400, MAXC = 12, MAXW = 90, KEEP = 300, KEEP_KB = 8192, HARD = 600, HARD_KB = 16384, PER_H = 40;   // Oct 30: 60 clips filled in 27 min (mostly thefts) and reels lost their replays
     const W8 = { steal: 4, robbed: 4.5, disaster: 5, friend: 5, first: 5, hangry: 3.5, rename: 4, metamorphosis: 5, evolve: 3, picked_up: 3, feel: 2.5, chart: 3.5, scared: 3 };
     const STRONG = new Set(Object.keys(W8));
-    const ring = [], active = [], lastBy = new Map(); let lastStart = 0, lastScare = 0, hour = [];
+    const ring = [], active = [], lastBy = new Map(); let lastStart = 0, lastScare = 0, lastTheft = 0, ver = 0;
+    const THEFT = new Set(['steal', 'robbed']);
     const sayRing = [], evRing = [];   // what was said and struck in the last seconds (a clip starts 6 s before its moment)
     const clips = new Map();
     const stc = c => (c.held ? 4 : c.state === 'sleep' ? 2 : c.state === 'hide' ? 3 : c.state === 'move' ? 1 : 0) | (c.hangryUntil > Date.now() ? 8 : 0);
     // the store: IndexedDB (clips are too big for localStorage next to the world), mirrored in memory so snapshots can take them right away
     let db = null; const idb = new Promise(res => { try { const rq = indexedDB.open('idle-replay', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('clips', { keyPath: 'id' }); rq.onsuccess = () => { db = rq.result; res(db); }; rq.onerror = () => res(null); } catch (e) { res(null); } });
-    idb.then(d => { if (!d) return; try { const rq = d.transaction('clips').objectStore('clips').getAll(); rq.onsuccess = () => { for (const c of rq.result || []) if (!clips.has(c.id)) clips.set(c.id, c); }; } catch (e) {} });
+    idb.then(d => { if (!d) return; try { const rq = d.transaction('clips').objectStore('clips').getAll(); rq.onsuccess = () => { for (const c of rq.result || []) if (!clips.has(c.id)) clips.set(c.id, c); ver++; setTimeout(() => { try { window.__reels && window.__reels.relink && window.__reels.relink(); } catch (e) {} }, 0); }; } catch (e) {} });
     const put = c => idb.then(d => { if (d) try { d.transaction('clips', 'readwrite').objectStore('clips').put(c); } catch (e) {} });
     const del = id => idb.then(d => { if (d) try { d.transaction('clips', 'readwrite').objectStore('clips').delete(id); } catch (e) {} });
     // which clips the reels point at (starred ones are never dropped)
     function refs() { const any = new Set(), star = new Set(); try { for (const r of window.__reels.list()) for (const x of r.items) if (x.clip) { any.add(x.clip); if (r.star) star.add(x.clip); } } catch (e) {} return { any, star }; }
-    function prune() { if (clips.size <= KEEP) return; const { any, star } = refs(); const order = [...clips.values()].filter(c => !star.has(c.id)).sort((a, b) => (any.has(a.id) - any.has(b.id)) || (a.score - b.score) || (a.t - b.t));
-      while (clips.size > KEEP && order.length) { const c = order.shift(); clips.delete(c.id); del(c.id); } }
+    const kbOf = c => c.kb || (c.kb = Math.round(JSON.stringify(c).length / 1024) || 1);
+    function prune() { let kb = 0; for (const c of clips.values()) kb += kbOf(c); if (clips.size <= KEEP && kb <= KEEP_KB) return; const { any, star } = refs();
+      const drop = c => { clips.delete(c.id); del(c.id); kb -= kbOf(c); ver++; };
+      // first the clips no reel uses, weakest and oldest first, down to the budget (300 clips or about 8 MB)
+      const loose = [...clips.values()].filter(c => !any.has(c.id)).sort((a, b) => (a.score - b.score) || (a.t - b.t));
+      while ((clips.size > KEEP || kb > KEEP_KB) && loose.length) drop(loose.shift());
+      // clips a reel uses stay while that reel exists; only past a hard ceiling do the oldest unstarred ones go
+      const used = [...clips.values()].filter(c => !star.has(c.id)).sort((a, b) => a.t - b.t);
+      while ((clips.size > HARD || kb > HARD_KB) && used.length) drop(used.shift()); }
     function sample() { if (document.hidden) return; const now = Date.now(); let sel = creatures.filter(c => !c.lab && c.legs);
       if (sel.length > 150) { const vs = viewSize(), hw = vs.w / 2 / cam.z + 600, hh = vs.h / 2 / cam.z + 600; sel = sel.filter(c => Math.abs(wd(cam.x, c.x, SPACE.W)) < hw && Math.abs(wd(cam.y, c.y, SPACE.H)) < hh).slice(0, 150); }
       const f = { t: now, a: sel.map(c => [c, c.x, c.y, c.heading, stc(c), c.carrying ? c.carrying.text : null]) };
@@ -2950,9 +2958,12 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function mark(c, k, why) { if (!c || c.lab || !c.legs || !STRONG.has(k)) return; const now = Date.now();
       for (const A of active) if (near(A, c.x, c.y)) { A.mem.add(c); if (!A.who.includes(c.name)) A.who.push(c.name); if (!A.ks.includes(k)) A.ks.push(k); A.score = Math.max(A.score, W8[k] || 2); return; }
       // scares come in waves (a storm frightens many at once): at most one scare clip a minute, and they never crowd out the rest
-      if (k === 'scared') { if (now - lastScare < 60000) return; } else if (now - (lastBy.get(c) || 0) < 15000 || now - lastStart < 2000) return;
-      hour = hour.filter(t => t > now - 3600000); if (hour.length >= 40) return;
-      lastBy.set(c, now); if (k === 'scared') lastScare = now; else lastStart = now; hour.push(now);
+      // thefts come in waves too (one hungry crowd robs everyone): at most one theft clip a minute, world-wide
+      if (k === 'scared') { if (now - lastScare < 60000) return; } else if (THEFT.has(k) && now - lastTheft < 60000) return; else if (now - (lastBy.get(c) || 0) < 15000 || now - lastStart < 2000) return;
+      // at most PER_H new clips an hour, counted from the store (so a reload does not reset it)
+      // and spread out: at most 8 in any 10 minutes, thefts only while fewer than 5 (so a theft wave can't use up the hour)
+      let inHour = active.length, in10 = active.length; for (const x of clips.values()) { if (x.t > now - 3600000) inHour++; if (x.t > now - 600000) in10++; } if (inHour >= PER_H || in10 >= 8 || (THEFT.has(k) && in10 >= 5)) return;
+      lastBy.set(c, now); if (k === 'scared') lastScare = now; else { lastStart = now; if (THEFT.has(k)) lastTheft = now; }
       const A = { t: now, k, ks: [k], why: why || '', who: [c.name], cx: c.x, cy: c.y, until: now + POST, mem: new Set([c]), post: [], wm: [], score: (W8[k] || 2) + (() => { try { const fe = c.life.fe; return Math.max(fe.fear || 0, fe.hurt || 0, fe.thrill || 0) * 2; } catch (e) { return 0; } })() };
       const last = ring[ring.length - 1]; if (last) last.a.filter(r => r[0] !== c && near(A, r[1], r[2])).sort((p, q) => Math.hypot(wd(A.cx, p[1], SPACE.W), wd(A.cy, p[2], SPACE.H)) - Math.hypot(wd(A.cx, q[1], SPACE.W), wd(A.cy, q[2], SPACE.H))).slice(0, MAXC - 1).forEach(r => A.mem.add(r[0]));
       A.pre = ring.filter(f => f.t >= now - PRE).map(f => ({ t: f.t, a: f.a.filter(r => A.mem.has(r[0])) }));
@@ -3000,9 +3011,11 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       const id = 'c' + A.t.toString(36) + Math.random().toString(36).slice(2, 5);
       const clip = { id, v: 1, t: A.t, k: A.k, ks: A.ks, why: A.why, who: A.who, score: A.score, pl: window.__placeKind || '', n: list.map(c => c.name), g: list.map(c => pick1(c.g)), sz: list.map(c => +(c.size || 1).toFixed(2)), ev: A.pre.length, f: b64(Int16Array.from(out)),
         w: A.wds.map(o => [o.w.text, o.x0, o.y0, Math.round(o.w.rot || 0), (o.w.piece ? 1 : 0) | (o.w.el && o.w.el.classList.contains('num') ? 2 : 0), o.s ?? -1]), wm: A.wm.length ? b64(Int16Array.from(A.wm.map(q16))) : '', carry, env: envOut(A, t0, idx) }; if (clip.env) clip.v = 2;
-      clips.set(id, clip); put(clip); prune(); logEvent('replay_clip', { who: A.who[0], k: A.k, n: list.length, frames: frames.length, kb: Math.round(JSON.stringify(clip).length / 102.4) / 10 }); }
+      clip.kb = Math.round(JSON.stringify(clip).length / 1024) || 1; clips.set(id, clip); ver++; put(clip); prune(); logEvent('replay_clip', { who: A.who[0], k: A.k, n: list.length, frames: frames.length, kb: Math.round(JSON.stringify(clip).length / 102.4) / 10 }); }
     if (!/[?&]norec\b/.test(location.search)) setInterval(sample, HZ);   // ?norec: no recording (to measure what it costs)
     // the clip for a memory: the creature was in it, and it is close in time to the memory
+    const memo = new Map(); let memoV = -1;
+    function has(name, t) { if (memoV !== ver) { memo.clear(); memoV = ver; } const k = name + '@' + t; if (!memo.has(k)) memo.set(k, !!find(name, t)); return memo.get(k); }
     function find(name, t) { let best = null, bd = 1e12; for (const c of clips.values()) { const main = c.who.includes(name); if (!main && !c.n.includes(name)) continue; const d = Math.abs(c.t - t) + (main ? 0 : 60000); if (d < bd && d < (main ? 120000 : 75000)) { bd = d; best = c; } } return best; }   // its own moment within 2 min, or one it was in within 15 s
     // unpack a clip for playing: per creature, its frames (time, x, y, heading, state)
     function unpack(clip) { if (clip._u) return clip._u; const a = unb64(clip.f), tl = clip.n.map(() => []), times = []; let i = 0, fi = 0;
@@ -3096,7 +3109,9 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     // snapshots: the clips the reels point at go along (never all of them: they are big); restoring adds the ones it does not have
     function forSnap() { const { any } = refs(); return [...clips.values()].filter(c => any.has(c.id)).map(c => c.env && (c.env.ks || (c.env.things || []).some(t => t.u)) ? { ...c, env: { ...c.env, ks: null, things: (c.env.things || []).map(t => t.u ? { ...t, u: null } : t) } } : c); }
     function merge(list) { if (!Array.isArray(list)) return; for (const c of list) if (c && c.id && !clips.has(c.id)) { clips.set(c.id, c); put(c); } }
-    return { mark, said, bolt, find, player, forSnap, merge, list: () => [...clips.values()], get: id => clips.get(id), _act: (c, o) => act(c, o), _words: () => words, _ring: () => ring.length, _active: () => active.length };
+    return { mark, said, bolt, find, has, player, forSnap, merge, list: () => [...clips.values()], get: id => clips.get(id), budget: () => { let kb = 0; for (const c of clips.values()) kb += kbOf(c); return { n: clips.size, kb, keep: KEEP, keepKb: KEEP_KB }; },
+      _markAt: (c, k, t) => { const D = Date.now; Date.now = () => t; try { mark(c, k, 'test'); const A = active[active.length - 1]; if (A && A.t === t) { A.until = 0; A.pre = ring.filter(f => f.t >= D() - PRE).map(f => ({ t: f.t, a: f.a.filter(r => A.mem.has(r[0])) })); } } finally { Date.now = D; } },   // test: a moment at a given time (its clip ends on the next sample)
+      _inject: (o) => { const id = 'cx' + Math.random().toString(36).slice(2, 9); const c = { id, v: 1, t: o.t, k: o.k || 'feel', ks: [o.k || 'feel'], why: 'test', who: o.who || ['x'], score: o.score ?? 3, pl: '', n: o.who || ['x'], g: [{}], sz: [1], ev: 0, f: '', w: [], wm: '', carry: [], kb: o.kb || 20 }; clips.set(id, c); ver++; prune(); return id; }, _prune: () => prune(), _act: (c, o) => act(c, o), _words: () => words, _ring: () => ring.length, _active: () => active.length };
   })();
   window.__replay = Replay;
   const Reels = (() => {
@@ -3118,7 +3133,8 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       return v; }
     // pick 6–12 strong moments with variety (few repeats of the same kind of memory, few from one creature), then in time order
     function pick(cands, o) { o = o || {}; const min = o.min || 6, max = o.max || 12, per = o.per || 99; const byG = {}, byK = {}, byN = {}, out = [];
-      const sorted = cands.map(x => ({ ...x, sc: x.sc ?? score(x.e) + (x.bonus || 0) })).sort((a, b) => b.sc - a.sc || b.e.t - a.e.t);
+      const R = window.__replay, cb = x => (R && R.has && R.has(x.n, x.e.t) ? 2.5 : 0);   // moments that have a replay come first (Oct 30)
+      const sorted = cands.map(x => ({ ...x, sc: (x.sc ?? score(x.e) + (x.bonus || 0)) + cb(x) })).sort((a, b) => b.sc - a.sc || b.e.t - a.e.t);
       for (const pass of [0, 1]) for (const x of sorted) { if (out.length >= max) break; if (out.includes(x)) continue; const g = x.e.g || x.e.x, k = kb(x.e);
         if (pass === 0 && ((byG[g] || 0) >= 1 || (byK[k] || 0) >= (k === 'day' ? 1 : 3) || (byN[x.n] || 0) >= per)) continue; if (pass === 1 && (byN[x.n] || 0) >= per + 1) continue;
         out.push(x); byG[g] = (byG[g] || 0) + 1; byK[k] = (byK[k] || 0) + 1; byN[x.n] = (byN[x.n] || 0) + 1; }
@@ -3205,10 +3221,15 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function cardRow(c, el) { if (!el) return; const mine = st.list.filter(r => (r.who || []).includes(c.name) || r.items.some(x => x.n === c.name)).sort((a, b) => (b.key === 'life:' + c.name) - (a.key === 'life:' + c.name) || b.t - a.t).slice(0, 4), s = c.name + mine.map(r => r.id + r.star).join();
       if (s === cardSig && el.firstChild) return; cardSig = s; el.innerHTML = mine.length ? `<span class="k">reels</span> ` + mine.map(r => `<button data-play="${r.id}" title="${esc(r.sub || '')}">▶ ${esc(r.title.replace(c.name + '\'s ', '').replace(c.name + ', ', ''))}${r.star ? ' ⭐' : ''}</button>`).join(' ') : ''; }
     // the player
-    const pl = document.createElement('div'); pl.id = 'reel'; pl.innerHTML = `<div class="stage"><div class="lay"><img alt=""></div><div class="lay"><img alt=""></div><canvas class="rp"></canvas><div class="tc"></div><div class="cp"><div class="q"></div><div class="u"></div></div></div><div class="bar"></div><div class="ctl"><button data-r="prev" title="previous (←)">⏮</button><button data-r="pause" title="pause (space)">⏸</button><button data-r="next" title="next (→)">⏭</button><span class="tt"></span><button data-r="music" title="soft music">♪ off</button><button data-r="star" title="keep this reel for good">☆ keep</button><button data-r="close" title="close (Esc)">✕</button></div>`;
+    const pl = document.createElement('div'); pl.id = 'reel'; pl.innerHTML = `<div class="stage"><div class="lay"><img alt=""></div><div class="lay"><img alt=""></div><canvas class="rp"></canvas><div class="tc"></div><div class="cp"><div class="q"></div><div class="u"></div></div></div><div class="bar"></div><div class="ctl"><button data-r="prev" title="previous (←)">⏮</button><button data-r="pause" title="pause (space)">⏸</button><button data-r="next" title="next (→)">⏭</button><span class="tt"></span><button data-r="style" title="replays, stills or a mix">◐ mixed</button><button data-r="music" title="soft music">♪ off</button><button data-r="star" title="keep this reel for good">☆ keep</button><button data-r="close" title="close (Esc)">✕</button></div>`;
     document.body.appendChild(pl); const lays = [...pl.querySelectorAll('.lay')], tc = pl.querySelector('.tc'), cp = pl.querySelector('.cp'), bar = pl.querySelector('.bar');
     let cur = null, idx = -1, paused = false, timer = 0, left = 0, t0 = 0, front = 0, raf = 0, dur = 5200; const SLIDE = 5200, TITLE = 3200;
     const rpc = pl.querySelector('.rp'), RP = window.__replay ? window.__replay.player(rpc) : null;
+    // stills or replays (Oct 30, Nico likes both): each kind leans one way, a slide's pick is fixed per reel, and the player has a toggle
+    const LEAN = { life: 0.35, friends: 0.85, weather: 0.9, disaster: 0.9, place: 0.6, count: 0.5, design: 0.5, best: 0.6 }, STY = ['mixed', 'replays', 'stills'];
+    let style = (() => { try { const v = localStorage.getItem('arena.reelStyle'); return STY.includes(v) ? v : 'mixed'; } catch (e) { return 'mixed'; } })();
+    function useClip(r, i) { if (style === 'stills') return false; if (style === 'replays') return true; let h = 2166136261; for (const ch of r.id + ':' + i) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h / 4294967296 < (LEAN[r.kind] ?? 0.6); }
+    function styleBtn() { const b = pl.querySelector('[data-r=style]'); if (b) b.textContent = { mixed: '◐ mixed', replays: '▶ replays', stills: '▢ stills' }[style]; }
     const clipOf = x => { if (!window.__replay) return null; let c = x.clip ? window.__replay.get(x.clip) : null; if (!c && !x.clip) { c = window.__replay.find(x.n, x.e.t); if (c) { x.clip = c.id; save(); } } return c; };
     const noRP = () => { if (RP) RP.stop(); rpc.classList.remove('on'); };
     // names in titles and captions are mentions (hover: who it is; click: their card, the reel waits small in the corner)
@@ -3217,14 +3238,14 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       const rx = new RegExp('(^|[^\\w|])(' + found.map(n => esc(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?=$|[^\\w|])', 'g');
       return h.replace(rx, (m0, a, n) => a + mn(n.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))); }
     const fk = e => kb(e) === 'feel' ? String(e.g || '').split(':')[1] : (e.s || {}).f;
-    function play(r) { cur = r; idx = -1; paused = false; pl.classList.remove('peek'); pl.querySelector('[data-r=pause]').textContent = '⏸'; r.seen = true; save(); renderList(); pl.classList.add('on'); pl.querySelector('.tt').innerHTML = linkNames(r.title); starBtn(); musicBtn();
+    function play(r) { cur = r; idx = -1; paused = false; pl.classList.remove('peek'); pl.querySelector('[data-r=pause]').textContent = '⏸'; r.seen = true; save(); renderList(); pl.classList.add('on'); pl.querySelector('.tt').innerHTML = linkNames(r.title); starBtn(); musicBtn(); styleBtn();
       const FC = window.__life.FCOL || {}; bar.innerHTML = r.items.map((x, i) => `<i data-i="${i}" style="--c:${FC[fk(x.e)] || '#9aa4b2'}"><b></b></i>`).join('');
       show(); if (music.on) music.start(); logEvent('reel_play', { key: r.key, n: r.items.length }); }
     function starBtn() { const b = pl.querySelector('[data-r=star]'); b.textContent = cur && cur.star ? '★ kept' : '☆ keep'; }
     function show() { clearTimeout(timer); const r = cur; if (!r) return;
       if (idx < 0) { noRP(); const x = r.items[0]; setImg(x, true); tc.innerHTML = `<div class="ti">${linkNames(r.title)}</div><div class="su">${linkNames(r.sub || '')}</div>`; tc.classList.add('on'); cp.classList.remove('on'); left = dur = TITLE; }
       else if (idx >= r.items.length) { noRP(); tc.innerHTML = `<div class="ti">${linkNames(r.title)}</div><div class="su">${r.items.length} memories · ${linkNames(new Set(r.items.map(x => x.n)).size > 1 ? [...new Set(r.items.map(x => x.n))].slice(0, 4).join(', ') : r.items[0].n)}</div><div class="end"><button data-r="again">↺ again</button> <button data-r="star2">${r.star ? '★ kept' : '☆ keep it'}</button></div>`; tc.classList.add('on'); cp.classList.remove('on'); left = Infinity; }
-      else { const x = r.items[idx], clip = RP && clipOf(x); setImg(x, false); tc.classList.remove('on'); cp.querySelector('.q').innerHTML = `${linkNames(x.cap)} <span class="by">— ${linkNames(x.n)}</span>`; cp.querySelector('.u').innerHTML = linkNames(x.u || '') + (clip ? ' · <span class="rpt">▶ replay</span>' : ''); cp.classList.remove('on'); void cp.offsetWidth; cp.classList.add('on');
+      else { const x = r.items[idx], cl0 = RP && clipOf(x), clip = cl0 && useClip(r, idx) ? cl0 : null; setImg(x, false); tc.classList.remove('on'); cp.querySelector('.q').innerHTML = `${linkNames(x.cap)} <span class="by">— ${linkNames(x.n)}</span>`; cp.querySelector('.u').innerHTML = linkNames(x.u || '') + (clip ? ' · <span class="rpt">▶ replay</span>' : ''); cp.classList.remove('on'); void cp.offsetWidth; cp.classList.add('on');
         if (clip) { RP.start(clip); if (paused) RP.pause(true); rpc.classList.add('on'); dur = Math.min(14000, RP.dur + 900); } else { noRP(); dur = SLIDE; } left = dur; }
       bar.querySelectorAll('i').forEach((el, i) => el.classList.toggle('done', i < idx)); t0 = performance.now(); if (!paused && left !== Infinity) timer = setTimeout(next, left); tick(); if (music.on) music.mood(idx >= 0 && r.items[idx] ? fk(r.items[idx].e) : null); }
     const srcOf = x => { if (x._src != null) return x._src; const g = cur.gs[x.n] || gOf(x.n) || {}; let src = ''; try { src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(window.__life.scene({ name: x.n, g }, x.e, 320, 174)); } catch (e) {} Object.defineProperty(x, '_src', { value: src, enumerable: false, configurable: true }); return src; };
@@ -3253,6 +3274,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       const b = e.target.closest('[data-r]'); if (!b) { if (e.target.closest('.stage')) pause(); return; } const a = b.dataset.r;
       if (a === 'prev') prev(); else if (a === 'next') next(); else if (a === 'pause') pause(); else if (a === 'close') close(); else if (a === 'again') { idx = -1; show(); }
       else if (a === 'star' || a === 'star2') { cur.star = !cur.star; save(); starBtn(); renderList(); cardSig = ''; if (a === 'star2') b.textContent = cur.star ? '★ kept' : '☆ keep it'; logEvent('reel_star', { key: cur.key, star: cur.star }); }
+      else if (a === 'style') { style = STY[(STY.indexOf(style) + 1) % STY.length]; try { localStorage.setItem('arena.reelStyle', style); } catch (er) {} styleBtn(); if (cur && idx >= 0) { idx--; next(); } }
       else if (a === 'music') { music.on = !music.on; try { localStorage.setItem('arena.reelMusic', music.on ? 'on' : 'off'); } catch (er) {} musicBtn(); if (music.on && !paused) music.start(); else music.stop(); } });
     document.addEventListener('keydown', e => { if (isTyping(e) || !pl.classList.contains('on') || pl.classList.contains('peek')) return; if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') next(); else if (e.key === 'ArrowLeft') prev(); else if (e.key === ' ') { pause(); e.preventDefault(); } else return; e.stopPropagation(); }, true);
     function musicBtn() { pl.querySelector('[data-r=music]').textContent = music.on ? '♪ on' : '♪ off'; }
@@ -3272,6 +3294,8 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     // snapshots: the reels go along; restoring one adds the reels it had (by id), it never drops reels made since
     function merge(list) { if (!list || !Array.isArray(list.list || list)) return; for (const r of (list.list || list)) { const ex = st.list.find(x => x.id === r.id); if (!ex) st.list.push(JSON.parse(JSON.stringify(r))); else if (r.star && !ex.star) ex.star = true; } save(); renderList(); cardSig = ''; }
     return { state: () => JSON.parse(JSON.stringify(st)), merge, refresh, play: id => { const r = st.list.find(x => x.id === id || x.key === id); if (r) { from = { k: 'none' }; play(r); } return !!r; },
+      // old reels keep what they have: a slide that has no clip yet gets one if its moment still has one (and that pins it)
+      relink: () => { const R = window.__replay; if (!R) return 0; let n = 0; for (const r of st.list) for (const x of r.items) if (!x.clip) { const c = R.find(x.n, x.e.t); if (c) { x.clip = c.id; n++; } } if (n) save(); return n; },
       _test: (name, title) => { const c = creatures.find(k => k.name === name); if (!c || !c.life) return null; const d = c.life.diary.slice(-6); const r = make('test:' + name + Date.now(), 'best', title || ('Friends: ' + name + ' & ' + ((creatures.find(k => k !== c && k.name) || c).name)), 'a test reel', d.map(e => ({ n: c.name, e })), who()); st.list.push(r); save(); return r.id; }, list: () => st.list, cardRow, candidates: () => candidates().out, REEL_KINDS, toggle: toggleList };
   })();
   window.__reels = Reels;
