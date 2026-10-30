@@ -500,17 +500,20 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     const s = side * (Math.sin(Math.atan2(uy, ux) - heading) >= 0 ? 1 : -1) >= 0 ? 1 : -1; return { x: H.x + ux * a - uy * h * s, y: H.y + uy * a + ux * h * s };
   }
   function mk(name, key, x, y, opts) {
-    const el = document.createElement('div'); el.className = 'creature hit'; floor.appendChild(el);
-    const bub = document.createElement('div'); bub.className = 'bubble'; floor.appendChild(bub);
+    // its hit area and speech bubble are elements only while needed (render trim, Oct 30): the hit area while the pointer is on it
+    // or it is held, the bubble while it shows; the rest of the time a creature is just canvas (hit-tested by HitC below)
+    const el = document.createElement('div'); el.className = 'creature hit';
+    const bub = document.createElement('div'); bub.className = 'bubble';
     const g0 = opts.genome || genomes[key]; const c = { home: { x, y }, name: g0.name || name, key, voiceKey: opts.voice, visitor: !!opts.genome, userUntil: 0, el, bub, x, y, tx: x, ty: y, vx: 0, vy: 0, heading: Math.random() * 6.28, speed: g0.speed, g: g0, options: opts.options, d: { hunger: 0.5, curiosity: 0.5, fatigue: 0.1, affection: 0.3 }, carrying: null, state: 'idle', until: 0, lastDecision: 0, phase: Math.random() * 10, voice: VOICE[opts.voice], task: null, held: false, nextFidget: 0, nextShift: 0 };
     c.size = c.size || 1; c.meals = 0; c.born = Date.now(); buildLegs(c); c.options = actionsOf(c);
     let down = null;   // click vs pick-up: past 5 px of movement it is a pick-up
-    el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY, moved: false }; el.setPointerCapture(ev.pointerId); });
+    const pd = ev => { down = { x: ev.clientX, y: ev.clientY, moved: false }; c._press = true; el.setPointerCapture(ev.pointerId); }; c._pd = pd;
+    el.addEventListener('pointerdown', pd); el.addEventListener('lostpointercapture', () => { c._press = false; });
     el.addEventListener('pointermove', ev => {
       if (!down) return; if (!down.moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) { down.moved = true; c.held = true; c.state = 'held'; select(c); speak(c, 'held'); logEvent('picked_up', { who: c.name, genome: c.g.id }); feel(c, 'drag'); if (Math.random() < 0.6) oracleComment(pick(ORACLE_SEEDS.held(c.name)), 'held'); }
       if (down.moved) { const p = toWorld(ev.clientX, ev.clientY); const nx = c.x + wd(c.x, p.x, SPACE.W), ny = c.y + wd(c.y, p.y, SPACE.H); c.x = c.tx = nx; c.y = c.ty = ny; }
     });
-    el.addEventListener('pointerup', () => { if (!down) return; const moved = down.moved; down = null; if (moved) { c.held = false; c.state = 'idle'; c.legs.forEach(L => { L.swing = null; }); speak(c, 'dropped'); logEvent('put_down', { who: c.name }); } else { select(c); feel(c, 'click'); openWhisper(c); } });
+    el.addEventListener('pointerup', () => { c._press = false; c._keepT = performance.now() + 500; if (!down) return; const moved = down.moved; down = null; if (moved) { c.held = false; c.state = 'idle'; c.legs.forEach(L => { L.swing = null; }); speak(c, 'dropped'); logEvent('put_down', { who: c.name }); } else { select(c); feel(c, 'click'); openWhisper(c); } });
     el.addEventListener('pointerenter', () => feel(c, 'hover'));
     return c;
   }
@@ -564,6 +567,29 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
     return s;
   }
   // ---------- movement + animation loop ----------
+  // creature hit-testing on the canvas (render trim, Oct 30): with 1,000 creatures, a positioned element per creature (hit area + bubble)
+  // restyled every frame was a large part of style, layout and commit. Now the creature under the pointer gets its element back, so
+  // hover, click, drag and the card work exactly as before; touch (no hover first) is found here and handed to the creature's own handler
+  const HitC = (() => { let hover = null, lp = null, lastPick = 0;
+    const hitR = c => Math.max(c.g.bodyL, c.g.bodyW) + 14;
+    function at(cx, cy) { const p = toWorld(cx, cy); let best = null, bd = 1e9; for (const c of creaturesNear(p.x, p.y, 90)) { if (c._off) continue; const d = Math.hypot(wd(p.x, c.x, SPACE.W), wd(p.y, c.y, SPACE.H)); if (d < hitR(c) && d < bd) { bd = d; best = c; } } return best; }
+    // the old hit areas sat above everything on the floor (z 5), so anything on the floor counts: words, things, designs, captured pages
+    const floorish = t => !!t && (t === arenaEl || (floor.contains(t) && !(t.closest && t.closest('.word.locked'))));
+    function pick() { if (!lp) return; lastPick = performance.now(); const c = lp.ok ? at(lp.x, lp.y) : null; if (c !== hover) hover = c; }
+    arenaEl.addEventListener('pointermove', e => { if (e.pointerType === 'touch') return; const fresh = !lp; lp = { x: e.clientX, y: e.clientY, ok: floorish(e.target) }; if (fresh || performance.now() - lastPick > 40) pick(); }, { passive: true });
+    arenaEl.addEventListener('pointerleave', () => { lp = null; hover = null; });
+    document.addEventListener('pointerdown', e => {   // a press that lands on a creature with no element yet (touch, or before the hover pick ran)
+      if (e.button !== 0 || !arenaEl.contains(e.target) || !floorish(e.target) || e.target.classList.contains('creature')) return; const c = at(e.clientX, e.clientY); if (!c) return;
+      e.stopImmediatePropagation(); e.preventDefault(); hover = c; attach(c, c.ox || 0, c.oy || 0); c._pd(e); }, true);
+    function attach(c, ox, oy) { if (!c.el.isConnected) { floor.appendChild(c.el); c._css = ''; } const r = hitR(c), css = `left:${(c.x + ox).toFixed(1)}px;top:${(c.y + oy).toFixed(1)}px;width:${r * 2}px;height:${r * 2}px;opacity:${c.state === 'hide' ? 0.12 : 1}`; if (css !== c._css) { c._css = css; c.el.style.cssText = css; } }
+    function frame(c, ox, oy, onScreen, t) {
+      if (onScreen && (c === hover || c.held || c._press || (c._keepT || 0) > performance.now())) attach(c, ox, oy);   // kept a moment after release, so the click lands on it too else if (c.el.isConnected) { c.el.remove(); c._css = ''; }
+      const on = c.bub.classList.contains('on') || c._bfade;
+      if (on && onScreen) { if (!c.bub.isConnected) { if (!c._bfade) { c.bub.classList.remove('on'); c._bfade = true; } floor.appendChild(c.bub); c._bx = c._by = null; } else if (c._bfade) { c._bfade = false; c.bub.classList.add('on'); }   // appended without 'on', then faded in like before
+        c._boff = 0; const bx = (c.x + ox).toFixed(1), by = (c.y + oy - c.g.bodyW - 18).toFixed(1); if (bx !== c._bx) { c._bx = bx; c.bub.style.left = bx + 'px'; } if (by !== c._by) { c._by = by; c.bub.style.top = by + 'px'; } }
+      else if (c.bub.isConnected) { if (!c._boff) c._boff = t; if (!onScreen || t - c._boff > 300) { c.bub.remove(); c._boff = 0; } } }   // kept 300 ms after it ends, for the fade out
+    return { frame, at, hover: () => hover }; })();
+  window.__hitc = HitC;
   function animate(t) {
     const away = window.__traveling; let svg = (away ? '' : featuresSVG(t) + portalsSVG(t)) + DataLab.svg(t) + specialsSVG(); if (!away) featureEffects(t);   // world features and portals belong to home
     if (window.__dis) { window.__dis.tick(t); svg += window.__dis.svg(t); }   // (Oct 30: this call had slipped into the comment above on Oct 28, so disasters never moved, spewed or fired at random)
@@ -581,11 +607,10 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
       const ox = near(c.x, cam.x, SPACE.W) - c.x, oy = near(c.y, cam.y, SPACE.H) - c.y; c.ox = ox; c.oy = oy; const vs = viewSize(), m = 260 / cam.z, onScreen = c.held || (Math.abs(c.x + ox - cam.x) < vs.w / 2 / cam.z + m && Math.abs(c.y + oy - cam.y) < vs.h / 2 / cam.z + m);
       // brain LOD: off the view a creature still walks and decides, but its legs (IK) are not stepped and its hit area and bubble leave the page; back in view, its feet re-plant
       c.lod = onScreen ? 1 : Math.abs(c.x + ox - cam.x) < vs.w / cam.z * 1.5 && Math.abs(c.y + oy - cam.y) < vs.h / cam.z * 1.5 ? 0.5 : 0.2;
-      if (onScreen) { if (c._off) { c._off = false; c._css = ''; c.el.style.display = c.bub.style.display = ''; c.legs.forEach(L => { L.swing = null; L.lift = 0; L.foot = restSpot(c, L); }); } stepLegs(c, t); }
-      else if (!c._off) { c._off = true; c.el.style.display = c.bub.style.display = 'none'; }
+      if (onScreen) { if (c._off) { c._off = false; c.legs.forEach(L => { L.swing = null; L.lift = 0; L.foot = restSpot(c, L); }); } stepLegs(c, t); }
+      else if (!c._off) c._off = true;
       if (onScreen) { const hg = c.hangryUntil > Date.now(), jx = hg ? (Math.random() - 0.5) * 4 : 0, jy = hg ? (Math.random() - 0.5) * 4 : 0; Crit.draw(c, t, +(ox + jx).toFixed(1), +(oy + jy).toFixed(1), hg); }   // on the creature canvas; creatures off the view are simulated but not drawn
-      const hitR = Math.max(c.g.bodyL, c.g.bodyW) + 14, css = c._off ? c._css : `left:${(c.x + ox).toFixed(1)}px;top:${(c.y + oy).toFixed(1)}px;width:${hitR * 2}px;height:${hitR * 2}px;opacity:${c.state === 'hide' ? 0.12 : 1}`; if (css !== c._css) { c._css = css; c.el.style.cssText = css;
-      c.bub.style.left = (c.x + ox).toFixed(1) + 'px'; c.bub.style.top = (c.y + oy - c.g.bodyW - 18).toFixed(1) + 'px'; }   // style writes only when something moved
+      HitC.frame(c, ox, oy, onScreen, t);   // the hit area and bubble elements, only for the hovered/held creature and the ones speaking
       if (c.carrying) { c.carrying.x = c.x + 18; c.carrying.y = c.y - 26; place(c.carrying); }
       if (c.until && Date.now() > c.until) { c.until = 0; if (c.state === 'sleep' || c.state === 'hide') { c.state = 'idle'; } }
     }
