@@ -89,14 +89,17 @@
     else if (id === 'lake' && window.__lake) { const names = window.__lake.gather(g.hiders.concat(g.cs.filter(c => ((c.life && c.life.fe) || {}).fear > 0.35 && !g.hiders.includes(c))).slice(0, 30)); done = names.length ? `${names.length} scared creatures are walking to the lake to calm down` : ''; }
     else if (id === 'rave' && M()) { M().setRave(true); M().play(true); done = 'the deck is playing, rave on: watch the dancefloor gauge'; un = () => { M().play(false); M().setRave(false); }; }
     if (!done) return; h.log('advisor_action', { id }); undo[w] = un ? { un, t: now(), what: done } : null; flash(done, !!un); if (S.open) render(); }
-  function flash(t, canUndo) { const el = $('#advpanel .did'); if (el) el.innerHTML = `✓ ${esc(t)}` + (canUndo ? ` <button data-a="undo">undo</button>` : ''); else if (window.__musicToast) window.__musicToast('📊 ' + t); }
+  function flash(t, canUndo) { const el = $('#advpanel .did'); if (el) el.innerHTML = `✓ ${esc(t)}` + (canUndo ? ` <button data-a="undo">undo</button>` : ''); else if (window.__notify) window.__notify({ kind: 'advisor', text: '✓ ' + t }); else if (window.__musicToast) window.__musicToast('📊 ' + t); }
 
   // ---------- the gazette: firsts, records, disasters, shortages (gentle: at most one every ~2.5 min) ----------
   const NEWS_GAP = 150000;
   function news(text, at, force) { if (S.mode === 'off') return; const item = { t: now(), text, at: at || null }; S.news.push(item); if (S.news.length > 40) S.news = S.news.slice(-40); save();
-    if (S.mode === 'quiet') { badge(); return; } if (!force && now() - lastNews < NEWS_GAP) { badge(); return; } lastNews = now(); pill(item); }
+    if (S.mode === 'quiet') { badge(); if (window.__notify) toStack(item, true); return; } if (!force && now() - lastNews < NEWS_GAP) { badge(); if (window.__notify) toStack(item, true); return; } lastNews = now(); pill(item); }
   const pillEl = document.createElement('div'); pillEl.id = 'advnote'; document.body.appendChild(pillEl);
-  function pill(item) { const rn = document.getElementById('reelnote'); pillEl.style.bottom = rn && rn.classList.contains('on') ? '70px' : '16px';
+  // with the shared notification stack (idle-notify.js) the gazette is one of its pills; quiet mode still files it in 🔔
+  if (window.__notify) window.__notify.on('advisor-open', () => { S.open = true; save(); render(); });
+  const toStack = (item, quiet) => window.__notify({ kind: /^⚠️/.test(item.text) ? 'advisor' : 'gazette', html: `<span class="gz">Id|le gazette</span> ${item.text.replace('<button data-open="1">', '<button data-act="advisor-open">')}`, at: item.at, quiet });
+  function pill(item) { if (window.__notify) { toStack(item); return; } const rn = document.getElementById('reelnote'); pillEl.style.bottom = rn && rn.classList.contains('on') ? '70px' : '16px';
     pillEl.innerHTML = `<span class="gz">Id|le gazette</span> ${item.text}` + (item.at ? ` <button data-go="${item.at.x},${item.at.y}">go ›</button>` : '') + `<span class="x" title="dismiss">✕</span>`; pillEl.classList.add('on'); clearTimeout(pillEl._t); pillEl._t = setTimeout(() => pillEl.classList.remove('on'), 12000); }
   pillEl.addEventListener('click', e => { if (e.target.closest('.x')) { pillEl.classList.remove('on'); return; } const b = e.target.closest('[data-go]'); if (b) { const [x, y] = b.dataset.go.split(',').map(Number); H().flyTo(x, y, 1.3); pillEl.classList.remove('on'); } });
   pillEl.addEventListener('mouseenter', () => clearTimeout(pillEl._t)); pillEl.addEventListener('mouseleave', () => { clearTimeout(pillEl._t); pillEl._t = setTimeout(() => pillEl.classList.remove('on'), 6000); });   // reading a name's mini card keeps the pill up
