@@ -1,0 +1,6 @@
+minilm-l6-v2-quantized.onnx and tokenizer.json: all-MiniLM-L6-v2 by sentence-transformers
+(https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2), int8 ONNX build from Xenova/all-MiniLM-L6-v2.
+Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+
+heads.json: logistic-regression heads (sms_spam, support_ticket, tweet_eval_sentiment) fitted on that encoder's
+embeddings by the Jeffy project (https://github.com/nicobrenner/jeffy). Part of Id|le, MIT (see ../../LICENSE).
