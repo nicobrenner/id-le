@@ -23,6 +23,32 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 - Forced births under pressure: newborns grew up Debuggers by need (marked `byNeed` on the genome).
 - fps flat: 1,000 creatures, 3 × 8 s, before 41.9 / 34.6 / 35.2, after 42.4 / 38.2 / 46.9 (headless).
 
+**Stats: where visitors come from, how long they stay, where the guided start stops; a local dashboard.** Before a public post, the question was "what did a Reddit visitor actually do?". Nico chose our own anonymous daily totals over Umami or GA4 (GA4 needs cookies and a consent banner, which would break the privacy page's promise; the Umami instance lives on Jeffy's box). Three additions to `idle-stats.js`, still daily totals only:
+- Came from: the referring site's name only (`reddit.com`, `news.ycombinator.com`, `x.com` for t.co, `google` for any google.*), "direct" for no link or our own pages, never a path or query; plus a cleaned `utm_source`. The server keeps at most 30 site names and 20 tags per day and shard, the rest count as `other`, so the KV document stays small (767 bytes in the test with 44 visits from 40 sites).
+- Time on screen: visible time only (Page Visibility), bucketed <1 / 1-5 / 5-20 / 20+ minutes.
+- Where the guided start stopped: the last moment reached, or finished/skipped, only for page loads that began with the trail running.
+- Finding: a page load reports these several times (on hide, at 3 and 15 minutes, on leave), and phones often never fire the last event. Counting each report would count one visit several times; counting only the last would lose phones. So each report says which bucket it moves *from* (`dw0`, `fl0`), and the server adds the new bucket and takes back the old one. Shards can go negative for a bucket; the sum over shards is exactly one per page load (tested: three reports from one load → counted once, in 5-20).
+- Dashboard: `python3 tools/stats.py --html out.html` writes one self-contained page (inline SVG, no external requests, light/dark): visits per day (new vs returning, days with our own tests starred), the guided-start funnel and stop points, referrers and tags, time on screen, features opened, devices and crash-guard levels, fps, errors. It also shows Cloudflare's daily requests split into real browsers and Cloudflare's own early-hints fetches once the token can read zone analytics (today it says how to enable that).
+
+**One sound switch, the deck as the place for music (#21)**
+
+Nico (and a music-artist friend): on/off switches on the deck's mixer and effects, and one clear sound control instead of three (the 🔇 top right, the background music's on/off, the deck's play).
+
+- **One master.** 🔊 top right mutes and unmutes everything (creature sounds, weather, background music, deck, reel soundtracks); hover or ▾ opens one master volume, a creatures-and-weather switch with its two levels, and which music plays. Everything now runs on one AudioContext through one master gain (`window.__audio`, arena.html); muted, the context is suspended after a 0.3 s ramp, so the audio graph does no work.
+- **Which of Nico's two options.** Both, in the sense that matters: one plays at a time (off / background / deck: the same segmented switch in the panel and the popover), and the deck has a **base tune** switch that plays the background music under the deck's own parts at the deck's tempo, key and scale, with the deck's bass, lead and pad following the base tune's chords. Exclusive sources keep one clock; the base tune gives the "play a base and mix on top" idea without two tempos fighting.
+- **Switches** (real toggle switches) on bass/lead/pad and on filter/echo/bitcrush: off takes it out of the sound and keeps its level or setting (`ch[c].off`, `fx.off[k]`; absent means on, so saved decks and sets load unchanged).
+- **Migration.** No master saved yet: it starts unmuted if the background music was on (so Nico's music doesn't go quiet), muted otherwise (as before: sound was off by default). Tracks, sets, set list and levels untouched.
+- **Pressing play while muted** unmutes and says so in a notice (silence after pressing play was the worst case).
+
+Measured (headless Chromium, 220 Hz tone at 0.5 into the master, biggest sample-to-sample jump while muting and unmuting):
+
+| | steady tone | while toggling |
+|---|---|---|
+| instant gain change (before) | 0.015 | **0.448** ↑ (a click) |
+| 30 ms ramp (now) | 0.015 | **0.015** (no click) |
+
+Muted: AudioContext `suspended` (was: separate contexts for effects, music and reels, effects muted only by skipping new notes). Phone: ☰ → *volume* opens it as a bottom sheet (375 px, no sideways scroll). Not in the frame loop, so no fps run.
+
 ## 2026-10-30
 
 **The Id|le-pedia covers the features, not just the creatures.** Nico: the pedia was "mostly focused on the creatures", while the README showed everything else. The pedia now opens with a tour (14 cards with the README's pictures, light or dark by the page's theme) and is reorganised into Life, The world, **Things to do** (reels with replays, music and rave, advisor, the Gazette and notices, the studio, the drawer, the data lab, connecting worlds, evolution, the first five minutes), **Make it yours** (remix a world, with your own AI, get the code) and **Settings and privacy**; disasters and snapshots (world files) are fuller.
@@ -132,22 +158,3 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 - Finding: disasters had silently stopped since Oct 28 because the line that runs them each frame had slipped into a comment.
 - Hunger: only Crawly kin could eat → per-family diets. Hangry mode; hangry beats fear (fight or flight).
 - Gloamhold (1-bit world), memory reels v1/v2, family names, Counters and Mathematicians, Designers, the Id|le-pedia, BYO-AI chat v1, static build groundwork.
-
-## 2026-10-31 · One sound switch, the deck as the place for music (#21)
-
-Nico (and a music-artist friend): on/off switches on the deck's mixer and effects, and one clear sound control instead of three (the 🔇 top right, the background music's on/off, the deck's play).
-
-- **One master.** 🔊 top right mutes and unmutes everything (creature sounds, weather, background music, deck, reel soundtracks); hover or ▾ opens one master volume, a creatures-and-weather switch with its two levels, and which music plays. Everything now runs on one AudioContext through one master gain (`window.__audio`, arena.html); muted, the context is suspended after a 0.3 s ramp, so the audio graph does no work.
-- **Which of Nico's two options.** Both, in the sense that matters: one plays at a time (off / background / deck: the same segmented switch in the panel and the popover), and the deck has a **base tune** switch that plays the background music under the deck's own parts at the deck's tempo, key and scale, with the deck's bass, lead and pad following the base tune's chords. Exclusive sources keep one clock; the base tune gives the "play a base and mix on top" idea without two tempos fighting.
-- **Switches** (real toggle switches) on bass/lead/pad and on filter/echo/bitcrush: off takes it out of the sound and keeps its level or setting (`ch[c].off`, `fx.off[k]`; absent means on, so saved decks and sets load unchanged).
-- **Migration.** No master saved yet: it starts unmuted if the background music was on (so Nico's music doesn't go quiet), muted otherwise (as before: sound was off by default). Tracks, sets, set list and levels untouched.
-- **Pressing play while muted** unmutes and says so in a notice (silence after pressing play was the worst case).
-
-Measured (headless Chromium, 220 Hz tone at 0.5 into the master, biggest sample-to-sample jump while muting and unmuting):
-
-| | steady tone | while toggling |
-|---|---|---|
-| instant gain change (before) | 0.015 | **0.448** ↑ (a click) |
-| 30 ms ramp (now) | 0.015 | **0.015** (no click) |
-
-Muted: AudioContext `suspended` (was: separate contexts for effects, music and reels, effects muted only by skipping new notes). Phone: ☰ → *volume* opens it as a bottom sheet (375 px, no sideways scroll). Not in the frame loop, so no fps run.
