@@ -69,7 +69,7 @@
     const n = { kind, icon: h.icon, html, at: h.at, actions: o.actions, ttl: o.ttl ?? K.ttl, h, onDismiss: o.onDismiss }; recent.set(key, { t: now(), n }); if (recent.size > 200) recent.delete(recent.keys().next().value);
     if (kind === 'lab' && o.ttl !== 0 && now() - born < 8000) o.quiet = true;
     if (kind !== 'trail' && !o.loud && calm()) o.quiet = true;   // the guided start has the floor: everything else waits in 🔔
-    if (o.quiet || !ensure()) return { close: () => {} }; if (live.length < cap()) show(n); else { queue.push(n); if (queue.length > 6) { const i = queue.findIndex(q => ['lab', 'music', 'system', 'world'].includes(q.kind) && q.ttl > 0); queue.splice(i >= 0 ? i : 0, 1); } } if (panel && panel.classList.contains('on')) renderPanel(); return { close: () => close(n, 'code') }; }
+    if (o.quiet || !ensure()) return { close: () => {} }; if (live.length < cap() || kind === 'trail') show(n); else { queue.push(n); if (queue.length > 6) { const i = queue.findIndex(q => ['lab', 'music', 'system', 'world'].includes(q.kind) && q.ttl > 0); queue.splice(i >= 0 ? i : 0, 1); } } if (panel && panel.classList.contains('on')) renderPanel(); return { close: () => close(n, 'code') }; }
 
   function fly(x, y) { if (window.__notifyFly) window.__notifyFly(x, y); else if (window.__advHooks && window.__advHooks.flyTo) window.__advHooks.flyTo(x, y, 1.3); }
   function onClick(e) { const pill = e.target.closest('.np, .it'); const n = pill && live.find(q => q.el === pill);
