@@ -5,6 +5,15 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-31
 
+**Replays play in the Id|le-pedia.** Five real clips, recorded in the starter world with the game's own recorder (test hooks staged the moments): a packet storm with lightning (under Memory reels), a volcano (Disasters), a rave (Rave mode), a hangry frenzy (Hangry) and an Architect finishing a hut (Solid objects and buildings). Each plays while on screen, pauses off screen, loops, follows the page's light/dark theme, and with reduced motion shows one still frame of the moment.
+- To make that possible the drawing left arena.html: `idle-critdraw.js` (bodies, IK legs and steps, hiding, 💤/🫣, hangry glow, dance poses) and `idle-replay-player.js` (the clip player), next to `idle-replay-env.js`. `idle-build.js` now gives a page without the world `__build.drawTo` (objects and finished buildings). The arena loads the same modules, so reels and the pedia draw identically.
+- fps at 1,000 creatures, before → after (headless, 2 × 10 s each, two alternating rounds, machine load 6–7): 51.2/55.3 and 52.0/57.0 → 48.6/53.0 and 54.3/57.3. Flat within noise.
+- Clips now record dancing (state bits 16 = dancing, 32 = in the mosh pit; the player dances each body by its own style on a 120 bpm beat). Before, a rave replay showed creatures milling about.
+- Not in clips: the showy/shy/dazzle looks (#36) are drawn by idle-looks.js, which needs the live world, so the looks section has no clip.
+- Weight: `pedia_clips.json` is 71 KB for five clips (10–19 KB each); the four modules it loads add about 90 KB (uncompressed), fetched only when the page has clips.
+- Finding: a mark next to a clip already recording joins that clip instead of starting its own, and a creature gets at most one clip per 15 s, so staging a clip needs a quiet recorder.
+
+**The pedia fills three gaps**: the Oracle (the narrator, the tiny local model, how typed commands are understood, safe mode; facts read from arena.html, arena_instr_v2.json and the model file's size), getting around (the minimap, travel to a real page, the Crawler with its page and depth limits read from the code), and drafts surviving reloads.
 **Creatures stand out from the charts, and charts stop piling up.** Nico (with a phone screenshot of a dark world full of charts): creatures were "hard to see in the noise", and "there aren't enough debuggers… we need to balance it out" (his second or third time asking).
 - Outlines: every body shape and the legs get a thin outline under their own colours (one extra stroke per shape, one per creature for all its legs; at least ~1.3 screen px at any zoom). Light mode: dark ink. Dark mode: a light line in the creature's own hue. Shy ones keep a faint outline (0.15–0.45 of full) and get it back in full when hovered or highlighted. Dark bodies are a little lighter in dark mode. Phones (light quality) keep the outline.
 - Findability (median colour distance between a creature and its surroundings, the #36 measure, 6 views each, a copy of Nico's world with 58 charts, a fixed third showy/plain/shy), before → after:

@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Id|le</title><meta name="description" content="A small world whose ground is made of words, and creatures that walk on them, eat them and cut them into pieces."><meta property="og:type" content="website"><meta property="og:site_name" content="Id|le"><meta property="og:url" content="https://id-le.com/"><meta property="og:title" content="Id|le"><meta property="og:description" content="A small world whose ground is made of words. Creatures with legs walk on them, eat them, carry them, cut them into pieces, name them and pile them up. Every creature has a genome, a job, feelings, a diary and a mind you can watch stream."><meta property="og:image" content="https://id-le.com/og-image.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="The Id|le wordmark over a pale floor scattered with 0s and 1s, word-bricks reading coffee, heap, loop and token, and six many-legged creatures walking among them."><meta name="twitter:card" content="summary_large_image">
-<script>/* boot cover: every load starts behind it (no flash of the default world), in the style of the place you were in; the cover below the <body> tag draws a creature and a bar fed by the real boot steps */try{var bp=JSON.parse(localStorage.getItem("arena.place")||"\"home\"")||"home",bq=(JSON.parse(localStorage.getItem("arena.places")||"[]").find(function(x){return x.id===bp})||{});window.__bootPlace={id:bp,name:bp==="home"?"Home":(bq.name||""),kind:bp==="home"?"home":(bq.kind||"page")};document.documentElement.classList.add("booting");if(window.__bootPlace.kind==="keep")document.documentElement.classList.add("bootkeep")}catch(e){window.__bootPlace={id:"home",name:"Home",kind:"home"};document.documentElement.classList.add("booting")}</script><script src="idle-runtime.js"></script><script src="idle-notify.js"></script><script src="idle-replay-env.js"></script><script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script>/* boot cover: every load starts behind it (no flash of the default world), in the style of the place you were in; the cover below the <body> tag draws a creature and a bar fed by the real boot steps */try{var bp=JSON.parse(localStorage.getItem("arena.place")||"\"home\"")||"home",bq=(JSON.parse(localStorage.getItem("arena.places")||"[]").find(function(x){return x.id===bp})||{});window.__bootPlace={id:bp,name:bp==="home"?"Home":(bq.name||""),kind:bp==="home"?"home":(bq.kind||"page")};document.documentElement.classList.add("booting");if(window.__bootPlace.kind==="keep")document.documentElement.classList.add("bootkeep")}catch(e){window.__bootPlace={id:"home",name:"Home",kind:"home"};document.documentElement.classList.add("booting")}</script><script src="idle-runtime.js"></script><script src="idle-notify.js"></script><script src="idle-replay-env.js"></script><script src="idle-critdraw.js"></script><script src="idle-replay-player.js"></script><script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 <style>
 :root{--bg:#f6f4ee;--ink:#222;--floor:#fbf9f3;--accent:#2b5cff}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15161a;--ink:#e8e6e1;--floor:#1c1e24}}
@@ -478,79 +478,15 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   const web = document.createElementNS(NS, 'svg'); web.setAttribute('id', 'web'); web.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;overflow:visible'; floor.appendChild(web);
   // creatures are drawn on one canvas (the svg above was rebuilt with innerHTML every frame, legs and bodies for every creature: the main per-frame cost on slow machines)
   const critCv = document.createElement('canvas'); critCv.id = 'crit'; critCv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:5'; floor.appendChild(critCv); const crit = critCv.getContext('2d');   // layering: words, things, designs and charts (3-4) < creatures (5) < carried words (5, later in the page), bubbles (6), locked words (7), effects and cards
+  const { sizeUp, buildLegs, restSpot, hip, knee, stepLegs } = window.__critDraw;
   const Crit = (() => { let key = '', dpr = 1;
-    // the keyline (Nico, Oct 31: creatures were "hard to see in the noise", charts everywhere): every body shape and the legs get a
-    // thin outline under their own colours, so they read on the floor, on charts and on words, phones too. Light mode: a dark ink line.
-    // Dark mode: a light line in the creature's own hue (a dark one measured worse there: it pulled them toward the dark floor).
-    // KL.w is in world units but never thinner than ~1.3 screen px; KL.a is scaled per creature (shy ones keep only a faint one).
-    const KL = { on: true, w: 1.5, col: 'rgba(10,11,16,.82)', a: 1, dk: false };
-    const KLH = []; for (let i = 0; i < 24; i++) KLH.push(`hsla(${i * 15},85%,78%,.62)`);   // dark mode: one light keyline colour per 15° of hue
-    function keylineFrame() { const z = cam.z || 1; KL.dk = isDark(); KL.w = Math.min(4, Math.max(1.1, 1.3 / z)); KL.col = KL.dk ? KLH[0] : 'rgba(22,22,30,.62)'; }
-    function keylineFor(c) { const LK = window.__looks; KL.a = LK && LK.ink ? LK.ink(c) : 1; if (KL.dk) { const h = ((c.gs || c.g).hue || 0); KL.col = KLH[Math.round(((h % 360) + 360) % 360 / 15) % 24]; } }
-    function begin() { const vs = viewSize(), z = cam.z; dpr = QUAL.low ? 1 : Math.min(2, devicePixelRatio || 1); keylineFrame();
+    function begin() { const vs = viewSize(), z = cam.z; dpr = QUAL.low ? 1 : Math.min(2, devicePixelRatio || 1); keylineFrame(cam.z, isDark());
       const x0 = cam.x - vs.w / 2 / z, y0 = cam.y - vs.h / 2 / z, W = Math.ceil(vs.w * dpr), H = Math.ceil(vs.h * dpr), k = `${W}x${H}|${(vs.w / z).toFixed(2)}|${x0.toFixed(2)},${y0.toFixed(2)}`;
       if (critCv.width !== W || critCv.height !== H) { critCv.width = W; critCv.height = H; }
       if (k !== key) { key = k; critCv.style.width = (vs.w / z) + 'px'; critCv.style.height = (vs.h / z) + 'px'; critCv.style.left = x0 + 'px'; critCv.style.top = y0 + 'px'; }
       crit.setTransform(1, 0, 0, 1, 0, 0); crit.clearRect(0, 0, W, H); crit.setTransform(dpr * z, 0, 0, dpr * z, -x0 * dpr * z, -y0 * dpr * z); }
-    const circ = (g, x, y, r) => { g.beginPath(); g.arc(x, y, Math.max(0, r), 0, Math.PI * 2); };
-    const ell = (g, x, y, rx, ry) => { g.beginPath(); g.ellipse(x, y, Math.max(0, rx), Math.max(0, ry), 0, 0, Math.PI * 2); };
-    const rrect = (g, x, y, w, h, r) => { w = Math.max(0, w); h = Math.max(0, h); g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2))); else g.rect(x, y, w, h); };
-    function fs(g, fill, stroke, lw) { if (fill && stroke && KL.on && KL.a > 0.02) { const a = g.globalAlpha; g.globalAlpha = a * KL.a; g.strokeStyle = KL.col; g.lineWidth = (lw ?? 1) + KL.w * 2; g.stroke(); g.globalAlpha = a; }
-      if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw ?? 1; g.stroke(); } }
-    const LP = [];   // leg points, reused (no allocation per frame)
-    function legs(g, c, hp) { const G = c.gs || c.g; g.lineJoin = 'round'; g.lineCap = 'round'; let n = 0;
-      for (const L of c.legs) { const H = hip(c, L), F0 = L.foot, F = hp ? { x: H.x + (F0.x - H.x) * (1 - 0.6 * hp.k), y: H.y + (F0.y - H.y) * (1 - 0.6 * hp.k) } : F0, K = knee(H, F, G.l1, G.l2, L.side, c.heading), lift = L.lift || 0;
-        const q = LP[n] || (LP[n] = {}); q.hx = H.x; q.hy = H.y; q.kx = K.x + (K.x - H.x) * 0.12 * lift; q.ky = K.y + (K.y - H.y) * 0.12 * lift; q.fx = F.x; q.fy = F.y; q.l = lift; n++; }
-      if (KL.on && KL.a > 0.02) { const a = g.globalAlpha; g.globalAlpha = a * KL.a; g.beginPath(); for (let i = 0; i < n; i++) { const q = LP[i]; g.moveTo(q.hx, q.hy); g.lineTo(q.kx, q.ky); g.lineTo(q.fx, q.fy); } g.strokeStyle = KL.col; g.lineWidth = 1.7 + KL.w * 2; g.stroke(); g.globalAlpha = a; }
-      const ll = c.state === 'sleep' ? 55 : KL.dk ? 76 : 64;
-      for (let i = 0; i < n; i++) { const q = LP[i]; g.beginPath(); g.moveTo(q.hx, q.hy); g.lineTo(q.kx, q.ky); g.lineTo(q.fx, q.fy); g.strokeStyle = `hsl(${G.hue},70%,${ll}%)`; g.lineWidth = 1.5 + 0.4 * q.l; g.stroke();
-        circ(g, q.fx, q.fy, 1.8 + 1.4 * q.l); g.fillStyle = `hsl(${G.footHue},90%,72%)`; g.fill(); }
-      g.lineJoin = 'miter'; g.lineCap = 'butt'; }
-    function body(g, c, t) {   // the same shapes as bodySVG (kept for cards, the pedia and miniSVG)
-      const G = c.gs || c.g, breathe = 1 + (c.state === 'sleep' ? 0.05 : 0.025) * Math.sin(t / (c.state === 'sleep' ? 900 : 380) + c.phase), L = G.bodyL * breathe, W = G.bodyW * breathe, BL = KL.dk ? 12 : 0;
-      const sw = c.held ? Math.sin(t / 60) * 12 : Math.sin(t / 700 + c.phase) * 2.5; g.save(); g.translate(c.x, c.y); g.rotate(c.heading + sw * Math.PI / 180);
-      if (G.abdomen) { ell(g, -L * 0.95, 0, L * 0.55, W * 0.55); fs(g, `hsl(${G.hue},25%,${18 + BL}%)`, `hsl(${G.hue},60%,72%)`, 0.8); }
-      g.lineCap = 'round'; for (let p = 0; p < (G.palps || 0); p++) { const sd = p ? 1 : -1, a = 0.35 + 0.25 * Math.sin(t / 160 + p * 2 + c.phase); g.beginPath(); g.moveTo(L * 0.5, sd * W * 0.2); g.lineTo(L * 0.5 + 9 * Math.cos(a * sd), sd * W * 0.2 + sd * 9 * Math.sin(a)); g.strokeStyle = `hsl(${G.hue},70%,78%)`; g.lineWidth = 1.4; g.stroke(); } g.lineCap = 'butt';
-      if (c.boost && c.boost.what === 'glow' && c.boost.until > Date.now()) { circ(g, 0, 0, Math.max(L, W) * 1.3); fs(g, `hsla(${G.hue},90%,65%,${0.18 + 0.08 * Math.sin(t / 150)})`); }
-      if (c.sickUntil > Date.now()) { g.font = '12px system-ui,sans-serif'; g.textAlign = 'center'; g.fillStyle = '#000'; g.fillText('🤢', 0, -W - 6); g.textAlign = 'start'; }
-      if (c.flash && performance.now() < c.flash.until) { const k = (c.flash.until - performance.now()) / 900; circ(g, 0, 0, Math.max(L, W) * (1.6 - k * 0.6)); fs(g, `hsla(${c.flash.how === 'big' ? 345 : c.flash.how === 'keep' ? 330 : 225},90%,60%,${0.35 * k})`); }
-      if (G.wings) { const flap = Math.sin(t / (c.state === 'move' ? 45 : 160)) * 0.35 + 0.65; for (const sd of [-1, 1]) { g.save(); g.rotate(sd * 18 * Math.PI / 180); ell(g, -L * 0.1, sd * W * 0.9, L * 0.7, W * 0.9 * flap); fs(g, `hsla(${G.hue},80%,80%,.35)`, `hsl(${G.hue},70%,70%)`, 0.6); g.restore(); } }
-      if (G.body === 'orb') { circ(g, 0, 0, Math.max(L, W) * 0.55); fs(g, `hsl(${G.hue},45%,${22 + BL}%)`, `hsl(${G.hue},70%,72%)`); circ(g, L * 0.18, 0, W * 0.22); fs(g, `hsl(${G.footHue},90%,70%)`); }
-      else if (G.body === 'tri') { g.beginPath(); g.moveTo(L * 0.6, 0); g.lineTo(-L * 0.5, -W * 0.6); g.lineTo(-L * 0.5, W * 0.6); g.closePath(); fs(g, `hsl(${G.hue},40%,${25 + BL}%)`, `hsl(${G.hue},70%,72%)`); circ(g, L * 0.15, 0, 2.2); fs(g, '#ff5e5e'); }
-      else if (G.body === 'seg') { for (let k = 2; k >= 0; k--) { circ(g, -k * L * 0.42, Math.sin(t / 200 + k) * 2, W * (0.5 - k * 0.08)); fs(g, `hsl(${G.hue},40%,${22 + BL + k * 6}%)`, `hsl(${G.hue},70%,72%)`, 0.8); } circ(g, L * 0.15, 0, 2); fs(g, '#ff5e5e'); }
-      else if (G.body === 'star') { g.save(); g.rotate((t / 30 % 360) * Math.PI / 180); g.beginPath(); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, R = k % 2 ? W * 0.3 : Math.max(L, W) * 0.6; const x = +(Math.cos(a) * R).toFixed(1), y = +(Math.sin(a) * R).toFixed(1); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); fs(g, `hsl(${G.hue},50%,${30 + BL}%)`, `hsl(${G.hue},80%,75%)`); g.restore(); }
-      else if (G.body === 'chip') { rrect(g, -L / 2, -W / 2, L, W, 2); fs(g, BL ? '#45454d' : '#2e2e33', `hsl(${G.hue},60%,72%)`, 0.8); rrect(g, -L / 2 + 4, -W / 2 + 3, Math.max(0, L * 0.45), Math.max(0, W - 6), 1); fs(g, '#9fe3c5');
-        const dur = c.state === 'sleep' ? 3000 : 1200, u = (performance.now() % dur) / dur; g.globalAlpha = 1 - 0.7 * (1 - Math.abs(1 - 2 * u)); circ(g, L / 2 - 4, 0, 2.2); fs(g, c.state === 'sleep' ? '#553' : '#ff5e5e'); g.globalAlpha = 1; }   // the status light blinks (1 → .3 → 1)
-      else { const blink = (Math.floor(t / 2600 + c.phase) % 5 === 0 && (t % 2600) < 140) || c.state === 'sleep'; rrect(g, -L / 2, -W / 2, L, W, 4); fs(g, `hsl(${G.hue},90%,82%)`, `hsl(${G.hue},55%,48%)`);
-        if (blink) { g.beginPath(); g.moveTo(L * 0.05, -W * 0.18); g.lineTo(L * 0.05 + 4, -W * 0.18); g.moveTo(L * 0.05, W * 0.18 - 2); g.lineTo(L * 0.05 + 4, W * 0.18 - 2); g.strokeStyle = '#333'; g.lineWidth = 1.3; g.stroke(); }
-        else { circ(g, L * 0.1, -W * 0.18, 2.2); fs(g, '#333'); circ(g, L * 0.1, W * 0.18, 2.2); fs(g, '#333'); }
-        g.save(); g.translate(L / 2, 0); g.rotate((c.chopUntil > t ? Math.sin(t / 30) * 20 : 0) * Math.PI / 180); g.beginPath(); g.moveTo(0, -W * 0.25); g.lineTo(7, -W * 0.25 - 5); g.moveTo(0, W * 0.25); g.lineTo(7, W * 0.25 + 5); g.strokeStyle = `hsl(${G.hue},60%,32%)`; g.lineWidth = 2.2; g.lineCap = 'round'; g.stroke(); g.lineCap = 'butt'; g.restore(); }
-      if (c._dz && window.__looks) window.__looks.dazzle(g, c, L, W);
-      if (c === selected) { circ(g, 0, 0, Math.max(L, W) * 0.9 + 6); g.setLineDash([4, 4]); g.globalAlpha = 0.8; fs(g, null, '#2b5cff', 1.2); g.setLineDash([]); g.globalAlpha = 1; }
-      g.restore(); }
-    function hangryGlow(g, c, t) { const r = (Math.max(c.g.bodyL, c.g.bodyW) + 26) * (c.size || 1) * (1 + 0.15 * Math.sin(t / 80)), gr = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
-      gr.addColorStop(0, 'rgba(255,74,18,.6)'); gr.addColorStop(0.6, 'rgba(255,122,31,.25)'); gr.addColorStop(1, 'rgba(255,122,31,0)'); circ(g, c.x, c.y, r); g.fillStyle = gr; g.fill(); }
-    // 💤 and 🫣 as pre-rendered sprites (render trim, Oct 30): an emoji fillText per sleeper per frame was slow without a GPU
-    const EMO = {}; function emo(ch) { let e = EMO[ch]; if (e) return e; const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S; const x = cv.getContext('2d'); x.font = `${S * 0.78}px system-ui,sans-serif`; x.textBaseline = 'alphabetic'; x.textAlign = 'center'; x.fillStyle = '#000'; x.fillText(ch, S / 2, S * 0.8);
-      return EMO[ch] = { cv, S }; }   // drawn as if by fillText at (x, baseline) with the given px size: the glyph box sits from 0.8 em above the baseline
-    function emoAt(g, ch, x, y, px, center) { if (window.__emojiText) { g.font = `${px}px system-ui,sans-serif`; g.fillStyle = '#000'; if (center) g.textAlign = 'center'; g.fillText(ch, x, y); if (center) g.textAlign = 'start'; return; }
-      const e = emo(ch), k = px / (e.S * 0.78), w = e.S * k, cx = center ? x : x + px * 0.6; g.drawImage(e.cv, cx - w / 2, y - e.S * 0.8 * k, w, w); }   // start-aligned text: the glyph's middle is about 0.6 em right of x
-    function zz(g, c, t) { const top = c.y - (Math.max(c.g.bodyL, c.g.bodyW) + 14) * (c.size || 1), ph = ((t / 2600) + (c.g.hue || 0) / 360) % 1;
-      for (const o of [0, 0.5]) { const p = (ph + o) % 1; g.globalAlpha = +(Math.sin(p * Math.PI) * 0.9).toFixed(2); emoAt(g, '💤', c.x + 8 + p * 10, top - p * 22, 15 + p * 7, false); } g.globalAlpha = 1; }
-    // hiding: the one pose for every renderer (k fades in over 0.6 s once it reaches cover): legs and body pulled in, dimmer, trembling
-    function hidePose(c) { if (c.state !== 'hide' || c.dashUntil > Date.now()) return null; const k = Math.max(0, Math.min(1, (Date.now() - Math.max(c.dashUntil || 0, c.hideT || 0)) / 600));
-      return { k, s: 1 - 0.24 * k, a: 1 - 0.45 * k, jx: (Math.random() - .5) * 1.4 * k, jy: (Math.random() - .5) * 1.0 * k }; }
-    function peek(g, c, t, k) { const top = c.y - (Math.max(c.g.bodyL, c.g.bodyW) + 10) * (c.size || 1); g.globalAlpha = 0.9 * k; emoAt(g, '🫣', c.x, top + Math.sin(t / 240) * 1.5, 16, true); g.globalAlpha = 1; }
+    const { circ, ell, rrect, fs, legs, body, hangryGlow, emoAt, zz, hidePose, peek, dancePose, drawTo, keylineFrame, keylineFor } = window.__critDraw;   // the drawing itself lives in idle-critdraw.js (shared with the pedia's replays)
     const marks = [];   // 💤 and 🫣 go on top of every creature, so they are drawn after all of them
-    // rave mode: a beat-synced dance per body (chips bob, triangles spin, orbs bounce, long legs high-step, the rest sway); idle-rave.js sets c.dance
-    function dancePose(g, c) { const d = c.dance, R = window.__rave; if (!d || !R) return; const ph = R.phase(), k = d.k ?? 1, s = c.size || 1, hit = Math.pow(1 - ph, 3);
-      if (d.style === 'spin') { const a = (d.turn || 0) + hit * 0.9 * k; g.translate(c.x, c.y); g.rotate(a); g.translate(-c.x, -c.y); }
-      else if (d.style === 'bounce') { const y = -Math.abs(Math.sin(ph * Math.PI)) * 9 * k * s, sq = 1 + 0.12 * hit * k; g.translate(c.x, c.y + y); g.scale(sq, 2 - sq); g.translate(-c.x, -c.y); }
-      else if (d.style === 'high') { const y = -Math.max(0, Math.sin(ph * Math.PI * 2)) * 7 * k * s; g.translate(0, y); }
-      else if (d.style === 'bob') g.translate(0, hit * 5 * k * s);
-      else if (d.style === 'mosh') g.translate((Math.random() - .5) * 5 * k, hit * 4 * k);
-      else if (d.style === 'ears') g.translate((Math.random() - .5) * 1.2, 0);
-      else { const a = Math.sin(ph * Math.PI * 2) * 0.16 * k; g.translate(c.x, c.y); g.rotate(a); g.translate(-c.x, -c.y); } }
     function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c), LK = window.__looks; g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t); if (c.dance && !hp) dancePose(g, c);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
       keylineFor(c); if (LK) LK.pre(g, c, t); legs(g, c, hp); body(g, c, t); if (LK) LK.post(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
@@ -565,10 +501,6 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     // crowds: past 24 beams in view, a plain beam and ring (no dashes, brackets or labels)
     function plainBeam(g, c, T, t) { const hue = c.g.laserHue ?? 200, n = T.text.length; g.strokeStyle = `hsla(${hue},95%,60%,.55)`; g.lineWidth = 1; g.beginPath(); g.moveTo(c.x + c.ox, c.y + c.oy); g.lineTo(T.x, T.y); g.moveTo(T.x + n * 4.2 + 14, T.y); g.ellipse(T.x, T.y, n * 4.2 + 14, 13, 0, 0, Math.PI * 2); g.stroke(); }
     function end(t) { const g = crit; if (window.__looks) window.__looks.end(g, t); beams.forEach(([c, T, tt], i) => i < 24 ? drawBeam(g, c, T, tt) : plainBeam(g, c, T, tt)); beams.length = 0; for (const [c, ox, oy, k] of marks) { g.save(); g.translate(ox, oy); if (c.state === 'sleep') zz(g, c, t); else peek(g, c, t, k); g.restore(); } marks.length = 0; }
-    // the same drawing onto another canvas (reel replays): body, legs, hiding pose, 💤/🫣, hangry glow
-    function drawTo(g, c, t, hg) { const hp = hidePose(c); g.save(); if (hg) hangryGlow(g, c, t); if (c.dance && !hp) dancePose(g, c);
-      if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
-      keylineFor(c); if (window.__looks) window.__looks.pre(g, c, t, true); legs(g, c, hp); body(g, c, t); g.restore(); g.save(); if (c.state === 'sleep') zz(g, c, t); else if (hp) peek(g, c, t, hp.k); g.restore(); }
     return { begin, draw, end, hidePose, laser, drawTo };
   })();
   const DEFAULT_GENOMES = {
@@ -595,25 +527,6 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   function defaultsFor(c) { return DEFAULT_GENOMES[c.key] || DEFAULT_GENOMES[c.voiceKey === 'crawly' ? 'crawly' : 'tok']; }
   function actionsOf(c) { return (c.g.actions || defaultsFor(c).actions).slice(0, 4).concat('greet'); }
   function jobOf(c) { return c.g.job || defaultsFor(c).job; }
-  function sizeUp(c) { const k = c.size || 1; c.gs = { ...c.g, l1: c.g.l1 * k, l2: c.g.l2 * k, bodyL: c.g.bodyL * k, bodyW: c.g.bodyW * k, step: c.g.step * k }; }
-  function buildLegs(c) { sizeUp(c);
-    const g = c.g, m = Math.max(1, Math.floor(g.legs / 2)); c.legs = [];
-    for (let side of [-1, 1]) for (let k = 0; k < m; k++) { const L = { side, k, m, foot: null, swing: null, group: (k + (side > 0 ? 1 : 0)) % 2 }; c.legs.push(L); }
-    c.legs.forEach(L => { L.foot = restSpot(c, L); });
-  }
-  function restSpot(c, L, extra) {
-    const g = c.gs || c.g, reach = (g.l1 + g.l2) * (c.state === 'hide' && !(c.dashUntil > Date.now()) ? 0.3 : c.state === 'sleep' ? 0.45 : c.held ? 0.55 : 0.78);
-    const along = L.m > 1 ? (L.k / (L.m - 1) - 0.5) : 0, fx = along * g.bodyL * 1.9 + along * reach * 0.55, fy = L.side * reach * (0.75 + 0.25 * Math.cos(along * Math.PI));
-    const ca = Math.cos(c.heading), sa = Math.sin(c.heading), lead = c.held ? 0 : 7;
-    let x = c.x + fx * ca - fy * sa + c.vx * lead, y = c.y + fx * sa + fy * ca + c.vy * lead;
-    if (extra) { x += extra[0]; y += extra[1]; } return { x, y };
-  }
-  function hip(c, L) { const g = c.gs || c.g, along = L.m > 1 ? (L.k / (L.m - 1) - 0.5) : 0, hx = along * g.bodyL * 0.9, hy = L.side * g.bodyW * 0.42, ca = Math.cos(c.heading), sa = Math.sin(c.heading); return { x: c.x + hx * ca - hy * sa, y: c.y + hx * sa + hy * ca }; }
-  function knee(H, F, l1, l2, side, heading) {   // two-bone IK, knee bent away from the body
-    let dx = F.x - H.x, dy = F.y - H.y, d = Math.hypot(dx, dy) || 1e-6; const dd = Math.min(d, l1 + l2 - 0.01);
-    const a = (l1 * l1 - l2 * l2 + dd * dd) / (2 * dd), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)), ux = dx / d, uy = dy / d;
-    const s = side * (Math.sin(Math.atan2(uy, ux) - heading) >= 0 ? 1 : -1) >= 0 ? 1 : -1; return { x: H.x + ux * a - uy * h * s, y: H.y + uy * a + ux * h * s };
-  }
   function mk(name, key, x, y, opts) {
     // its hit area and speech bubble are elements only while needed (render trim, Oct 30): the hit area while the pointer is on it
     // or it is held, the bubble while it shows; the rest of the time a creature is just canvas (hit-tested by HitC below)
@@ -636,6 +549,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   const tokc = mk('Id|le', 'tok', 560, 120, { options: ['chop', 'fetch', 'bring', 'greet', 'come', 'sleep', 'hide', 'hand'], voice: 'tok' });
   const creatures = [crawly, tokc]; let selected = null;
   function select(c) { selected = c; }
+  window.__critDraw.selected = () => selected;   // the dashed ring around the selected creature
   const clamp = v => Math.max(0, Math.min(1, v)); const pick = a => a[Math.floor(Math.random() * a.length)];
   function speak(c, key, vars) { const t = (pick(c.voice[key] || c.voice.own)).replace(/\{(\w)\}/g, (_, k) => (vars || {})[k] ?? ''); c.bub.textContent = t; c.bub.classList.add('on'); Sound.chirp(c, t); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2600); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); if (window.__life) window.__life.said(c, key, t); if (window.__replay) window.__replay.said(c, t); return t; }
   function otherOf(c) { return creatures.filter(k => k !== c).sort((a, b) => dist(a, c) - dist(b, c))[0] || c; }
@@ -662,20 +576,6 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     return s + '</g>';
   }
   if (window.__boot) { window.__boot.attach({ drawTo: (g, c, t, hg) => Crit.drawTo(g, c, t, hg), buildLegs, stepLegs, fallback: () => genomes[Math.random() < 0.5 ? 'crawly' : 'tok'] }); window.__boot.step('state'); if ((window.__bootPlace || {}).kind === 'home') window.__boot.step('place'); }
-  function stepLegs(c, t) {
-    const moving = Math.hypot(c.vx, c.vy) > 0.15, inAir = c.legs.filter(L => L.swing).length, maxAir = Math.max(1, Math.floor(c.legs.length / 2));
-    for (const L of c.legs) {
-      if (L.swing) { const u = Math.min(1, (t - L.swing.t0) / L.swing.dur), e = u * u * (3 - 2 * u); L.foot = { x: L.swing.from.x + (L.swing.to.x - L.swing.from.x) * e, y: L.swing.from.y + (L.swing.to.y - L.swing.from.y) * e }; L.lift = Math.sin(u * Math.PI); if (u >= 1) { L.swing = null; L.lift = 0; L.justLanded = true; } continue; }
-      if (c.held) { const r = restSpot(c, L, [Math.sin(t / 50 + L.k * 1.7 + L.side) * 9, Math.cos(t / 65 + L.k) * 9]); L.foot = { x: L.foot.x + (r.x - L.foot.x) * 0.35, y: L.foot.y + (r.y - L.foot.y) * 0.35 }; L.lift = 0.8; continue; }   // dangling, kicking
-      const target = restSpot(c, L), lag = Math.hypot(target.x - L.foot.x, target.y - L.foot.y);
-      const nbAir = c.legs.some(o => o !== L && o.swing && o.side === L.side && Math.abs(o.k - L.k) === 1);
-      if (lag > (c.gs || c.g).step && !nbAir && inAir < maxAir && (moving ? L.group === (Math.floor(t / 140) % 2) : true)) L.swing = { from: { ...L.foot }, to: restSpot(c, L, [c.vx * 10, c.vy * 10]), t0: t, dur: 130 + 60 * Math.random() };
-    }
-    if (!moving && !c.held && c.state !== 'sleep' && t > c.nextFidget) {   // idle life: one leg re-plants or taps
-      c.nextFidget = t + (900 + Math.random() * 2600) / Math.max(0.2, c.g.fidget); const L = pick(c.legs);
-      if (!L.swing) L.swing = { from: { ...L.foot }, to: restSpot(c, L, [(Math.random() - .5) * 10, (Math.random() - .5) * 10]), t0: t, dur: 160 + Math.random() * 120 };
-    }
-  }
   function legsSVG(c) {
     const g = c.gs || c.g; let s = '';
     for (const L of c.legs) { const H = hip(c, L), F = L.foot, K = knee(H, F, g.l1, g.l2, L.side, c.heading), lift = L.lift || 0; const Kx = K.x + (K.x - H.x) * 0.12 * lift, Ky = K.y + (K.y - H.y) * 0.12 * lift;
@@ -3307,7 +3207,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     const THEFT = new Set(['steal', 'robbed']);
     const sayRing = [], evRing = [];   // what was said and struck in the last seconds (a clip starts 6 s before its moment)
     const clips = new Map();
-    const stc = c => (c.held ? 4 : c.state === 'sleep' ? 2 : c.state === 'hide' ? 3 : c.state === 'move' ? 1 : 0) | (c.hangryUntil > Date.now() ? 8 : 0);
+    const stc = c => (c.held ? 4 : c.state === 'sleep' ? 2 : c.state === 'hide' ? 3 : c.state === 'move' ? 1 : 0) | (c.hangryUntil > Date.now() ? 8 : 0) | (c.dance ? 16 | (c.dance.style === 'mosh' ? 32 : 0) : 0);   // 16: dancing (Oct 31), 32: in the mosh pit
     // the store: IndexedDB (clips are too big for localStorage next to the world), mirrored in memory so snapshots can take them right away
     let db = null; const idb = new Promise(res => { try { const rq = indexedDB.open('idle-replay', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('clips', { keyPath: 'id' }); rq.onsuccess = () => { db = rq.result; res(db); }; rq.onerror = () => res(null); } catch (e) { res(null); } });
     idb.then(d => { if (!d) return; try { const rq = d.transaction('clips').objectStore('clips').getAll(); rq.onsuccess = () => { for (const c of rq.result || []) if (!clips.has(c.id)) clips.set(c.id, c); ver++; setTimeout(() => { try { window.__reels && window.__reels.relink && window.__reels.relink(); } catch (e) {} }, 0); }; } catch (e) {} });
@@ -3386,7 +3286,6 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function said(c, text) { if (!c || c.lab) return; const now = Date.now(), x = { t: now, c, text: String(text || '').slice(0, 64) }; sayRing.push(x); while (sayRing.length && sayRing[0].t < now - PRE - 2000) sayRing.shift(); for (const A of active) if (A.says && A.mem.has(c)) A.says.push(x); }
     function bolt(x, y) { const now = Date.now(); evRing.push({ t: now, k: 'bolt', x, y }); while (evRing.length && evRing[0].t < now - PRE - 2000) evRing.shift(); for (const A of active) if (A.env) A.env.evs.push([now, 'bolt', Math.round(wd(A.cx, x, SPACE.W)), Math.round(wd(A.cy, y, SPACE.H))]); }
     const b64 = a => { const u = new Uint8Array(a.buffer); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
-    const unb64 = s => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new Int16Array(u.buffer); };
     const q16 = v => Math.max(-32767, Math.min(32767, Math.round(v)));
     function finish(A) { const frames = A.pre.concat(A.post); if (frames.length < 6) return; const t0 = frames[0].t, list = [...A.mem], idx = new Map(list.map((c, i) => [c, i])), out = [], carry = [], lastCarry = new Map();
       frames.forEach((f, fi) => { const rows = f.a.filter(r => idx.has(r[0])); out.push(q16((f.t - t0) / 10), rows.length);
@@ -3401,84 +3300,9 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     const memo = new Map(); let memoV = -1;
     function has(name, t) { if (memoV !== ver) { memo.clear(); memoV = ver; } const k = name + '@' + t; if (!memo.has(k)) memo.set(k, !!find(name, t)); return memo.get(k); }
     function find(name, t) { let best = null, bd = 1e12; for (const c of clips.values()) { const main = c.who.includes(name); if (!main && !c.n.includes(name)) continue; const d = Math.abs(c.t - t) + (main ? 0 : 60000); if (d < bd && d < (main ? 120000 : 75000)) { bd = d; best = c; } } return best; }   // its own moment within 2 min, or one it was in within 15 s
-    // unpack a clip for playing: per creature, its frames (time, x, y, heading, state)
-    function unpack(clip) { if (clip._u) return clip._u; const a = unb64(clip.f), tl = clip.n.map(() => []), times = []; let i = 0, fi = 0;
-      while (i < a.length) { const t = a[i++] * 10, n = a[i++]; times.push(t); for (let k = 0; k < n; k++) { const ci = a[i++]; tl[ci].push([t, a[i++], a[i++], a[i++] / 5000, a[i++], fi]); } fi++; }
-      const wm = clip.wm ? unb64(clip.wm) : [], moves = []; for (let j = 0; j + 3 < wm.length; j += 4) moves.push([wm[j], wm[j + 1], wm[j + 2], wm[j + 3]]);
-      const u = { tl, times, moves, dur: times[times.length - 1] || 1, evT: times[Math.min(clip.ev, times.length - 1)] || 0 }; Object.defineProperty(clip, '_u', { value: u, enumerable: false, configurable: true }); return u; }
-    // playing: one clip on one canvas, the same drawing as the world (Crit), with a slow push in on the moment
-    const ST = ['idle', 'move', 'sleep', 'hide', 'idle'];
-    function player(cv) { let raf = 0, clip = null, u = null, ghosts = [], t0 = 0, paused = false, pausedAt = 0, wstyle = null;
-      const g = cv.getContext('2d');
-      function style() { if (wstyle) return wstyle; const css = getComputedStyle(document.documentElement), probe = document.querySelector('#world .word, .word'); let bg = '#e9e4d6', fg = '#333', bd = '#c8b98a', wb = '#f3e6bd';
-        try { const fl = css.getPropertyValue('--floor').trim(); if (fl) bg = fl; if (probe) { const s = getComputedStyle(probe); fg = s.color || fg; wb = s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)' ? s.backgroundColor : wb; bd = s.borderTopColor || bd; } } catch (e) {} return wstyle = { bg, fg, bd, wb }; }
-      function start(c) { stop(); clip = c; u = unpack(c); wstyle = null; ghosts = c.n.map((name, i) => { const gh = { name, g: { ...c.g[i] }, size: c.sz[i] || 1, x: 0, y: 0, heading: 0, vx: 0, vy: 0, state: 'idle', phase: (i * 1.7) % 6.28, nextFidget: 0, hideT: 0, dashUntil: 0, legs: [] }; const r = u.tl[i][0]; if (r) { gh.x = r[1]; gh.y = r[2]; gh.heading = r[3]; } try { buildLegs(gh); } catch (e) {} return gh; });
-        envStart(c); t0 = performance.now(); paused = false; raf = requestAnimationFrame(frame); }
-      function stop() { cancelAnimationFrame(raf); raf = 0; }
-      // the environment of a v2 clip: the keep's stone or the floor, cracks, things, disasters, the words' own look, speech, weather and lightning
-      let imgs = {}, rng = Math.random, wxs = { rng: Math.random }, bolts = []; const LAVA2 = ['<div>', '{', '}', ';', '=>', '404', 'NaN', '<p>', 'null', '</>', '#fff', '<br>'];
-      function envStart(c) { imgs = {}; wxs = { rng: () => rng() }; bolts = []; const E = c.env; if (!E) return; const ld = (k, src) => { if (!src) return; const im = new Image(); im.src = src; imgs[k] = im; }; ld('ks', E.ks && E.ks.u); (E.things || []).forEach((th, i) => ld('t' + i, th.u));
-        let sd = 7; for (const ch of c.id) sd = (Math.imul(sd, 31) + ch.charCodeAt(0)) >>> 0; rng = () => { sd = (sd + 0x6D2B79F5) >>> 0; let x = Math.imul(sd ^ (sd >>> 15), 1 | sd); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
-        bolts = (E.evs || []).filter(e => e[1] === 'bolt').map(e => { const p = []; let x = e[2] + (rng() - 0.5) * 300, y = e[3] - 700; while (y < e[3]) { p.push([x, y]); x += (rng() - 0.5) * 70; y += 30 + rng() * 40; } p.push([e[2], e[3]]); return { t: e[0] * 10, p }; }); }
-      const wxAt = (E, t) => { let w = E.wx; for (const e of E.evs || []) if (e[1] === 'wx' && e[0] * 10 <= t) w = { kind: e[2], k: e[3], sl: w ? w.sl : 0, P: e[4] || undefined }; return w; };
-      function shakeAt(t) { const E = clip.env; let m = 0; for (const d of E.dis || []) if (d.k === 'quake') { const a = t - d.t0 * 10; if (a >= 0 && a < 3200) m = Math.max(m, 9 * (1 - a / 3200)); } for (const b of bolts) { const a = t - b.t - 300; if (a >= 0 && a < 520) m = Math.max(m, 5 * (1 - a / 520)); } return m && !paused ? [(Math.random() - 0.5) * 2 * m, (Math.random() - 0.5) * 1.4 * m] : [0, 0]; }
-      function back(g, t, z, K, dk) { const E = clip.env, ink = dk ? '#fff' : '#000', paper = dk ? '#000' : '#fff'; if (E.gr && window.__replayEnv) window.__replayEnv.ground(g, E.gr, t, dk, K); if (E.ob && window.__build && window.__build.drawTo) try { window.__build.drawTo(g, E.ob, dk, K, performance.now()); } catch (er) {}
-        if (K && imgs.ks && imgs.ks.complete && imgs.ks.naturalWidth) { const k = E.ks; g.imageSmoothingEnabled = false; if (k.dark !== dk) g.filter = 'invert(1)'; g.drawImage(imgs.ks, k.x0, k.y0, k.s, k.s); g.filter = 'none'; g.imageSmoothingEnabled = true; }
-        for (const c of E.cracks || []) { if (t - c.t0 * 10 > 90000) continue; g.beginPath(); for (let i = 0; i + 1 < c.p.length; i += 2) i ? g.lineTo(c.p[i], c.p[i + 1]) : g.moveTo(c.p[i], c.p[i + 1]); if (K) { g.strokeStyle = paper; g.lineWidth = 5; g.stroke(); g.strokeStyle = ink; g.lineWidth = 2; g.stroke(); } else { g.strokeStyle = dk ? 'rgba(255,255,255,.35)' : 'rgba(60,40,20,.55)'; g.lineWidth = 3; g.stroke(); } }
-        (E.things || []).forEach((th, i) => { g.save(); g.translate(th.x, th.y); if (th.r) g.rotate(th.r * Math.PI / 180); const w = th.w || 100, h = th.h || 70, x0 = -w / 2, y0 = -h / 2, im = imgs['t' + i];
-          if (im && im.complete && im.naturalWidth) { if (K) g.filter = 'grayscale(1) contrast(1.35)'; g.drawImage(im, x0, y0, w, h); g.filter = 'none'; if (K) { g.strokeStyle = ink; g.lineWidth = 1; g.strokeRect(x0, y0, w, h); } }
-          else { const chart = th.dk === 'chart'; g.fillStyle = K ? paper : chart ? (dk ? '#181d2b' : '#1e2433') : `hsl(${th.hue ?? 220},30%,${dk ? 20 : 93}%)`; g.fillRect(x0, y0, w, h); g.strokeStyle = K ? ink : 'rgba(120,140,170,.6)'; g.lineWidth = K ? 2 : 1; g.strokeRect(x0, y0, w, h);
-            const tc = K ? ink : chart ? '#5fb7ad' : (dk ? '#ddd' : '#333'); g.fillStyle = tc; g.font = (K ? '11px Silkscreen,' : 'bold 13px ') + 'ui-monospace,Menlo,monospace'; g.textAlign = 'left'; g.textBaseline = 'top'; if (th.ti) g.fillText(th.ti, x0 + 10, y0 + 8, Math.max(10, w - 20));
-            if (th.pts && th.pts.length > 1 && h > 80) { const px = x0 + 14, py = y0 + 34, pw = w - 28, ph = h - 70; g.strokeStyle = K ? ink : 'rgba(150,160,180,.35)'; g.lineWidth = 1; g.beginPath(); g.moveTo(px, py + ph / 2); g.lineTo(px + pw, py + ph / 2); g.moveTo(px + pw / 2, py); g.lineTo(px + pw / 2, py + ph); g.stroke(); g.strokeStyle = tc; g.lineWidth = 2; g.beginPath(); th.pts.forEach(([a, b], j) => { const X = px + a / 100 * pw, Y = py + ph - b / 100 * ph; j ? g.lineTo(X, Y) : g.moveTo(X, Y); }); g.stroke(); } }
-          g.restore(); });
-        for (const d of E.dis || []) { const a = t - d.t0 * 10; if (a < 0 || a > d.dur * 10 || d.k === 'quake') continue; let px = d.p.length ? d.p[0][1] : 0, py = d.p.length ? d.p[0][2] : 0; for (const q of d.p) if (q[0] * 10 <= t) { px = q[1]; py = q[2]; }
-          g.save(); g.globalAlpha = Math.max(0, Math.min(1, a / 800, (d.dur * 10 - a) / 1500));
-          if (d.k === 'volcano') { if (!K) { const gr = g.createRadialGradient(px, py - 30, 4, px, py - 30, 110); gr.addColorStop(0, 'rgba(255,140,40,.55)'); gr.addColorStop(1, 'rgba(255,90,20,0)'); g.fillStyle = gr; g.beginPath(); g.arc(px, py - 30, 110, 0, 7); g.fill(); }
-            g.fillStyle = K ? ink : '#4a2f25'; g.beginPath(); g.moveTo(px - 74, py + 42); g.lineTo(px - 20, py - 20); g.lineTo(px + 20, py - 20); g.lineTo(px + 74, py + 42); g.closePath(); g.fill(); g.fillStyle = K ? paper : '#ff7a2a'; g.beginPath(); g.ellipse(px, py - 19, 18, 5, 0, 0, 7); g.fill();
-            g.font = K ? '10px Silkscreen,ui-monospace,monospace' : 'bold 11px ui-monospace,Menlo,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; for (let k = 0; k < 14; k++) { const ph = ((a / 1100) + k * 0.137) % 1, x = px + Math.sin(k * 7.1) * 46 * ph, y = py - 22 - ph * 150 + ph * ph * 60; g.fillStyle = K ? ink : `hsl(${20 + k * 3},95%,${dk ? 62 : 50}%)`; g.fillText(K ? (k & 1 ? '1' : '0') : LAVA2[k % LAVA2.length], x, y); } }
-          if (d.k === 'tornado') { g.lineWidth = 2; g.setLineDash([6, 5]); g.strokeStyle = K ? ink : (dk ? 'rgba(200,210,230,.75)' : 'rgba(90,100,120,.75)'); for (let k = 0; k < 8; k++) { const cx = px + Math.sin(a / 300 + k) * k * 2.4, cy = py - k * 17, rx = 14 + k * 13; g.lineDashOffset = -a / 30 - k * 3; g.beginPath(); g.ellipse(cx, cy, rx, rx * 0.32, 0, 0, 7); g.stroke(); } g.setLineDash([]); }
-          g.restore(); } }
-      function plainWord(g, w, p, S) { g.font = '12px ui-monospace,Menlo,monospace'; g.textBaseline = 'middle'; g.textAlign = 'center'; const tw = g.measureText(w[0]).width + 10; g.save(); g.translate(p[0], p[1]); if (w[3]) g.rotate(w[3] * Math.PI / 180); g.beginPath(); if (g.roundRect) g.roundRect(-tw / 2, -9, tw, 18, 4); else g.rect(-tw / 2, -9, tw, 18); g.fillStyle = w[4] & 2 ? '#dfe9ff' : w[4] & 1 ? '#f6d9e9' : S.wb; g.fill(); g.strokeStyle = S.bd; g.lineWidth = 1; g.stroke(); g.fillStyle = S.fg; g.fillText(w[0], 0, 0.5); g.restore(); }
-      function wordAt(g, w, p, S) { const P = w[5] >= 0 && clip.env.ws[w[5]]; if (!P) return plainWord(g, w, p, S); g.save(); g.translate(p[0], p[1]); if (w[3]) g.rotate(w[3] * Math.PI / 180); g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.font = P.f; try { g.letterSpacing = P.ls || '0px'; } catch (e) {}
-        let bw0 = 0; if (P.be) { g.font = P.be.f; bw0 = g.measureText(P.be.t).width; g.font = P.f; } const tw = g.measureText(w[0]).width, W = tw + bw0 + P.pl + P.pr + 2 * P.bw, H = P.H, x0 = -W / 2, y0 = -H / 2, bx = (X, Y, a, b, r) => { g.beginPath(); if (r && g.roundRect) g.roundRect(X, Y, a, b, r); else g.rect(X, Y, a, b); };
-        g.globalAlpha = P.o ?? 1; if (P.sh) { g.fillStyle = P.sh.c; bx(x0 + P.sh.x, y0 + P.sh.y, W, H, P.r); g.fill(); } if (P.b) { g.fillStyle = P.b; bx(x0, y0, W, H, P.r); g.fill(); } if (P.bw) { g.lineWidth = P.bw; g.strokeStyle = P.bc; bx(x0 + P.bw / 2, y0 + P.bw / 2, W - P.bw, H - P.bw, P.r ? Math.max(0, P.r - P.bw / 2) : 0); g.stroke(); }
-        let tx = x0 + P.bw + P.pl; const by = y0 + P.bs; if (P.be) { g.font = P.be.f; g.fillStyle = P.be.c; g.fillText(P.be.t, tx, by); tx += bw0; g.font = P.f; } g.fillStyle = P.c; g.fillText(w[0], tx, by);
-        if (P.u) { g.strokeStyle = P.c; g.lineWidth = 1; g.setLineDash([1, 2]); g.beginPath(); g.moveTo(tx, by + 2.5); g.lineTo(tx + tw, by + 2.5); g.stroke(); g.setLineDash([]); } try { g.letterSpacing = '0px'; } catch (e) {} g.restore(); }
-      function says(g, t, z, K, dk) { const L2 = clip.env.says || []; if (!L2.length) return; const fs = Math.max(10, Math.round(13 / Math.max(0.5, Math.min(1.6, z)))); g.font = (K ? `${fs - 1}px Silkscreen,` : `${fs}px system-ui,`) + 'sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-        for (const x of L2) { const a = t - x[0] * 10, gh = ghosts[x[1]]; if (a < 0 || a > 2600 || !gh || gh._off) continue; const tw = g.measureText(x[2]).width + 14, bh = fs + 10, cx = gh.x, cy = gh.y - 34 - bh / 2 - 8 * (gh.size || 1); g.globalAlpha = Math.max(0, Math.min(1, (2600 - a) / 400, a / 120));
-          g.fillStyle = K ? (dk ? '#000' : '#fff') : (dk ? '#2a2f3a' : '#fff'); g.beginPath(); if (g.roundRect) g.roundRect(cx - tw / 2, cy - bh / 2, tw, bh, K ? 0 : 8); else g.rect(cx - tw / 2, cy - bh / 2, tw, bh); g.fill(); g.strokeStyle = K ? (dk ? '#fff' : '#000') : 'rgba(120,130,150,.6)'; g.lineWidth = 1; g.stroke(); g.fillStyle = K ? (dk ? '#fff' : '#000') : (dk ? '#eee' : '#222'); g.fillText(x[2], cx, cy + 0.5); g.globalAlpha = 1; } }
-      function sky(g, W, H, t, z, cxw, cyw, K, dk) { const E = clip.env, w = wxAt(E, t), RE = window.__replayEnv;
-        if (RE) { if (!K) RE.daylight(g, W, H, E.day, dk); RE.weather(wxs, g, W, H, t, w, { z, cxw, cyw, K, dk, paused, light: QUAL.low }); }   // light quality (phones): the tint and the ground, no particles
-        // lightning: the bolt and the flash (in the keep the whole picture flips black for white, twice, like the live keep)
-        const sx = X => W / 2 + (X - cxw) * z, sy = Y => H / 2 + (Y - cyw) * z;
-        for (const b of bolts) { const a = t - b.t; if (a < 0 || a > 600) continue; const path = () => { g.beginPath(); b.p.forEach(([x, y], i) => i ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y))); };
-          if (K) { if (a < 260) { g.strokeStyle = dk ? '#fff' : '#000'; g.lineWidth = 3; path(); g.stroke(); } if (a < 110 || (a >= 190 && a < 270)) { g.globalCompositeOperation = 'difference'; g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'source-over'; } }
-          else { const fa = 0.55 * Math.pow(0.86, a / 16); if (fa > 0.01) { g.fillStyle = `rgba(255,255,255,${fa.toFixed(3)})`; g.fillRect(0, 0, W, H); g.strokeStyle = `rgba(255,255,240,${Math.min(1, fa * 3).toFixed(3)})`; g.lineWidth = 2.5; path(); g.stroke(); } } } }
-      function pause(p) { if (p && !paused) { paused = true; pausedAt = performance.now(); } else if (!p && paused) { paused = false; t0 += performance.now() - pausedAt; } }
-      function at(tl, t) { if (!tl.length || t < tl[0][0] - 200 || t > tl[tl.length - 1][0] + 200) return null; let j = 0; while (j + 1 < tl.length && tl[j + 1][0] <= t) j++; const a = tl[j], b = tl[Math.min(j + 1, tl.length - 1)], k = b[0] > a[0] ? Math.max(0, Math.min(1, (t - a[0]) / (b[0] - a[0]))) : 0;
-        let dh = b[3] - a[3]; if (dh > Math.PI) dh -= Math.PI * 2; if (dh < -Math.PI) dh += Math.PI * 2; return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, a[3] + dh * k, k < 0.5 ? a[4] : b[4], k < 0.5 ? a[5] : b[5]]; }
-      function frame(now) { raf = requestAnimationFrame(frame); if (!clip) return; const dpr = Math.min(2, devicePixelRatio || 1), W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
-        if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
-        const el = paused ? pausedAt - t0 : now - t0, t = Math.min(u.dur, el), S = style();
-        const E = clip.env, K = !!(E && E.pl === 'keep'), dk = isDark(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = E ? (K ? (dk ? '#000' : '#fff') : (E.bg || S.bg)) : S.bg; g.fillRect(0, 0, cv.width, cv.height);
-        // framing: everyone in the clip at the start, pushing in on the moment as it comes
-        let x0 = -160, x1 = 160, y0 = -90, y1 = 90; for (const tl of u.tl) for (const r of tl) { if (r[1] < x0) x0 = r[1]; if (r[1] > x1) x1 = r[1]; if (r[2] < y0) y0 = r[2]; if (r[2] > y1) y1 = r[2]; }
-        const fitZ = Math.min(W / (x1 - x0 + 160), H / (y1 - y0 + 120)), k = Math.min(1, t / Math.max(1, u.dur)), e = k * k * (3 - 2 * k), z = fitZ * (1 + 0.35 * e), cxw = (x0 + x1) / 2 * (1 - e), cyw = (y0 + y1) / 2 * (1 - e);
-        const shk = E ? shakeAt(t) : [0, 0]; g.setTransform(dpr * z, 0, 0, dpr * z, dpr * (W / 2 - cxw * z + shk[0]), dpr * (H / 2 - cyw * z + shk[1])); if (E) back(g, t, z, K, dk);
-        // words (where they were, moving when they moved, gone when eaten)
-        const fi = u.times.findIndex(x => x > t) - 1, cur = fi < 0 ? u.times.length - 1 : fi, pos = clip.w.map(w => [w[1], w[2], true]);
-        for (const m of u.moves) { if (m[0] > cur) break; const p = pos[m[1]]; if (!p) continue; if (m[2] === -32768) p[2] = false; else { p[0] = m[2]; p[1] = m[3]; } }
-        g.font = '12px ui-monospace,Menlo,monospace'; g.textBaseline = 'middle'; g.textAlign = 'center';
-        if (E && E.ws) clip.w.forEach((w, i) => { const p = pos[i]; if (p[2]) wordAt(g, w, p, S); }); else clip.w.forEach((w, i) => { const p = pos[i]; if (!p[2]) return; const tw = g.measureText(w[0]).width + 10; g.save(); g.translate(p[0], p[1]); if (w[3]) g.rotate(w[3] * Math.PI / 180); g.beginPath(); if (g.roundRect) g.roundRect(-tw / 2, -9, tw, 18, 4); else g.rect(-tw / 2, -9, tw, 18); g.fillStyle = w[4] & 2 ? '#dfe9ff' : w[4] & 1 ? '#f6d9e9' : S.wb; g.fill(); g.strokeStyle = S.bd; g.lineWidth = 1; g.stroke(); g.fillStyle = S.fg; g.fillText(w[0], 0, 0.5); g.restore(); });
-        // the moment: a soft ring where it happened
-        const de = t - u.evT; if (de > -100 && de < 1400) { const a = 1 - Math.max(0, de) / 1400; g.beginPath(); g.arc(0, 0, 30 + Math.max(0, de) / 8, 0, Math.PI * 2); g.strokeStyle = `rgba(255,213,74,${(0.8 * a).toFixed(2)})`; g.lineWidth = 3 / z; g.stroke(); }
-        const tn = performance.now();
-        ghosts.forEach((gh, i) => { const r = at(u.tl[i], t); if (!r) return; const st = r[3] & 7; gh.vx = (r[0] - gh.x); gh.vy = (r[1] - gh.y); if (Math.hypot(gh.vx, gh.vy) > 60) { gh.x = r[0]; gh.y = r[1]; try { buildLegs(gh); } catch (er) {} } gh.x = r[0]; gh.y = r[1]; gh.heading = r[2]; gh.state = ST[st] || 'idle'; gh.held = st === 4; gh.hangryUntil = r[3] & 8 ? Date.now() + 1000 : 0;
-          if (!paused) try { stepLegs(gh, tn); } catch (er) {}
-          if (K) g.filter = 'grayscale(1) contrast(1.35)'; try { Crit.drawTo(g, gh, tn, !!(r[3] & 8)); } catch (er) {} if (K) g.filter = 'none';
-          const ca = clip.carry.filter(x => x[1] === i && x[0] <= r[4]).pop(); if (ca && ca[2]) { g.font = '11px ui-monospace,Menlo,monospace'; const tw = g.measureText(ca[2]).width + 8; g.fillStyle = S.wb; g.fillRect(gh.x - tw / 2, gh.y - 34, tw, 14); g.fillStyle = S.fg; g.fillText(ca[2], gh.x, gh.y - 27); } });
-        if (E) says(g, t, z, K, dk); g.setTransform(dpr, 0, 0, dpr, 0, 0); if (E) sky(g, W, H, t, z, cxw, cyw, K, dk); g.font = '11px system-ui'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillStyle = K ? (dk ? 'rgba(255,255,255,.6)' : 'rgba(0,0,0,.55)') : 'rgba(0,0,0,.45)'; g.fillText('▶ replay', 10, 14); }
-      return { start, stop, pause, get dur() { return u ? u.dur : 0; } }; }
+    // playing a clip: idle-replay-player.js (shared with the pedia), drawing creatures with idle-critdraw.js like the world does
+    const unpack = c => window.__replayPlayer.unpack(c);
+    function player(cv) { return window.__replayPlayer.make(cv, { dark: isDark, low: () => QUAL.low }); }
     // snapshots: the clips the reels point at go along (never all of them: they are big); restoring adds the ones it does not have
     function forSnap() { const { any } = refs(); return [...clips.values()].filter(c => any.has(c.id)).map(c => c.env && (c.env.ks || (c.env.things || []).some(t => t.u)) ? { ...c, env: { ...c.env, ks: null, things: (c.env.things || []).map(t => t.u ? { ...t, u: null } : t) } } : c); }
     function merge(list) { if (!Array.isArray(list)) return; for (const c of list) if (c && c.id && !clips.has(c.id)) { clips.set(c.id, c); put(c); } }
