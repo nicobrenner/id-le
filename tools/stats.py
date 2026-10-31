@@ -13,6 +13,7 @@ import argparse, datetime as dt, html, json, os, sys, urllib.error, urllib.parse
 API = "https://api.cloudflare.com/client/v4"
 NS_TITLE = "id-le-stats"
 STEPS = ["card", "name", "feed", "dream", "gazette", "weather", "reel", "keep"]
+DLSTEPS = ["what", "travel", "kinds", "team", "review", "stats", "where", "finished", "ended"]   # the data lab walkthrough (demo/idle-dlwalk.js)
 DWELL = ["<1", "1-5", "5-20", "20+"]
 TEST_FEATS = {"smoketest", "beacontest"}   # feature keys only our own checks send: a day with them includes our tests
 
@@ -108,7 +109,7 @@ def main():
     feats = sorted(tot.get("feat", {}).items(), key=lambda kv: -kv[1])
     print("\nopened (visits that opened it): " + (", ".join(f"{k} {v}" for k, v in feats[:20]) or "-"))
     errs = sorted(tot.get("err", {}).items(), key=lambda kv: -kv[1])
-    for k, title in (("ref", "came from"), ("utm", "campaign tags"), ("dw", "time on screen (minutes)"), ("fl", "guided start stopped at")):
+    for k, title in (("ref", "came from"), ("utm", "campaign tags"), ("dw", "time on screen (minutes)"), ("fl", "guided start stopped at"), ("dl", "data lab walkthrough steps reached")):
         v = {x: n for x, n in tot.get(k, {}).items() if n}
         if v:
             items = [(x, v.get(x, 0)) for x in DWELL] if k == "dw" else sorted(v.items(), key=lambda kv: -kv[1])
@@ -193,6 +194,7 @@ def dashboard(days, since, traffic, note):
     m = tot.get("m", {})
     funnel = [(s, (m.get(s) or {}).get("n", 0)) for s in STEPS]
     f5, fl, dw, ref, utm = nz(tot.get("f5")), nz(tot.get("fl")), nz(tot.get("dw")), nz(tot.get("ref")), nz(tot.get("utm"))
+    dl = nz(tot.get("dl"))
     feats = sorted(((k, n) for k, n in nz(tot.get("feat")).items() if k not in TEST_FEATS), key=lambda kv: -kv[1])[:20]
     dev, safe, fps = nz(tot.get("dev")), nz(tot.get("safe")), nz(tot.get("fps"))
     if traffic:
@@ -238,6 +240,7 @@ ul{{padding-left:18px;margin:0}}code{{font-size:12px;word-break:break-word}}
 <section><h2>Guided start: who reached each moment (of {new_visits} new browsers)</h2>{bars(funnel, total=new_visits or None)}<p class="muted">finished {f5.get("finished", 0)} · skipped {f5.get("skipped", 0)}</p></section>
 <section><h2>Guided start: where page loads stopped</h2>{bars([(k, fl.get(k, 0)) for k in ["none"] + STEPS + ["finished", "skipped"]], total=sum(fl.values()) or None, empty=later)}</section>
 <section><h2>Came from</h2>{bars(sorted(ref.items(), key=lambda kv: -kv[1])[:15], total=sum(ref.values()) or None, empty=later)}{("<h2 style='margin-top:12px'>Campaign tags</h2>" + bars(sorted(utm.items(), key=lambda kv: -kv[1])[:10])) if utm else ""}</section>
+<section><h2>Data lab walkthrough: browsers that reached each step</h2>{bars([(k, dl.get(k, 0)) for k in DLSTEPS], total=dl.get("what") or None, empty=later)}</section>
 <section><h2>Time on screen per page load (minutes)</h2>{bars([(k, dw.get(k, 0)) for k in DWELL], total=sum(dw.values()) or None, empty=later)}</section>
 <section><h2>Opened (visits that opened it)</h2>{bars(feats)}</section>
 <section><h2>Devices</h2>{bars([("desktop", dev.get("desktop", 0)), ("phone", dev.get("phone", 0)), ("iOS", tot.get("ios", 0))])}
