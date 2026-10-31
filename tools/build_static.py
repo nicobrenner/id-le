@@ -69,6 +69,10 @@ def main():
         src = os.path.join(DEMO, f)
         if os.path.exists(src): shutil.copy2(src, os.path.join(out, f))
         else: print("  missing (skipped):", f)
+    # the README's pictures, for the pedia's feature pages (img/<name>.jpg; the 3.7 MB hero.gif stays out)
+    img = os.path.join(ROOT, "docs", "img"); os.makedirs(os.path.join(out, "img"), exist_ok=True)
+    for f in sorted(os.listdir(img)):
+        if f.endswith(".jpg"): shutil.copy2(os.path.join(img, f), os.path.join(out, "img", f))
     sums = vendor_ort(out)
     open(os.path.join(out, "_headers"), "w").write(HEADERS)
     if a.pages_helper:   # Pages advanced mode: static files as usual, the helper (helper/worker.js) on the same origin
