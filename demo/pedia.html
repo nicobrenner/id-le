@@ -137,7 +137,10 @@ svg.onebit{float:right;margin:0 0 8px 14px;border:1px solid #000;shape-rendering
   const KEEPW = lit('SEEDW') || [], ICONS = lit('ICON') || {}, KEEPROOMS = lit('KIND_NAMES') || {}, KEEPGENES = lit('GENES0') || {};
   const FEATS = [...new Set(((/pick\(\[('stream'[^\]]*)\]/.exec(fnSrc('genFeatures')) || [])[1] || '').match(/'(\w+)'/g)?.map(s => s.slice(1, -1)) || [])];
   // the creature drawing code, taken verbatim from the world (legs, inverse kinematics, gait, bodies)
-  let draw = null; try { draw = new Function('pick', 'selected', ['sizeUp', 'restSpot', 'hip', 'knee', 'buildLegs', 'stepLegs', 'legsSVG', 'bodySVG'].map(fnSrc).join('\n') + '\nreturn { buildLegs, stepLegs, legsSVG, bodySVG };')(pick, null); } catch (e) { console.warn('pedia: drawing code', e); }
+  // legs and steps live in idle-critdraw.js since the clips (it sets window.__critDraw); the SVG bodies are still in arena.html
+  if (!window.__critDraw) await new Promise(r => { const sc = document.createElement('script'); sc.src = 'idle-critdraw.js'; sc.onload = sc.onerror = r; document.head.appendChild(sc); });
+  const KD = ['sizeUp', 'restSpot', 'hip', 'knee', 'buildLegs', 'stepLegs'];
+  let draw = null; try { const K = window.__critDraw || {}; draw = new Function('pick', 'selected', ...KD, ['legsSVG', 'bodySVG'].map(fnSrc).join('\n') + '\nreturn { buildLegs, stepLegs, legsSVG, bodySVG };')(pick, null, ...KD.map(n => K[n] || (() => { throw new Error(n + ' missing from idle-critdraw.js'); }))); } catch (e) { console.warn('pedia: drawing code', e); }
   // ---------- read-only view of your world (never written) ----------
   const ls = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
   const auto = ls('arena.autosave') || {}, liveG = ls('arena.genomes') || auto.genomes || {}, worldNow = ls('arena.world') || auto.world || {}, resting = ls('arena.resting') || auto.resting || [], namerSt = ls('arena.namers') || auto.namers || {};
@@ -295,7 +298,7 @@ svg.onebit{float:right;margin:0 0 8px 14px;border:1px solid #000;shape-rendering
   // off screen and loops; with reduced motion it shows one still frame of the moment.
   (async () => { let C; try { C = await (await fetch('pedia_clips.json', { cache: 'no-store' })).json(); } catch (e) { return; } if (!C || !C.clips) return;
     const load = f => new Promise(r => { const el = document.createElement('script'); el.src = f; el.onload = r; el.onerror = r; document.head.appendChild(el); });
-    for (const f of ['idle-critdraw.js', 'idle-replay-env.js', 'idle-build.js', 'idle-replay-player.js']) await load(f);
+    for (const f of ['idle-critdraw.js', 'idle-replay-env.js', 'idle-build.js', 'idle-replay-player.js']) if (!(f === 'idle-critdraw.js' && window.__critDraw)) await load(f);
     const RP = window.__replayPlayer; if (!RP || !window.__critDraw) return;
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches, live = [];
     for (const [id, x] of Object.entries(C.place || {})) { const hd = document.getElementById(id), cl = C.clips[x.clip]; if (!hd || !cl) continue;
