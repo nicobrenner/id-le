@@ -41,11 +41,12 @@
     el.innerHTML = `<div class="hd"><b>⚙ settings</b><button data-a="close" title="close">✕</button></div>
 <div class="row"><div class="t"><b>Public helper</b><small>${helperNote}</small></div>${sw('helper', pub() ? helperOn() : false, !pub())}</div>
 <div class="row"><div class="t"><b>Anonymous stats</b><small>${statsNote}</small></div>${sw('stats', pub() && !sandbox() ? statsOn() : false, !pub() || sandbox())}</div>
+${window.__looks ? `<div class="row"><div class="t"><b>Highlight creatures</b><small>A ring around every creature, the camouflaged ones too, so you can find them in a busy world. Tip: hold H to see them for a moment, tap H to switch.</small></div>${sw('hilite', window.__looks.state().hilite)}</div>` : ''}
 <div class="ft">Your worlds, your drawer and any AI keys stay in this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy: what Id|le keeps and sends ›</a></div>`;
   }
   el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.a === 'close') return toggle(false);
-    const k = b.dataset.k; if (!k || b.disabled) return; S[k] = !(S[k] !== false); save(); render();
+    const k = b.dataset.k; if (!k || b.disabled) return; if (k === 'hilite') { window.__looks.hilite(); render(); return; } S[k] = !(S[k] !== false); save(); render();
     if (k === 'helper' && window.__idle && window.__idle.swHelper) window.__idle.swHelper();
     if (window.__notify) window.__notify({ kind: 'system', text: k === 'helper' ? (helperOn() ? 'public helper on: creatures can read web pages again' : 'public helper off: no web pages are read for this browser') : (statsOn() ? 'anonymous stats on: thank you' : 'anonymous stats off: nothing more is sent from this browser') }); });
   // drag it by the header (not on phones, where it is a bottom sheet); its place is remembered and kept inside the window
