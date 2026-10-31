@@ -20,7 +20,7 @@
   #minimap{width:96px!important;height:auto!important;right:6px!important;bottom:6px!important}
   #zoomer{right:6px!important;left:auto!important;bottom:auto!important;top:50%;transform:translateY(-50%);flex-direction:column;gap:2px;padding:4px 2px;border-radius:14px}
   #zoomer button{width:40px;height:40px;font-size:22px;border-radius:10px}
-  #zoomer [data-z=in]{order:0}#zoomer input{order:1;display:block;writing-mode:vertical-lr;direction:rtl;width:28px;height:110px;margin:4px 0;accent-color:#2b5cff}#zoomer [data-z=out]{order:2}#zoomer .zp{order:3;min-width:0;font-size:11px;padding:2px 0 4px}
+  #zoomer [data-z=in]{order:0}#zoomer input{order:1;display:block;writing-mode:vertical-lr;direction:rtl;width:28px;height:110px;margin:4px 0;accent-color:#2b5cff}#zoomer [data-z=out]{order:2}#zoomer .zp{order:3;width:40px;height:30px;min-width:0;font-size:11px}
   .grow{display:none!important}
   #cline{display:none!important}
   #soundBtn,#sndMore,#lab-toggle,#rc-open{display:none!important}
@@ -29,6 +29,7 @@
   #herd.on,#studio.on,#lab.open{transform:none!important}
   #almanac{padding:0!important;align-items:flex-end!important}#almanac .bx{border-radius:16px 16px 0 0!important;max-height:88dvh;overflow:auto}
   #ntf{left:8px!important;right:8px;max-width:none!important;bottom:112px}
+  body.msheet #ntf{visibility:hidden!important}
   #roomchat{left:0!important;right:0!important;width:auto!important;max-width:none!important}
   #mSheet{position:fixed;left:0;right:0;bottom:0;z-index:10002;background:var(--floor,#fff);color:var(--ink,#222);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px #0006;padding:10px 12px calc(14px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .22s;font:13px system-ui}
   #mSheet.on{transform:none}
@@ -83,7 +84,8 @@
   setInterval(() => { if (!phone()) return; const now = performance.now(), open = [];
     for (const s of SHEETS) { const el = $(s); if (isOpen(el)) { if (!openedAt.has(el)) openedAt.set(el, now); open.push(el); if (!el._mSwipe) { el._mSwipe = 1; swipeClose(el, () => closeSheet(el)); } } else openedAt.delete(el); }
     if (open.length > 1) { open.sort((a, b) => openedAt.get(b) - openedAt.get(a)); open.slice(1).forEach(closeSheet); }
-    if (open.length && sheet && sheet.classList.contains('on')) toggleMore(false); }, 250);
+    if (open.length && sheet && sheet.classList.contains('on')) toggleMore(false);
+    document.body.classList.toggle('msheet', open.length > 0 || !!(sheet && sheet.classList.contains('on'))); }, 250);   // pills (the guide's 🧭 tips too) step aside while a sheet is open: sheets inside #arena are under them otherwise
 
   // swipe down from the top of a sheet (or anywhere while it is scrolled to the top) closes it
   function swipeClose(el, done) { let y0 = null, dy = 0;
