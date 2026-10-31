@@ -94,6 +94,8 @@ Id|le grew out of [Jeffy](https://github.com/nicobrenner/jeffy), a project about
 ## Contributing
 Issues and pull requests are welcome. The [roadmap (issue #20)](https://github.com/nicobrenner/id-le/issues/20) shows what is planned, and the [devlog](docs/devlog.md) explains how things work and what was measured along the way.
 
+**Tests.** `python3 tools/test_smoke.py` builds the static site into a temporary folder and checks it in headless Chromium and WebKit (iPhone profile), with every outside request stubbed: a fresh visit (starter world, the Oracle, the guided start, no errors), the camera's limits and wrap-around and the zoom control, every panel opening and closing, sound muting, the anonymous stats' allowlist, the data lab sorting with its in-browser classifiers, replays, and the pedia (sections, pictures, clips, phone width). It also runs `node --check` on every script and tests the helper Worker's rules. About a minute and a half; `--full` adds a frame-rate floor, `-k <name>` runs a subset. It needs `pip install playwright` and `playwright install chromium webkit`, and runs on every push ([smoke tests](.github/workflows/smoke.yml)). Please add a check for what you change.
+
 ## License
 [MIT](LICENSE), for the code and the bundled model files.
 

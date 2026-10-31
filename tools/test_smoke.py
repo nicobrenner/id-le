@@ -1,0 +1,461 @@
+"""Id|le regression checks: a static build in real browsers, plus the helper Worker and every script's syntax.
+
+    python3 tools/test_smoke.py            # the fast set (a few minutes): what CI runs on every push
+    python3 tools/test_smoke.py --full     # also a frame-rate floor with 300 creatures and a longer data lab run
+    python3 tools/test_smoke.py -k camera  # only the checks whose name contains "camera"
+    python3 tools/test_smoke.py --dist dist --keep   # reuse an existing build; keep the temporary build
+
+Needs: python3, node, and Playwright for Python (pip install playwright; playwright install chromium webkit).
+Nothing leaves this computer: the build is served on localhost, every other request is answered with an empty
+stub (fonts, CDNs, Jeffy's server, id-le.com), and /lab/* and /worlds/* are stubbed, so production storage is never touched.
+
+Why: each feature so far was tested by a one-off script, and a regression slipped through (applyCam's travel clamp and
+wrap-around sat inside a // comment for a day). Add a check here for whatever you build.
+"""
+import argparse, contextlib, functools, http.server, json, os, re, shutil, socket, socketserver, subprocess, sys, tempfile, threading, time, traceback
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEMO = os.path.join(ROOT, "demo")
+LOCK = os.environ.get("IDLE_BROWSER_LOCK", "/private/tmp/claude-501/idle-browser.lock")   # one headless browser at a time on a shared Mac
+RESULTS = []
+
+
+def check(name, fn, *a):
+    t0 = time.time()
+    try:
+        note = fn(*a) or ""
+        RESULTS.append((name, True, note, time.time() - t0)); print(f"  ok    {name}  {note}  ({time.time() - t0:.1f}s)", flush=True)
+    except Exception as e:
+        msg = f"{type(e).__name__}: {e}"
+        RESULTS.append((name, False, msg, time.time() - t0)); print(f"  FAIL  {name}  {msg}", flush=True)
+        if os.environ.get("IDLE_TEST_TRACE"): traceback.print_exc()
+
+
+def need(cond, msg):
+    if not cond: raise AssertionError(msg)
+
+
+# ---------------------------------------------------------------- static checks (no browser)
+def js_syntax():
+    files = [os.path.join(DEMO, f) for f in sorted(os.listdir(DEMO)) if f.endswith(".js")] + [os.path.join(ROOT, "helper", "worker.js")]
+    tmp = tempfile.mkdtemp(prefix="idle-js-"); bad = []
+    try:
+        for page in ("arena.html", "pedia.html", "privacy.html"):   # inline scripts too: most of the game lives in arena.html
+            html = open(os.path.join(DEMO, page), encoding="utf-8").read()
+            for i, m in enumerate(re.finditer(r"<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)</script>", html)):
+                if "json" in m.group(1): continue
+                ext = ".mjs" if "module" in m.group(1) else ".js"
+                p = os.path.join(tmp, f"{page}.{i}{ext}"); open(p, "w", encoding="utf-8").write(m.group(2)); files.append(p)
+        for f in files:
+            if f.endswith("worker.js"):   # an ES module (export default)
+                p = os.path.join(tmp, "worker.mjs"); shutil.copy(f, p); f = p
+            r = subprocess.run(["node", "--check", f], capture_output=True, text=True)
+            if r.returncode: bad.append(os.path.basename(f) + ": " + (r.stderr.strip().splitlines() or ["?"])[-1][:160])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    need(not bad, "; ".join(bad))
+    return f"{len(files)} scripts"
+
+
+WORKER_TEST = r"""
+globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; };   // the stats flush waits 20 s in production
+const kv = () => { const m = new Map(), puts = []; return { m, puts, get: async k => m.get(k) ?? null, put: async (k, v) => { puts.push(k); m.set(k, v); } }; };
+const W = (await import(process.argv[2])).default;
+const env = { STATS: kv(), WORLDS: kv(), ALLOWED_ORIGINS: '*', RATE_PER_MIN: '1000' };
+const go = async (path, init = {}, ip = '1.2.3.4') => { const ctx = { p: [], waitUntil(p) { this.p.push(p); } }; const r = await W.fetch(new Request('http://t' + path, { ...init, headers: { 'CF-Connecting-IP': ip, 'Content-Type': 'application/json', ...(init.headers || {}) } }), env, ctx); await Promise.all(ctx.p); return r; };
+const post = (path, body, ip) => go(path, { method: 'POST', body: JSON.stringify(body) }, ip);
+const out = {};
+// stats: allowlisted keys only, junk dropped, a page load counted once in its last time bucket
+await post('/lab/stats', { v: 1, visit: 1, dev: 'phone', ref: 'reddit.com', utm: 'r-webgames', fps: '55+', feat: ['datalab'], dw: '<1', fl: 'card', evil: 'x' });
+await post('/lab/stats', { v: 1, dw: '1-5', dw0: '<1', fl: 'finished', fl0: 'card' });
+await post('/lab/stats', { v: 1, visit: 1, ref: 'https://evil.example/path?q=1', dev: 'toaster', dw: '20+' });
+out.bad_format = (await post('/lab/stats', { v: 2 })).status;
+out.too_big = (await go('/lab/stats', { method: 'POST', body: 'x'.repeat(9000) })).status;
+const days = [...env.STATS.m.values()].map(v => JSON.parse(v));
+out.stats = days.reduce((a, d) => { for (const k of ['visits', 'dev', 'ref', 'utm', 'dw', 'fl', 'feat']) a[k] = typeof d[k] === 'number' ? (a[k] || 0) + d[k] : { ...(a[k] || {}), ...d[k] }; return a; }, {});
+out.stat_keys = [...new Set(days.flatMap(d => Object.keys(d)))].sort();
+// jeffy proxy: an allowlist of two paths; nothing else is relayed (no network needed for these answers)
+out.jeffy_train = (await post('/jeffy/train', { text: 'x', task: 'sms_spam' })).status;
+out.jeffy_get_predict = (await go('/jeffy/predict')).status;
+out.jeffy_no_text = (await post('/jeffy/predict', { task: 'sms_spam' })).status;
+// world links: a poll writes to KV only for a new world (the free plan allows 1,000 writes a day, shared by the account)
+const p0 = env.WORLDS.puts.length;
+for (let i = 0; i < 5; i++) await go('/worlds/state?code=testworld');
+out.world_poll_writes = env.WORLDS.puts.length - p0;
+out.world_state = await (await go('/worlds/state?code=testworld')).json();
+// rate limit: the 61st request in a minute from one address is refused
+env.RATE_PER_MIN = '60'; let last = 0; for (let i = 0; i < 61; i++) last = (await go('/lab/nothing', {}, '9.9.9.9')).status;
+out.rate_61st = last;
+console.log(JSON.stringify(out));
+"""
+
+
+def worker_unit():
+    tmp = tempfile.mkdtemp(prefix="idle-worker-")
+    try:
+        shutil.copy(os.path.join(ROOT, "helper", "worker.js"), os.path.join(tmp, "worker.mjs"))
+        t = os.path.join(tmp, "t.mjs"); open(t, "w").write(WORKER_TEST)
+        r = subprocess.run(["node", t, "file://" + os.path.join(tmp, "worker.mjs")], capture_output=True, text=True, timeout=60)
+        need(r.returncode == 0, (r.stderr or r.stdout)[-400:])
+        o = json.loads(r.stdout.strip().splitlines()[-1])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    s = o["stats"]
+    need(s["visits"] == 2, f"visits {s['visits']} != 2")
+    need(s["dev"] == {"phone": 1}, f"dev {s['dev']} (a made-up device must not be counted)")
+    need(s["ref"] == {"reddit.com": 1, "other": 1}, f"ref {s['ref']} (a full URL must count as 'other')")
+    need(s["utm"] == {"r-webgames": 1}, f"utm {s['utm']}")
+    need({k: v for k, v in s["dw"].items() if v} == {"1-5": 1, "20+": 1}, f"time buckets {s['dw']} (each page load once, in its last bucket)")
+    need({k: v for k, v in s["fl"].items() if v} == {"finished": 1}, f"guided-start stop {s['fl']}")
+    need("evil" not in o["stat_keys"], "an unknown key was stored")
+    need(o["bad_format"] == 400 and o["too_big"] == 413, f"bad format {o['bad_format']}, too big {o['too_big']}")
+    need(o["jeffy_train"] == 404 and o["jeffy_get_predict"] == 404, f"jeffy allowlist: train {o['jeffy_train']}, GET predict {o['jeffy_get_predict']}")
+    need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
+    need(o["world_poll_writes"] == 1, f"5 polls of one world wrote {o['world_poll_writes']} times to KV (expected 1)")
+    need("me" in o["world_state"], "world state has no 'me'")
+    need(o["rate_61st"] == 429, f"61st request in a minute: {o['rate_61st']}")
+    return "stats allowlist + buckets, jeffy allowlist, KV write throttle, rate limit"
+
+
+# ---------------------------------------------------------------- the build, served locally
+def build(out):
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_static.py"), "--out", out], capture_output=True, text=True)
+    need(r.returncode == 0, r.stderr[-600:])
+    need(os.path.exists(os.path.join(out, "index.html")) or os.path.exists(os.path.join(out, "arena.html")), "no page in the build")
+
+
+class Quiet(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store"); super().end_headers()
+
+
+class Server(socketserver.ThreadingTCPServer):
+    daemon_threads = True
+    def handle_error(self, *a): pass   # a browser closing a download early (lazy pictures, a page navigating) is not a failure
+
+
+def serve(d):
+    s = Server(("127.0.0.1", 0), functools.partial(Quiet, directory=d))
+    threading.Thread(target=s.serve_forever, daemon=True).start()
+    return s, f"http://127.0.0.1:{s.server_address[1]}"
+
+
+@contextlib.contextmanager
+def browser_lock():
+    held = False
+    if os.path.isdir(os.path.dirname(LOCK)) and not os.environ.get("CI"):
+        t0 = time.time()
+        while True:
+            try: os.mkdir(LOCK); held = True; break
+            except FileExistsError:
+                if time.time() - t0 > 1800: raise RuntimeError("the shared browser lock was held for 30 minutes: " + LOCK)
+                print("  waiting for the shared browser lock…", flush=True); time.sleep(15)
+    try: yield
+    finally:
+        if held:
+            with contextlib.suppress(OSError): os.rmdir(LOCK)
+
+
+CAPS = {"capabilities": [{"task_id": t, "name": t, "n_classes": n, "labels": {str(i): l for i, l in enumerate(L)}} for t, n, L in [
+    ("sms_spam", 2, ["ham", "spam"]), ("support_ticket", 5, ["billing", "technical", "account", "shipping", "other"]), ("tweet_eval_sentiment", 3, ["negative", "neutral", "positive"])]]}
+IGNORE_CONSOLE = re.compile(r"favicon|ERR_ABORTED|net::ERR_|Failed to load resource|onnxruntime|ort-wasm|SharedArrayBuffer|AudioContext was not allowed|The AudioContext")
+
+
+class Page:
+    """a page with every outside request stubbed, errors collected"""
+    def __init__(self, ctx, base, stats_sink=None):
+        self.ctx, self.base, self.errors, self.console, self.outside = ctx, base, [], [], []
+        self.stats = stats_sink if stats_sink is not None else []
+        ctx.route("**/*", self._route)
+
+    def _route(self, route):
+        u = route.request.url
+        if u.startswith(self.base):
+            path = u[len(self.base):].split("?")[0]
+            if path.startswith("/jeffy/capabilities"): return route.fulfill(status=200, content_type="application/json", body=json.dumps(CAPS))
+            if path.startswith("/jeffy/"): return route.fulfill(status=503, content_type="application/json", body='{"error":"busy"}')
+            if path == "/lab/stats": self.stats.append(route.request.post_data or ""); return route.fulfill(status=204, body="")
+            if path == "/lab/notices": return route.fulfill(status=200, content_type="application/json", body="[]")
+            if path.startswith("/worlds/state"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"me": {"name": "", "links": [], "requests": [], "inbox": []}, "peers": {}}))
+            if path.startswith("/lab/") or path.startswith("/worlds/"): return route.fulfill(status=200, content_type="application/json", body='{"ok":false,"error":"test stub"}')
+            return route.continue_()
+        if u.startswith("data:") or u.startswith("blob:"): return route.continue_()
+        self.outside.append(u.split("?")[0][:100])
+        ct = "text/css" if ".css" in u or "fonts.googleapis" in u else "text/plain"
+        return route.fulfill(status=200, content_type=ct, body="")
+
+    def open(self, path):
+        pg = self.ctx.new_page()
+        pg.on("pageerror", lambda e: self.errors.append(str(e)[:200]))
+        pg.on("console", lambda m: self.console.append(m.text[:200]) if m.type == "error" and not IGNORE_CONSOLE.search(m.text) else None)
+        pg.goto(self.base + path, wait_until="load")
+        return pg
+
+
+def wait_for(pg, js, timeout=60, every=0.5):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        try: v = pg.evaluate(js)
+        except Exception as e:   # the page may reload itself while booting (fresh start, recovery): wait for the new one
+            if "context was destroyed" not in str(e) and "navigation" not in str(e): raise
+            v = None
+        if v: return v
+        time.sleep(every)
+    raise AssertionError(f"timed out after {timeout}s waiting for {js[:80]}")
+
+
+def booted(pg):
+    wait_for(pg, "() => !!(window.__arena && window.__arena.raw && window.__arena.raw().length && window.__restoredOrFresh)", 90)
+
+
+# ---------------------------------------------------------------- browser checks
+def t_fresh_load(P):
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    n = pg.evaluate("() => window.__arena.raw().length")
+    need(n >= 8, f"only {n} creatures: is the starter world there?")
+    wait_for(pg, "() => !!(window.__oracle && (window.__oracle.ready || /Oracle is off|unavailable/i.test(document.body.innerText)))", 120)
+    f5 = pg.evaluate("() => !!(window.__first5 && window.__first5.state())")
+    need(f5, "the first-five guide did not start for a fresh visitor")
+    pg.wait_for_timeout(3000)
+    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
+    need(not P.console, "console errors: " + " | ".join(P.console[:3]))
+    return f"{n} creatures, Oracle ready={pg.evaluate('() => window.__oracle.ready')}, outside requests stubbed: {len(set(P.outside))}"
+
+
+def t_camera(P, phone=False):
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    cam = "window.__testCam"
+    z0 = pg.evaluate(f"() => {cam}.get().z")
+    need(abs(z0 - 1) < 0.01, f"default zoom {z0}, expected 1 (100%)")
+    sp = pg.evaluate(f"() => {cam}.space()"); vw, vh = pg.evaluate(f"() => {{ const v = {cam}.view(); return [v.w, v.h] }}")
+    zmin = pg.evaluate(f"() => {cam}.zMin()")
+    out = pg.evaluate(f"() => {cam}.set({{ z: 0.01 }}).z")
+    need(abs(out - zmin) < 1e-6, f"zoomed out to {out}, floor is {zmin}")
+    if phone: need(zmin >= 0.35 - 1e-9, f"phones must stop at 0.35 or more, got {zmin}")
+    else: need(abs(zmin - max(vw / sp['W'], vh / sp['H'])) < 1e-6 or zmin > 0, f"desktop floor {zmin}")
+    zin = pg.evaluate(f"() => {cam}.set({{ z: 99 }}).z"); zmax = pg.evaluate(f"() => {cam}.ZMAX")
+    need(abs(zin - zmax) < 1e-6, f"zoomed in to {zin}, ceiling {zmax}")
+    # wrap-around (the applyCam regression): the camera wraps instead of leaving the world
+    c = pg.evaluate(f"() => {cam}.set({{ z: 1, x: {cam}.space().W + 123, y: -77 }})")
+    need(abs(c["x"] - 123) < 1e-6 and abs(c["y"] - (sp["H"] - 77)) < 1e-6, f"wrap-around: x {c['x']} y {c['y']}")
+    # travel clamp: while travelling the view stays inside the page
+    c = pg.evaluate(f"() => {{ window.__traveling = true; try {{ return {cam}.set({{ z: 1, x: 5, y: 5 }}); }} finally {{ window.__traveling = false; }} }}")
+    need(c["x"] >= vw / 2 - 1 and c["y"] >= vh / 2 - 1, f"travel clamp: x {c['x']} y {c['y']} (half view {vw / 2}×{vh / 2})")
+    # the zoom control. A fresh world glides the camera to its first scene for a few seconds: wait for that to end first
+    pct = lambda: pg.evaluate("() => document.querySelector('#zoomer .zp').textContent")
+    zs, t0 = [], time.time()
+    while time.time() - t0 < 20 and not (len(zs) >= 4 and len(set(zs[-4:])) == 1):
+        zs.append(pg.evaluate(f"() => {cam}.get().z")); pg.wait_for_timeout(400)
+    pg.evaluate(f"() => {cam}.set({{ z: 1 }})"); pg.wait_for_timeout(600)
+    need(pg.evaluate(f"() => {cam}.get().z") == 1 and pct() == "100%", f"zoom 1 did not hold (now {pg.evaluate(f'() => {cam}.get().z')}, control {pct()})")
+    z0 = pg.evaluate(f"() => {cam}.get().z"); pg.click("#zoomer [data-z='in']"); z1 = pg.evaluate(f"() => {cam}.get().z")
+    need(abs(z1 / z0 - 1.25) < 0.01, f"+ took the zoom from {z0:.3f} to {z1:.3f} (expected ×1.25)")
+    pg.click("#zoomer [data-z='out']"); pg.click("#zoomer [data-z='out']"); z2 = pg.evaluate(f"() => {cam}.get().z")
+    need(abs(z2 / z1 - 0.64) < 0.01, f"− twice took {z1:.3f} to {z2:.3f} (expected ×0.64)")
+    need(pct() == f"{round(z2 * 100)}%", f"the control shows {pct()} at zoom {z2:.3f}")
+    pg.click("#zoomer .zp"); pg.click("#zoomer .zp")
+    need(abs(pg.evaluate(f"() => {cam}.get().z") - 1) < 0.01, "double-tap on the % should reset to 100%")
+    if phone:   # phones zoom the floor by layout (#35), not by scale(): at the floor, the floor's CSS zoom is set
+        pg.evaluate(f"() => {cam}.set({{ z: 0.01 }})"); pg.wait_for_timeout(400)
+        zz = pg.evaluate(f"() => {cam}.floorZoom()")
+        need(zz and abs(float(zz) - zmin) < 0.02, f"phone floor zoom '{zz}' (expected about {zmin:.2f}: CSS zoom, #35)")
+    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
+    return f"default 100%, floor {zmin:.2f}, ceiling {zmax}, wrap + travel clamp ok"
+
+
+PANELS = [("herdBtn", "creatures"), ("studioBtn", "studio"), ("reelsBtn", "reels"), ("drawerBtn", "drawer"), ("advBtn", "advisor"), ("djBtn", "music deck"),
+          ("almanacBtn", "almanac"), ("treesBtn", "trees"), ("settingsBtn", "settings"), ("ntfBtn", "notices"), ("rc-open", "IRC"), ("lab-toggle", "Operator"), ("labBtn", "data lab")]
+VISIBLE = """() => [...document.querySelectorAll('body *')].filter(e => { if (!e.id || e.offsetParent === null && getComputedStyle(e).position !== 'fixed') return false; const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+  const w = Math.min(r.right, innerWidth) - Math.max(r.left, 0), h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);   // on screen, not just laid out (side panels slide in)
+  return w > 120 && h > 80 && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && cs.display !== 'none'; }).map(e => e.id)"""
+
+
+def t_panels(P):
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg); pg.wait_for_timeout(1500)
+    if pg.evaluate("() => window.__first5 && window.__first5.skip") : pg.evaluate("() => window.__first5.skip()")   # the guide's pills would sit on top of some panels
+    opened, missing = [], []
+    for bid, name in PANELS:
+        if not pg.evaluate(f"() => !!document.getElementById('{bid}')"): missing.append(name); continue
+        before = set(pg.evaluate(VISIBLE)); e0 = len(P.errors)
+        pg.evaluate(f"() => document.getElementById('{bid}').click()"); pg.wait_for_timeout(700)
+        new = set(pg.evaluate(VISIBLE)) - before
+        need(len(P.errors) == e0, f"{name}: page error {P.errors[e0:e0 + 1]}")
+        need(new, f"{name} ({bid}): nothing new became visible")
+        opened.append(name)
+        if bid == "labBtn": pg.evaluate("() => window.__places && window.__places.closeLab && window.__places.closeLab()")
+        else:
+            pg.keyboard.press("Escape"); pg.wait_for_timeout(250)
+            still = set(pg.evaluate(VISIBLE)) & new
+            if still: pg.evaluate(f"() => document.getElementById('{bid}').click()")   # panels that toggle with their own button
+        pg.wait_for_timeout(300)
+        need(len(P.errors) == e0, f"{name}: page error on close {P.errors[e0:e0 + 1]}")
+    need(not missing, "buttons missing: " + ", ".join(missing))
+    need(not P.console, "console errors: " + " | ".join(P.console[:3]))
+    return f"{len(opened)} panels opened and closed"
+
+
+def t_sound(P):
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    st = lambda: pg.evaluate("() => { const c = window.__audio.ctx(); return [window.__audio.muted(), c ? c.state : 'none'] }")
+    if not pg.evaluate("() => window.__audio.muted()"): pg.click("#soundBtn"); pg.wait_for_timeout(600)
+    pg.click("#soundBtn"); pg.wait_for_timeout(400); m, s = st()
+    need(not m and s == "running", f"after unmute: muted={m} context={s}")
+    pg.click("#soundBtn"); pg.wait_for_timeout(700); m, s = st()
+    need(m and s == "suspended", f"after mute: muted={m} context={s} (a muted game should suspend its audio)")
+    return "unmute → running, mute → suspended"
+
+
+ALLOWED_STATS = {"v", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0"}
+
+
+def t_stats(P):
+    pg = P.open("/arena.html?fresh=1&test&utm_source=Smoke_Test!"); booted(pg)
+    need(pg.evaluate("() => !window.__settings.statsLive()"), "stats must never be live on localhost or a ?fresh test")
+    p = pg.evaluate("() => window.__stats.peek()") or {}
+    keys = set(p) if isinstance(p, dict) else set()
+    need(keys and keys <= ALLOWED_STATS, f"payload keys outside the allowlist: {sorted(keys - ALLOWED_STATS)}")
+    parts = pg.evaluate("() => window.__stats._parts()")
+    need(parts.get("ref") in ("direct", None), f"referrer for a direct visit: {parts.get('ref')}")
+    if parts.get("utm"): need(re.fullmatch(r"[a-z0-9-]{1,24}", parts["utm"]), f"utm not cleaned: {parts['utm']}")
+    need(not P.stats, f"{len(P.stats)} stats requests were sent from a test page")
+    return f"{len(keys)} keys, all allowlisted; nothing sent"
+
+
+def t_datalab(P, secs=45):
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => window.__places.openLab()")
+    s = wait_for(pg, """() => { const s = window.__lab && window.__lab.state && window.__lab.state(); return s && s.msgs.filter(m => m.done).length >= 3 ? s : null }""", secs + 60)
+    done = sum(1 for m in s["msgs"] if m.get("done")); where = s["stats"].get("where")
+    need("browser" in json.dumps(where), f"classifiers did not run in the browser: {where}")
+    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
+    return f"{done} sorted, in {s['stats']['in']}, where={where}"
+
+
+def t_datalab_stuck(P):
+    team = [{"head": "sms_spam", "role": "filter", "match": "spam", "thr": 0.7, "name": "Mine"}, {"head": "support_ticket", "role": "route", "thr": 0.6, "margin": 0.2, "name": "Rtr"},
+            {"head": "tweet_eval_sentiment", "role": "tag", "thr": 0.5, "name": "Late"}]
+    P.ctx.add_init_script("try { if (!sessionStorage.getItem('t')) { localStorage.setItem('arena.team', %s); sessionStorage.setItem('t', '1'); } } catch (e) {}" % json.dumps(json.dumps(team)))
+    pg = P.open("/arena.html?test"); booted(pg)
+    pg.evaluate("() => window.__places.openLab()")
+    txt = wait_for(pg, "() => { const t = (document.querySelector('#labStats') || {}).innerText || ''; return /stuck/i.test(t) && /Late/.test(t) ? t : '' }", 90)
+    line = next((l for l in txt.splitlines() if "Late" in l), "")
+    return "stuck line: " + line.strip()[:90]
+
+
+def t_replay(P):
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    r = pg.evaluate("""async () => { const C = await (await fetch('pedia_clips.json')).json(), cl = C.clips.storm; const cv = document.createElement('canvas'); cv.width = 320; cv.height = 200;
+      cv.style.cssText = 'position:fixed;left:0;top:0;width:320px;height:200px;z-index:99999'; document.body.appendChild(cv);
+      const P = window.__replayPlayer.make(cv, {}); P.start(cl); const snap = () => { const d = cv.getContext('2d').getImageData(0, 0, 320, 200).data; let h = 0, ink = 0; for (let i = 0; i < d.length; i += 16) { h = (h * 31 + d[i] + d[i + 1] * 7 + d[i + 2] * 13) | 0; if (d[i + 3]) ink++; } return [h, ink]; };
+      await new Promise(r => setTimeout(r, 900)); const a = snap(); await new Promise(r => setTimeout(r, 900)); const b = snap(); P.stop(); cv.remove();
+      return { a, b, wx: !!(cl.env && cl.env.wx), dur: P.dur }; }""")
+    need(r["wx"], "the storm clip carries no weather (env.wx)")
+    need(r["a"][1] > 100, "the replay drew nothing")
+    need(r["a"][0] != r["b"][0], "the replay's frames did not change in 0.9 s")
+    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
+    return f"storm clip plays, weather {r['wx']}"
+
+
+def t_pedia(P, phone=False):
+    pg = P.open("/pedia.html")
+    wait_for(pg, "() => document.querySelectorAll('#toc a').length > 20", 30)
+    toc = pg.evaluate("() => [...document.querySelectorAll('#toc a')].map(a => a.getAttribute('href')).filter(h => h && h.startsWith('#'))")
+    broken = pg.evaluate("(ids) => ids.filter(h => !document.getElementById(decodeURIComponent(h.slice(1))))", toc)
+    need(not broken, f"contents links to missing sections: {broken[:5]}")
+    wait_for(pg, "() => document.querySelectorAll('figure.clip canvas').length >= 5", 30)
+    pg.evaluate("() => document.querySelectorAll('img[loading=lazy]').forEach(i => i.loading = 'eager')")   # lazy pictures: load them all now
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => [...document.images].every(i => i.complete)", 30)
+    imgs = pg.evaluate("() => [...document.images].map(i => [i.currentSrc || i.src, i.complete && i.naturalWidth > 0])")
+    bad = [s for s, ok in imgs if not ok]
+    need(not bad, f"{len(bad)} pictures did not load: {bad[:3]}")
+    moving = pg.evaluate("""async () => { const out = []; for (const cv of document.querySelectorAll('figure.clip canvas')) { cv.scrollIntoView({ block: 'center' }); await new Promise(r => setTimeout(r, 700));
+        const g = cv.getContext('2d'), w = cv.width, h = cv.height, s = () => { const d = g.getImageData(0, 0, w, h).data; let x = 0; for (let i = 0; i < d.length; i += 64) x = (x * 31 + d[i] + d[i + 1]) | 0; return x; };
+        const a = s(); await new Promise(r => setTimeout(r, 700)); out.push(a !== s()); } return out; }""")
+    need(all(moving), f"clips not playing: {moving}")
+    if phone:
+        sw = pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
+        need(sw <= 1, f"sideways scroll of {sw}px at phone width")
+    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
+    need(not P.console, "console errors: " + " | ".join(P.console[:3]))
+    return f"{len(toc)} sections, {len(imgs)} pictures, {len(moving)} clips playing"
+
+
+def t_fps(P, n=300, floor=20):
+    pg = P.open("/arena.html?fresh=1&test&bench"); booted(pg)
+    pg.evaluate(f"() => window.__bench.spawn({n})"); pg.wait_for_timeout(6000)
+    fps = wait_for(pg, "() => window.__fps && window.__fps.fps", 20)
+    samples = []
+    for _ in range(5): pg.wait_for_timeout(1000); samples.append(pg.evaluate("() => window.__fps.fps"))
+    avg = sum(samples) / len(samples)
+    need(avg >= floor, f"{avg:.1f} fps with {n} extra creatures (floor {floor})")
+    return f"{avg:.1f} fps with {n} extra creatures"
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--full", action="store_true"); ap.add_argument("-k", default=""); ap.add_argument("--dist", default=""); ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--headed", action="store_true")
+    a = ap.parse_args(); t0 = time.time()
+    want = lambda name: a.k.lower() in name.lower()
+    print("static checks")
+    if want("js syntax"): check("js syntax", js_syntax)
+    if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "stats", "data lab", "data lab stuck", "replay", "pedia desktop", "camera phone", "pedia phone", "fps"]
+    if not any(want(n) for n in browser_names): return report(t0)
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("  FAIL  playwright is not installed (pip install playwright; playwright install chromium webkit)"); RESULTS.append(("playwright", False, "missing", 0)); return report(t0)
+    out = a.dist or tempfile.mkdtemp(prefix="idle-dist-")
+    try:
+        if not a.dist:
+            print("building", out); check("static build", build, out)
+        srv, base = serve(out)
+        print("browser checks at", base)
+        with browser_lock(), sync_playwright() as p:
+            ch = p.chromium.launch(headless=not a.headed, args=["--autoplay-policy=no-user-gesture-required"])
+            try:
+                def run(name, fn, *args, **ctxkw):
+                    if not want(name): return
+                    ctx = ch.new_context(viewport={"width": 1400, "height": 900}, **ctxkw); P = Page(ctx, base)
+                    try: check(name, fn, P, *args)
+                    finally: ctx.close()
+                run("fresh load", t_fresh_load)
+                run("camera desktop", t_camera)
+                run("panels", t_panels)
+                run("sound", t_sound)
+                run("stats", t_stats)
+                run("data lab", t_datalab, 90 if a.full else 45)
+                run("data lab stuck", t_datalab_stuck)
+                run("replay", t_replay)
+                run("pedia desktop", t_pedia)
+                if a.full: run("fps", t_fps)
+            finally:
+                ch.close()
+            if any(want(n) for n in ("camera phone", "pedia phone")):
+                wk = p.webkit.launch(headless=not a.headed)
+                try:
+                    dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
+                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("pedia phone", t_pedia, {"phone": True})):
+                        if not want(name): continue
+                        ctx = wk.new_context(**dev); P = Page(ctx, base)
+                        try: check(name, lambda P=P, fn=fn, kw=kw: fn(P, **kw))
+                        finally: ctx.close()
+                finally:
+                    wk.close()
+        srv.shutdown()
+    finally:
+        if not a.dist and not a.keep: shutil.rmtree(out, ignore_errors=True)
+    return report(t0)
+
+
+def report(t0):
+    bad = [r for r in RESULTS if not r[1]]
+    print(f"\n{len(RESULTS) - len(bad)}/{len(RESULTS)} passed in {time.time() - t0:.0f}s")
+    for n, _, msg, _ in bad: print(f"  FAIL  {n}: {msg}")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
