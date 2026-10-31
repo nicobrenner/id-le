@@ -5,6 +5,24 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-31
 
+**Creatures stand out from the charts, and charts stop piling up.** Nico (with a phone screenshot of a dark world full of charts): creatures were "hard to see in the noise", and "there aren't enough debuggers… we need to balance it out" (his second or third time asking).
+- Outlines: every body shape and the legs get a thin outline under their own colours (one extra stroke per shape, one per creature for all its legs; at least ~1.3 screen px at any zoom). Light mode: dark ink. Dark mode: a light line in the creature's own hue. Shy ones keep a faint outline (0.15–0.45 of full) and get it back in full when hovered or highlighted. Dark bodies are a little lighter in dark mode. Phones (light quality) keep the outline.
+- Findability (median colour distance between a creature and its surroundings, the #36 measure, 6 views each, a copy of Nico's world with 58 charts, a fixed third showy/plain/shy), before → after:
+
+| view | plain | showy | shy |
+|---|---|---|---|
+| desktop dark | 93 → **116** ↑ | 93 → 95 | 74 → 91 ↑ |
+| desktop light | 67 → **109** ↑ | 89 → **122** ↑ | 64 → 90 ↑ |
+| phone dark | 95 → **111** ↑ | 107 → 120 ↑ | 81 → 106 ↑ |
+| phone light | 73 → **125** ↑ | 93 → **160** ↑ | 65 → 92 ↑ |
+
+  Noise is about ±10. Shy ones stay the hardest to see everywhere, but less hidden than before, most on phones in dark mode (106 vs plain 111).
+- Finding: the first version used a dark outline in both themes; in dark mode it made creatures *less* findable (desktop showy 93 → 72, plain 93 → 86), the same trap as #36's halo: dark on a dark floor pulls them toward the background. A light outline in their own hue fixed it.
+- Chart ecology: a world now has a comfortable number of charts, 10 + 0.4 per creature (10–36). Past it, pressure p = charts/target − 1 feeds back: charts count as old 1/(1+3p) as soon (grazers, code eaters, Debuggers reach them earlier), Mathematicians replot one of their own old charts or count instead of adding (more often the fuller), creatures without a craft lend a Debugger's hand (code eaters most), code eaters graze charts more readily, and a child born into a full world with fewer than one Debugger per 12 creatures has an even chance of growing up one. Nothing is deleted outright; pinned charts are never touched.
+- Measured, 14 minutes, real time, side by side: a copy of Nico's world plus 3 Mathematicians (47 creatures, 4 Mathematicians, 1 Debugger): before 58 → 100 charts (68 made, 24 broken into code, 8 folded) and still climbing; after it came down to 28 within 4 minutes and held 32–36 (target 29; 66 made, 43 replots, 77 broken, 54 by helpers). Starter world (12 creatures, 1 Mathematician, no Debugger): 4 → 22 before, 4 → 15 after; the pressure was 0 there all along, so that gap is chance, and the brakes start at its target of 15.
+- Forced births under pressure: newborns grew up Debuggers by need (marked `byNeed` on the genome).
+- fps flat: 1,000 creatures, 3 × 8 s, before 41.9 / 34.6 / 35.2, after 42.4 / 38.2 / 46.9 (headless).
+
 **Stats: where visitors come from, how long they stay, where the guided start stops; a local dashboard.** Before a public post, the question was "what did a Reddit visitor actually do?". Nico chose our own anonymous daily totals over Umami or GA4 (GA4 needs cookies and a consent banner, which would break the privacy page's promise; the Umami instance lives on Jeffy's box). Three additions to `idle-stats.js`, still daily totals only:
 - Came from: the referring site's name only (`reddit.com`, `news.ycombinator.com`, `x.com` for t.co, `google` for any google.*), "direct" for no link or our own pages, never a path or query; plus a cleaned `utm_source`. The server keeps at most 30 site names and 20 tags per day and shard, the rest count as `other`, so the KV document stays small (767 bytes in the test with 44 visits from 40 sites).
 - Time on screen: visible time only (Page Visibility), bucketed <1 / 1-5 / 5-20 / 20+ minutes.
