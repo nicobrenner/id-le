@@ -87,7 +87,7 @@ python3 -m http.server 8776 -d dist
 ```
 
 ## Built with
-No WebGL: DOM + SVG + canvas2d (composited on the GPU by the browser), WebAudio for all the music (no audio files), and a tiny local ONNX model (the Tiny Oracle, 10.8 MB) running in a worker.
+No WebGL: DOM + SVG + canvas2d (composited on the GPU by the browser), WebAudio for all the music (no audio files), and a tiny local ONNX model (the Tiny Oracle, 10.8 MB) running in a worker. The data lab's starting classifiers run in the browser too, on [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) (int8, Apache-2.0, in `demo/jeffy-heads/`) with heads refitted by [Jeffy](https://github.com/nicobrenner/jeffy); they download (23.7 MB) only when a data lab opens.
 
 Id|le grew out of [Jeffy](https://github.com/nicobrenner/jeffy), a project about many small local classifiers: the Tiny Oracle and the data lab's classifier creatures come from there. It moved to its own repository on 2026-10-29 with its full history.
 
