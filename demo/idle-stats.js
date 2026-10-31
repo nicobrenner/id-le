@@ -11,6 +11,7 @@
 //                 "direct" when there was none; plus a campaign tag (utm_source) if the link had one
 //   time here     how long the page was on screen, as a bucket (<1, 1-5, 5-20, 20+ minutes); counted once per page load
 //   stopped at    for a guided start still running: the last of its moments you reached when you left (or finished/skipped)
+//   lab walk      the data lab walkthrough's steps reached (what, travel, kinds, team, review, stats, where), finished or ended; once per browser
 // Not sent: anything from the world (names, words, pictures), chats, AI keys, cookies, an ID that follows you.
 // The server (helper/worker.js) only adds these to daily totals; it keeps no single visit and no address.
 (() => {
@@ -74,6 +75,7 @@
     const p = { v: 1 }; let any = false;
     if (!sent.visit) { p.visit = 1; p.back = returning ? 1 : 0; p.dev = phone() ? 'phone' : 'desktop'; p.ios = window.__isIOS ? 1 : 0; p.safe = [0, 1, 2].includes(window.__safeLevel) ? window.__safeLevel : 0; p.ref = refHost(); const u = utm(); if (u) p.utm = u; any = true; }
     const fb = fpsBucket(); if (fb && !sent.fps) { p.fps = fb; any = true; }
+    try { const w = window.__dlwalk && window.__dlwalk.state && window.__dlwalk.state(); if (w) { const ks = Object.keys(w.done || {}).concat(w.finished ? ['finished'] : w.skipped ? ['ended'] : []).filter(k => !ahaSent['dl:' + k]); if (ks.length) { p.dl = ks; any = true; } } } catch (e) {}
     const nf = [...feats].filter(f => !sent.feats.includes(f)); if (nf.length) { p.feat = nf; any = true; }
     const ne = [...errs.keys()].filter(k => !sent.errs.includes(k)); if (ne.length) { p.err = ne; any = true; }
     try { const st = window.__first5 && window.__first5.state && window.__first5.state();
@@ -90,11 +92,11 @@
     let ok = false; try { ok = navigator.sendBeacon('/lab/stats', new Blob([JSON.stringify(p)], { type: 'application/json' })); } catch (e) {}
     if (!ok) return;
     if (p.visit) sent.visit = true; if (p.fps) sent.fps = true; if (p.feat) sent.feats.push(...p.feat); if (p.err) sent.errs.push(...p.err);
-    if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; try { localStorage.setItem(SENT, JSON.stringify(ahaSent)); } catch (e) {}
+    if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dl) p.dl.forEach(k => { ahaSent['dl:' + k] = 1; }); if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; try { localStorage.setItem(SENT, JSON.stringify(ahaSent)); } catch (e) {}
   }
   // batches: when the page is hidden or closed, and at 3 and 15 minutes for tabs that stay open
   addEventListener('visibilitychange', () => { if (document.hidden) send('hide'); });
   addEventListener('pagehide', () => send('leave'));
   setTimeout(() => send('3m'), 180000); setTimeout(() => send('15m'), 900000);
-  window.__stats = { live, peek: () => payload(true), _send: send, _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop() }) };
+  window.__stats = { live, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop() }) };
 })();
