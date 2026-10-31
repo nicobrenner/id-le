@@ -23,8 +23,8 @@
   #zoomer [data-z=in]{order:0}#zoomer input{order:1;display:block;writing-mode:vertical-lr;direction:rtl;width:28px;height:110px;margin:4px 0;accent-color:#2b5cff}#zoomer [data-z=out]{order:2}#zoomer .zp{order:3;min-width:0;font-size:11px;padding:2px 0 4px}
   .grow{display:none!important}
   #cline{display:none!important}
-  #soundBtn,#lab-toggle,#rc-open{display:none!important}
-  #advpanel,#dj,#reelpanel,#drawer,#trees,#settings,#ntfpanel,#conn,#team,#whisper,#objmenu{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;max-height:72dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;margin:0!important}
+  #soundBtn,#sndMore,#lab-toggle,#rc-open{display:none!important}
+  #advpanel,#dj,#reelpanel,#drawer,#trees,#settings,#ntfpanel,#conn,#team,#whisper,#objmenu,#sndpop{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;max-height:72dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;margin:0!important}
   #herd,#studio,#lab{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;height:78dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;transform:translateY(105%)!important;transition:transform .22s!important;border:0!important}
   #herd.on,#studio.on,#lab.open{transform:none!important}
   #almanac{padding:0!important;align-items:flex-end!important}#almanac .bx{border-radius:16px 16px 0 0!important;max-height:88dvh;overflow:auto}
@@ -45,7 +45,7 @@
   // ---------- ☰ more: every top-bar button that isn't kept on the bar, plus the chats and sound
   const LABELS = { labBtn: ['🧪', 'data lab'], connBtn: ['🌐', 'connect'], snapBtn: ['📸', 'snapshot'], evolveWorldBtn: ['🌦', 'evolve'], reelsBtn: ['🎞', 'reels'], pediaBtn: ['📖', 'pedia'],
     djBtn: ['🎧', 'music'], advBtn: ['📊', 'advisor'], drawerBtn: ['🗄', 'drawer'], treesBtn: ['🌳', 'family trees'], almanacBtn: ['🌊', 'almanac'], keepDetail: ['🏰', 'detail'],
-    'rc-open': [(window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.icon : '💬', (window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.short : 'IRC'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': [(window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.icon : '📟', (window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.short : 'Operator'], soundBtn: ['🔊', 'sound'] };
+    'rc-open': [(window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.icon : '💬', (window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.short : 'IRC'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': [(window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.icon : '📟', (window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.short : 'Operator'], soundBtn: ['🔊', 'sound'], sndMore: ['🎚', 'volume'] };
   const KEEP = ['herdBtn', 'ntfBtn', 'studioBtn', 'mMore'];
   let sheet = null, more = null;
   function mount() {
@@ -60,7 +60,7 @@
   function render() {
     const ids = [...$('#topbar').children].filter(el => el.tagName === 'BUTTON' && el.id && !KEEP.includes(el.id)).map(el => el.id);
     if ($('#keepDetail') && !$('#arena.keep')) ids.splice(ids.indexOf('keepDetail'), 1);
-    for (const extra of ['lab-toggle', 'rc-open', 'soundBtn']) if (document.getElementById(extra)) ids.push(extra);
+    for (const extra of ['lab-toggle', 'rc-open', 'soundBtn', 'sndMore']) if (document.getElementById(extra)) ids.push(extra);
     const wx = ($('#weatherLabel') || {}).textContent || '', fps = ($('#fps') || {}).textContent || '';
     sheet.innerHTML = `<span class="mgrab"></span><div class="mh"><b>Id|le</b><small>${esc(wx)}${wx && fps ? ' · ' : ''}${esc(fps)}</small><button class="mx" title="close">✕</button></div><div class="mg">` +
       ids.map(id => { const el = document.getElementById(id), L = LABELS[id] || [el.textContent.trim().slice(0, 2), (el.title || id).split(':')[0].slice(0, 16)];
@@ -71,7 +71,7 @@
   const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   // ---------- one sheet at a time
-  const SHEETS = ['#advpanel', '#dj', '#reelpanel', '#drawer', '#trees', '#settings', '#ntfpanel', '#conn', '#team', '#whisper', '#herd', '#studio', '#lab', '#almanac', '#objmenu'];
+  const SHEETS = ['#sndpop', '#advpanel', '#dj', '#reelpanel', '#drawer', '#trees', '#settings', '#ntfpanel', '#conn', '#team', '#whisper', '#herd', '#studio', '#lab', '#almanac', '#objmenu'];
   const CLOSE = '[data-a=close],[data-x=close],[data-s=close],[data-h=close],[data-d=close],[data-close],#lab-close,#connClose,#teamClose,.cx,button[title^="close"],.x';
   const isOpen = el => { if (!el || !el.isConnected) return false; const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return false; const r = el.getBoundingClientRect(); return r.height > 0 && r.top < innerHeight - 24; };
   function closeSheet(el) { if (el.id === 'whisper') { const b = el.querySelector('.cx'); if (b) b.click(); else el.style.display = 'none'; return; }

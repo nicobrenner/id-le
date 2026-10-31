@@ -9,6 +9,9 @@
 // lo-fi), a new variation, speed, key and scale, busyness, brightness, a level for each voice (pluck, pad, bells, drone, beat), and
 // whether it follows the weather and the day. A tweak can be saved as a track: it joins the sets, plays as the background or on the
 // deck (where rave mode hears it), and goes in the set list, which plays sets and tracks in order with a crossfade.
+// #21: one plays at a time (off / background / deck, the same switch here and in the 🔊 popover top right); the deck can play the
+// background as a base tune under its own parts (keyed and chorded to it); every mixer channel and effect has an on/off switch that
+// keeps its setting; all of it goes through the master (window.__audio): one mute, one volume, one AudioContext.
 (() => {
   const KEY = 'idle.music', $ = s => document.querySelector(s);
   const esc = t => String(t ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
@@ -42,8 +45,9 @@
 
   // ---------- audio graph ----------
   let ctx = null, master, bgBus, bgFilt, deckBus, laneA, laneB, curLane, OUT, dFilt, crush, crushWet, crushDry, echo, echoFb, echoWet, comp, noiseBuf = null;
-  function ensure() { if (ctx) return ctx; ctx = new (window.AudioContext || window.webkitAudioContext)();
-    comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(ctx.destination);
+  const A = () => window.__audio;
+  function ensure() { if (ctx) return ctx; ctx = A() ? A().ctx() : new (window.AudioContext || window.webkitAudioContext)();
+    comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(A() ? A().out() : ctx.destination);
     master = ctx.createGain(); master.gain.value = 0.9; master.connect(comp);
     bgFilt = ctx.createBiquadFilter(); bgFilt.type = 'lowpass'; bgFilt.frequency.value = 6000; bgFilt.connect(master);
     bgBus = ctx.createGain(); bgBus.gain.value = 0; bgBus.connect(bgFilt);
@@ -55,11 +59,13 @@
     crushWet.connect(post); crushDry.connect(post); post.connect(master); post.connect(echo); echo.connect(echoFb); echoFb.connect(echo); echo.connect(echoWet); echoWet.connect(master);
     const n = ctx.sampleRate * 2; noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
     applyFx(); return ctx; }
+  const fxOn = k => !((S.deck.fx.off || {})[k]), chOn = c => !(S.deck.ch[c] || {}).off;   // switches: off keeps the setting, it just isn't heard
+  const cutOf = () => fxOn('filter') ? 180 * Math.pow(2, S.deck.fx.filter * 6.8) : 20000;
   function applyFx() { if (!ctx) return; const f = S.deck.fx, t = ctx.currentTime;
-    dFilt.frequency.setTargetAtTime(180 * Math.pow(2, f.filter * 6.8), t, 0.05);
+    dFilt.frequency.setTargetAtTime(cutOf(), t, 0.05);
     const bits = Math.round(16 - f.crush * 13), steps = Math.pow(2, bits), c = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; c[i] = Math.round(x * steps / 2) / (steps / 2); } crush.curve = c;
-    crushWet.gain.setTargetAtTime(f.crush > 0.02 ? 1 : 0, t, 0.02); crushDry.gain.setTargetAtTime(f.crush > 0.02 ? 0 : 1, t, 0.02);
-    echo.delayTime.setTargetAtTime(Math.min(1.9, 0.75 * 60 / S.deck.bpm), t, 0.05); echoFb.gain.setTargetAtTime(0.25 + f.echo * 0.4, t, 0.05); echoWet.gain.setTargetAtTime(f.echo * 0.6, t, 0.05); }
+    const cr = fxOn('crush') && f.crush > 0.02; crushWet.gain.setTargetAtTime(cr ? 1 : 0, t, 0.02); crushDry.gain.setTargetAtTime(cr ? 0 : 1, t, 0.02);
+    echo.delayTime.setTargetAtTime(Math.min(1.9, 0.75 * 60 / S.deck.bpm), t, 0.05); const eo = fxOn('echo'); echoFb.gain.setTargetAtTime(eo ? 0.25 + f.echo * 0.4 : 0, t, 0.05); echoWet.gain.setTargetAtTime(eo ? f.echo * 0.6 : 0, t, 0.05); }
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
   function env(g, t, a, peak, d, sus, rel, dur) { g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.setTargetAtTime(sus * peak, t + a, d / 3); g.gain.setTargetAtTime(0.0001, t + Math.max(a, dur), rel / 4); }
   function tone(bus, t, freq, { type = 'triangle', dur = 0.3, vol = 0.2, a = 0.005, d = 0.15, sus = 0.3, rel = 0.3, cut = 4000, q = 0.7, detune = 0 } = {}) {
@@ -86,17 +92,19 @@
     if (G.kick[i]) { kick(t); if (!quiet) beat(t, 1); } else if (i % 4 === 0 && !quiet) beat(t, 0.4);
     if (i % 4 === 0 && !quiet) beatEv(t, i, G);
     if (G.snare[i]) snare(t); if (G.hat[i]) hat(t, i % 8 === 6); if (G.clap[i]) clap(t);
-    const ch = D.ch, root = 36 + D.key;
-    if (G.bass[i] && ch.bass.v > 0.01) tone(OUT, t, mtof(deg(sc, root, chord) + (i % 8 === 4 ? 12 : 0)), { type: oscFor(ch.bass.m), dur: spb * 1.6, vol: 0.32 * ch.bass.v, d: 0.12, sus: 0.6, rel: 0.08, cut: 280 + ch.bass.m * 2600, q: 2 + ch.bass.m * 6 });
-    if (!leadPat) rollLead(); const ln = leadPat[bar][i];
-    if (ln >= 0 && ch.lead.v > 0.01) tone(OUT, t, mtof(deg(sc, root + 24, chord + [0, 2, 4, 7, 9][ln])), { type: leadOsc(ch.lead.m), dur: spb * 0.9, vol: 0.11 * ch.lead.v, d: 0.08, sus: 0.3, rel: 0.12, cut: 900 + ch.lead.m * 5000 });
-    if (i === 0 && ch.pad.v > 0.01) [0, 2, 4].forEach(k => [-7, 7].forEach(dt => tone(OUT, t, mtof(deg(sc, root + 12, chord + k)), { type: ch.pad.m < 0.5 ? 'triangle' : 'sawtooth', dur: spb * 15, vol: 0.045 * ch.pad.v, a: 0.25, d: 0.5, sus: 0.8, rel: 0.6, cut: 600 + ch.pad.m * 3800, detune: dt })));
+    voices(D, G, i, bar, chord, t, spb, sc);
     if (dropAt && t >= dropAt.rise && t < dropAt.cut && i % 4 === 0) snare(t); }
+  // the deck's own parts (bass row, lead, pad), each through its mixer switch; chord is a degree of the scale (the deck's progression, or the base tune's)
+  function voices(D, G, i, bar, chord, t, spb, sc) { const ch = D.ch, root = 36 + D.key, on = c => !(ch[c] || {}).off;
+    if (G.bass[i] && on('bass') && ch.bass.v > 0.01) tone(OUT, t, mtof(deg(sc, root, chord) + (i % 8 === 4 ? 12 : 0)), { type: oscFor(ch.bass.m), dur: spb * 1.6, vol: 0.32 * ch.bass.v, d: 0.12, sus: 0.6, rel: 0.08, cut: 280 + ch.bass.m * 2600, q: 2 + ch.bass.m * 6 });
+    if (!leadPat) rollLead(); const ln = leadPat[bar][i];
+    if (ln >= 0 && on('lead') && ch.lead.v > 0.01) tone(OUT, t, mtof(deg(sc, root + 24, chord + [0, 2, 4, 7, 9][ln])), { type: leadOsc(ch.lead.m), dur: spb * 0.9, vol: 0.11 * ch.lead.v, d: 0.08, sus: 0.3, rel: 0.12, cut: 900 + ch.lead.m * 5000 });
+    if (i === 0 && on('pad') && ch.pad.v > 0.01) [0, 2, 4].forEach(k => [-7, 7].forEach(dt => tone(OUT, t, mtof(deg(sc, root + 12, chord + k)), { type: ch.pad.m < 0.5 ? 'triangle' : 'sawtooth', dur: spb * 15, vol: 0.045 * ch.pad.v, a: 0.25, d: 0.5, sus: 0.8, rel: 0.6, cut: 600 + ch.pad.m * 3800, detune: dt }))); }
   // drop: two bars of riser (filter closes, noise sweeps up, snare rolls), one beat of silence, then everything slams back in
   let dropAt = null;
   function drop() { if (!deck.playing) return; const spb = 60 / S.deck.bpm / 4, nextBar = deck.t0 + Math.ceil((deck.next - deck.t0) / (16 * spb)) * 16 * spb, rise = nextBar, cut = rise + 32 * spb - 4 * spb, back = rise + 32 * spb;
     dropAt = { rise, cut, back }; const n = noise(master, rise, { dur: cut - rise, vol: 0.12, type: 'bandpass', freq: 400, q: 3, a: cut - rise, rel: 0.02 }); n.frequency.setValueAtTime(300, rise); n.frequency.exponentialRampToValueAtTime(9000, cut);
-    dFilt.frequency.setTargetAtTime(500, rise, (cut - rise) / 3); dFilt.frequency.setTargetAtTime(180 * Math.pow(2, S.deck.fx.filter * 6.8), back, 0.01);
+    dFilt.frequency.setTargetAtTime(500, rise, (cut - rise) / 3); dFilt.frequency.setTargetAtTime(cutOf(), back, 0.01);
     setTimeout(() => { kick(back, 1.2); clap(back); noise(master, back, { dur: 0.6, vol: 0.18, type: 'lowpass', freq: 3000, rel: 0.6 }); strobeHit(true); }, Math.max(0, (back - ctx.currentTime) * 1000 - 30));
     setTimeout(() => { dropAt = null; }, (back - ctx.currentTime) * 1000 + 600); toast('drop in ' + Math.max(1, Math.round((back - ctx.currentTime))) + ' s'); }
 
@@ -178,7 +186,8 @@
   function trackGrid(T) { let g = tgCache.get(T); if (g) return g; const P = PROF[T.style] || PROF.home, b = lvl(P, T, 'beat') > 0.01;
     g = { kick: Array.from({ length: 16 }, (_, i) => b && kickAt(P, i) ? 1 : 0), bass: Array.from({ length: 16 }, (_, i) => P.bass > 0 && (i === 0 || (P.drums && i === 8)) ? 1 : 0), snare: Array(16).fill(0), hat: Array(16).fill(0), clap: Array(16).fill(0) }; tgCache.set(T, g); return g; }
   function trackDeckStep(step, t, D, quiet, st) { const i = step % 16, spb = 60 / D.bpm / 4, T = D.track; if (dropAt && t >= dropAt.cut && t < dropAt.back) return;
-    const P = PROF[T.style] || PROF.home, T2 = { ...T, speed: D.bpm / P.bpm }; trackStep(T2, step, t, OUT, null, st, spb);
+    const P = PROF[T.style] || PROF.home, T2 = D.base ? { ...T, speed: D.bpm / P.bpm, key: D.key, scale: D.scale } : { ...T, speed: D.bpm / P.bpm }; trackStep(T2, step, t, OUT, null, st, spb);
+    if (D.base) voices(D, D.grid, i, Math.floor(step / 16) % 4, st.chord || 0, t, spb, SCALES[D.scale] || SCALES.minor);   // the base tune: your bass, lead and pad on its chords
     const G = D.layer ? D.grid : trackGrid(T);
     if (D.layer) { if (G.kick[i]) kick(t); if (G.snare[i]) snare(t); if (G.hat[i]) hat(t, i % 8 === 6); if (G.clap[i]) clap(t); }
     if (!quiet) { const kk = G.kick[i] || (!D.layer && trackGrid(T).kick[i]); if (kk) beat(t, 1); else if (i % 4 === 0) beat(t, 0.4); if (i % 4 === 0) beatEv(t, i, D.layer ? { ...G, kick: G.kick.map((v, j) => v || trackGrid(T).kick[j]) } : G); }
@@ -188,7 +197,7 @@
     if (bg.wind) { bg.wind.g.gain.setTargetAtTime(v, ctx.currentTime, 2); if (v === 0) { const w = bg.wind; bg.wind = null; setTimeout(() => { try { w.s.stop(); w.l.stop(); } catch (e) {} }, 6000); } } }
 
   // ---------- on/off, handover ----------
-  function setBg(on) { S.bg.on = on; save(); if (on) { ensure(); ctx.resume(); bg.next = Math.max(bg.next, ctx.currentTime + 0.05); fadeBg(); run(); } else if (ctx) { bgBus.gain.setTargetAtTime(0, ctx.currentTime, 0.4); windPad(0); release(bg, 0.4); } render(); }
+  function setBg(on) { S.bg.on = on; save(); if (on) { ensure(); if (A()) A().wantSound(); else ctx.resume(); bg.next = Math.max(bg.next, ctx.currentTime + 0.05); fadeBg(); run(); } else if (ctx) { bgBus.gain.setTargetAtTime(0, ctx.currentTime, 0.4); windPad(0); release(bg, 0.4); } render(); }
   // ducking: while something else speaks (a reel playing, later others) the music steps back to about a fifth, keyed by who asked;
   // a live rave set is never ducked (the creatures are dancing to it)
   const ducks = new Set(), duckF = () => ducks.size ? 0.2 : 1, bgVol = () => S.bg.vol * duckF(), deckVol = () => S.deck.vol * (S.rave ? 1 : duckF());
@@ -197,13 +206,21 @@
     if (deck.playing) { deckBus.gain.cancelScheduledValues(now); deckBus.gain.setTargetAtTime(deckVol(), now, tc); } }
   function fadeBg() { if (!ctx) return; bgBus.gain.setTargetAtTime(S.bg.on && !deck.playing ? bgVol() : 0, ctx.currentTime, deck.playing ? 0.5 : 1.2); }
   // a change of style, key, scale or variation: a short dip, the long notes let go, and the new music starts on its first chord
-  function bgRestart() { save(); if (!ctx || !S.bg.on || deck.playing) return; const now = ctx.currentTime; release(bg, 0.3); bg.lastKey = null;
+  function bgRestart() { if (S.deck.base) { S.deck.track = trackOf(S.bg, world()); S.deck.setName = 'base tune: ' + (PROF[S.deck.track.style] || PROF.home).name; }   // the base tune follows your background tweaks
+    save(); if (!ctx || !S.bg.on || deck.playing) return; const now = ctx.currentTime; release(bg, 0.3); bg.lastKey = null;
     bgBus.gain.cancelScheduledValues(now); bgBus.gain.setTargetAtTime(bgVol() * 0.3, now, 0.12); bgBus.gain.setTargetAtTime(bgVol(), now + 0.5, 0.6); bg.step = 0; bg.next = Math.max(bg.next, now + 0.35); }
-  function play(on) { ensure(); ctx.resume(); deck.playing = on; const now = ctx.currentTime;
+  function play(on) { ensure(); if (on && A()) A().wantSound(); else if (!A()) ctx.resume(); deck.playing = on; const now = ctx.currentTime;
     if (on) { deck.step = 0; deck.t0 = deck.next = now + 0.08; release(deck.tst); deck.tst = newTst(); deck.out = null; [laneA, laneB].forEach(l => { l.gain.cancelScheduledValues(now); l.gain.setValueAtTime(l === laneA ? 1 : 0, now); }); curLane = OUT = laneA;
       deckBus.gain.setTargetAtTime(deckVol(), now, 0.05); lightsOn(true); run(); }
     else { deckBus.gain.setTargetAtTime(0, now, 0.15); dropAt = null; lightsOn(false); bg.next = now + 0.6; deck.q = null; deck.out = null; release(deck.tst, 0.2); }
-    fadeBg(); window.__music.playing = on; render(); }
+    fadeBg(); window.__music.playing = on; render(); srcEv(); }
+  // what plays: one at a time. 'deck' keeps the background's own on/off, so stopping the deck brings it back as before
+  const source = () => deck.playing ? 'deck' : S.bg.on ? 'bg' : 'off';
+  const srcEv = () => { try { dispatchEvent(new CustomEvent('idle:musicsrc', { detail: { src: source() } })); } catch (e) {} };
+  function setSource(k) { if (k !== 'off' && A()) A().wantSound(); if (k === 'deck') { if (!deck.playing) play(true); } else { if (deck.playing) play(false); if (S.bg.on !== (k === 'bg')) setBg(k === 'bg'); } render(); srcEv(); }
+  // the base tune: the background music as it is set now, played by the deck at the deck's tempo, key and scale, your parts on top
+  function setBase(on) { const D = S.deck; if (on) { if (D.track && !D.base) D.prevTrack = { track: D.track, layer: D.layer, setName: D.setName }; D.track = trackOf(S.bg, world()); D.base = true; D.layer = true; D.setName = 'base tune: ' + (PROF[D.track.style] || PROF.home).name; }
+    else { const pv = D.prevTrack; D.base = false; D.track = pv ? pv.track : null; D.layer = pv ? pv.layer : false; D.setName = pv ? pv.setName : null; D.prevTrack = null; } if (ctx) release(deck.tst, 0.3); deck.tst = newTst(); save(); render(); srcEv(); }
   // ---------- sets and the set list ----------
   const clampBpm = b => Math.max(50, Math.min(160, Math.round(b)));
   function loadSet(s) { if (!s) return;
@@ -221,7 +238,7 @@
     deck.q = { i, next: now + S.qo.each * 60 }; render(); }
   setInterval(() => { if (deck.q && (!deck.playing || !ctx)) deck.q = null; if (deck.q && ctx.currentTime >= deck.q.next - S.qo.xf) qNext(); }, 500);
   // the first click anywhere wakes the audio if the background music was left on (browsers only start sound on a gesture)
-  addEventListener('pointerdown', function wake() { if (S.bg.on) { ensure(); ctx.resume(); setBg(true); } removeEventListener('pointerdown', wake, true); }, true);
+  addEventListener('pointerdown', function wake() { if (S.bg.on && !(A() && A().muted())) { ensure(); setBg(true); } removeEventListener('pointerdown', wake, true); }, true);
 
   // ---------- event marks (only with the background music on and following the world; at most one per kind every 8 s) ----------
   const lastMark = {};
@@ -268,7 +285,7 @@
 @keyframes djsw{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
 #dj{position:fixed;right:16px;top:56px;width:330px;max-height:calc(100vh - 72px);overflow:auto;z-index:11;border:1px solid #8885;border-radius:12px;padding:8px 12px 12px;font:12px system-ui;background:color-mix(in srgb,var(--floor) 94%,transparent);box-shadow:0 6px 24px #0003;display:none}
 #dj.on{display:block}#dj h4{margin:10px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.7}#dj .hd{display:flex;justify-content:space-between;align-items:center;margin:-8px -12px 4px;padding:8px 12px 6px;position:sticky;top:-8px;z-index:2;background:var(--floor);border-bottom:1px solid #8883;cursor:grab;user-select:none;touch-action:none}#dj.drag .hd{cursor:grabbing}#dj .hd b{font-size:14px}
-#dj button{font:inherit;font-size:12px;padding:2px 8px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}#dj button.on{background:#2b5cff;color:#fff;border-color:#2b5cff}
+#dj button{font:inherit;font-size:12px;padding:2px 8px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}#dj button.on{background:#2b5cff;color:#fff;border-color:#2b5cff}#dj .row .sw+label{width:46px}#dj .seg{display:inline-flex;border:1px solid #8886;border-radius:8px;overflow:hidden}#dj .seg button{border:0;border-radius:0}
 #dj .row{display:flex;align-items:center;gap:6px;margin:3px 0}#dj .row label{width:58px;opacity:.8}#dj input[type=range]{flex:1;min-width:0}#dj select{font:inherit;font-size:12px;background:none;color:inherit;border:1px solid #8886;border-radius:6px}
 #dj .grid{display:grid;grid-template-columns:40px repeat(16,1fr);gap:2px;margin-top:4px}#dj .grid span{opacity:.75;font-size:10px;align-self:center}#dj .grid b{height:14px;border-radius:3px;border:1px solid #8885;cursor:pointer}
 #dj .grid b.x{background:#2b5cff;border-color:#2b5cff}#dj .grid b.q{margin-left:2px}#dj .grid b.now{outline:2px solid #f6b73c;outline-offset:-1px}#dj .drop{width:100%;margin-top:6px;padding:6px;font-weight:700;letter-spacing:.1em}
@@ -293,9 +310,12 @@
     const B = S.bg, T = trackOf(B, W), R = B.react, var_ = B.seed !== 1 ? ' · variation ' + B.seed : '';
     const mood = (B.style === 'world' ? (W.keep ? 'Gloamhold: low drones, slow bells' : 'Home: warm plucks and a pad') : (PROF[T.style] || PROF.home).name) + var_;
     const wx = /storm/.test(W.kind) ? ', a low pulse for the storm' : /rain/.test(W.kind) ? ', softened by the rain' : /fog/.test(W.kind) ? ', slowed by the fog' : /wind/.test(W.kind) ? ', with the wind breathing' : '';
+    const src = source(), sw = (k, on, tip) => `<button class="sw ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-sw="${k}" title="${tip}"></button>`;
     el.innerHTML = `<div class="hd"><b>🎧 music</b><button data-x="close" title="close">✕</button></div>
-<h4>background music</h4><div class="row"><button data-x="bg" class="${S.bg.on ? 'on' : ''}">${S.bg.on ? 'on' : 'off'}</button><label style="width:auto">volume</label><input type="range" min="0" max="1" step="0.01" value="${S.bg.vol}" data-r="bgvol"></div>
-<div class="sub">${S.bg.on ? (deck.playing ? 'resting while the deck plays' : mood + (R ? wx + (isNight(W.day) ? ', quieter for the night' : '') : ', not following the weather')) : 'off: turn it on for music that follows the place, the weather and the day'}</div>
+<div class="row"><label style="width:auto">plays</label><span class="seg">${[['off', 'off'], ['bg', 'background'], ['deck', 'deck']].map(([k, l]) => `<button data-x="src:${k}" class="${src === k ? 'on' : ''}">${l}</button>`).join('')}</span></div>
+<div class="sub">one at a time; the 🔊 top right mutes everything and sets the volume${A() && A().muted() ? ' · <b>muted now</b>' : ''}</div>
+<h4>background music</h4><div class="row"><label style="width:auto">volume</label><input type="range" min="0" max="1" step="0.01" value="${S.bg.vol}" data-r="bgvol"></div>
+<div class="sub">${S.bg.on ? (deck.playing ? (D.base ? 'playing as the deck\'s base tune' : 'resting while the deck plays') : mood + (R ? wx + (isNight(W.day) ? ', quieter for the night' : '') : ', not following the weather')) : 'off: turn it on for music that follows the place, the weather and the day'}</div>
 <div class="row"><label>style</label><select data-s="bgstyle">${Object.keys(STYLES).map(k => `<option value="${k}" ${k === B.style ? 'selected' : ''}>${STYLES[k]}</option>`).join('')}</select><button data-x="bgvar" title="a new variation of this style: chords, rhythm, register">↻ new variation</button></div>
 <details class="tweak" data-d="bgt" ${S.ui.bgt ? 'open' : ''}><summary>tweak${B.seed !== 1 || B.speed !== 1 || B.key >= 0 || B.scale !== 'auto' || B.dens !== 0.5 || B.bright !== 0.75 || !R || VOICES.some(v => B.voices[v] !== 1) ? ' ·  changed' : ''}</summary>
 <div class="row"><label>speed</label><input type="range" min="0.5" max="1.6" step="0.01" value="${B.speed}" data-r="bg:speed"><span class="bpm">${Math.round(bgTempo(W))} bpm</span></div>
@@ -308,13 +328,14 @@ ${VOICES.map(v => `<div class="row"><label>${v}</label><input type="range" min="
 <h4>deck</h4><div class="row"><button data-x="play" class="${deck.playing ? 'on' : ''}">${deck.playing ? '■ stop' : '▶ play'}</button><select data-s="preset">${Object.keys(PRESETS).map(p => `<option ${p === D.preset ? 'selected' : ''}>${p}</option>`).join('')}</select><button data-x="roll" title="a new lead melody">↻ melody</button></div>
 <div class="row"><button data-x="rave" class="${S.rave ? 'on' : ''}" title="rave mode: the creatures near you hear the deck and react by their own taste (tempo, loudness, drums, bass, melody)">🕺 rave ${S.rave ? 'on' : 'off'}</button><span class="sub" style="margin:0">${S.rave ? (deck.playing ? 'they can hear you' : 'press play') : 'play for the creatures'}</span></div>
 <div id="ravemeter"></div>
-${D.track ? `<div class="row trk"><span>🌙 track: <b>${esc(D.setName || (PROF[D.track.style] || PROF.home).name)}</b></span><button data-x="layer" class="${D.layer ? 'on' : ''}" title="play the grid's drums on top of the track">+ grid drums</button><button data-x="untrack" title="back to the grid">grid</button></div>` : ''}
+<div class="row"><button class="sw ${D.base ? 'on' : ''}" role="switch" aria-checked="${!!D.base}" data-x="base" title="play the background music (style, variation, voices as set above) under the deck, at the deck's tempo and in its key; your bass, lead and pad follow its chords"></button><label style="width:auto">base tune: the background music under your parts</label></div>
+${D.track && !D.base ? `<div class="row trk"><span>🌙 track: <b>${esc(D.setName || (PROF[D.track.style] || PROF.home).name)}</b></span><button data-x="layer" class="${D.layer ? 'on' : ''}" title="play the grid's drums on top of the track">+ grid drums</button><button data-x="untrack" title="back to the grid">grid</button></div>` : ''}
 <div class="row"><label>tempo</label><input type="range" min="50" max="160" step="1" value="${D.bpm}" data-r="bpm"><span>${D.bpm}</span></div>
 <div class="row"><label>key</label><select data-s="key">${NOTES.map((n, i) => `<option value="${i}" ${i === D.key ? 'selected' : ''}>${n}</option>`).join('')}</select><select data-s="scale">${Object.keys(SCALES).map(s => `<option ${s === D.scale ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
 <div class="row"><label>volume</label><input type="range" min="0" max="1" step="0.01" value="${D.vol}" data-r="vol"></div>
 <div class="grid">${ROWS.map(r => `<span>${r}</span>` + D.grid[r].map((v, i) => `<b class="${v ? 'x' : ''}${i % 4 === 0 && i ? ' q' : ''}" data-g="${r}:${i}"></b>`).join('')).join('')}</div>
-<h4>mixer · soft ↔ gritty</h4>${['bass', 'lead', 'pad'].map(c => `<div class="row"><label>${c}</label><input type="range" min="0" max="1" step="0.01" value="${D.ch[c].v}" data-r="ch:${c}:v" title="${c} volume"><input type="range" min="0" max="1" step="0.01" value="${D.ch[c].m}" data-r="ch:${c}:m" title="${c} mood: soft ↔ gritty"></div>`).join('')}
-<h4>effects</h4><div class="row"><label>filter</label><input type="range" min="0" max="1" step="0.01" value="${D.fx.filter}" data-r="fx:filter"></div><div class="row"><label>echo</label><input type="range" min="0" max="1" step="0.01" value="${D.fx.echo}" data-r="fx:echo"></div><div class="row"><label>bitcrush</label><input type="range" min="0" max="1" step="0.01" value="${D.fx.crush}" data-r="fx:crush"></div>
+<h4>mixer · soft ↔ gritty</h4>${['bass', 'lead', 'pad'].map(c => `<div class="row">${sw('ch:' + c, !D.ch[c].off, c + ' on or off (keeps its level)')}<label>${c}</label><input type="range" min="0" max="1" step="0.01" value="${D.ch[c].v}" data-r="ch:${c}:v" title="${c} volume"><input type="range" min="0" max="1" step="0.01" value="${D.ch[c].m}" data-r="ch:${c}:m" title="${c} mood: soft ↔ gritty"></div>`).join('')}
+<h4>effects</h4>${[['filter', 'filter'], ['echo', 'echo'], ['crush', 'bitcrush']].map(([k, l]) => `<div class="row">${sw('fx:' + k, !(D.fx.off || {})[k], l + ' on or off (bypass; keeps its setting)')}<label>${l}</label><input type="range" min="0" max="1" step="0.01" value="${D.fx[k]}" data-r="fx:${k}"></div>`).join('')}
 <button class="drop" data-x="drop" ${deck.playing ? '' : 'disabled'} title="two bars of build-up, a beat of silence, then everything back in">DROP</button>
 <h4>lights</h4><div class="row"><button data-l="pulse" class="${D.lights.pulse ? 'on' : ''}">floor pulse</button><button data-l="spots" class="${D.lights.spots ? 'on' : ''}" title="sweeping spotlights at Home">spotlights</button><button data-l="strobe" class="${D.lights.strobe ? 'on' : ''}" title="⚠ flashing light on the beat (at most four flashes a second; in Gloamhold it flips black and white). Off if your system asks for reduced motion">⚠ strobe</button></div>
 ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold still</div>' : ''}
@@ -326,6 +347,9 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
   el.addEventListener('click', e => { const b = e.target.closest('button,[data-g]'); if (!b) return; const D = S.deck, x = b.dataset.x;
     if (x === 'close') { S.open = false; save(); render(); }
     else if (x === 'bg') setBg(!S.bg.on);
+    else if (x && x.startsWith('src:')) setSource(x.slice(4));
+    else if (x === 'base') setBase(!S.deck.base);
+    else if (b.dataset.sw) { const [a, k] = b.dataset.sw.split(':'); if (a === 'ch') { D.ch[k].off = !D.ch[k].off; } else { D.fx.off = Object.assign({}, D.fx.off); D.fx.off[k] = !D.fx.off[k]; applyFx(); } save(); render(); }
     else if (x === 'play') play(!deck.playing);
     else if (x === 'roll') { D.seed = (D.seed + 1) % 1000; rollLead(); save(); }
     else if (x === 'drop') drop();
@@ -336,7 +360,7 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
     else if (x === 'bgreact') { S.bg.react = !S.bg.react; if (!S.bg.react) windPad(0); save(); render(); }
     else if (x === 'bgreset') { const k = { on: S.bg.on, vol: S.bg.vol, style: S.bg.style }; S.bg = Object.assign(BG0(), k); bgRestart(); render(); }
     else if (x === 'layer') { D.layer = !D.layer; save(); render(); }
-    else if (x === 'untrack') { D.track = null; D.layer = false; D.setName = null; D.bpm = Math.max(70, D.bpm); release(deck.tst); save(); render(); }
+    else if (x === 'untrack') { D.track = null; D.layer = false; D.setName = null; D.base = false; D.prevTrack = null; D.bpm = Math.max(70, D.bpm); release(deck.tst); save(); render(); }
     else if (x === 'qplay') { if (deck.q) { deck.q = null; render(); } else qPlay(); }
     else if (b.dataset.load) { const s = S.sets[+b.dataset.load]; if (s) { if (deck.playing && ctx) release(deck.tst, 0.3); loadSet(s); } }
     else if (b.dataset.asbg) { const s = S.sets[+b.dataset.asbg]; if (s) bgFromTrack(s); }
@@ -373,6 +397,6 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
       if (st.bg) { S.bg = Object.assign(BG0(), st.bg, { on: S.bg.on }); S.bg.voices = Object.assign(BG0().voices, S.bg.voices); }
       if (st.queue && !S.queue.length) S.queue = st.queue.filter(id => S.sets.some(s => s.t === id)); if (st.qo) S.qo = Object.assign(S.qo, st.qo); save(); render(); },
     bgTrack: () => trackOf(S.bg, world()), bgSet: o => { Object.assign(S.bg, o); bgRestart(); render(); }, loadSet, bgFromTrack, qPlay, qNext, styles: Object.keys(STYLES), _q: () => deck.q, _out: () => deck.out,
-    setBg, play, drop, features, rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); reDuck(); render(); }, _ducks: () => [...ducks], _gains: () => ctx && { bg: +bgBus.gain.value.toFixed(3), deck: +deckBus.gain.value.toFixed(3) }, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _ctx: () => ctx, _deck: deck, _bg: bg };
+    setBg, play, drop, features, source, setSource, setBase, baseOn: () => !!(deck.playing && S.deck.base), rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); reDuck(); render(); }, _ducks: () => [...ducks], _gains: () => ctx && { bg: +bgBus.gain.value.toFixed(3), deck: +deckBus.gain.value.toFixed(3) }, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _ctx: () => ctx, _deck: deck, _bg: bg };
   render();
 })();

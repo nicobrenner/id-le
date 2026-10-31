@@ -10,7 +10,9 @@
 // For you: when the view is busy every plain creature gets a faint halo under it so it separates from the word-bricks; the hovered
 // creature always gets a clear ring; "highlight creatures" (⚙ settings, the ✨ button on phones, or hold / press H) rings
 // every creature, camouflaged or not. All drawing is on the creature canvas; ripples are pooled; light quality drops them.
-//   window.__looks: pre, post, dazzle, step, end (renderer hooks), scareMul, targetMul, slip, bond (gameplay), cardLine,
+// Every creature also gets a thin dark keyline round its body and legs (Oct 31), so it reads on charts and busy floors; shy ones
+// keep a faint one.
+//   window.__looks: pre, post, dazzle, step, end, ink (renderer hooks), scareMul, targetMul, slip, bond (gameplay), cardLine,
 //   showOf(c), hilite(on?), state()
 (() => {
   const H = () => window.__looksHooks; if (!H()) return;
@@ -43,6 +45,9 @@
       R = (r * 1.6 + 14) * pulse * (0.75 + 0.5 * (s - 0.66) / 0.34); g.save(); g.globalAlpha *= 0.55 + 0.45 * (s - 0.66) / 0.34; g.drawImage(glowSprite((c.gs || c.g).hue), c.x - R, c.y - R, R * 2, R * 2); g.restore(); }
     if (s <= 0.34 && !hilited(c)) g.globalAlpha *= 1 - 0.5 * (0.34 - s) / 0.34 * (c.state === 'move' ? 0.8 : 1); }   // camouflage: fades toward the floor (less while it walks)
   const hilited = c => S.hilite || held || c === H().hover();
+  // the keyline under every creature (arena.html, Crit): full for showy and plain ones, faint for shy ones (they still blend in, but
+  // never vanish into a chart), full again when you highlight or hover them
+  const ink = c => { if (!c.g || hilited(c)) return 1; const s = showOf(c); return s <= 0.34 ? 0.15 + 0.3 * s / 0.34 : 1; };
   function post(g, c, t) { const sel = c === H().selected(), hov = c === H().hover(); if (!(S.hilite || held || hov) || sel) return;
     const r = rad(c) * 0.95 + 9, z = H().cam().z || 1, lw = Math.max(1.2, 2 / z), hue = (c.gs || c.g).hue || 200;
     g.save(); g.beginPath(); g.arc(c.x, c.y, r, 0, Math.PI * 2); g.lineWidth = lw + 2 / z; g.strokeStyle = H().isDark() ? 'rgba(0,0,0,.7)' : 'rgba(255,255,255,.85)'; g.stroke();
@@ -93,5 +98,5 @@
   function cardLine(c) { const s = showOf(c), k = kind(c);
     return `<span class="k">looks</span> ${k === 'showy' ? 'showy · glows in a crowd, leaves ripples' : k === 'shy' ? 'shy · blends into the floor' : 'plain'} (${s.toFixed(2)})${c._dz ? ' · in a dazzle herd' : ''}<br>`; }
 
-  window.__looks = { pre, post, dazzle, step, end, scareMul, targetMul, slip, bond, cardLine, showOf, kind, hilite, state: () => ({ hilite: S.hilite, held, busy: +busy.toFixed(2), herds, ripples: rip.filter(o => performance.now() - o.t < 700).length }) };
+  window.__looks = { pre, post, dazzle, step, end, ink, scareMul, targetMul, slip, bond, cardLine, showOf, kind, hilite, state: () => ({ hilite: S.hilite, held, busy: +busy.toFixed(2), herds, ripples: rip.filter(o => performance.now() - o.t < 700).length }) };
 })();

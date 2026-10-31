@@ -37,7 +37,7 @@ html.bootkeep #boot{background:#000;color:#fff;font-family:ui-monospace,Menlo,mo
 #workshop{margin:6px 16px;border:1px solid #8884;border-radius:10px;padding:4px 8px;font-size:12px}#workshop summary{cursor:pointer;opacity:.75;padding:3px 0}#workshop #evo,#workshop #terrainrow{padding:4px 0}
 #drives{padding:4px 0}.drow{margin:3px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.drow b{min-width:90px}.dstate{opacity:.7;min-width:150px}.dv{display:inline-block;width:46px;height:6px;border-radius:3px;background:#8883;overflow:hidden;vertical-align:middle}.dv i{display:block;height:100%;background:#2b5cff}
 #worldrow{padding:4px 0}#snaprow{padding:6px 0;border-top:1px solid #8883;margin-top:6px}#snaps .scard{display:inline-block;border:1px solid #8885;border-radius:8px;padding:4px 8px;margin:3px 6px 3px 0;font-size:11px}#snaps button{font-size:10px;padding:1px 6px;margin:2px 2px 0 0}.fileload{font-size:11px;border:1px solid #8886;border-radius:6px;padding:1px 6px;cursor:pointer}#worldCtl{display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0}#worldCtl label{display:flex;align-items:center;gap:5px}#worldCtl input[type=range]{width:90px}#worldColl .wcard{display:inline-block;border:1px solid #8885;border-radius:8px;padding:4px 8px;margin:3px 6px 3px 0;font-size:11px;vertical-align:top}#worldColl .wcard.cmp{border-color:#2b5cff}#worldColl button{font-size:10px;padding:1px 6px;margin:2px 2px 0 0}#worldrow button{font-size:11px;padding:2px 7px;margin-left:3px}
-#soundBtn{position:absolute;right:8px;top:8px;z-index:8;font-size:14px;padding:2px 6px;opacity:.7}
+#sndWrap{position:absolute;right:8px;top:8px;z-index:12;display:flex;gap:2px;align-items:flex-start}#soundBtn{font-size:14px;padding:2px 6px;opacity:.7}#sndMore{font-size:10px;padding:2px 4px;opacity:.55}#soundBtn:hover,#sndMore:hover{opacity:1}#sndpop{display:none;position:absolute;right:0;top:28px;width:270px;padding:8px 10px;border:1px solid #8885;border-radius:12px;background:var(--floor);box-shadow:0 6px 24px #0004;font:12px system-ui}#sndpop.on{display:block}#sndpop .r{display:flex;align-items:center;gap:6px;margin:5px 0}#sndpop .r label{flex:none;min-width:70px}#sndpop input[type=range]{flex:1;min-width:0}#sndpop h6{margin:8px 0 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.6}#sndpop .sub{opacity:.65;font-size:11px}#sndpop button:not(.sw){font:inherit;font-size:12px;padding:2px 8px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}.sw{width:30px;height:16px;border-radius:9px;border:1px solid #8888;background:#8884;position:relative;padding:0!important;flex:none;cursor:pointer;vertical-align:middle}.sw::after{content:"";position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #0005;transition:left .12s}.sw.on{background:#2fbf71!important;border-color:#2fbf71!important}.sw.on::after{left:15px}.seg{display:inline-flex;border:1px solid #8886;border-radius:8px;overflow:hidden}.seg button{border:0!important;border-radius:0!important;background:none;color:inherit;font:inherit;font-size:12px;padding:2px 8px;cursor:pointer}.seg button.on{background:#2b5cff!important;color:#fff}
 #quick{display:flex;gap:6px;flex-wrap:wrap;margin:6px 16px 0}#quick button{font-size:12px;padding:3px 9px;border-radius:14px}#quick .x{margin-left:4px;opacity:.5}#quick .add{opacity:.6}
 .word.locked{color:#ff3b6b!important;opacity:1!important;font-weight:700;text-shadow:0 0 10px #ff3b6baa,0 0 22px #2b5cff88;animation:lockpulse .55s ease-in-out infinite;z-index:7;outline:1.5px solid #ff3b6b;outline-offset:3px;border-radius:4px}@keyframes lockpulse{0%,100%{scale:1.15}50%{scale:1.55;text-shadow:0 0 18px #ff3b6b,0 0 30px #2b5cff}}
 .word.trash{background:transparent;border:0;opacity:.55;font-size:13px;padding:0}.word.built{font-weight:700;opacity:1;text-decoration:underline dotted}
@@ -208,7 +208,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
 <div id="labStats"></div></div>
 <div id="insp"></div><div id="notice"></div><div id="roomchat"><div id="rc-head"><b id="rc-title">IRC · Id|le Relay Chat</b><span><button id="rc-min" title="collapse">▾</button><button id="rc-close" title="close">×</button></span></div><div id="rc-body"><div id="quick"></div>
 <div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button class="mic" data-mic="chat" title="speak to everyone (uses the browser's speech recognition)">🎤</button><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
-<div id="log"></div></div></div><button id="rc-open">💬 IRC</button><div id="whisper"><div class="chead" title="drag to move the card (double-click: dock it beside the creature again)"><span class="csw"></span><b class="cnm"></b><small class="cfam"></small><span class="cst"></span><button class="cx" title="close (Esc)">×</button></div><div id="ccard"></div><div id="creels"></div><div id="cfamily"></div><div id="clife"></div><div class="wrow win"><input id="whisperIn" placeholder="say something to it…"><button class="mic" data-mic="whisperIn" title="speak">🎤</button></div><div class="wrow wacts"><button data-wact="hangry" title="a feeding frenzy: for about 50 s it eats a lot of what it eats, fast, glowing and shaking">😤 hangry</button><button data-wact="mutate">mutate</button><button data-wact="big">×3</button><button data-wact="revert">revert</button><button data-wact="keep" title="save its body plan as a blueprint in Designs (and mark it as a favourite: the fitness signal)">♥ keep</button><button data-wact="clone">clone</button><button data-wact="portrait" title="put its portrait in your drawer: name, genes and a few lines of its diary">🗄 portrait</button><button data-wact="rest" title="put it away: it keeps its name, memories and friends, stops moving and frees a place (wake it from the creatures sidebar)">rest</button></div></div><svg id="cline"></svg><button id="soundBtn" title="sounds (off by default)">🔇</button></div>
+<div id="log"></div></div></div><button id="rc-open">💬 IRC</button><div id="whisper"><div class="chead" title="drag to move the card (double-click: dock it beside the creature again)"><span class="csw"></span><b class="cnm"></b><small class="cfam"></small><span class="cst"></span><button class="cx" title="close (Esc)">×</button></div><div id="ccard"></div><div id="creels"></div><div id="cfamily"></div><div id="clife"></div><div class="wrow win"><input id="whisperIn" placeholder="say something to it…"><button class="mic" data-mic="whisperIn" title="speak">🎤</button></div><div class="wrow wacts"><button data-wact="hangry" title="a feeding frenzy: for about 50 s it eats a lot of what it eats, fast, glowing and shaking">😤 hangry</button><button data-wact="mutate">mutate</button><button data-wact="big">×3</button><button data-wact="revert">revert</button><button data-wact="keep" title="save its body plan as a blueprint in Designs (and mark it as a favourite: the fitness signal)">♥ keep</button><button data-wact="clone">clone</button><button data-wact="portrait" title="put its portrait in your drawer: name, genes and a few lines of its diary">🗄 portrait</button><button data-wact="rest" title="put it away: it keeps its name, memories and friends, stops moving and frees a place (wake it from the creatures sidebar)">rest</button></div></div><svg id="cline"></svg><span id="sndWrap"><button id="sndMore" title="volume, and what plays">▾</button><button id="soundBtn" title="sound: click to mute or unmute everything (hover or ▾ for volume and what plays)">🔇</button><div id="sndpop"></div></span></div>
 <div id="terrainrow"><input id="terrain" placeholder="paste text, or a web address, and press enter: it grows into the world"><label style="font-size:12px;white-space:nowrap" title="on: the new page grows around where you are looking, everything else stays; off: it replaces the old floor"><input type="checkbox" id="additive" checked> add to the world</label><button id="terrainGo">grow world</button><button id="travelGo" title="visit the page as its own place: it fills the canvas like a browser, the creatures come along, home stays as it is">🧭 visit page</button><button id="captureGo" title="bring the page into this world, laid out in columns on the floor">📰 capture</button><button id="terrainClear">clear world</button><button id="collBtn" title="saved body plans (blueprints), in the creatures sidebar">designs (0)</button></div>
 <details id="workshop"><summary>workshop · how they feel, evolve them, designs, the world</summary><div id="drives"></div><div id="evo"></div>
 <div id="coll"></div><div id="worldrow"><b>world</b> <small id="worldInfo"></small><br>
@@ -493,7 +493,15 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // creatures are drawn on one canvas (the svg above was rebuilt with innerHTML every frame, legs and bodies for every creature: the main per-frame cost on slow machines)
   const critCv = document.createElement('canvas'); critCv.id = 'crit'; critCv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:5'; floor.appendChild(critCv); const crit = critCv.getContext('2d');   // layering: words, things, designs and charts (3-4) < creatures (5) < carried words (5, later in the page), bubbles (6), locked words (7), effects and cards
   const Crit = (() => { let key = '', dpr = 1;
-    function begin() { const vs = viewSize(), z = cam.z; dpr = QUAL.low ? 1 : Math.min(2, devicePixelRatio || 1);
+    // the keyline (Nico, Oct 31: creatures were "hard to see in the noise", charts everywhere): every body shape and the legs get a
+    // thin outline under their own colours, so they read on the floor, on charts and on words, phones too. Light mode: a dark ink line.
+    // Dark mode: a light line in the creature's own hue (a dark one measured worse there: it pulled them toward the dark floor).
+    // KL.w is in world units but never thinner than ~1.3 screen px; KL.a is scaled per creature (shy ones keep only a faint one).
+    const KL = { on: true, w: 1.5, col: 'rgba(10,11,16,.82)', a: 1, dk: false };
+    const KLH = []; for (let i = 0; i < 24; i++) KLH.push(`hsla(${i * 15},85%,78%,.62)`);   // dark mode: one light keyline colour per 15° of hue
+    function keylineFrame() { const z = cam.z || 1; KL.dk = isDark(); KL.w = Math.min(4, Math.max(1.1, 1.3 / z)); KL.col = KL.dk ? KLH[0] : 'rgba(22,22,30,.62)'; }
+    function keylineFor(c) { const LK = window.__looks; KL.a = LK && LK.ink ? LK.ink(c) : 1; if (KL.dk) { const h = ((c.gs || c.g).hue || 0); KL.col = KLH[Math.round(((h % 360) + 360) % 360 / 15) % 24]; } }
+    function begin() { const vs = viewSize(), z = cam.z; dpr = QUAL.low ? 1 : Math.min(2, devicePixelRatio || 1); keylineFrame();
       const x0 = cam.x - vs.w / 2 / z, y0 = cam.y - vs.h / 2 / z, W = Math.ceil(vs.w * dpr), H = Math.ceil(vs.h * dpr), k = `${W}x${H}|${(vs.w / z).toFixed(2)}|${x0.toFixed(2)},${y0.toFixed(2)}`;
       if (critCv.width !== W || critCv.height !== H) { critCv.width = W; critCv.height = H; }
       if (k !== key) { key = k; critCv.style.width = (vs.w / z) + 'px'; critCv.style.height = (vs.h / z) + 'px'; critCv.style.left = x0 + 'px'; critCv.style.top = y0 + 'px'; }
@@ -501,26 +509,31 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     const circ = (g, x, y, r) => { g.beginPath(); g.arc(x, y, Math.max(0, r), 0, Math.PI * 2); };
     const ell = (g, x, y, rx, ry) => { g.beginPath(); g.ellipse(x, y, Math.max(0, rx), Math.max(0, ry), 0, 0, Math.PI * 2); };
     const rrect = (g, x, y, w, h, r) => { w = Math.max(0, w); h = Math.max(0, h); g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2))); else g.rect(x, y, w, h); };
-    function fs(g, fill, stroke, lw) { if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw ?? 1; g.stroke(); } }
-    function legs(g, c, hp) { const G = c.gs || c.g; g.lineJoin = 'round'; g.lineCap = 'round';
-      for (const L of c.legs) { const H = hip(c, L), F0 = L.foot, F = hp ? { x: H.x + (F0.x - H.x) * (1 - 0.6 * hp.k), y: H.y + (F0.y - H.y) * (1 - 0.6 * hp.k) } : F0, K = knee(H, F, G.l1, G.l2, L.side, c.heading), lift = L.lift || 0, Kx = K.x + (K.x - H.x) * 0.12 * lift, Ky = K.y + (K.y - H.y) * 0.12 * lift;
-        g.beginPath(); g.moveTo(H.x, H.y); g.lineTo(Kx, Ky); g.lineTo(F.x, F.y); g.strokeStyle = `hsl(${G.hue},70%,${c.state === 'sleep' ? 55 : 76}%)`; g.lineWidth = 1.5 + 0.4 * lift; g.stroke();
-        circ(g, F.x, F.y, 1.8 + 1.4 * lift); g.fillStyle = `hsl(${G.footHue},90%,72%)`; g.fill(); }
+    function fs(g, fill, stroke, lw) { if (fill && stroke && KL.on && KL.a > 0.02) { const a = g.globalAlpha; g.globalAlpha = a * KL.a; g.strokeStyle = KL.col; g.lineWidth = (lw ?? 1) + KL.w * 2; g.stroke(); g.globalAlpha = a; }
+      if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw ?? 1; g.stroke(); } }
+    const LP = [];   // leg points, reused (no allocation per frame)
+    function legs(g, c, hp) { const G = c.gs || c.g; g.lineJoin = 'round'; g.lineCap = 'round'; let n = 0;
+      for (const L of c.legs) { const H = hip(c, L), F0 = L.foot, F = hp ? { x: H.x + (F0.x - H.x) * (1 - 0.6 * hp.k), y: H.y + (F0.y - H.y) * (1 - 0.6 * hp.k) } : F0, K = knee(H, F, G.l1, G.l2, L.side, c.heading), lift = L.lift || 0;
+        const q = LP[n] || (LP[n] = {}); q.hx = H.x; q.hy = H.y; q.kx = K.x + (K.x - H.x) * 0.12 * lift; q.ky = K.y + (K.y - H.y) * 0.12 * lift; q.fx = F.x; q.fy = F.y; q.l = lift; n++; }
+      if (KL.on && KL.a > 0.02) { const a = g.globalAlpha; g.globalAlpha = a * KL.a; g.beginPath(); for (let i = 0; i < n; i++) { const q = LP[i]; g.moveTo(q.hx, q.hy); g.lineTo(q.kx, q.ky); g.lineTo(q.fx, q.fy); } g.strokeStyle = KL.col; g.lineWidth = 1.7 + KL.w * 2; g.stroke(); g.globalAlpha = a; }
+      const ll = c.state === 'sleep' ? 55 : KL.dk ? 76 : 64;
+      for (let i = 0; i < n; i++) { const q = LP[i]; g.beginPath(); g.moveTo(q.hx, q.hy); g.lineTo(q.kx, q.ky); g.lineTo(q.fx, q.fy); g.strokeStyle = `hsl(${G.hue},70%,${ll}%)`; g.lineWidth = 1.5 + 0.4 * q.l; g.stroke();
+        circ(g, q.fx, q.fy, 1.8 + 1.4 * q.l); g.fillStyle = `hsl(${G.footHue},90%,72%)`; g.fill(); }
       g.lineJoin = 'miter'; g.lineCap = 'butt'; }
     function body(g, c, t) {   // the same shapes as bodySVG (kept for cards, the pedia and miniSVG)
-      const G = c.gs || c.g, breathe = 1 + (c.state === 'sleep' ? 0.05 : 0.025) * Math.sin(t / (c.state === 'sleep' ? 900 : 380) + c.phase), L = G.bodyL * breathe, W = G.bodyW * breathe;
+      const G = c.gs || c.g, breathe = 1 + (c.state === 'sleep' ? 0.05 : 0.025) * Math.sin(t / (c.state === 'sleep' ? 900 : 380) + c.phase), L = G.bodyL * breathe, W = G.bodyW * breathe, BL = KL.dk ? 12 : 0;
       const sw = c.held ? Math.sin(t / 60) * 12 : Math.sin(t / 700 + c.phase) * 2.5; g.save(); g.translate(c.x, c.y); g.rotate(c.heading + sw * Math.PI / 180);
-      if (G.abdomen) { ell(g, -L * 0.95, 0, L * 0.55, W * 0.55); fs(g, `hsl(${G.hue},25%,18%)`, `hsl(${G.hue},60%,72%)`, 0.8); }
+      if (G.abdomen) { ell(g, -L * 0.95, 0, L * 0.55, W * 0.55); fs(g, `hsl(${G.hue},25%,${18 + BL}%)`, `hsl(${G.hue},60%,72%)`, 0.8); }
       g.lineCap = 'round'; for (let p = 0; p < (G.palps || 0); p++) { const sd = p ? 1 : -1, a = 0.35 + 0.25 * Math.sin(t / 160 + p * 2 + c.phase); g.beginPath(); g.moveTo(L * 0.5, sd * W * 0.2); g.lineTo(L * 0.5 + 9 * Math.cos(a * sd), sd * W * 0.2 + sd * 9 * Math.sin(a)); g.strokeStyle = `hsl(${G.hue},70%,78%)`; g.lineWidth = 1.4; g.stroke(); } g.lineCap = 'butt';
       if (c.boost && c.boost.what === 'glow' && c.boost.until > Date.now()) { circ(g, 0, 0, Math.max(L, W) * 1.3); fs(g, `hsla(${G.hue},90%,65%,${0.18 + 0.08 * Math.sin(t / 150)})`); }
       if (c.sickUntil > Date.now()) { g.font = '12px system-ui,sans-serif'; g.textAlign = 'center'; g.fillStyle = '#000'; g.fillText('🤢', 0, -W - 6); g.textAlign = 'start'; }
       if (c.flash && performance.now() < c.flash.until) { const k = (c.flash.until - performance.now()) / 900; circ(g, 0, 0, Math.max(L, W) * (1.6 - k * 0.6)); fs(g, `hsla(${c.flash.how === 'big' ? 345 : c.flash.how === 'keep' ? 330 : 225},90%,60%,${0.35 * k})`); }
       if (G.wings) { const flap = Math.sin(t / (c.state === 'move' ? 45 : 160)) * 0.35 + 0.65; for (const sd of [-1, 1]) { g.save(); g.rotate(sd * 18 * Math.PI / 180); ell(g, -L * 0.1, sd * W * 0.9, L * 0.7, W * 0.9 * flap); fs(g, `hsla(${G.hue},80%,80%,.35)`, `hsl(${G.hue},70%,70%)`, 0.6); g.restore(); } }
-      if (G.body === 'orb') { circ(g, 0, 0, Math.max(L, W) * 0.55); fs(g, `hsl(${G.hue},45%,22%)`, `hsl(${G.hue},70%,72%)`); circ(g, L * 0.18, 0, W * 0.22); fs(g, `hsl(${G.footHue},90%,70%)`); }
-      else if (G.body === 'tri') { g.beginPath(); g.moveTo(L * 0.6, 0); g.lineTo(-L * 0.5, -W * 0.6); g.lineTo(-L * 0.5, W * 0.6); g.closePath(); fs(g, `hsl(${G.hue},40%,25%)`, `hsl(${G.hue},70%,72%)`); circ(g, L * 0.15, 0, 2.2); fs(g, '#ff5e5e'); }
-      else if (G.body === 'seg') { for (let k = 2; k >= 0; k--) { circ(g, -k * L * 0.42, Math.sin(t / 200 + k) * 2, W * (0.5 - k * 0.08)); fs(g, `hsl(${G.hue},40%,${22 + k * 6}%)`, `hsl(${G.hue},70%,72%)`, 0.8); } circ(g, L * 0.15, 0, 2); fs(g, '#ff5e5e'); }
-      else if (G.body === 'star') { g.save(); g.rotate((t / 30 % 360) * Math.PI / 180); g.beginPath(); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, R = k % 2 ? W * 0.3 : Math.max(L, W) * 0.6; const x = +(Math.cos(a) * R).toFixed(1), y = +(Math.sin(a) * R).toFixed(1); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); fs(g, `hsl(${G.hue},50%,30%)`, `hsl(${G.hue},80%,75%)`); g.restore(); }
-      else if (G.body === 'chip') { rrect(g, -L / 2, -W / 2, L, W, 2); fs(g, '#2e2e33', `hsl(${G.hue},60%,72%)`, 0.8); rrect(g, -L / 2 + 4, -W / 2 + 3, Math.max(0, L * 0.45), Math.max(0, W - 6), 1); fs(g, '#9fe3c5');
+      if (G.body === 'orb') { circ(g, 0, 0, Math.max(L, W) * 0.55); fs(g, `hsl(${G.hue},45%,${22 + BL}%)`, `hsl(${G.hue},70%,72%)`); circ(g, L * 0.18, 0, W * 0.22); fs(g, `hsl(${G.footHue},90%,70%)`); }
+      else if (G.body === 'tri') { g.beginPath(); g.moveTo(L * 0.6, 0); g.lineTo(-L * 0.5, -W * 0.6); g.lineTo(-L * 0.5, W * 0.6); g.closePath(); fs(g, `hsl(${G.hue},40%,${25 + BL}%)`, `hsl(${G.hue},70%,72%)`); circ(g, L * 0.15, 0, 2.2); fs(g, '#ff5e5e'); }
+      else if (G.body === 'seg') { for (let k = 2; k >= 0; k--) { circ(g, -k * L * 0.42, Math.sin(t / 200 + k) * 2, W * (0.5 - k * 0.08)); fs(g, `hsl(${G.hue},40%,${22 + BL + k * 6}%)`, `hsl(${G.hue},70%,72%)`, 0.8); } circ(g, L * 0.15, 0, 2); fs(g, '#ff5e5e'); }
+      else if (G.body === 'star') { g.save(); g.rotate((t / 30 % 360) * Math.PI / 180); g.beginPath(); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, R = k % 2 ? W * 0.3 : Math.max(L, W) * 0.6; const x = +(Math.cos(a) * R).toFixed(1), y = +(Math.sin(a) * R).toFixed(1); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); fs(g, `hsl(${G.hue},50%,${30 + BL}%)`, `hsl(${G.hue},80%,75%)`); g.restore(); }
+      else if (G.body === 'chip') { rrect(g, -L / 2, -W / 2, L, W, 2); fs(g, BL ? '#45454d' : '#2e2e33', `hsl(${G.hue},60%,72%)`, 0.8); rrect(g, -L / 2 + 4, -W / 2 + 3, Math.max(0, L * 0.45), Math.max(0, W - 6), 1); fs(g, '#9fe3c5');
         const dur = c.state === 'sleep' ? 3000 : 1200, u = (performance.now() % dur) / dur; g.globalAlpha = 1 - 0.7 * (1 - Math.abs(1 - 2 * u)); circ(g, L / 2 - 4, 0, 2.2); fs(g, c.state === 'sleep' ? '#553' : '#ff5e5e'); g.globalAlpha = 1; }   // the status light blinks (1 → .3 → 1)
       else { const blink = (Math.floor(t / 2600 + c.phase) % 5 === 0 && (t % 2600) < 140) || c.state === 'sleep'; rrect(g, -L / 2, -W / 2, L, W, 4); fs(g, `hsl(${G.hue},90%,82%)`, `hsl(${G.hue},55%,48%)`);
         if (blink) { g.beginPath(); g.moveTo(L * 0.05, -W * 0.18); g.lineTo(L * 0.05 + 4, -W * 0.18); g.moveTo(L * 0.05, W * 0.18 - 2); g.lineTo(L * 0.05 + 4, W * 0.18 - 2); g.strokeStyle = '#333'; g.lineWidth = 1.3; g.stroke(); }
@@ -554,7 +567,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       else { const a = Math.sin(ph * Math.PI * 2) * 0.16 * k; g.translate(c.x, c.y); g.rotate(a); g.translate(-c.x, -c.y); } }
     function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c), LK = window.__looks; g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t); if (c.dance && !hp) dancePose(g, c);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
-      if (LK) LK.pre(g, c, t); legs(g, c, hp); body(g, c, t); if (LK) LK.post(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
+      keylineFor(c); if (LK) LK.pre(g, c, t); legs(g, c, hp); body(g, c, t); if (LK) LK.post(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
     const beams = [];
     function laser(c, T, t) { beams.push([c, T, t]); }
     function drawBeam(g, c, T, t) { const hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2, n = T.text.length, br = n * 4.5 + 22, rr = ((t / 8) % 360) * Math.PI / 180, col = `hsl(${hue},95%,60%)`;
@@ -569,7 +582,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     // the same drawing onto another canvas (reel replays): body, legs, hiding pose, 💤/🫣, hangry glow
     function drawTo(g, c, t, hg) { const hp = hidePose(c); g.save(); if (hg) hangryGlow(g, c, t); if (c.dance && !hp) dancePose(g, c);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
-      if (window.__looks) window.__looks.pre(g, c, t, true); legs(g, c, hp); body(g, c, t); g.restore(); g.save(); if (c.state === 'sleep') zz(g, c, t); else if (hp) peek(g, c, t, hp.k); g.restore(); }
+      keylineFor(c); if (window.__looks) window.__looks.pre(g, c, t, true); legs(g, c, hp); body(g, c, t); g.restore(); g.save(); if (c.state === 'sleep') zz(g, c, t); else if (hp) peek(g, c, t, hp.k); g.restore(); }
     return { begin, draw, end, hidePose, laser, drawTo };
   })();
   const DEFAULT_GENOMES = {
@@ -865,11 +878,23 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // grazing: an unpinned chart that has been on the floor for about 20 minutes of play becomes food for Counter kin; each bite
   // takes a data point off the curve (it gets sparser), is a meal and drops that point's number word; when only two points are
   // left the chart folds back into the number words it was made from. Pinned charts are never grazed.
-  const grazeable = t => t.kind === 'design' && t.d && t.d.dk === 'chart' && t.d.done && !t.d.pinned && (t.d.play || 0) >= 1200 && t.d.f && t.d.f.pts.length > 2;
+  // the chart ecology (Nico, Oct 31: "the chart generators are very prolific… there aren't enough debuggers… we need to balance it
+  // out"). A world has a comfortable number of charts, 10 + 0.4 per creature (10–36). Past it the floor is "full", and the
+  // pressure p (how far past, 0 = fine, 1 = twice as many) feeds back everywhere, gently: charts count as old sooner (grazers, code
+  // eaters and Debuggers get to them earlier), Mathematicians replot one of their own old charts or count instead of adding more,
+  // creatures without a craft lend a Debugger's hand, and children born into a full world now and then grow up Debuggers. Nothing
+  // is deleted outright: charts still end as numbers or code that others eat. Pinned charts are never touched.
+  let _cl = { t: 0, n: 0, target: 14, p: 0, debug: 0 };
+  function chartLoad() { if (Date.now() - _cl.t < 3000) return _cl; let n = 0, pop = 0, dbg = 0; for (const x of things) if (x.kind === 'design' && x.d && x.d.dk === 'chart' && x.d.done && !x.d.pinned) n++;
+    for (const c of creatures) { if (!c.d || c.lab || c.guest) continue; pop++; if (jobOf(c) === 'debug') dbg++; }
+    const target = Math.round(Math.max(10, Math.min(36, 10 + 0.4 * pop))); _cl = { t: Date.now(), n, target, p: Math.max(0, n / target - 1), debug: dbg, pop }; return _cl; }
+  const ageK = () => { const p = chartLoad().p; return p > 0 ? Math.max(0.15, 1 / (1 + 3 * p)) : 1; };   // a full floor: a chart counts as old 1/(1+3p) as soon
+  window.__chartLoad = () => ({ ...chartLoad(), ageK: +ageK().toFixed(2) });   // for the pedia's numbers and tests
+  const grazeable = t => t.kind === 'design' && t.d && t.d.dk === 'chart' && t.d.done && !t.d.pinned && (t.d.play || 0) >= 1200 * ageK() && t.d.f && t.d.f.pts.length > 2;
   setInterval(() => { if (document.visibilityState !== 'visible') return; for (const t of things) if (t.kind === 'design' && t.d && t.d.dk === 'chart' && t.d.done) t.d.play = (t.d.play || 0) + 10; }, 10000);
   // code eaters bite charts sooner (5 minutes of play): each bite drops a code token instead of a number, and the last bite breaks
   // what is left into code. Between the two, charts no longer pile up.
-  const biteable = t => t.kind === 'design' && t.d && t.d.dk === 'chart' && t.d.done && !t.d.pinned && (t.d.play || 0) >= 300 && t.d.f && t.d.f.pts.length > 2;
+  const biteable = t => t.kind === 'design' && t.d && t.d.dk === 'chart' && t.d.done && !t.d.pinned && (t.d.play || 0) >= 300 * ageK() && t.d.f && t.d.f.pts.length > 2;
   async function graze(c, t, code) { const ok = code ? biteable : grazeable; c.target = t; if (!(await chase(c, t, 14))) { c.target = null; return false; } c.target = null; if (!things.includes(t) || !ok(t)) return false;
     const d = t.d, P = d.f.pts, i = 1 + Math.floor(Math.random() * (P.length - 2)), py = P.splice(i, 1)[0][1], n = code ? pick(codeTokens(d).filter(x => !/^-?\d+$/.test(x))) : String(Math.round(Math.abs(py)) % 100);
     if (d.f.ser) d.f.ser = d.f.ser.map(S => S.length > P.length + 1 ? S.filter((_, k) => k !== i) : S);
@@ -892,11 +917,17 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     t.el.remove(); things.splice(things.indexOf(t), 1); creatures.forEach(o => { if (o._dz === t) o._dz = null; if (o._admiring === t) o._admiring = null; });
     logEvent('chart_code', { who: c ? c.name : 'you', n: k, vis: d.f && d.f.vis, formula: d.f && d.f.expr, by: d.by }); return k; }
   // Debuggers take charts left alone for 10 minutes of play apart into code (the chart crumbles first)
-  const breakable = t => t.kind === 'design' && t.d && t.d.dk === 'chart' && t.d.done && !t.d.pinned && (t.d.play || 0) >= 600 && !creatures.some(o => o._admiring === t);
-  async function debugChart(c, t) { c.target = t; if (!(await chase(c, t, 22))) { c.target = null; return false; } c.target = null; if (!things.includes(t) || !breakable(t)) return false;
+  const breakable = t => t.kind === 'design' && t.d && t.d.dk === 'chart' && t.d.done && !t.d.pinned && (t.d.play || 0) >= 600 * ageK() && !creatures.some(o => o._admiring === t);
+  // need-driven work: a creature without a craft of its own (and code eaters most of all) sometimes lends a Debugger's hand when the
+  // floor is full of charts
+  const CRAFTS = new Set(['debug', 'math', 'designer', 'counter', 'architect', 'crawl', 'blursort', 'namer', 'sorter', 'build']);
+  function lendsHand(c, job) { if (c.lab || c.guest || CRAFTS.has(job)) return false; const L = chartLoad(); if (L.p < 0.1) return false;
+    return Math.random() < Math.min(0.55, 0.3 * L.p) * (dietOf(c) === 'code' ? 1.6 : 1); }
+  async function debugChart(c, t, helping) { c.target = t; if (!(await chase(c, t, 22))) { c.target = null; return false; } c.target = null; if (!things.includes(t) || !breakable(t)) return false;
     c.bub.textContent = pick(['</>', '{ … }', 'view source', 'ah, a <path>']); c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 1800);
     try { await t.el.animate([{ filter: 'none', opacity: 1, transform: getComputedStyle(t.el).transform }, { filter: 'blur(1px) contrast(2)', opacity: 0.2, transform: getComputedStyle(t.el).transform + ' scale(.9)' }], { duration: 900, easing: 'ease-in' }).finished; } catch (e) {}
-    const n = breakChart(t, c); if (!n) return false; Sound.snip(c); if (window.__life) window.__life.note(c, 'work', 'broke a chart into code', 'work:chartcode');
+    const n = breakChart(t, c); if (!n) return false; Sound.snip(c); if (window.__life) window.__life.note(c, 'work', helping ? 'lent a hand: broke a chart into code (the floor was full of charts)' : 'broke a chart into code', helping ? 'work:helpcode' : 'work:chartcode');
+    if (helping) { logEvent('work', { who: c.name, job: jobOf(c), act: 'broke a chart into code', helping: true }); return true; }
     if (Math.random() < 0.35) oracleComment(`${c.name} took a chart by ${t.d.by} apart into ${n} pieces of code. ${pick(['Lunch is served', 'The chart is now a recipe', 'Somebody will eat the curly braces', 'View source, but make it edible'])}`, 'chart_code');
     logEvent('work', { who: c.name, job: 'debug', act: 'broke a chart into code' }); return true; }
   window.__chartPick = (c, A, B) => chooseChart(c, A ?? 1 + Math.floor(Math.random() * 9), B ?? Math.floor(Math.random() * 30));   // test hook
@@ -904,7 +935,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   window.__chartTest = (x, y, play, pk) => { const f = pk ? pk.f : formulaOf('square', 3, 4); return addDesign({ dk: 'chart', title: f.expr, f, pal: pk && pk.pal, grid: pk && pk.grid, exp: pk && pk.exp || undefined, items: [{ t: 'num', w: '3', cls: 'word num' }, { t: 'num', w: '4', cls: 'word num' }], recipe: ['num', 'num'], style: 'soft', hue: 200, by: 'test', done: true, np: f.pts.length, play: play ?? 1300 }, x, y); };   // test hook
   async function doEat(c, obj) {   // a meal from its diet (or what you hand it)
     if (!obj && dietOf(c) === 'numbers') { let ch = null, bd = 900; for (const t of things) if (grazeable(t)) { const d = dist(t, c); if (d < bd) { bd = d; ch = t; } } if (ch && (Math.random() < 0.45 || !words.some(w => edibleOn(c, w)))) return graze(c, ch); }
-    if (!obj && dietOf(c) === 'code') { let ch = null, bd = 900; for (const t of things) if (biteable(t)) { const d = dist(t, c); if (d < bd) { bd = d; ch = t; } } if (ch && (Math.random() < 0.4 || !words.some(w => edibleOn(c, w)))) return graze(c, ch, true); }
+    if (!obj && dietOf(c) === 'code') { let ch = null, bd = 900; for (const t of things) if (biteable(t)) { const d = dist(t, c); if (d < bd) { bd = d; ch = t; } } if (ch && (Math.random() < 0.4 + 0.4 * Math.min(1, chartLoad().p) || !words.some(w => edibleOn(c, w)))) return graze(c, ch, true); }
     const D = DIETS[dietOf(c)], handed = !!(obj && !obj.thing && c._handed === obj);
     const tile = obj && obj.thing ? obj : (obj || !D.tiles ? null : things.filter(smallTile).sort((a, b) => dist(a, c) - dist(b, c))[0]);
     if (tile && (obj || dist(tile, c) < 500 || !words.some(w => edibleOn(c, w)))) { c.target = tile; if (!(await chase(c, tile, 10))) return false; c.target = null; if (!things.includes(tile)) return false; return eatImage(c, tile); }
@@ -978,6 +1009,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   async function doWork(c) {   // the creature's job, from its genome; most jobs carry or change words on the floor
     const job = jobOf(c), free = words.filter(w => !w.carriedBy), near1 = (list) => { let b, bd = Infinity; for (const x of list) { const d = dist(x, c); if (d < bd) { bd = d; b = x; } } return b; };   // one pass, not a sort of every word
     if (job === 'crawl') return window.__crawler ? window.__crawler.step(c) : false;   // the Crawler's work is on the web, not the floor
+    if (!c.focus && lendsHand(c, job)) { const ch = near1(things.filter(breakable)); if (ch && dist(ch, c) < 1400) return debugChart(c, ch, true); }
     if (job === 'architect') { if (!window.__build) return false; c.working = job; try { return await window.__build.work(c); } finally { c.working = null; c.target = null; if (c.state === 'move') c.state = 'idle'; } }   // Architects build with solid objects (demo/idle-build.js)
     if (!free.length) return false; c.working = job; (c.stats = c.stats || {}).work = (c.stats.work || 0) + 1;
     try {
@@ -1528,21 +1560,40 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       rec.onend = () => { on = false; btn.classList.remove('on'); }; rec.onerror = ev => { say('lab', 'voice: ' + ev.error, 'lab'); }; rec.start(); }
     document.addEventListener('click', e => { const b = e.target.closest('.mic'); if (b) start(b.dataset.mic, b); });
     return { listening: () => on }; })();
+  // ---------- one master for every sound (#21): 🔊 top right mutes and unmutes everything (creature sounds, weather, background music, the deck,
+  // reel soundtracks) and holds one volume; hover or ▾ opens the volume and what plays. One AudioContext for all of it: muted, it is suspended,
+  // so the audio graph costs nothing. Remembered in idle.audio; the first time, music that was left on stays audible.
+  const Master = (() => { const K = 'idle.audio', AC = window.AudioContext || window.webkitAudioContext; let ctx = null, out = null, fxOut = null, sus = 0;
+    const st = (() => { let s = null; try { s = JSON.parse(localStorage.getItem(K) || 'null'); } catch (e) {} if (s) return Object.assign({ muted: true, vol: 0.9, fx: true }, s);
+      let bgOn = false; try { bgOn = !!((JSON.parse(localStorage.getItem('idle.music') || '{}') || {}).bg || {}).on; } catch (e) {} return { muted: !bgOn, vol: 0.9, fx: true }; })();
+    const save = () => { try { localStorage.setItem(K, JSON.stringify(st)); } catch (e) {} };
+    function get() { if (!ctx) { ctx = new AC(); out = ctx.createGain(); out.gain.value = st.muted ? 0 : st.vol; out.connect(ctx.destination); fxOut = ctx.createGain(); fxOut.connect(out); if (st.muted) ctx.suspend(); } return ctx; }
+    function apply(tc = 0.03) { if (!ctx) return; const now = ctx.currentTime; clearTimeout(sus); out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(out.gain.value, now); out.gain.setTargetAtTime(st.muted ? 0 : st.vol, now, tc);   // short ramps: no clicks
+      if (st.muted) sus = setTimeout(() => { if (st.muted && ctx.state === 'running') ctx.suspend(); }, 300); else if (ctx.state !== 'running') ctx.resume(); }
+    const changed = () => { save(); apply(); try { dispatchEvent(new CustomEvent('idle:audio', { detail: { ...st } })); } catch (e) {} };
+    const api = { ctx: get, out: () => (get(), out), fxOut: () => (get(), fxOut), muted: () => st.muted, vol: () => st.vol, fx: () => st.fx, fxOn: () => st.fx && !st.muted,
+      setMuted(m) { st.muted = !!m; if (!m) get(); changed(); logEvent('sound', { on: !m }); }, toggle() { this.setMuted(!st.muted); return !st.muted; },
+      setVol(v) { st.vol = Math.max(0, Math.min(1, +v)); if (st.muted && st.vol > 0) st.muted = false; if (!st.muted) get(); changed(); }, setFx(on) { st.fx = !!on; changed(); },
+      resume() { if (ctx && !st.muted && ctx.state !== 'running') ctx.resume(); },   // only ever wakes the audio when not muted
+      wantSound() { if (st.muted) { this.setMuted(false); try { window.__notify && window.__notify({ kind: 'system', text: '🔊 sound on (it was muted: the 🔊 top right mutes everything)', ttl: 5000 }); } catch (e) {} } else this.resume(); } };
+    addEventListener('pointerdown', () => api.resume(), true);   // browsers start audio only after a gesture
+    return api; })();
+  window.__audio = Master;
   // ---------- sound (Web Audio, synthesized, off by default): footsteps, chirps per creature voice, snip, crunch ----------
   const Sound = (() => { let ctx = null, on = false, lastStep = 0, fxVol = +(localStorage.getItem('arena.fxVol') ?? 1), ambVol = +(localStorage.getItem('arena.ambVol') ?? 0.9);
-    const ensure = () => { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; };
+    const ensure = () => { if (!ctx) ctx = Master.ctx(); return ctx; };
     function noise(dur, freq, vol) { const a = ensure(), n = Math.floor(a.sampleRate * dur), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
-      const s = a.createBufferSource(); s.buffer = b; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 4; const g = a.createGain(); g.gain.value = vol * fxVol; s.connect(f); f.connect(g); g.connect(a.destination); s.start(); }
+      const s = a.createBufferSource(); s.buffer = b; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 4; const g = a.createGain(); g.gain.value = vol * fxVol; s.connect(f); f.connect(g); g.connect(Master.fxOut()); s.start(); }
     function blip(t0, f0, f1, dur, vol, type) { const a = ensure(), o = a.createOscillator(), g = a.createGain(); f0 = Math.min(16000, Math.max(30, f0)); f1 = Math.min(16000, Math.max(30, f1));   // evolved voices can ask for pitches above what audio can play o.type = type || 'sine'; o.frequency.setValueAtTime(f0, a.currentTime + t0); o.frequency.exponentialRampToValueAtTime(Math.max(40, f1), a.currentTime + t0 + dur);
-      g.gain.setValueAtTime(0.0001, a.currentTime + t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * fxVol), a.currentTime + t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur); o.connect(g); g.connect(a.destination); o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02); }
-    return { toggle() { on = !on; if (on) ensure().resume(); $('#soundBtn').textContent = on ? '🔊' : '🔇'; logEvent('sound', { on }); this.ambient(...(this._ambK || ['clear', 0])); return on; },
+      g.gain.setValueAtTime(0.0001, a.currentTime + t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * fxVol), a.currentTime + t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur); o.connect(g); g.connect(Master.fxOut()); o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02); }
+    return { sync() { const was = on; on = Master.fxOn(); if (was !== on) this.ambient(...(this._ambK || ['clear', 0])); return on; },   // creature sounds and weather follow the master (and their own switch)
       hear(c, kind) { if (!c) return 1; const { w, h } = viewSize(), sx = wd(cam.x, c.x, SPACE.W) * cam.z, sy = wd(cam.y, c.y, SPACE.H) * cam.z, d = Math.hypot(sx, sy) / (Math.hypot(w, h) / 2);
         const zoomF = kind === 'step' ? Math.max(0, Math.min(1, (cam.z - 0.9) / 0.9)) : Math.max(0.04, Math.min(1, (cam.z - 0.4) / 0.8)); return zoomF / (1 + Math.pow(d * 1.5, 2)); },   // steps only up close; voices fade with distance and zoom
       step(c) { if (!on) return; const g = this.hear(c, 'step'); if (g < 0.02) return; const now = performance.now(); if (now - lastStep < 45) return; lastStep = now; noise(0.03, 1800 + 4000 / (c.g.l1 + c.g.l2) * 30, 0.05 * g); },
       zoomAmb() { if (!this._out || !ctx) return; const zmin = Math.max(viewSize().w / SPACE.W, viewSize().h / SPACE.H), zn = Math.max(0, Math.min(1, (cam.z - zmin) / (2.5 - zmin))); this._out.gain.setTargetAtTime(ambVol * (0.45 + 0.9 * (1 - zn)), ctx.currentTime, 0.2); },
       chirp(c, text) { if (!on) return; const hg = this.hear(c, 'voice'); if (hg < 0.02) return; const base = c.g.voicePitch || (c.voiceKey === 'crawly' ? 900 : 480), n = Math.min(6, 2 + Math.floor((text || '').length / 8)), wave = c.g.voiceWave || (c.voiceKey === 'crawly' ? 'square' : 'triangle');
         for (let i = 0; i < n; i++) { const f = base * Math.pow(2, (Math.random() - .5) * (c.g.voiceRange || 0.8)); blip(i * 0.075, f, f * (Math.random() < .5 ? 1.3 : 0.75), 0.06, 0.035 * hg, wave); } },
-      ambient(kind, k) { this._amb && this._amb.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); this._amb = []; clearInterval(this._ambT); this._ambK = [kind, k]; if (!on || kind === 'clear') return; const a = ensure(), out = a.createGain(); out.gain.value = ambVol; this._out = out; out.connect(a.destination); this._amb.push(out);
+      ambient(kind, k) { this._amb && this._amb.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); this._amb = []; clearInterval(this._ambT); this._ambK = [kind, k]; if (!on || kind === 'clear') return; const a = ensure(), out = a.createGain(); out.gain.value = ambVol; this._out = out; out.connect(Master.fxOut()); this._amb.push(out);
         const loopNoise = (type, f, vol) => { const n = a.sampleRate * 2, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const src = a.createBufferSource(); src.buffer = b; src.loop = true; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const gg = a.createGain(); gg.gain.value = vol; src.connect(fl); fl.connect(gg); gg.connect(out); src.start(); this._amb.push(src); return fl; };
         const tone = (f, vol, type) => { const o = a.createOscillator(), gg = a.createGain(); o.type = type || 'sine'; o.frequency.value = f; gg.gain.value = vol; o.connect(gg); gg.connect(out); o.start(); this._amb.push(o); return o; };
         if (kind === 'bitrain') this._ambT = setInterval(() => { if (Math.random() < 0.5 + k / 2) blip(0, 2200 + Math.random() * 2600, 1800 + Math.random() * 1500, 0.025, 0.012 + 0.02 * k, 'sine'); }, 70);
@@ -1563,7 +1614,26 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
         if (how === 'mutate') up(520, 3, 0.07); else if (how === 'big') { up(400, 4, 0.06); setTimeout(() => up(520, 4, 0.06), 330); setTimeout(() => up(660, 5, 0.06), 660); } else if (how === 'revert') { for (let i = 0; i < 3; i++) blip(i * 0.08, 900 / Math.pow(1.26, i), 500 / Math.pow(1.26, i), 0.12, 0.05 * g, 'sine'); } else if (how === 'keep') { blip(0, 1046, 1046, 0.18, 0.05 * g, 'sine'); blip(0.12, 1318, 1318, 0.25, 0.05 * g, 'sine'); } else blip(0, 300, 200, 0.15, 0.04 * g, 'sine'); },
       snip(c) { if (!on) return; const g = this.hear(c, 'voice'); if (g < 0.02) return; noise(0.05, 5200, 0.12 * g); blip(0.02, 2400, 900, 0.05, 0.03 * g, 'sawtooth'); }, crunch(c) { if (!on) return; const g = this.hear(c, 'voice'); if (g < 0.02) return; noise(0.12, 900, 0.15 * g); noise(0.08, 2400, 0.08 * g); } }; })();
   window.__snd = Sound;
-  $('#soundBtn').addEventListener('click', () => Sound.toggle());
+  // the master's button and its popover: mute, one volume, creature sounds and weather, and which music plays
+  const SndUI = (() => { const pop = $('#sndpop'), wrap = $('#sndWrap'), M = () => window.__music; let hov = 0;
+    const paint = () => { const m = Master.muted(); $('#soundBtn').textContent = m ? '🔇' : Master.vol() < 0.34 ? '🔈' : Master.vol() < 0.67 ? '🔉' : '🔊'; };
+    function render() { if (!pop.classList.contains('on')) return; const v = Sound.vols(), mu = M(), src = mu && mu.source ? mu.source() : 'off', pct = x => Math.round(x * 100);
+      pop.innerHTML = `<div class="r"><button class="sw ${Master.muted() ? '' : 'on'}" role="switch" aria-checked="${!Master.muted()}" data-m="mute" title="everything on or off"></button><label><b>sound</b></label><input type="range" min="0" max="1" step="0.01" value="${Master.vol()}" data-m="vol" title="master volume: everything"><span class="sub">${pct(Master.vol())}</span></div>
+<h6>creatures and weather</h6><div class="r"><button class="sw ${Master.fx() ? 'on' : ''}" role="switch" aria-checked="${Master.fx()}" data-m="fx" title="footsteps, voices, snips, thunder, rain and wind"></button><label>effects</label><input type="range" min="0" max="1.5" step="0.05" value="${v.fxVol}" data-m="fxv"></div><div class="r"><span class="sw" style="visibility:hidden"></span><label>weather</label><input type="range" min="0" max="1.5" step="0.05" value="${v.ambVol}" data-m="amb"></div>
+<h6>music</h6><div class="r"><span class="seg">${[['off', 'off'], ['bg', 'background'], ['deck', 'deck']].map(([k, l]) => `<button data-m="src:${k}" class="${src === k ? 'on' : ''}">${l}</button>`).join('')}</span><button data-m="open" title="open the music panel">🎧 ›</button></div>
+<div class="sub">${src === 'deck' ? 'the deck is playing' + (mu && mu.baseOn && mu.baseOn() ? ', with the base tune under it' : '') : src === 'bg' ? 'background music that follows the place, the weather and the day' : 'one plays at a time: the background music or the deck'}${Master.muted() ? ' · everything is muted' : ''}</div>`; }
+    const open = on => { pop.classList.toggle('on', on); render(); };
+    $('#soundBtn').addEventListener('click', () => { Master.toggle(); });
+    $('#sndMore').addEventListener('click', e => { e.stopPropagation(); open(!pop.classList.contains('on')); });
+    if (matchMedia('(hover: hover)').matches) { wrap.addEventListener('mouseenter', () => { clearTimeout(hov); hov = setTimeout(() => open(true), 350); }); wrap.addEventListener('mouseleave', () => { clearTimeout(hov); hov = setTimeout(() => { if (!pop.contains(document.activeElement)) open(false); }, 600); }); }
+    document.addEventListener('pointerdown', e => { if (pop.classList.contains('on') && !wrap.contains(e.target) && !pop.contains(e.target) && !e.target.closest('#mSheet')) open(false); });
+    pop.addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b) return; const k = b.dataset.m, mu = M();
+      if (k === 'mute') Master.toggle(); else if (k === 'fx') Master.setFx(!Master.fx()); else if (k === 'open') { open(false); const d = $('#djBtn'); if (d && !$('#dj.on')) d.click(); }
+      else if (k.startsWith('src:') && mu && mu.setSource) mu.setSource(k.slice(4)); render(); });
+    pop.addEventListener('input', e => { const k = e.target.dataset.m, v = +e.target.value; if (k === 'vol') { Master.setVol(v); const s = e.target.nextElementSibling; if (s) s.textContent = Math.round(v * 100); } else if (k === 'fxv') Sound.vols(v, null); else if (k === 'amb') Sound.vols(null, v); });
+    addEventListener('idle:audio', () => { paint(); Sound.sync(); const a = document.activeElement; if (!(a && a.type === 'range' && pop.contains(a))) render(); });
+    addEventListener('idle:musicsrc', render);
+    paint(); Sound.sync(); return { render, open }; })();
   // ---------- digital weather: a visual layer over the arena and an ambient sound, part of the world genome ----------
   const Weather = (() => { const cv = $('#weather'), g = cv.getContext('2d'); let kind = 'clear', k = 0.35, parts = [], amb = null, windA = Math.random() * 6.28, gust = 1, flashA = 0, bolt = null;
     function strike(w, h) { flashA = 0.55; let x = Math.random() * w, y = 0; bolt = [[x, y]]; while (y < h * (0.5 + Math.random() * 0.4)) { x += (Math.random() - .5) * 60; y += 20 + Math.random() * 30; bolt.push([x, y]); }
@@ -1725,7 +1795,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     let open = false, last = null; const pref = (() => { try { return { env: true, obj: false, cre: false, ...JSON.parse(localStorage.getItem('arena.studio') || '{}') }; } catch (e) { return { env: true, obj: false, cre: false }; } })();
     const savePref = () => { try { localStorage.setItem('arena.studio', JSON.stringify(pref)); } catch (e) {} };
     const nid = () => 'world-' + Date.now().toString(36).slice(-4), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-    const soundOn = () => $('#soundBtn') && $('#soundBtn').textContent === '🔊';
+    const soundOn = () => !Master.muted();
     const fader = (k, lab, a, b, s, v, fmt) => `<div class="fd"><output>${fmt ? fmt(v) : v}</output><input type="range" class="vf" data-s="${k}" min="${a}" max="${b}" step="${s}" value="${v}"><span>${lab}</span></div>`;
     const led = (k, lab, on, tip) => `<button class="led${on ? ' on' : ''}" data-s="${k}" title="${tip || ''}"><i></i>${lab}</button>`;
     const wxP = () => ({ ...wxDefaults(world.weather), ...((world.wx || {})[world.weather] || {}) });
@@ -1763,7 +1833,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function undoLast() { if (!last) { say('lab', 'nothing to undo', 'lab'); return; } applyWorld({ ...last.world }, 'studio'); if (last.keep && window.__keep) window.__keep.load(last.keep); if (last.styles) for (const [w, f, c, r] of last.styles) { w.el.style.font = f; w.el.style.color = c; w.rot = r; place(w); } if (window.__lod) window.__lod.restyled(); for (const c of last.mutated) if (creatures.includes(c)) evolveC(c, 'revert'); last = null; render(); }
     el.addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (!b) return; const k = b.dataset.s;
       if (k === 'close') toggle(false); else if (k === 'day' || k === 'disasters') { setWorld({ [k]: !world[k] }); if ($('#wcDis')) $('#wcDis').checked = !!world.disasters; render(); }
-      else if (k === 'births') { setWorld({ births: world.births === false }); render(); } else if (k === 'sound') { Sound.toggle(); render(); } else if (['env', 'obj', 'cre'].includes(k)) { pref[k] = !pref[k]; savePref(); render(); }
+      else if (k === 'births') { setWorld({ births: world.births === false }); render(); } else if (k === 'sound') { Master.toggle(); render(); } else if (['env', 'obj', 'cre'].includes(k)) { pref[k] = !pref[k]; savePref(); render(); }
       else if (k === 'wxreset') { const wx = { ...(world.wx || {}) }; delete wx[world.weather]; world = { ...world, wx }; saveWorld(); render(); }
       else if (k === 'keepworld') { $('#worldKeep').click(); }
       else if (k === 'reshuffle' && window.__placeKind === 'keep' && window.__keep) { window.__keep.reshuffle(); say('lab', '🕯️ Gloamhold: every room refurnished', 'lab'); }
@@ -2118,7 +2188,17 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     if (nser > 1) f.ser = Array.from({ length: nser - 1 }, (_, k) => REAL_SRC.has(f.kind) || f.kind === 'noise' || f.kind === 'prime' ? ma(f.pts, k + 1) : formulaOf(f.kind, A + (k + 1) * 3, B + (k + 1) * 5).pts);   // more series: the same formula with nudged numbers, or a trend line through real data
     const pal = exp && Math.random() < 0.6 ? pick(PALS) : wpick(tasteW(c, mg.cpal, 'p:'));
     return { f, pal, exp, grid: Math.random() < mg.cplx, tried }; }
-  async function doMath(c, free) { const nums = free.filter(isNum), foc = c.focus && isNum(c.focus) && words.includes(c.focus) ? c.focus : null;
+  // a full floor (chartLoad): replot one of its own old charts (new formula and look from the same numbers, so the count stays) or
+  // go back to counting, more often the fuller the floor
+  async function replot(c, t) { c.target = t; if (!(await chase(c, t, 30))) { c.target = null; return false; } c.target = null; if (!things.includes(t) || !t.d || t.d.pinned || !t.d.done) return false;
+    const d = t.d, nums = (d.items || []).filter(i => i.t === 'num').map(i => +i.w).filter(Number.isFinite), a = nums[0] ?? 1 + Math.floor(Math.random() * 9), b = nums[1] ?? Math.floor(Math.random() * 30), was = d.f && d.f.expr;
+    const { f, pal, exp, grid, tried } = chooseChart(c, a, b); Object.assign(d, { f, title: f.expr, pal, grid, exp: exp || undefined, np: f.pts.length, play: Math.min(d.play || 0, 300), rev: (d.rev || 0) + 1 });
+    renderDesign(t); place(t); numFx(t.x, t.y - 74, f.expr, c.g.hue, true); Sound.snip(c); tried[f.vis] = (tried[f.vis] || 0) + 1; const l = ledger(c); l.formulas = (l.formulas || 0) + 1; l.last = f.expr; l.replots = (l.replots || 0) + 1;
+    if (window.__life) window.__life.note(c, 'work', 'replotted an old chart instead of starting a new one (the floor was full)', 'work:replot');
+    logEvent('work', { who: c.name, job: 'math', formula: f.expr, chart: f.kind, vis: f.vis, replot: true, was }); return true; }
+  async function doMath(c, free) { const nums = free.filter(isNum), foc = c.focus && isNum(c.focus) && words.includes(c.focus) ? c.focus : null, L = chartLoad();
+    if (!foc && L.p > 0 && Math.random() < Math.min(0.9, 0.35 + 0.6 * L.p)) { let own = null; for (const t of things) if (t.kind === 'design' && t.d && t.d.dk === 'chart' && t.d.done && !t.d.pinned && t.d.byKey === c.key && (!own || (t.d.play || 0) > (own.d.play || 0))) own = t;
+      return own && Math.random() < 0.6 ? replot(c, own) : doCount(c, free); }
     if (!foc && (nums.length < 2 || Math.random() < 0.3)) return doCount(c, free);
     const a = foc || nums.sort((p, q) => dist(p, c) - dist(q, c))[0], b = nums.filter(w => w !== a).sort((p, q) => dist(p, a) - dist(q, a))[0]; if (!a || !b) return doCount(c, free);
     const site = dzSite(c), hue = c.g.hue, take = async w => { c.target = w; if (!(await chase(c, w, 12))) return false; c.target = null; if (!words.includes(w) || w.carriedBy) return false;
@@ -3199,6 +3279,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   window.__looksHooks = { creatures: () => creatures, creaturesNear: (x, y, r) => creaturesNear(x, y, r), wordsNear: (x, y, r) => wordsNear(x, y, r), cam: () => cam, viewSize, isDark: () => isDark(), qual: () => QUAL,
     selected: () => selected, hover: () => HitC.hover(), famKey: c => famKey(c), note: (c, k, x) => Life.note(c, k, x), log: (t, x) => logEvent(t, x), keep: () => window.__placeKind === 'keep' };
   window.__babyHooks = { creatures: () => creatures, world: () => world, mutate: (k, r, p) => mutate(k, r, p), famKey: c => famKey(c), famName: c => NAME_FAMS[nameFamily(c.g, famKey(c))] || 'kin', jobOf: c => jobOf(c),
+    needJob: () => { const L = chartLoad(); return L.p > 0.2 && L.debug < Math.max(1, Math.ceil(L.pop / 12)) ? 'debug' : null; },   // a full floor and too few Debuggers: a child may grow up one
     birth(fam, g, x, y) { const before = creatures.length; release({ key: fam, genome: g }, true); const n = creatures[creatures.length - 1]; if (creatures.length === before || !n) return null;
       n.x = n.tx = x; n.y = n.ty = y; n.size = 0.55; buildLegs(n); sizeUp(n); n.born = Date.now(); n.flash = { how: 'keep', until: performance.now() + 1200 }; saveResidents(); renderEvo(); return n; },
     wordsNear: (x, y, r) => wordsNear(x, y, r), edible: (c, w) => edibleOn(c, w), log: (t, x) => logEvent(t, x), comment: (t, k) => oracleComment(t, k), wd, space: () => SPACE,
@@ -3602,7 +3683,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       const m = { on: (() => { try { return localStorage.getItem('arena.reelMusic') === 'on'; } catch (e) { return false; } })() };
       const hz = n => 440 * Math.pow(2, (n - 69) / 12);
       function note(n, t, len, vol, type) { const o = ac.createOscillator(), g = ac.createGain(); o.type = type || 'sine'; o.frequency.value = hz(n); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + len); o.connect(g); g.connect(gain); o.start(t); o.stop(t + len + 0.05); }
-      m.start = () => { try { if (!ac) { ac = new (window.AudioContext || window.webkitAudioContext)(); gain = ac.createGain(); gain.gain.value = 0.08; gain.connect(ac.destination); } ac.resume(); } catch (e) { return; } clearInterval(iv);
+      m.start = () => { try { if (!ac) { ac = Master.ctx(); gain = ac.createGain(); gain.gain.value = 0.08; gain.connect(Master.out()); } Master.resume(); } catch (e) { return; } clearInterval(iv);   // the reel's soundtrack goes through the master too
         iv = setInterval(() => { if (!ac) return; const t = ac.currentTime + 0.05, sc = PENT; if (step % 8 === 0) { note(root - 12, t, 3.2, 0.22, 'triangle'); note(root - 5, t, 3.2, 0.12, 'sine'); } if (Math.random() < 0.8) note(root + sc[(step * 3 + (step >> 2)) % sc.length], t, 1.4, 0.18, 'sine'); step++; }, 420); };
       m.stop = () => { clearInterval(iv); };
       m.mood = f => { root = SAD.includes(f) ? 54 : f === 'excited' ? 60 : 57; };
