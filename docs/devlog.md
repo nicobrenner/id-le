@@ -3,6 +3,15 @@
 What we built, what we measured, and what surprised us. Newest first. Each entry names the commit or issue.
 Numbers come from tests on copies of Nico's world (headless, one browser at a time) unless marked otherwise.
 
+## 2026-10-31
+
+**Stats: where visitors come from, how long they stay, where the guided start stops; a local dashboard.** Before a public post, the question was "what did a Reddit visitor actually do?". Nico chose our own anonymous daily totals over Umami or GA4 (GA4 needs cookies and a consent banner, which would break the privacy page's promise; the Umami instance lives on Jeffy's box). Three additions to `idle-stats.js`, still daily totals only:
+- Came from: the referring site's name only (`reddit.com`, `news.ycombinator.com`, `x.com` for t.co, `google` for any google.*), "direct" for no link or our own pages, never a path or query; plus a cleaned `utm_source`. The server keeps at most 30 site names and 20 tags per day and shard, the rest count as `other`, so the KV document stays small (767 bytes in the test with 44 visits from 40 sites).
+- Time on screen: visible time only (Page Visibility), bucketed <1 / 1-5 / 5-20 / 20+ minutes.
+- Where the guided start stopped: the last moment reached, or finished/skipped, only for page loads that began with the trail running.
+- Finding: a page load reports these several times (on hide, at 3 and 15 minutes, on leave), and phones often never fire the last event. Counting each report would count one visit several times; counting only the last would lose phones. So each report says which bucket it moves *from* (`dw0`, `fl0`), and the server adds the new bucket and takes back the old one. Shards can go negative for a bucket; the sum over shards is exactly one per page load (tested: three reports from one load → counted once, in 5-20).
+- Dashboard: `python3 tools/stats.py --html out.html` writes one self-contained page (inline SVG, no external requests, light/dark): visits per day (new vs returning, days with our own tests starred), the guided-start funnel and stop points, referrers and tags, time on screen, features opened, devices and crash-guard levels, fps, errors. It also shows Cloudflare's daily requests split into real browsers and Cloudflare's own early-hints fetches once the token can read zone analytics (today it says how to enable that).
+
 ## 2026-10-30
 
 **The Id|le-pedia covers the features, not just the creatures.** Nico: the pedia was "mostly focused on the creatures", while the README showed everything else. The pedia now opens with a tour (14 cards with the README's pictures, light or dark by the page's theme) and is reorganised into Life, The world, **Things to do** (reels with replays, music and rave, advisor, the Gazette and notices, the studio, the drawer, the data lab, connecting worlds, evolution, the first five minutes), **Make it yours** (remix a world, with your own AI, get the code) and **Settings and privacy**; disasters and snapshots (world files) are fuller.
