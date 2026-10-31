@@ -251,7 +251,8 @@ def t_camera(P, phone=False):
     z0 = pg.evaluate(f"() => {cam}.get().z")
     need(abs(z0 - 1) < 0.01, f"default zoom {z0}, expected 1 (100%)")
     sp = pg.evaluate(f"() => {cam}.space()"); vw, vh = pg.evaluate(f"() => {{ const v = {cam}.view(); return [v.w, v.h] }}")
-    zmin = pg.evaluate(f"() => {cam}.zMin()")
+    zmin = pg.evaluate(f"() => {cam}.zMin()"); safe = pg.evaluate("() => window.__safeLevel || 0")
+    need(safe == 0, f"a fresh visit started in crash-guard safe mode (level {safe})")
     out = pg.evaluate(f"() => {cam}.set({{ z: 0.01 }}).z")
     need(abs(out - zmin) < 1e-6, f"zoomed out to {out}, floor is {zmin}")
     if phone: need(zmin >= 0.35 - 1e-9, f"phones must stop at 0.35 or more, got {zmin}")
@@ -283,7 +284,7 @@ def t_camera(P, phone=False):
         zz = pg.evaluate(f"() => {cam}.floorZoom()")
         need(zz and abs(float(zz) - zmin) < 0.02, f"phone floor zoom '{zz}' (expected about {zmin:.2f}: CSS zoom, #35)")
     P.clean()
-    return f"default 100%, floor {zmin:.2f}, ceiling {zmax}, wrap + travel clamp ok"
+    return f"default 100%, floor {zmin:.2f} (view {vw}×{vh}, world {sp['W']}×{sp['H']}), ceiling {zmax}, wrap + travel clamp ok, not in safe mode"
 
 
 PANELS = [("herdBtn", "creatures"), ("studioBtn", "studio"), ("reelsBtn", "reels"), ("drawerBtn", "drawer"), ("advBtn", "advisor"), ("djBtn", "music deck"),
