@@ -5,6 +5,23 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-31
 
+**Zooming out on a phone no longer piles up memory (#35); a zoom control; IRC and the Operator.** Nico: the iPhone "mostly works, but sometimes at full zoom out it doesn't", what is the default zoom, should there be a visible zoom control, and "chat", "lab" and "data lab" are confusing.
+- Measured in real WebKit (Playwright's WebKit, iPhone 12 mini profile, 3× screen, a copy of Nico's world: 2,673 words, 58 charts, 44 creatures), physical footprint of all WebKit processes while looking around at each zoom:
+
+| zoom | before: all WebKit | after | before: largest process | after |
+|---|---|---|---|---|
+| 100% | 1154 MB | 1138 MB | 691 MB | 720 MB |
+| 60% | 1374 MB | **1166 MB** ↓ | 872 MB | **691 MB** ↓ |
+| 35% (the phone floor) | 1668 MB | **1218 MB** ↓ | 999 MB | **741 MB** ↓ |
+
+- Finding: the floor was zoomed with `transform: scale()`. Scaled, Safari keeps drawing the floor and the canvases in it at the resolution of 100%, so memory grew with how much of the world is on screen (≈1/zoom²): +450 MB at 35%, which is why the clamp helped but full zoom-out still sometimes closed the tab. Switching off one suspect at a time (the world-sized SVG, the 58 charts, will-change, the word canvases, the creature canvas, the sky, the words) each left the growth in place; hiding the whole floor removed it, and zooming the floor with CSS `zoom` (layout, drawn at its real size) removed it too. Phones and tablets now use `zoom`; computers keep `scale()`. The floor's translate is divided by the zoom because CSS zoom scales the element's own transform too; `offsetWidth`/`offsetHeight` read the same under both (checked in WebKit and Chromium), so the word probe and replay sizes are unaffected.
+- Screen-sized canvases on phones are capped at 2× (a 3× iPhone spent 2.25× the memory on each for little visible gain).
+- Finding: since 4494482 (the iOS zoom clamp, Oct 30) the rest of `applyCam` (the travel-mode clamp and the camera wrap) sat inside that line's comment and never ran. Restored. (Second time a line slipped into a comment, after the disasters.)
+- Default zoom is 100% (new worlds and the starter world). Computers zoom out until the whole world fits, phones and iPads to 35% (50% after a crash), everything to 250%. The **zoom control**: − · % · + at the minimap's lower left on computers; on phones a thin vertical slider with 40 px + and − at the right edge. Double-click or double-tap the % for 100%. Finding: a tap on the plain-text % was delivered to the − next to it (WebKit's touch targeting picks the nearest clickable thing), so the % is a button.
+- Names: the room chat is **IRC · Id|le Relay Chat** (💬 IRC), the AI chat is the **📟 Operator** ("your AI changes this world"; provisional, Nico may rename it), the data lab stays. Both live in `window.IDLE_NAMES` (idle-runtime.js) and the page, the phone menu, the AI chat and the pedia read them from there. Stats keys unchanged.
+- Phones: notification pills (the guide's 🧭 tips too) step aside while a bottom sheet is open; sheets that live inside the arena were drawn under them.
+- Pedia: new "Getting around" (zoom, the control and limits read from the code, the three ways to talk, on phones and the crash guard); "With your own AI" names the Operator.
+
 **Replays play in the Id|le-pedia.** Five real clips, recorded in the starter world with the game's own recorder (test hooks staged the moments): a packet storm with lightning (under Memory reels), a volcano (Disasters), a rave (Rave mode), a hangry frenzy (Hangry) and an Architect finishing a hut (Solid objects and buildings). Each plays while on screen, pauses off screen, loops, follows the page's light/dark theme, and with reduced motion shows one still frame of the moment.
 - To make that possible the drawing left arena.html: `idle-critdraw.js` (bodies, IK legs and steps, hiding, 💤/🫣, hangry glow, dance poses) and `idle-replay-player.js` (the clip player), next to `idle-replay-env.js`. `idle-build.js` now gives a page without the world `__build.drawTo` (objects and finished buildings). The arena loads the same modules, so reels and the pedia draw identically.
 - fps at 1,000 creatures, before → after (headless, 2 × 10 s each, two alternating rounds, machine load 6–7): 51.2/55.3 and 52.0/57.0 → 48.6/53.0 and 54.3/57.3. Flat within noise.

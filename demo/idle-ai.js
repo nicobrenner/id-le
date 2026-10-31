@@ -29,7 +29,7 @@
     { name: 'open_card', description: "Fly the player's view to a creature and open its card.", input_schema: S({ name: str('creature name') }, ['name']) },
     { name: 'take_apart', description: 'Take apart the nearest unpinned design or chart (its words go back on the floor). The player must confirm.', input_schema: S({ near: str('creature name, optional') }) },
     { name: 'rest', description: 'Put a creature to rest (it keeps its name and memories and can be woken later). The player must confirm.', input_schema: S({ name: str('creature name') }, ['name']) },
-    { name: 'note', description: 'Pin a short note in the room chat for the player.', input_schema: S({ text: str('the note') }, ['text']) },
+    { name: 'note', description: 'Pin a short note in IRC (the world chat) for the player.', input_schema: S({ text: str('the note') }, ['text']) },
   ];
   const CONFIRM = new Set(['take_apart', 'rest']);
   const ICON = { look: '👀', creature: '🪪', say_as: '💬', weather: '☁', spawn: '✦', rename: '✎', evolve: '🧬', place_words: '🔤', disaster: '🌋', hangry: '😤', open_card: '🔎', take_apart: '✂', rest: '💤', note: '📌' };
@@ -111,8 +111,8 @@
   // on a public site (no local server) there is no lab relay: the chat is the player's own AI, and says how to connect one
   (window.__idle ? window.__idle.mode() : Promise.resolve('server')).then(m => { if (m !== 'static') return;
     const o = brainSel.querySelector('option[value=relay]'); if (o) o.remove(); if (cfg.brain === 'relay') { cfg.brain = 'anthropic'; brainSel.value = 'anthropic'; }
-    $('#lab-head b').textContent = 'chat · your AI'; const cap = $('#lab-form small'); if (cap) cap.textContent = 'talks to the AI you bring; it can look at the world and use the game\'s own actions';
-    applyBrain(); if (!ready() && !thread.childElementCount) add('page', 'This chat talks to an AI you bring: Claude or any OpenAI-compatible API with your own key, or a local model (Ollama, LM Studio). Pick one above and press ⚙ to connect it. Your key stays in this browser.'); });
+    { const N = window.IDLE_NAMES; $('#lab-head b').textContent = N ? `${N.op.icon} ${N.op.short} · ${N.op.sub}` : 'Operator · your AI'; } const cap = $('#lab-form small'); if (cap) cap.textContent = 'talks to the AI you bring; it can look at the world and use the game\'s own actions';
+    applyBrain(); if (!ready() && !thread.childElementCount) add('page', (window.IDLE_NAMES ? 'The ' + window.IDLE_NAMES.op.short : 'This chat') + ' talks to an AI you bring: Claude or any OpenAI-compatible API with your own key, or a local model (Ollama, LM Studio). Pick one above and press ⚙ to connect it. Your key stays in this browser.'); });
 
   function add(who, msg, cls) { const d = document.createElement('div'); d.className = 'ai-row ' + (cls || who); d.innerHTML = '<b>' + esc(who) + '</b> ' + esc(msg); thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   function chip(t, err) { const d = document.createElement('div'); d.className = 'ai-chip' + (err ? ' err' : ''); d.textContent = t; thread.appendChild(d); thread.scrollTop = 1e9; return d; }
