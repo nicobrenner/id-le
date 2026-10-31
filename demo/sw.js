@@ -3,7 +3,7 @@
 // 2. adds the cross-origin isolation headers a static host may not send, so the Oracle can use several threads
 //    (the same idea as coi-serviceworker; a host that sends them itself, like the _headers file, makes this a no-op);
 // 3. forwards /lab/img and /lab/asset (used as <img src> and CSS urls, which never pass through window.fetch) to the helper.
-const CACHE = 'idle-v1', BIG = /\.(onnx|wasm|mjs)$|vendor\/|tokenizer_.*\.json$|assoc_v1\.json$/;
+const CACHE = 'idle-v1', BIG = /\.(onnx|wasm|mjs)$|vendor\/|jeffy-heads\/|tokenizer_.*\.json$|assoc_v1\.json$/;
 let helper = '';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));

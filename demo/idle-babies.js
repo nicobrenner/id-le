@@ -43,6 +43,7 @@
     const g = h.mutate(fam, b ? 0.08 : 0.05, m);
     // a small mutation, not a new creature: keep the mixed body, job and actions most of the time
     if (Math.random() < 0.85) { g.body = m.body; g.job = m.job; if (m.letter) g.letter = m.letter; } if (Math.random() < 0.9 && m.actions) g.actions = m.actions.slice();
+    delete g.byNeed; const need = h.needJob ? h.needJob() : null; if (need && g.job !== need && Math.random() < 0.5) { g.job = need; g.byNeed = need; }   // born into a world full of charts with too few Debuggers: it grows up one
     if (m.social != null) g.social = +clamp(m.social + (Math.random() - 0.5) * 0.08, 0, 1).toFixed(2);
     g.parent = pa.id; g.parent2 = b ? pb.id : null; g.birth = 1; g.born = now(); return { g, fam }; }
 

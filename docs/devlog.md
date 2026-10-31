@@ -14,6 +14,56 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 - Finding: a mark next to a clip already recording joins that clip instead of starting its own, and a creature gets at most one clip per 15 s, so staging a clip needs a quiet recorder.
 
 **The pedia fills three gaps**: the Oracle (the narrator, the tiny local model, how typed commands are understood, safe mode; facts read from arena.html, arena_instr_v2.json and the model file's size), getting around (the minimap, travel to a real page, the Crawler with its page and depth limits read from the code), and drafts surviving reloads.
+**Creatures stand out from the charts, and charts stop piling up.** Nico (with a phone screenshot of a dark world full of charts): creatures were "hard to see in the noise", and "there aren't enough debuggers… we need to balance it out" (his second or third time asking).
+- Outlines: every body shape and the legs get a thin outline under their own colours (one extra stroke per shape, one per creature for all its legs; at least ~1.3 screen px at any zoom). Light mode: dark ink. Dark mode: a light line in the creature's own hue. Shy ones keep a faint outline (0.15–0.45 of full) and get it back in full when hovered or highlighted. Dark bodies are a little lighter in dark mode. Phones (light quality) keep the outline.
+- Findability (median colour distance between a creature and its surroundings, the #36 measure, 6 views each, a copy of Nico's world with 58 charts, a fixed third showy/plain/shy), before → after:
+
+| view | plain | showy | shy |
+|---|---|---|---|
+| desktop dark | 93 → **116** ↑ | 93 → 95 | 74 → 91 ↑ |
+| desktop light | 67 → **109** ↑ | 89 → **122** ↑ | 64 → 90 ↑ |
+| phone dark | 95 → **111** ↑ | 107 → 120 ↑ | 81 → 106 ↑ |
+| phone light | 73 → **125** ↑ | 93 → **160** ↑ | 65 → 92 ↑ |
+
+  Noise is about ±10. Shy ones stay the hardest to see everywhere, but less hidden than before, most on phones in dark mode (106 vs plain 111).
+- Finding: the first version used a dark outline in both themes; in dark mode it made creatures *less* findable (desktop showy 93 → 72, plain 93 → 86), the same trap as #36's halo: dark on a dark floor pulls them toward the background. A light outline in their own hue fixed it.
+- Chart ecology: a world now has a comfortable number of charts, 10 + 0.4 per creature (10–36). Past it, pressure p = charts/target − 1 feeds back: charts count as old 1/(1+3p) as soon (grazers, code eaters, Debuggers reach them earlier), Mathematicians replot one of their own old charts or count instead of adding (more often the fuller), creatures without a craft lend a Debugger's hand (code eaters most), code eaters graze charts more readily, and a child born into a full world with fewer than one Debugger per 12 creatures has an even chance of growing up one. Nothing is deleted outright; pinned charts are never touched.
+- Measured, 14 minutes, real time, side by side: a copy of Nico's world plus 3 Mathematicians (47 creatures, 4 Mathematicians, 1 Debugger): before 58 → 100 charts (68 made, 24 broken into code, 8 folded) and still climbing; after it came down to 28 within 4 minutes and held 32–36 (target 29; 66 made, 43 replots, 77 broken, 54 by helpers). Starter world (12 creatures, 1 Mathematician, no Debugger): 4 → 22 before, 4 → 15 after; the pressure was 0 there all along, so that gap is chance, and the brakes start at its target of 15.
+- Forced births under pressure: newborns grew up Debuggers by need (marked `byNeed` on the genome).
+- fps flat: 1,000 creatures, 3 × 8 s, before 41.9 / 34.6 / 35.2, after 42.4 / 38.2 / 46.9 (headless).
+
+**The data lab's classifiers run in the browser (#18), and a stuck lab is fixed.** The Jeffy side refitted the three starting heads (sms_spam, support_ticket, tweet_eval_sentiment) on all-MiniLM-L6-v2 int8, since the server's bge-large heads (335M parameters) can't be shipped; `idle-jeffy.js` runs them, `demo/jeffy-heads/` holds 23.7 MB, fetched only when a lab opens (or by a sorter/debugger once present), never on a first visit. Any other head still goes to Jeffy's server through the helper.
+- Speed, headless, static build: **4–5 ms** per classification in the lab (median 3.0 ms, p90 4.1 ms over 150 calls) against **≈500 ms** through the proxy on id-le.com (49 live calls); fetching the files from localhost took 0.1 s (from the network it is a 23.7 MB download, then cached: `_headers` 7 days and the service worker's cache).
+- Accuracy (Jeffy side, same test sets): spam 0.992 vs 0.991 ↑, tickets 0.998 vs 0.996 ↑, mood 0.626 vs 0.663 ↓.
+- Same 50 demo messages, server vs browser: spam 48/50 same label, 1 message changes bin; router 33/50 same label, 9/50 change bin (20 vs 19 routed, the rest to review); mood 32/50 same label, the browser says "neutral" much more often (18/50 change). The router and filter behave the same in practice; the mood tagger reads differently, as the accuracy drop predicted.
+- **Why the lab looked dead on id-le.com** (Nico: "the inbox gets filled up and no one does anything"), from a fresh visitor on the live site over 2 minutes: (1) **Moodring never got a message**: a router bins every message (sure or review), and the default team had the tagger after the router, so it stood by the inbox forever; (2) **the server path can't keep up**: each message needs 2 server calls at ≈500 ms plus walking, and the helper allows 20 predictions a minute per visitor (5 × 429 'busy' in 2 minutes), so at most ≈10 messages a minute get sorted while the inbox adds 15: the inbox grows without end; (3) any server answer other than 'busy' (the helper's general 'slow down' limit, a non-JSON error page, a dropped connection) **stopped the team until the lab was reopened**. Fixed: default order Spamtrap → Moodring → Router (an untouched old default is migrated; any other team stays as made), errors other than rate limits pause the server stages for 30 s and retry, and the team panel shows one ⚠ stuck line (a stage behind a router, a busy or silent server, messages nobody picks up), said once as a notice.
+- Flow after the fix (static build, 60 s, fresh): in browser 14 in / 10 sorted / 12 tagged, waiting stays at 4–5 ↑ (live before: Moodring 0 tagged, waiting growing); old default migrated: same flow; a custom team with a tagger behind a router: flows, and the panel says "Late never gets a message…"; server unreachable with in-browser heads off (safe mode): nothing sorted, panel says "Jeffy's server did not answer: … try again every 30 s".
+
+**Stats: where visitors come from, how long they stay, where the guided start stops; a local dashboard.** Before a public post, the question was "what did a Reddit visitor actually do?". Nico chose our own anonymous daily totals over Umami or GA4 (GA4 needs cookies and a consent banner, which would break the privacy page's promise; the Umami instance lives on Jeffy's box). Three additions to `idle-stats.js`, still daily totals only:
+- Came from: the referring site's name only (`reddit.com`, `news.ycombinator.com`, `x.com` for t.co, `google` for any google.*), "direct" for no link or our own pages, never a path or query; plus a cleaned `utm_source`. The server keeps at most 30 site names and 20 tags per day and shard, the rest count as `other`, so the KV document stays small (767 bytes in the test with 44 visits from 40 sites).
+- Time on screen: visible time only (Page Visibility), bucketed <1 / 1-5 / 5-20 / 20+ minutes.
+- Where the guided start stopped: the last moment reached, or finished/skipped, only for page loads that began with the trail running.
+- Finding: a page load reports these several times (on hide, at 3 and 15 minutes, on leave), and phones often never fire the last event. Counting each report would count one visit several times; counting only the last would lose phones. So each report says which bucket it moves *from* (`dw0`, `fl0`), and the server adds the new bucket and takes back the old one. Shards can go negative for a bucket; the sum over shards is exactly one per page load (tested: three reports from one load → counted once, in 5-20).
+- Dashboard: `python3 tools/stats.py --html out.html` writes one self-contained page (inline SVG, no external requests, light/dark): visits per day (new vs returning, days with our own tests starred), the guided-start funnel and stop points, referrers and tags, time on screen, features opened, devices and crash-guard levels, fps, errors. It also shows Cloudflare's daily requests split into real browsers and Cloudflare's own early-hints fetches once the token can read zone analytics (today it says how to enable that).
+
+**One sound switch, the deck as the place for music (#21)**
+
+Nico (and a music-artist friend): on/off switches on the deck's mixer and effects, and one clear sound control instead of three (the 🔇 top right, the background music's on/off, the deck's play).
+
+- **One master.** 🔊 top right mutes and unmutes everything (creature sounds, weather, background music, deck, reel soundtracks); hover or ▾ opens one master volume, a creatures-and-weather switch with its two levels, and which music plays. Everything now runs on one AudioContext through one master gain (`window.__audio`, arena.html); muted, the context is suspended after a 0.3 s ramp, so the audio graph does no work.
+- **Which of Nico's two options.** Both, in the sense that matters: one plays at a time (off / background / deck: the same segmented switch in the panel and the popover), and the deck has a **base tune** switch that plays the background music under the deck's own parts at the deck's tempo, key and scale, with the deck's bass, lead and pad following the base tune's chords. Exclusive sources keep one clock; the base tune gives the "play a base and mix on top" idea without two tempos fighting.
+- **Switches** (real toggle switches) on bass/lead/pad and on filter/echo/bitcrush: off takes it out of the sound and keeps its level or setting (`ch[c].off`, `fx.off[k]`; absent means on, so saved decks and sets load unchanged).
+- **Migration.** No master saved yet: it starts unmuted if the background music was on (so Nico's music doesn't go quiet), muted otherwise (as before: sound was off by default). Tracks, sets, set list and levels untouched.
+- **Pressing play while muted** unmutes and says so in a notice (silence after pressing play was the worst case).
+
+Measured (headless Chromium, 220 Hz tone at 0.5 into the master, biggest sample-to-sample jump while muting and unmuting):
+
+| | steady tone | while toggling |
+|---|---|---|
+| instant gain change (before) | 0.015 | **0.448** ↑ (a click) |
+| 30 ms ramp (now) | 0.015 | **0.015** (no click) |
+
+Muted: AudioContext `suspended` (was: separate contexts for effects, music and reels, effects muted only by skipping new notes). Phone: ☰ → *volume* opens it as a bottom sheet (375 px, no sideways scroll). Not in the frame loop, so no fps run.
 
 ## 2026-10-30
 

@@ -30,6 +30,8 @@ HEADERS = """/*
   Cache-Control: public, max-age=604800
 /vendor/*
   Cache-Control: public, max-age=31536000, immutable
+/jeffy-heads/*
+  Cache-Control: public, max-age=604800
 """
 
 
@@ -73,6 +75,8 @@ def main():
     img = os.path.join(ROOT, "docs", "img"); os.makedirs(os.path.join(out, "img"), exist_ok=True)
     for f in sorted(os.listdir(img)):
         if f.endswith(".jpg"): shutil.copy2(os.path.join(img, f), os.path.join(out, "img", f))
+    # the data lab's in-browser classifiers (idle-jeffy.js): fetched only when the lab opens, never on a first visit
+    shutil.copytree(os.path.join(DEMO, "jeffy-heads"), os.path.join(out, "jeffy-heads"))
     sums = vendor_ort(out)
     open(os.path.join(out, "_headers"), "w").write(HEADERS)
     if a.pages_helper:   # Pages advanced mode: static files as usual, the helper (helper/worker.js) on the same origin
