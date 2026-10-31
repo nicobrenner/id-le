@@ -19,7 +19,7 @@ window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Rel
   try { const G = 'idle.bootGuard', prev = JSON.parse(localStorage.getItem(G) || 'null'), died = prev && prev.alive === false ? prev.n : 0;
     window.__safeLevel = died >= 2 ? 2 : died >= 1 ? 1 : 0; localStorage.setItem(G, JSON.stringify({ n: died + 1, alive: false }));
     const ok = () => { try { localStorage.setItem(G, JSON.stringify({ n: 0, alive: true })); } catch (e) {} };
-    setTimeout(ok, 40000); addEventListener('pagehide', ok);
+    setTimeout(ok, 40000); addEventListener('pagehide', ok); window.__bootOk = ok;   // a reload the page asks for itself is not a crash: it calls this first (WebKit doesn't always fire pagehide then, so a first visit started in safe mode)
   } catch (e) { window.__safeLevel = 0; }
   window.__isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const CFG = Object.assign({ mode: 'auto', helper: '' }, window.IDLE_CFG || {});
@@ -83,8 +83,8 @@ window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Rel
   function setup() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('sw.js', { scope: './' }).then(reg => { reg.active && reg.active.postMessage({ helper: helperOn() ? CFG.helper : '' }); }).catch(() => {});
-      navigator.serviceWorker.addEventListener('controllerchange', () => { try { if (!crossOriginIsolated && !sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); location.reload(); } } catch (e) {} });
-      if (navigator.serviceWorker.controller && !crossOriginIsolated) { try { if (!sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); location.reload(); } } catch (e) {} }
+      navigator.serviceWorker.addEventListener('controllerchange', () => { try { if (!crossOriginIsolated && !sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); if (window.__bootOk) window.__bootOk(); location.reload(); } } catch (e) {} });
+      if (navigator.serviceWorker.controller && !crossOriginIsolated) { try { if (!sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); if (window.__bootOk) window.__bootOk(); location.reload(); } } catch (e) {} }
     }
     const add = () => { const row = document.getElementById('snaprow'); if (!row || document.getElementById('idleWorldFile')) return; const box = document.createElement('div'); box.id = 'idleWorldFile'; box.style.cssText = 'margin-top:6px;font-size:12px';
       box.innerHTML = '<small style="opacity:.6">no server here: your world lives in this browser. Keep a copy:</small> <button data-idle="dl">⬇ download my world</button> <label class="fileload">⬆ load a world file <input type="file" accept=".json" hidden></label>';
@@ -111,7 +111,7 @@ window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Rel
     for (const [k, v] of Object.entries(w.keys)) { try { localStorage.setItem(k, v); } catch (e) {} }
     try { localStorage.setItem('arena.snaps', JSON.stringify(snaps)); } catch (e) { try { localStorage.setItem('arena.snaps', JSON.stringify(snaps.slice(-15))); } catch (er) {} }
     try { localStorage.setItem('arena.autorestore', 'on'); } catch (e) {}
-    location.reload();
+    if (window.__bootOk) window.__bootOk(); location.reload();
   }
   const alertish = t => { const el = document.createElement('div'); el.textContent = t; el.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);background:#222;color:#fff;padding:6px 12px;border-radius:8px;z-index:99999;font:13px system-ui'; document.body.appendChild(el); setTimeout(() => el.remove(), 3500); };
   // drafts: whatever is half-typed in a chat box (any textarea with an id, and the room chat line) survives a reload; it is put back once the box

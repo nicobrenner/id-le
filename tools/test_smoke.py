@@ -226,7 +226,18 @@ def wait_for(pg, js, timeout=60, every=0.5, P=None):
 
 
 def booted(pg):
-    wait_for(pg, "() => !!(window.__arena && window.__arena.raw && window.__arena.raw().length && window.__restoredOrFresh)", 90)
+    # booted, and staying the same document: on a first visit the service worker reloads the page once (cross-origin isolation),
+    # sometimes after the first document has already booted (WebKit on Linux), so mark the document and make sure the mark survives
+    t0 = time.time()
+    while time.time() - t0 < 120:
+        wait_for(pg, "() => !!(window.__arena && window.__arena.raw && window.__arena.raw().length && window.__restoredOrFresh)", 90)
+        with contextlib.suppress(Exception): pg.evaluate("() => { window.__t_doc = 1 }")
+        pg.wait_for_timeout(2000)
+        try:
+            if pg.evaluate("() => window.__t_doc === 1 && !!window.__restoredOrFresh"): return
+        except Exception as e:
+            if "context was destroyed" not in str(e) and "navigation" not in str(e): raise
+    raise AssertionError("the page kept reloading")
 
 
 # ---------------------------------------------------------------- browser checks
@@ -248,8 +259,11 @@ def t_fresh_load(P):
 def t_camera(P, phone=False):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     cam = "window.__testCam"
-    z0 = pg.evaluate(f"() => {cam}.get().z")
-    need(abs(z0 - 1) < 0.01, f"default zoom {z0}, expected 1 (100%)")
+    zs, t0 = [], time.time()   # a fresh visit flies to the starter creatures: wait for the camera to land
+    while time.time() - t0 < 20 and not (len(zs) >= 4 and len(set(zs[-4:])) == 1):
+        zs.append(pg.evaluate(f"() => {cam}.get().z")); pg.wait_for_timeout(400)
+    z0 = zs[-1]; land = 0.7 if pg.evaluate("() => innerWidth < 700") else 0.95   # idle-first5.js: the guide arrives at 70% on phones, 95% elsewhere
+    need(abs(z0 - land) < 0.01 or abs(z0 - 1) < 0.01, f"a fresh visit settled at zoom {z0}, expected {land} (the guide's arrival) or 1")
     sp = pg.evaluate(f"() => {cam}.space()"); vw, vh = pg.evaluate(f"() => {{ const v = {cam}.view(); return [v.w, v.h] }}")
     zmin = pg.evaluate(f"() => {cam}.zMin()"); safe = pg.evaluate("() => window.__safeLevel || 0")
     need(safe == 0, f"a fresh visit started in crash-guard safe mode (level {safe})")
@@ -284,7 +298,7 @@ def t_camera(P, phone=False):
         zz = pg.evaluate(f"() => {cam}.floorZoom()")
         need(zz and abs(float(zz) - zmin) < 0.02, f"phone floor zoom '{zz}' (expected about {zmin:.2f}: CSS zoom, #35)")
     P.clean()
-    return f"default 100%, floor {zmin:.2f} (view {vw}×{vh}, world {sp['W']}×{sp['H']}), ceiling {zmax}, wrap + travel clamp ok, not in safe mode"
+    return f"fresh visit lands at {round(z0 * 100)}%, floor {zmin:.2f} (view {vw}×{vh}, world {sp['W']}×{sp['H']}), ceiling {zmax}, wrap + travel clamp ok, not in safe mode"
 
 
 PANELS = [("herdBtn", "creatures"), ("studioBtn", "studio"), ("reelsBtn", "reels"), ("drawerBtn", "drawer"), ("advBtn", "advisor"), ("djBtn", "music deck"),
