@@ -9,6 +9,9 @@
 // the game's source code, open to read, fork and change (shown in ⚙ settings and the phone ☰ menu; pedia.html, privacy.html
 // and README.md spell the same address out, so change them together)
 window.IDLE_REPO = 'https://github.com/nicobrenner/id-le';
+// the two chats' names, in one place (the Operator's name is provisional: change it here): IRC is where the world and its
+// creatures talk (and you talk to them); the Operator is the AI you bring, which can change this world. The data lab is a third thing.
+window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Relay Chat', sub: 'the world and its creatures talking' }, op: { icon: '📟', short: 'Operator', sub: 'your AI changes this world' } };
 (() => {
   // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) never
   // fires pagehide, so its record stays 'alive: false'. The next load sees it and starts safer: level 1 = the Oracle on one

@@ -18,6 +18,9 @@
   #topbar>#mMore{margin-left:auto}
   #placesBar{top:58px!important}
   #minimap{width:96px!important;height:auto!important;right:6px!important;bottom:6px!important}
+  #zoomer{right:6px!important;left:auto!important;bottom:auto!important;top:50%;transform:translateY(-50%);flex-direction:column;gap:2px;padding:4px 2px;border-radius:14px}
+  #zoomer button{width:40px;height:40px;font-size:22px;border-radius:10px}
+  #zoomer [data-z=in]{order:0}#zoomer input{order:1;display:block;writing-mode:vertical-lr;direction:rtl;width:28px;height:110px;margin:4px 0;accent-color:#2b5cff}#zoomer [data-z=out]{order:2}#zoomer .zp{order:3;min-width:0;font-size:11px;padding:2px 0 4px}
   .grow{display:none!important}
   #cline{display:none!important}
   #soundBtn,#lab-toggle,#rc-open{display:none!important}
@@ -42,7 +45,7 @@
   // ---------- ☰ more: every top-bar button that isn't kept on the bar, plus the chats and sound
   const LABELS = { labBtn: ['🧪', 'data lab'], connBtn: ['🌐', 'connect'], snapBtn: ['📸', 'snapshot'], evolveWorldBtn: ['🌦', 'evolve'], reelsBtn: ['🎞', 'reels'], pediaBtn: ['📖', 'pedia'],
     djBtn: ['🎧', 'music'], advBtn: ['📊', 'advisor'], drawerBtn: ['🗄', 'drawer'], treesBtn: ['🌳', 'family trees'], almanacBtn: ['🌊', 'almanac'], keepDetail: ['🏰', 'detail'],
-    'rc-open': ['💬', 'room chat'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': ['🤖', 'chat'], soundBtn: ['🔊', 'sound'] };
+    'rc-open': [(window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.icon : '💬', (window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.short : 'IRC'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': [(window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.icon : '📟', (window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.short : 'Operator'], soundBtn: ['🔊', 'sound'] };
   const KEEP = ['herdBtn', 'ntfBtn', 'studioBtn', 'mMore'];
   let sheet = null, more = null;
   function mount() {
