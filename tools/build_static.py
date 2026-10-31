@@ -20,7 +20,7 @@ ORT_FILES = ["ort.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded
 ORT_CDN = f"https://cdn.jsdelivr.net/npm/onnxruntime-web@{ORT_VER}/dist/"
 ORT_TAG = f'<script src="{ORT_CDN}ort.min.js"></script>'
 # the one cached model is enough; the two old ones are only a fallback for checkouts without it
-COPY = ["pedia.html", "privacy.html", "idle-runtime.js", "sw.js", "starter_world.json", "og-image.png", "og-image-square.png", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
+COPY = ["pedia.html", "privacy.html", "idle-runtime.js", "sw.js", "starter_world.json", "pedia_clips.json", "og-image.png", "og-image-square.png", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
         "arena_instr_v1.json", "arena_instr_v2.json", "arena_genomes.json", "datalab_stream.json"]
 HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
@@ -30,6 +30,8 @@ HEADERS = """/*
   Cache-Control: public, max-age=604800
 /vendor/*
   Cache-Control: public, max-age=31536000, immutable
+/jeffy-heads/*
+  Cache-Control: public, max-age=604800
 """
 
 
@@ -73,6 +75,8 @@ def main():
     img = os.path.join(ROOT, "docs", "img"); os.makedirs(os.path.join(out, "img"), exist_ok=True)
     for f in sorted(os.listdir(img)):
         if f.endswith(".jpg"): shutil.copy2(os.path.join(img, f), os.path.join(out, "img", f))
+    # the data lab's in-browser classifiers (idle-jeffy.js): fetched only when the lab opens, never on a first visit
+    shutil.copytree(os.path.join(DEMO, "jeffy-heads"), os.path.join(out, "jeffy-heads"))
     sums = vendor_ort(out)
     open(os.path.join(out, "_headers"), "w").write(HEADERS)
     if a.pages_helper:   # Pages advanced mode: static files as usual, the helper (helper/worker.js) on the same origin
