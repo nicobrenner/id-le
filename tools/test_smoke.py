@@ -159,6 +159,10 @@ def browser_lock():
 
 CAPS = {"capabilities": [{"task_id": t, "name": t, "n_classes": n, "labels": {str(i): l for i, l in enumerate(L)}} for t, n, L in [
     ("sms_spam", 2, ["ham", "spam"]), ("support_ticket", 5, ["billing", "technical", "account", "shipping", "other"]), ("tweet_eval_sentiment", 3, ["negative", "neutral", "positive"])]]}
+# the pages' own console.warn() calls that mean a feature switched itself off: a smoke run fails on these (a warning, not an error,
+# hid a real regression: "pedia: drawing code ReferenceError: buildLegs is not defined" left the pedia without creatures or clips)
+FEATURE_WARN = re.compile(r"^(pedia:|in-browser classifiers|reels|babies|cached Oracle unavailable)")
+FALLBACK_WARN = re.compile(r"^Oracle worker unavailable")   # a legitimate fallback (the Oracle runs on the page): noted, not failed
 IGNORE_CONSOLE = re.compile(r"favicon|ERR_ABORTED|net::ERR_|Failed to load resource|onnxruntime|ort-wasm|SharedArrayBuffer|AudioContext was not allowed|The AudioContext")
 
 
@@ -166,6 +170,7 @@ class Page:
     """a page with every outside request stubbed, errors collected"""
     def __init__(self, ctx, base, stats_sink=None):
         self.ctx, self.base, self.errors, self.console, self.outside = ctx, base, [], [], []
+        self.warns, self.notes, self.before_reload = [], [], []
         self.stats = stats_sink if stats_sink is not None else []
         ctx.route("**/*", self._route)
 
@@ -185,17 +190,32 @@ class Page:
         ct = "text/css" if ".css" in u or "fonts.googleapis" in u else "text/plain"
         return route.fulfill(status=200, content_type=ct, body="")
 
+    def _console(self, m):
+        t = m.text
+        if m.type == "error" and not IGNORE_CONSOLE.search(t): self.console.append(t[:200])
+        elif m.type == "warning" and FEATURE_WARN.search(t): self.warns.append(t[:200])
+        elif m.type == "warning" and FALLBACK_WARN.search(t): self.notes.append(t[:80])
+
+    def clean(self, what="page"):
+        need(not self.errors, f"{what} errors: " + " | ".join(self.errors[:3]))
+        need(not self.console, f"{what} console errors: " + " | ".join(self.console[:3]))
+        need(not self.warns, f"{what} switched a feature off: " + " | ".join(self.warns[:3]))
+
     def open(self, path):
         pg = self.ctx.new_page()
         pg.on("pageerror", lambda e: self.errors.append(str(e)[:200]))
-        pg.on("console", lambda m: self.console.append(m.text[:200]) if m.type == "error" and not IGNORE_CONSOLE.search(m.text) else None)
+        pg.on("console", self._console)
+        def nav(fr):   # the service worker reloads the page once (cross-origin isolation): errors from the first document were from a page being replaced
+            if fr == pg.main_frame and (self.errors or self.console or self.warns): self.before_reload += self.errors + self.console + self.warns; self.errors.clear(); self.console.clear(); self.warns.clear()
+        pg.on("framenavigated", nav)
         pg.goto(self.base + path, wait_until="load")
         return pg
 
 
-def wait_for(pg, js, timeout=60, every=0.5):
+def wait_for(pg, js, timeout=60, every=0.5, P=None):
     t0 = time.time()
     while time.time() - t0 < timeout:
+        if P is not None: P.clean()   # a feature that switched itself off fails now, with its own words, instead of a timeout
         try: v = pg.evaluate(js)
         except Exception as e:   # the page may reload itself while booting (fresh start, recovery): wait for the new one
             if "context was destroyed" not in str(e) and "navigation" not in str(e): raise
@@ -212,15 +232,17 @@ def booted(pg):
 # ---------------------------------------------------------------- browser checks
 def t_fresh_load(P):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 30)   # the starter world arrives a moment after boot
     n = pg.evaluate("() => window.__arena.raw().length")
-    need(n >= 8, f"only {n} creatures: is the starter world there?")
+    if n < 8:
+        why = pg.evaluate("() => ({ guide: !!(window.__first5 && window.__first5.state()), restored: !!window.__restored, saved: !!localStorage.getItem('arena.autosave'), isolated: crossOriginIsolated })")
+        raise AssertionError(f"only {n} creatures after 30 s: is the starter world there? {why}, errors before the reload: {P.before_reload[:2]}")
     wait_for(pg, "() => !!(window.__oracle && (window.__oracle.ready || /Oracle is off|unavailable/i.test(document.body.innerText)))", 120)
     f5 = pg.evaluate("() => !!(window.__first5 && window.__first5.state())")
     need(f5, "the first-five guide did not start for a fresh visitor")
     pg.wait_for_timeout(3000)
-    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
-    need(not P.console, "console errors: " + " | ".join(P.console[:3]))
-    return f"{n} creatures, Oracle ready={pg.evaluate('() => window.__oracle.ready')}, outside requests stubbed: {len(set(P.outside))}"
+    P.clean()
+    return f"{n} creatures, Oracle ready={pg.evaluate('() => window.__oracle.ready')}" + (f", fallback: {P.notes[0]}" if P.notes else "") + (f", {len(P.before_reload)} errors before the service worker's reload ignored" if P.before_reload else "")
 
 
 def t_camera(P, phone=False):
@@ -260,7 +282,7 @@ def t_camera(P, phone=False):
         pg.evaluate(f"() => {cam}.set({{ z: 0.01 }})"); pg.wait_for_timeout(400)
         zz = pg.evaluate(f"() => {cam}.floorZoom()")
         need(zz and abs(float(zz) - zmin) < 0.02, f"phone floor zoom '{zz}' (expected about {zmin:.2f}: CSS zoom, #35)")
-    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
+    P.clean()
     return f"default 100%, floor {zmin:.2f}, ceiling {zmax}, wrap + travel clamp ok"
 
 
@@ -291,7 +313,7 @@ def t_panels(P):
         pg.wait_for_timeout(300)
         need(len(P.errors) == e0, f"{name}: page error on close {P.errors[e0:e0 + 1]}")
     need(not missing, "buttons missing: " + ", ".join(missing))
-    need(not P.console, "console errors: " + " | ".join(P.console[:3]))
+    P.clean()
     return f"{len(opened)} panels opened and closed"
 
 
@@ -303,6 +325,7 @@ def t_sound(P):
     need(not m and s == "running", f"after unmute: muted={m} context={s}")
     pg.click("#soundBtn"); pg.wait_for_timeout(700); m, s = st()
     need(m and s == "suspended", f"after mute: muted={m} context={s} (a muted game should suspend its audio)")
+    P.clean()
     return "unmute → running, mute → suspended"
 
 
@@ -319,16 +342,17 @@ def t_stats(P):
     need(parts.get("ref") in ("direct", None), f"referrer for a direct visit: {parts.get('ref')}")
     if parts.get("utm"): need(re.fullmatch(r"[a-z0-9-]{1,24}", parts["utm"]), f"utm not cleaned: {parts['utm']}")
     need(not P.stats, f"{len(P.stats)} stats requests were sent from a test page")
+    P.clean()
     return f"{len(keys)} keys, all allowlisted; nothing sent"
 
 
 def t_datalab(P, secs=45):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     pg.evaluate("() => window.__places.openLab()")
-    s = wait_for(pg, """() => { const s = window.__lab && window.__lab.state && window.__lab.state(); return s && s.msgs.filter(m => m.done).length >= 3 ? s : null }""", secs + 60)
+    s = wait_for(pg, """() => { const s = window.__lab && window.__lab.state && window.__lab.state(); return s && s.msgs.filter(m => m.done).length >= 3 ? s : null }""", secs + 60, P=P)
     done = sum(1 for m in s["msgs"] if m.get("done")); where = s["stats"].get("where")
     need("browser" in json.dumps(where), f"classifiers did not run in the browser: {where}")
-    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
+    P.clean()
     return f"{done} sorted, in {s['stats']['in']}, where={where}"
 
 
@@ -340,6 +364,7 @@ def t_datalab_stuck(P):
     pg.evaluate("() => window.__places.openLab()")
     txt = wait_for(pg, "() => { const t = (document.querySelector('#labStats') || {}).innerText || ''; return /stuck/i.test(t) && /Late/.test(t) ? t : '' }", 90)
     line = next((l for l in txt.splitlines() if "Late" in l), "")
+    P.clean()
     return "stuck line: " + line.strip()[:90]
 
 
@@ -353,7 +378,7 @@ def t_replay(P):
     need(r["wx"], "the storm clip carries no weather (env.wx)")
     need(r["a"][1] > 100, "the replay drew nothing")
     need(r["a"][0] != r["b"][0], "the replay's frames did not change in 0.9 s")
-    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
+    P.clean()
     return f"storm clip plays, weather {r['wx']}"
 
 
@@ -363,6 +388,20 @@ def t_pedia(P, phone=False):
     toc = pg.evaluate("() => [...document.querySelectorAll('#toc a')].map(a => a.getAttribute('href')).filter(h => h && h.startsWith('#'))")
     broken = pg.evaluate("(ids) => ids.filter(h => !document.getElementById(decodeURIComponent(h.slice(1))))", toc)
     need(not broken, f"contents links to missing sections: {broken[:5]}")
+    # positive content, not just "no errors": the creature boxes are drawn by code the pedia takes from the game (legs, bodies);
+    # when that broke (a warning, no error) the page showed empty boxes and no clips
+    wait_for(pg, "() => document.querySelectorAll('svg.live').length >= 5", 30)
+    drawn = pg.evaluate("""async () => { const out = [], ok = s => s.childElementCount >= 3 && s.innerHTML.length > 200;
+        for (const s of document.querySelectorAll('svg.live')) { s.scrollIntoView({ block: 'center' });   // each box draws while on screen
+          for (let k = 0; k < 20 && !ok(s); k++) await new Promise(r => setTimeout(r, 100)); out.push([s.dataset.fam || 'bodies', ok(s)]); } scrollTo(0, 0); return out; }""")
+    empty = [f for f, ok in drawn if not ok]
+    need(not empty, f"{len(empty)} of {len(drawn)} creature boxes stayed empty: {empty[:6]}")
+    live = len(drawn)
+    info = pg.evaluate("() => { const s = document.querySelector('svg.live[data-fam]'); return s ? s.innerHTML : '' }")
+    need(info, "the infobox creature (svg.live[data-fam]) is missing")
+    pg.evaluate("() => { window.__t_info = document.querySelector('svg.live[data-fam]').innerHTML }")
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => document.querySelector('svg.live[data-fam]').innerHTML !== window.__t_info", 6)
+    need(pg.evaluate("() => document.querySelector('svg.live[data-fam]').innerHTML") != info, "the infobox creature is drawn but did not move in 6 s (its legs should step)")
     wait_for(pg, "() => document.querySelectorAll('figure.clip canvas').length >= 5", 30)
     pg.evaluate("() => document.querySelectorAll('img[loading=lazy]').forEach(i => i.loading = 'eager')")   # lazy pictures: load them all now
     with contextlib.suppress(AssertionError): wait_for(pg, "() => [...document.images].every(i => i.complete)", 30)
@@ -376,9 +415,8 @@ def t_pedia(P, phone=False):
     if phone:
         sw = pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
         need(sw <= 1, f"sideways scroll of {sw}px at phone width")
-    need(not P.errors, "page errors: " + " | ".join(P.errors[:3]))
-    need(not P.console, "console errors: " + " | ".join(P.console[:3]))
-    return f"{len(toc)} sections, {len(imgs)} pictures, {len(moving)} clips playing"
+    P.clean()
+    return f"{len(toc)} sections, {live} live creatures, {len(imgs)} pictures, {len(moving)} clips playing"
 
 
 def t_fps(P, n=300, floor=20):
