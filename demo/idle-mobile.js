@@ -61,7 +61,8 @@
     const wx = ($('#weatherLabel') || {}).textContent || '', fps = ($('#fps') || {}).textContent || '';
     sheet.innerHTML = `<span class="mgrab"></span><div class="mh"><b>Id|le</b><small>${esc(wx)}${wx && fps ? ' · ' : ''}${esc(fps)}</small><button class="mx" title="close">✕</button></div><div class="mg">` +
       ids.map(id => { const el = document.getElementById(id), L = LABELS[id] || [el.textContent.trim().slice(0, 2), (el.title || id).split(':')[0].slice(0, 16)];
-        const icon = id === 'soundBtn' ? el.textContent.trim() : L[0]; return `<button data-for="${id}"><b>${icon}</b>${esc(L[1])}</button>`; }).join('') + '</div>' + (window.__settings && window.__settings.noticeLine() ? `<p class="mnote">${esc(window.__settings.noticeLine())} <a href="privacy.html" target="_blank" rel="noopener">privacy</a> · <button data-for="settingsBtn" class="mlink">⚙ settings</button></p>` : '');
+        const icon = id === 'soundBtn' ? el.textContent.trim() : L[0]; return `<button data-for="${id}"><b>${icon}</b>${esc(L[1])}</button>`; }).join('') + '</div>' + (window.__settings && window.__settings.noticeLine() ? `<p class="mnote">${esc(window.__settings.noticeLine())} <a href="privacy.html" target="_blank" rel="noopener">privacy</a> · <button data-for="settingsBtn" class="mlink">⚙ settings</button></p>` : '') +
+      (window.IDLE_REPO ? `<p class="mnote">open source · <a href="${window.IDLE_REPO}" target="_blank" rel="noopener">code on GitHub</a></p>` : '');
     if (sheet.querySelector('.mnote')) window.__settings.markNotice();   // the stats notice is shown once: here or as a pill
   }
   const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

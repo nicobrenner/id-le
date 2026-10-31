@@ -2,9 +2,13 @@
 
 **A little world of creatures that live in your browser: they eat words, plot charts, dream, gossip, build huts, dance to your DJ sets and remember all of it.**
 
+**▶ Play it at [id-le.com](https://id-le.com)**: nothing to install, works on phones too.
+
 <p align="center"><img src="docs/img/hero.gif" width="540" alt="Creatures wandering, eating words and chatting among charts in Home"></p>
 
 Written `Id|le` (the bar is a token split, like the Tok kin names), spelled `id-le` wherever a bar can't go: the repo, the domain (id-le.com), file names.
+
+Id|le is open source: this repository is the whole game (the page, its modules and the optional helper), and [id-le.com](https://id-le.com) runs it as is.
 
 **Links:** [📖 the Id|le-pedia](#the-idle-pedia) · [🗺 roadmap (issue #20)](https://github.com/nicobrenner/id-le/issues/20) · [📓 devlog](docs/devlog.md) · [🤖 bring your own AI](docs/byo_ai.md) · [🔒 privacy](demo/privacy.html) (live at [id-le.com/privacy](https://id-le.com/privacy))
 
@@ -64,7 +68,7 @@ Solid objects in each world's style, and Architects who carry them into huts wit
 An encyclopedia of the game that reads the game's own code: families, jobs, genes, diets, places, weather, disasters, and how every system works.
 
 - Locally: run the server below and open http://localhost:8765/pedia.html
-- Online: id-le.com/pedia (coming with the deploy, [#5](https://github.com/nicobrenner/id-le/issues/5))
+- Online: [id-le.com/pedia](https://id-le.com/pedia)
 
 ## Run locally
 
@@ -85,6 +89,12 @@ python3 -m http.server 8776 -d dist
 ## Built with
 No WebGL: DOM + SVG + canvas2d (composited on the GPU by the browser), WebAudio for all the music (no audio files), and a tiny local ONNX model (the Tiny Oracle, 10.8 MB) running in a worker.
 
-Moved out of `nicobrenner/jeffy` on 2026-10-29 with its full history.
+Id|le grew out of [Jeffy](https://github.com/nicobrenner/jeffy), a project about many small local classifiers: the Tiny Oracle and the data lab's classifier creatures come from there. It moved to its own repository on 2026-10-29 with its full history.
+
+## Contributing
+Issues and pull requests are welcome. The [roadmap (issue #20)](https://github.com/nicobrenner/id-le/issues/20) shows what is planned, and the [devlog](docs/devlog.md) explains how things work and what was measured along the way.
+
+## License
+[MIT](LICENSE), for the code and the bundled model files.
 
 <sub>Screenshots and the animation are from a copy of a real world. The hut and pen under "Architects" were placed with test hooks for the picture.</sub>

@@ -6,6 +6,9 @@
 //   lab chat      /lab/notes                 -> kept in this browser for now (the BYO-AI chat replaces the replies; docs/byo_ai.md)
 //   research only /lab/recover, /lab/notices, /lab/replies, /lab/embed, /jeffy/*  -> empty answers; the game already falls back
 // Config: set window.IDLE_CFG = { mode: 'auto' | 'server' | 'static', helper: 'https://…' } before this file (the static build does).
+// the game's source code, open to read, fork and change (shown in ⚙ settings and the phone ☰ menu; pedia.html, privacy.html
+// and README.md spell the same address out, so change them together)
+window.IDLE_REPO = 'https://github.com/nicobrenner/id-le';
 (() => {
   // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) never
   // fires pagehide, so its record stays 'alive: false'. The next load sees it and starts safer: level 1 = the Oracle on one
