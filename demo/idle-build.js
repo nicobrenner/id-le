@@ -10,7 +10,34 @@
 // Finished ones get a name; building shows in diaries, the Gazette, the almanac and replays. Everything is kept per world,
 // in this browser and in snapshots, and merges never drop an object.
 (() => {
-  const H = () => window.__buildHooks; if (!H()) return;
+  // the drawing of objects and finished buildings needs nothing from the arena, so a page without it (the pedia's replays) still gets __build.drawTo
+  let g = null;
+  const DEF = { crate: { w: 34, h: 26, small: 1, name: 'crate of bits' }, brick: { w: 42, h: 18, small: 1, name: 'word-brick' }, stone: { w: 30, h: 24, small: 1, name: 'stone' },
+    rock: { w: 80, h: 54, small: 0, name: 'data boulder' }, rack: { w: 44, h: 86, small: 0, name: 'server rack' }, pillar: { w: 46, h: 46, small: 0, name: 'pillar' } };
+  const half = o => { const d = DEF[o.k] || DEF.crate, r = o.rot === 90; return [(r ? d.h : d.w) / 2, (r ? d.w : d.h) / 2]; };
+  const B4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]; const pats = {};
+  const dither = (lvl, col) => { const k = lvl + col; if (pats[k]) return pats[k]; const c = document.createElement('canvas'); c.width = c.height = 4; const x = c.getContext('2d'); x.fillStyle = col; for (let i = 0; i < 16; i++) if (B4[i] < lvl) x.fillRect(i % 4, i >> 2, 1, 1); return (pats[k] = g.createPattern(c, 'repeat')); };
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
+  function drawObj(o, x, y, keep, dark, ts) { const d = DEF[o.k] || DEF.crate, [hw, hh] = half(o), X = x - hw, Y = y - hh, w = hw * 2, h = hh * 2;
+    if (keep) { const ink = dark ? '#fff' : '#000', paper = dark ? '#000' : '#fff'; g.lineWidth = 2; g.strokeStyle = ink;
+      if (o.k === 'stone' || o.k === 'rock') { rr(X, Y, w, h, 10); g.fillStyle = paper; g.fill(); g.fillStyle = dither(o.k === 'rock' ? 6 : 4, ink); g.fill(); g.stroke(); }
+      else if (o.k === 'pillar') { g.fillStyle = paper; g.fillRect(X, Y, w, h); g.strokeRect(X, Y, w, h); g.strokeRect(X + 7, Y + 7, w - 14, h - 14); g.fillStyle = dither(3, ink); g.fillRect(X + 9, Y + 9, w - 18, h - 18); }
+      else if (o.k === 'brick') { g.fillStyle = paper; g.fillRect(X, Y, w, h); g.fillStyle = dither(5, ink); g.fillRect(X, Y, w, h); g.strokeRect(X, Y, w, h); if (o.word) { g.fillStyle = paper; g.fillRect(x - 15, y - 5, 30, 10); g.fillStyle = ink; g.font = '9px monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(o.word.slice(0, 6), x, y + 0.5); } }
+      else { g.fillStyle = paper; g.fillRect(X, Y, w, h); g.strokeRect(X, Y, w, h); g.beginPath(); g.moveTo(X, Y); g.lineTo(X + w, Y + h); g.moveTo(X + w, Y); g.lineTo(X, Y + h); g.stroke(); }
+      return; }
+    g.lineWidth = 1.2;
+    if (o.k === 'crate') { rr(X, Y, w, h, 3); g.fillStyle = dark ? 'hsl(32,32%,30%)' : 'hsl(34,48%,72%)'; g.fill(); g.strokeStyle = dark ? 'hsl(32,40%,55%)' : 'hsl(30,40%,42%)'; g.stroke(); g.beginPath(); g.moveTo(X + 3, Y + h / 2); g.lineTo(X + w - 3, Y + h / 2); g.stroke(); g.font = '7px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsla(32,60%,80%,.7)' : 'hsla(30,50%,30%,.6)'; g.fillText('0110', x, y - h / 4 + 1); g.fillText('1001', x, y + h / 4); }
+    else if (o.k === 'brick') { rr(X, Y, w, h, 2); g.fillStyle = dark ? 'hsl(10,42%,36%)' : 'hsl(12,58%,58%)'; g.fill(); g.strokeStyle = dark ? 'hsl(10,45%,58%)' : 'hsl(10,50%,40%)'; g.stroke(); g.font = '600 9px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsl(20,70%,88%)' : '#fff8'; g.fillText((o.word || 'brick').slice(0, 7), x, y + 0.5); }
+    else if (o.k === 'rock') { g.beginPath(); g.ellipse(x, y, hw, hh, 0, 0, 7); g.fillStyle = dark ? 'hsl(215,10%,30%)' : 'hsl(215,10%,74%)'; g.fill(); g.strokeStyle = dark ? 'hsl(215,14%,52%)' : 'hsl(215,10%,52%)'; g.stroke(); g.font = '9px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsla(210,30%,85%,.45)' : 'hsla(215,25%,30%,.45)'; g.fillText('{ 0 1 }', x, y - 6); g.fillText('1 0 1', x + 4, y + 8); }
+    else if (o.k === 'rack') { rr(X, Y, w, h, 3); g.fillStyle = dark ? '#1b1f26' : '#2c323c'; g.fill(); g.strokeStyle = dark ? '#556' : '#111'; g.stroke(); for (let i = 0; i < 6; i++) { const yy = Y + 7 + i * (h - 12) / 6; g.fillStyle = dark ? '#2a303a' : '#3a414d'; g.fillRect(X + 4, yy, w - 8, (h - 12) / 6 - 3); for (let j = 0; j < 3; j++) { const on = Math.sin(ts / (300 + j * 170 + i * 90) + i * 2 + j + o.x) > 0.2; g.fillStyle = on ? (j === 2 ? '#f6b73c' : '#3ddc84') : '#0006'; g.fillRect(X + 7 + j * 5, yy + 3, 3, 3); } } }
+    else { rr(X, Y, w, h, 6); g.fillStyle = dark ? '#555' : '#bbb'; g.fill(); }
+    if (o.pin) { g.font = '11px system-ui'; g.textAlign = 'center'; g.fillText('📌', x + hw - 2, y - hh + 2); } }
+  function drawTo(g2, ob, dark, keep, ts) { if (!ob) return; const g0 = g; g = g2; try { const ink = keep ? (dark ? '#fff' : '#000') : dark ? 'rgba(230,200,150,.75)' : 'rgba(110,70,30,.7)';
+      for (const s of ob.s || []) { const I = s.i; if (!I) continue; g.fillStyle = keep ? dither(2, ink) : dark ? 'rgba(240,200,140,.07)' : 'rgba(170,120,60,.08)'; if (s.k === 'pen') { g.beginPath(); g.ellipse(I[0], I[1], I[2], I[3], 0, 0, 7); g.fill(); } else g.fillRect(I[0], I[1], I[2] - I[0], I[3] - I[1]); }
+      for (const [k, x, y, rot, word] of ob.o || []) drawObj({ k, rot, word }, x, y, keep, dark, ts);
+      for (const s of ob.s || []) { if (!s.n) continue; g.font = keep ? '12px monospace' : 'italic 11px Georgia,serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = ink; g.fillText(s.n, s.x, s.k === 'hut' ? s.y + 62 : s.k === 'pen' ? s.y + 96 : s.k === 'bench' ? s.y + 26 : s.y + (s.v ? 108 : 30)); }
+    } finally { g = g0; } }
+  const H = () => window.__buildHooks; if (!H()) { window.__build = window.__build || { drawTo }; return; }
   const now = () => Date.now(), pick = a => a[Math.floor(Math.random() * a.length)], clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const P = () => window.__places, placeId = () => (P() && P().cur && P().cur()) || 'home', kind = () => placeId() === 'home' ? 'home' : (P() && P().kind && P().kind()) || 'page';
   const active = () => ['home', 'keep'].includes(kind());
@@ -25,10 +52,7 @@
   const mod = (v, L) => ((v % L) + L) % L;
 
   // ---------- what there is ----------
-  const DEF = { crate: { w: 34, h: 26, small: 1, name: 'crate of bits' }, brick: { w: 42, h: 18, small: 1, name: 'word-brick' }, stone: { w: 30, h: 24, small: 1, name: 'stone' },
-    rock: { w: 80, h: 54, small: 0, name: 'data boulder' }, rack: { w: 44, h: 86, small: 0, name: 'server rack' }, pillar: { w: 46, h: 46, small: 0, name: 'pillar' } };
   const KINDS = { home: { small: ['crate', 'crate', 'brick'], big: ['rock', 'rack'] }, keep: { small: ['stone', 'crate', 'brick'], big: ['pillar', 'rock'] } };
-  const half = o => { const d = DEF[o.k] || DEF.crate, r = o.rot === 90; return [(r ? d.h : d.w) / 2, (r ? d.w : d.h) / 2]; };
   const small = o => (DEF[o.k] || {}).small;
   const free = o => small(o) && !o.pin && !o.you && !o.sid && !o.carriedBy;   // building material
   function mkObj(S, k, x, y, extra) { const o = { id: 'o' + (++S.n) + now().toString(36).slice(-3), k, x: Math.round(mod(x, W())), y: Math.round(y), rot: 0, t: now(), ...(extra || {}) }; S.objs.push(o); dirty = true; save(); return o; }
@@ -167,24 +191,8 @@
   setInterval(tick, 1000);
 
   // ---------- drawing: one canvas under the words, only what is in view ----------
-  const cv = document.createElement('canvas'); cv.id = 'buildCv'; cv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:2'; H().floor.insertBefore(cv, H().floor.firstChild.nextSibling); let g = cv.getContext('2d');   // let: picture() borrows the drawing code for a moment
-  const B4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]; const pats = {};
-  const dither = (lvl, col) => { const k = lvl + col; if (pats[k]) return pats[k]; const c = document.createElement('canvas'); c.width = c.height = 4; const x = c.getContext('2d'); x.fillStyle = col; for (let i = 0; i < 16; i++) if (B4[i] < lvl) x.fillRect(i % 4, i >> 2, 1, 1); return (pats[k] = g.createPattern(c, 'repeat')); };
-  let key = '', last = 0, shown = false; const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
-  function drawObj(o, x, y, keep, dark, ts) { const d = DEF[o.k] || DEF.crate, [hw, hh] = half(o), X = x - hw, Y = y - hh, w = hw * 2, h = hh * 2;
-    if (keep) { const ink = dark ? '#fff' : '#000', paper = dark ? '#000' : '#fff'; g.lineWidth = 2; g.strokeStyle = ink;
-      if (o.k === 'stone' || o.k === 'rock') { rr(X, Y, w, h, 10); g.fillStyle = paper; g.fill(); g.fillStyle = dither(o.k === 'rock' ? 6 : 4, ink); g.fill(); g.stroke(); }
-      else if (o.k === 'pillar') { g.fillStyle = paper; g.fillRect(X, Y, w, h); g.strokeRect(X, Y, w, h); g.strokeRect(X + 7, Y + 7, w - 14, h - 14); g.fillStyle = dither(3, ink); g.fillRect(X + 9, Y + 9, w - 18, h - 18); }
-      else if (o.k === 'brick') { g.fillStyle = paper; g.fillRect(X, Y, w, h); g.fillStyle = dither(5, ink); g.fillRect(X, Y, w, h); g.strokeRect(X, Y, w, h); if (o.word) { g.fillStyle = paper; g.fillRect(x - 15, y - 5, 30, 10); g.fillStyle = ink; g.font = '9px monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(o.word.slice(0, 6), x, y + 0.5); } }
-      else { g.fillStyle = paper; g.fillRect(X, Y, w, h); g.strokeRect(X, Y, w, h); g.beginPath(); g.moveTo(X, Y); g.lineTo(X + w, Y + h); g.moveTo(X + w, Y); g.lineTo(X, Y + h); g.stroke(); }
-      return; }
-    g.lineWidth = 1.2;
-    if (o.k === 'crate') { rr(X, Y, w, h, 3); g.fillStyle = dark ? 'hsl(32,32%,30%)' : 'hsl(34,48%,72%)'; g.fill(); g.strokeStyle = dark ? 'hsl(32,40%,55%)' : 'hsl(30,40%,42%)'; g.stroke(); g.beginPath(); g.moveTo(X + 3, Y + h / 2); g.lineTo(X + w - 3, Y + h / 2); g.stroke(); g.font = '7px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsla(32,60%,80%,.7)' : 'hsla(30,50%,30%,.6)'; g.fillText('0110', x, y - h / 4 + 1); g.fillText('1001', x, y + h / 4); }
-    else if (o.k === 'brick') { rr(X, Y, w, h, 2); g.fillStyle = dark ? 'hsl(10,42%,36%)' : 'hsl(12,58%,58%)'; g.fill(); g.strokeStyle = dark ? 'hsl(10,45%,58%)' : 'hsl(10,50%,40%)'; g.stroke(); g.font = '600 9px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsl(20,70%,88%)' : '#fff8'; g.fillText((o.word || 'brick').slice(0, 7), x, y + 0.5); }
-    else if (o.k === 'rock') { g.beginPath(); g.ellipse(x, y, hw, hh, 0, 0, 7); g.fillStyle = dark ? 'hsl(215,10%,30%)' : 'hsl(215,10%,74%)'; g.fill(); g.strokeStyle = dark ? 'hsl(215,14%,52%)' : 'hsl(215,10%,52%)'; g.stroke(); g.font = '9px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsla(210,30%,85%,.45)' : 'hsla(215,25%,30%,.45)'; g.fillText('{ 0 1 }', x, y - 6); g.fillText('1 0 1', x + 4, y + 8); }
-    else if (o.k === 'rack') { rr(X, Y, w, h, 3); g.fillStyle = dark ? '#1b1f26' : '#2c323c'; g.fill(); g.strokeStyle = dark ? '#556' : '#111'; g.stroke(); for (let i = 0; i < 6; i++) { const yy = Y + 7 + i * (h - 12) / 6; g.fillStyle = dark ? '#2a303a' : '#3a414d'; g.fillRect(X + 4, yy, w - 8, (h - 12) / 6 - 3); for (let j = 0; j < 3; j++) { const on = Math.sin(ts / (300 + j * 170 + i * 90) + i * 2 + j + o.x) > 0.2; g.fillStyle = on ? (j === 2 ? '#f6b73c' : '#3ddc84') : '#0006'; g.fillRect(X + 7 + j * 5, yy + 3, 3, 3); } } }
-    else { rr(X, Y, w, h, 6); g.fillStyle = dark ? '#555' : '#bbb'; g.fill(); }
-    if (o.pin) { g.font = '11px system-ui'; g.textAlign = 'center'; g.fillText('📌', x + hw - 2, y - hh + 2); } }
+  const cv = document.createElement('canvas'); cv.id = 'buildCv'; cv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:2'; H().floor.insertBefore(cv, H().floor.firstChild.nextSibling); g = cv.getContext('2d');   // let: picture() borrows the drawing code for a moment
+  let key = '', last = 0, shown = false;
   function frame(ts) { requestAnimationFrame(frame); if (ts - last < 66) return; last = ts; const S = active() ? ST[placeId()] : null, h = H();
     const clear = () => { if (shown) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); shown = false; } };
     if (!S || (!S.objs.length && !S.structs.length)) return clear();
@@ -250,11 +258,6 @@
     for (const q of S.structs) { if (!q.done) continue; const dx = wdx(cx, q.x), dy = wdy(cy, q.y); if (Math.hypot(dx, dy) > Rr + 120) continue; const ox = dx - q.x, oy = dy - q.y, I = q.inner;
       s.push({ k: q.kind, x: Math.round(dx), y: Math.round(dy), v: q.vert ? 1 : 0, n: q.name || '', i: I ? (I.rx ? [I.cx + ox, I.cy + oy, I.rx, I.ry] : [I.x0 + ox, I.y0 + oy, I.x1 + ox, I.y1 + oy]).map(Math.round) : null }); if (s.length >= 12) break; }
     return o.length || s.length ? { o, s } : null; }
-  function drawTo(g2, ob, dark, keep, ts) { if (!ob) return; const g0 = g; g = g2; try { const ink = keep ? (dark ? '#fff' : '#000') : dark ? 'rgba(230,200,150,.75)' : 'rgba(110,70,30,.7)';
-      for (const s of ob.s || []) { const I = s.i; if (!I) continue; g.fillStyle = keep ? dither(2, ink) : dark ? 'rgba(240,200,140,.07)' : 'rgba(170,120,60,.08)'; if (s.k === 'pen') { g.beginPath(); g.ellipse(I[0], I[1], I[2], I[3], 0, 0, 7); g.fill(); } else g.fillRect(I[0], I[1], I[2] - I[0], I[3] - I[1]); }
-      for (const [k, x, y, rot, word] of ob.o || []) drawObj({ k, rot, word }, x, y, keep, dark, ts);
-      for (const s of ob.s || []) { if (!s.n) continue; g.font = keep ? '12px monospace' : 'italic 11px Georgia,serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = ink; g.fillText(s.n, s.x, s.k === 'hut' ? s.y + 62 : s.k === 'pen' ? s.y + 96 : s.k === 'bench' ? s.y + 26 : s.y + (s.v ? 108 : 30)); }
-    } finally { g = g0; } }
   window.__build = {
     picture, near, drawTo,
     work, stats: () => ({ ...ST8 }), shelter: c => { const S = active() ? ST[placeId()] : null; if (!S) return 1; for (const s of S.structs) if (s.done && s.kind === 'hut' && insideS(s, c.x, c.y)) return 0.3; for (const s of S.structs) if (s.done && s.kind === 'pen' && insideS(s, c.x, c.y)) return 0.6; return 1; },
