@@ -6,6 +6,8 @@
 
 Written `Id|le` (the bar is a token split, like the Tok kin names), spelled `id-le` wherever a bar can't go: the repo, the domain (id-le.com), file names.
 
+Id|le is open source: this repository is the whole game (the page, its modules and the optional helper), and [id-le.com](https://id-le.com) runs it as is.
+
 **Links:** [📖 the Id|le-pedia](#the-idle-pedia) · [🗺 roadmap (issue #20)](https://github.com/nicobrenner/id-le/issues/20) · [📓 devlog](docs/devlog.md) · [🤖 bring your own AI](docs/byo_ai.md) · [🔒 privacy](demo/privacy.html) (live at [id-le.com/privacy](https://id-le.com/privacy))
 
 ## What happens here
