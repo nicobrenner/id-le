@@ -121,3 +121,22 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 - Finding: disasters had silently stopped since Oct 28 because the line that runs them each frame had slipped into a comment.
 - Hunger: only Crawly kin could eat → per-family diets. Hangry mode; hangry beats fear (fight or flight).
 - Gloamhold (1-bit world), memory reels v1/v2, family names, Counters and Mathematicians, Designers, the Id|le-pedia, BYO-AI chat v1, static build groundwork.
+
+## 2026-10-31 · One sound switch, the deck as the place for music (#21)
+
+Nico (and a music-artist friend): on/off switches on the deck's mixer and effects, and one clear sound control instead of three (the 🔇 top right, the background music's on/off, the deck's play).
+
+- **One master.** 🔊 top right mutes and unmutes everything (creature sounds, weather, background music, deck, reel soundtracks); hover or ▾ opens one master volume, a creatures-and-weather switch with its two levels, and which music plays. Everything now runs on one AudioContext through one master gain (`window.__audio`, arena.html); muted, the context is suspended after a 0.3 s ramp, so the audio graph does no work.
+- **Which of Nico's two options.** Both, in the sense that matters: one plays at a time (off / background / deck: the same segmented switch in the panel and the popover), and the deck has a **base tune** switch that plays the background music under the deck's own parts at the deck's tempo, key and scale, with the deck's bass, lead and pad following the base tune's chords. Exclusive sources keep one clock; the base tune gives the "play a base and mix on top" idea without two tempos fighting.
+- **Switches** (real toggle switches) on bass/lead/pad and on filter/echo/bitcrush: off takes it out of the sound and keeps its level or setting (`ch[c].off`, `fx.off[k]`; absent means on, so saved decks and sets load unchanged).
+- **Migration.** No master saved yet: it starts unmuted if the background music was on (so Nico's music doesn't go quiet), muted otherwise (as before: sound was off by default). Tracks, sets, set list and levels untouched.
+- **Pressing play while muted** unmutes and says so in a notice (silence after pressing play was the worst case).
+
+Measured (headless Chromium, 220 Hz tone at 0.5 into the master, biggest sample-to-sample jump while muting and unmuting):
+
+| | steady tone | while toggling |
+|---|---|---|
+| instant gain change (before) | 0.015 | **0.448** ↑ (a click) |
+| 30 ms ramp (now) | 0.015 | **0.015** (no click) |
+
+Muted: AudioContext `suspended` (was: separate contexts for effects, music and reels, effects muted only by skipping new notes). Phone: ☰ → *volume* opens it as a bottom sheet (375 px, no sideways scroll). Not in the frame loop, so no fps run.
