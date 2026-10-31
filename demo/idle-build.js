@@ -243,8 +243,20 @@
       const mine = S.objs.filter(o => o.sid === s.id || Math.hypot(wdx(s.x, o.x), wdy(s.y, o.y)) < r - 10); for (const o of mine) drawObj(o, s.x + wdx(s.x, o.x), s.y + wdy(s.y, o.y), keep, dark, 0);
       if (s.name) { g.font = keep ? '12px monospace' : 'italic 12px Georgia,serif'; g.textAlign = 'center'; g.fillStyle = keep ? (dark ? '#fff' : '#000') : dark ? 'rgba(230,200,150,.9)' : 'rgba(110,70,30,.9)'; g.fillText(s.name, s.x, s.y + r - 14); }
       return { data: c.toDataURL('image/png'), id: s.id, name: s.name || A[s.kind], kind: s.kind, what: A[s.kind], by: s.by, pieces: mine.length, done: !!s.done, x: s.x, y: s.y }; } finally { g = g0; } }
+  // replays (Oct 31): the objects and finished buildings around a moment, in the moment's own coordinates (a few numbers each),
+  // and the same drawing onto the replay's canvas, so a clip shows the hut it happened in
+  function near(cx, cy, Rr) { const S = active() ? ST[placeId()] : null; if (!S) return null; const o = [], s = [];
+    for (const x of S.objs) { const dx = wdx(cx, x.x), dy = wdy(cy, x.y); if (Math.hypot(dx, dy) > Rr) continue; o.push([x.k, Math.round(dx), Math.round(dy), x.rot || 0, x.word || '']); if (o.length >= 80) break; }
+    for (const q of S.structs) { if (!q.done) continue; const dx = wdx(cx, q.x), dy = wdy(cy, q.y); if (Math.hypot(dx, dy) > Rr + 120) continue; const ox = dx - q.x, oy = dy - q.y, I = q.inner;
+      s.push({ k: q.kind, x: Math.round(dx), y: Math.round(dy), v: q.vert ? 1 : 0, n: q.name || '', i: I ? (I.rx ? [I.cx + ox, I.cy + oy, I.rx, I.ry] : [I.x0 + ox, I.y0 + oy, I.x1 + ox, I.y1 + oy]).map(Math.round) : null }); if (s.length >= 12) break; }
+    return o.length || s.length ? { o, s } : null; }
+  function drawTo(g2, ob, dark, keep, ts) { if (!ob) return; const g0 = g; g = g2; try { const ink = keep ? (dark ? '#fff' : '#000') : dark ? 'rgba(230,200,150,.75)' : 'rgba(110,70,30,.7)';
+      for (const s of ob.s || []) { const I = s.i; if (!I) continue; g.fillStyle = keep ? dither(2, ink) : dark ? 'rgba(240,200,140,.07)' : 'rgba(170,120,60,.08)'; if (s.k === 'pen') { g.beginPath(); g.ellipse(I[0], I[1], I[2], I[3], 0, 0, 7); g.fill(); } else g.fillRect(I[0], I[1], I[2] - I[0], I[3] - I[1]); }
+      for (const [k, x, y, rot, word] of ob.o || []) drawObj({ k, rot, word }, x, y, keep, dark, ts);
+      for (const s of ob.s || []) { if (!s.n) continue; g.font = keep ? '12px monospace' : 'italic 11px Georgia,serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = ink; g.fillText(s.n, s.x, s.k === 'hut' ? s.y + 62 : s.k === 'pen' ? s.y + 96 : s.k === 'bench' ? s.y + 26 : s.y + (s.v ? 108 : 30)); }
+    } finally { g = g0; } }
   window.__build = {
-    picture,
+    picture, near, drawTo,
     work, stats: () => ({ ...ST8 }), shelter: c => { const S = active() ? ST[placeId()] : null; if (!S) return 1; for (const s of S.structs) if (s.done && s.kind === 'hut' && insideS(s, c.x, c.y)) return 0.3; for (const s of S.structs) if (s.done && s.kind === 'pen' && insideS(s, c.x, c.y)) return 0.6; return 1; },
     coverFor: (c, max) => { const S = active() ? ST[placeId()] : null; if (!S) return null; let best = null, bd = max; for (const s of S.structs) { if (!s.done || s.kind !== 'hut' || !filled(S, s)) continue; const d = Math.hypot(wdx(c.x, s.x), wdy(c.y, s.y)); if (d < bd) { bd = d; best = s; } } return best ? interiorPt(best) : null; },
     shift: (dx, dy) => { const S = ST[placeId()]; if (!S) return; for (const o of S.objs) { o.x += dx; o.y += dy; } for (const s of S.structs) { s.x += dx; s.y += dy; for (const sl of s.slots) { sl.x += dx; sl.y += dy; } if (s.door) { s.door.x += dx; s.door.y += dy; } const I = s.inner; if (I) { if (I.rx) { I.cx += dx; I.cy += dy; } else { I.x0 += dx; I.x1 += dx; I.y0 += dy; I.y1 += dy; } } } for (const q of S.quarries || []) { q.x += dx; q.y += dy; } dirty = true; save(); },
