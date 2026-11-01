@@ -119,6 +119,8 @@
     try { window.__design.restore(sw); } catch (e) { console.error(e); return false; }
     setTimeout(() => { try { const cs = live().filter(c => !c.visitor || c.g); if (cs.length && window.__dis) window.__dis.flyTo(cs.reduce((s, c) => s + c.x, 0) / cs.length, cs.reduce((s, c) => s + c.y, 0) / cs.length, innerWidth < 700 ? 0.7 : 0.95); } catch (e) {} }, 400);   // arrive in the middle of them
     run(1500); nextAt = now() + 5000; return true; }
+  // after a genesis (idle-genesis.js) the trail starts on the world the player just built, minus the steps the genesis covered
+  function startTrail(doneKeys) { if (Q.has('nofirst5') || (S && S.active)) return false; S = fresh(); S.meta = {}; for (const k of doneKeys || []) if (STEPS.some(s => s.k === k)) S.done[k] = now(); save(); run(1500); nextAt = now() + 6000; return true; }
   // a browser where the trail is under way keeps it going after a reload
   function resume() { if (!S || (!active() && S.backupAsked) || Q.has('nofirst5')) return; run(2500); nextAt = now() + 8000; }
   function stats() { if (!S) return null; return { started: new Date(S.t0).toISOString(), finished: S.finished ? new Date(S.finished).toISOString() : null, skipped: S.skipped ? new Date(S.skipped).toISOString() : null, play_s: S.play, aha_s: Object.fromEntries(Object.entries(S.aha).map(([k, v]) => [k, Math.round(v / 1000)])) }; }
@@ -126,7 +128,7 @@
     return 'your first visit: ' + e.map(([k, v]) => `${LABEL[k] || k} at ${f(v)}`).join(' · '); }
   // while the guided start is on (the first five minutes, and after that whenever a tip is showing) other notices wait in 🔔
   const calm = () => !!(active() && (now() - S.t0 < 5 * 60000 || cur));
-  window.__first5 = { calm, _play: s => { if (S) S.play = s; }, boot, resume, stats, statsLine, skip, state: () => S && JSON.parse(JSON.stringify(S)), steps: STEPS.map(s => s.k), _tick: tick };
+  window.__first5 = { startTrail, calm, _play: s => { if (S) S.play = s; }, boot, resume, stats, statsLine, skip, state: () => S && JSON.parse(JSON.stringify(S)), steps: STEPS.map(s => s.k), _tick: tick };
   // ?fresh in a browser that already keeps a world: say why nothing happens (the world is never replaced)
   if (Q.has('fresh') && (() => { try { return !!localStorage.getItem('arena.autosave'); } catch (e) { return false; } })()) setTimeout(() => N({ kind: 'system', ttl: 12000, key: 'first5:fresh-refused', html: `<b>?fresh</b> only works in a browser with no saved world (open it in a private window). Your world is untouched.` }), 3500);
   if (window.__pendingFirst5) { const pf = window.__pendingFirst5; Promise.resolve(boot(pf.fresh0)).catch(e => console.error(e)).finally(() => { if (pf.done) pf.done(); }); }   // the arena got there before this file loaded (and waits for this boot before it counts as ready)

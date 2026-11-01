@@ -122,6 +122,7 @@
   window.addEventListener('idle:ev', e => { const { type, extra: x } = e.detail || {}; if (!x || S.mode === 'off') return;
     try {
       if (type === 'birth') { first('baby', x.bud ? `${nm(x.who)} budded from ${nm(x.a)}` : `a baby: ${nm(x.who)}, born to ${nm(x.a)} & ${nm(x.b)}`, x.at); if (x.twin) first('twins', `twins: ${nm(x.who)} and ${nm(x.twin)}`, x.at); if (x.b && x.famA !== x.famB) first('mixed', `a child of two families: ${nm(x.who)} (${esc(x.famA)} × ${esc(x.famB)})`, x.at); }
+      else if (type === 'genesis') { if (x.step && x.step !== 'start' && x.text) first('genesis-' + x.step, esc(x.text), x.at); }   // in the beginning (idle-genesis.js)
       else if (type === 'halloween') {   // trick or treat (idle-treat.js): firsts, the candy-haul record, and a Halloween edition now and then
         if (x.kind === 'treat') first('halloween', `trick-or-treating: ${nm(x.who)} knocked at ${esc(x.door)} and came home with “${esc(x.candy)}”`, pos(x.who));
         else if (x.kind === 'trick') first('trick', `a Halloween trick: ${nm(x.who)} got no candy and ${esc(x.how)}`, pos(x.who));
@@ -146,7 +147,7 @@
     } catch (err) {} });
 
   // ---------- the tick ----------
-  function tick() { if (S.mode === 'off' && !S.open) return; const w = where(), wx = H().world().weather;
+  function tick() { if (S.mode === 'off' && !S.open) return; if (window.__genesisVoid) return; const w = where(), wx = H().world().weather;
     if (!wxSince[w] || wxSince[w + ':k'] !== wx) { wxSince[w] = now(); wxSince[w + ':k'] = wx; }
     const g = G = measure(); const hh = hist[w] = hist[w] || []; hh.push({ t: g.t, v: g.v }); while (hh.length > 120) hh.shift();
     if (++tickN > 2) { const fresh = evalIssues(g);   // let a few ticks settle after a load

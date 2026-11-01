@@ -593,7 +593,7 @@ def t_operator(P):
     return "; ".join(got) + "; 🧠 opens; send row clear"
 
 
-ALLOWED_STATS = {"v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0"}
+ALLOWED_STATS = {"gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0"}
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -907,6 +907,33 @@ def t_pedia(P, phone=False):
     return f"{len(toc)} sections, {live} live creatures, {len(imgs)} pictures, {len(moving)} clips playing"
 
 
+def t_genesis(P):
+    """?genesis&intro=0 starts in the void; each console chip builds its step; three steps make it alive; a new universe keeps a snapshot."""
+    pg = P.open("/arena.html?genesis&intro=0&test")
+    wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gen]'))", 40, P=P)
+    st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), g: window.__genesis.state(), ab: window.__genesis.ab })"
+    v0 = pg.evaluate(st)
+    need(v0["c"] == 0 and v0["w"] == 0 and v0["v"], f"genesis should start empty and dark: {v0}")
+    need(v0["ab"] == "off", f"the A/B switch must ship off: {v0['ab']}")
+    chip = "k => { const b = [...document.querySelectorAll('#genConsole [data-gen]')].find(b => b.dataset.gen.split(':')[0] === k); if (!b) return false; b.click(); return true; }"
+    for k, ok in (("words", "() => window.__genHooks.words().length > 10"), ("creatures", "() => window.__arena.raw().filter(c => !c.lab).length >= 2"), ("light", "() => !document.documentElement.classList.contains('gen-void')")):
+        need(pg.evaluate(chip, k), f"no '{k}' chip in the console")
+        wait_for(pg, ok, 30, P=P)
+    s3 = pg.evaluate(st)
+    need(s3["g"].get("alive") and not s3["v"], f"three steps should make the universe alive: {s3}")
+    for k in ("weather", "hut", "music"):
+        need(pg.evaluate(chip, k), f"no '{k}' chip"); wait_for(pg, f"() => !!(window.__genesis.state().steps || {{}})['{k}']", 20, P=P)
+    firsts = pg.evaluate("() => (window.__advisor && window.__advisor.state().firsts) || {}")
+    need(all(("genesis-" + k) in firsts for k in ("words", "creatures", "light")), f"each step should be a Gazette first: {sorted(firsts)}")
+    n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+    pg.evaluate("() => window.__genesis.newUniverse()")
+    wait_for(pg, "() => window.__genesis.state().n === 2 && document.documentElement.classList.contains('gen-void')", 20, P=P)
+    n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+    need(n1 == n0 + 1, f"a new universe must keep the old world as a snapshot first ({n0} → {n1})")
+    P.clean()
+    return f"void → words {s3['w']}, creatures {s3['c']}, alive after 3 steps; all 6 steps; firsts in the Gazette; new universe kept a snapshot ({n0}→{n1})"
+
+
 def t_halloween(P):
     pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
     wait_for(pg, "() => !!(window.__halloween && window.__halloween.on() && document.querySelector('#arena.hw'))", 30, P=P)
@@ -1053,7 +1080,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["genesis", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1096,6 +1123,7 @@ def main():
                 run("halloween light", t_halloween_light, color_scheme="light")
                 run("trick or treat", t_treat)
                 run("wikipedia world", t_wiki)
+                run("genesis", t_genesis)
                 run("pedia desktop", t_pedia)
                 run("pedia halloween", t_pedia_halloween)
                 if a.full: run("fps", t_fps)
