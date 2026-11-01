@@ -49,6 +49,18 @@ def vendor_ort(out):
     return {f: hashlib.sha256(open(os.path.join(dst, f), "rb").read()).hexdigest()[:16] for f in ORT_FILES}
 
 
+def mark_staging(out):
+    """staging.id-le.com: a fixed ribbon on every page and noindex, so nobody mistakes it for the real site."""
+    rib = ('<meta name="robots" content="noindex, nofollow"><style>#stagingRibbon{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:2147483647;'
+           'font:700 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;background:#e0367a;color:#fff;padding:2px 10px;border-radius:6px 6px 0 0;pointer-events:none;opacity:.9}</style>')
+    for f in os.listdir(out):
+        if not f.endswith(".html"): continue
+        path = os.path.join(out, f); html = open(path, encoding="utf-8").read()
+        html = html.replace("</head>", rib + "</head>", 1).replace("<body", "<body data-staging", 1)
+        i = html.find(">", html.find("<body")) + 1
+        html = html[:i] + '<div id="stagingRibbon">STAGING</div>' + html[i:]
+        open(path, "w", encoding="utf-8").write(html)
+
 def stamp_versions(out):
     """Cloudflare keeps .js files in browsers for 4 hours (the zone's browser cache TTL), while pages are always fresh.
     So every page names its scripts with a fingerprint of their contents (idle-music.js?v=1a2b3c4d): a new deploy means
@@ -69,6 +81,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--helper", default="", help="base URL of the deployed helper worker (page fetch + world links); empty = without")
     ap.add_argument("--out", default=os.path.join(ROOT, "dist"))
+    ap.add_argument("--staging", action="store_true", help="staging build: a STAGING ribbon on every page and noindex (staging.id-le.com)")
     ap.add_argument("--pages-helper", action="store_true", help="also write _worker.js so Cloudflare Pages serves the helper on the same origin (/lab/*, /worlds/*); use with --helper https://<your domain>")
     a = ap.parse_args()
     out = a.out
@@ -97,8 +110,9 @@ def main():
     # the data lab's in-browser classifiers (idle-jeffy.js): fetched only when the lab opens, never on a first visit
     shutil.copytree(os.path.join(DEMO, "jeffy-heads"), os.path.join(out, "jeffy-heads"))
     sums = vendor_ort(out)
+    if a.staging: mark_staging(out)
     stamp_versions(out)
-    open(os.path.join(out, "_headers"), "w").write(HEADERS)
+    open(os.path.join(out, "_headers"), "w").write(HEADERS.replace("/*\n", "/*\n  X-Robots-Tag: noindex, nofollow\n", 1) if a.staging else HEADERS)
     if a.pages_helper:   # Pages advanced mode: static files as usual, the helper (helper/worker.js) on the same origin
         w = open(os.path.join(ROOT, "helper", "worker.js"), encoding="utf-8").read()
         assert w.count("export default {") == 1

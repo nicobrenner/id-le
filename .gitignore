@@ -6,3 +6,4 @@ dist/
 tools/.vendor_cache/
 helper/node_modules/
 lab/
+dist-staging/
