@@ -24,12 +24,15 @@
   // on a phone the panel covers the world: "show me" closes it so the world (and the step's pill) can be seen
   const look = (x, y, z) => { if (phone()) panel(false); fly(x, y, z); };
 
+  const EX = ["my parcel never arrived and I'm furious", 'thanks so much, the refund came through today', 'WIN a free phone, text YES now', 'how do I change the address on my order?'];
   const STEPS = [
     { k: 'what', text: () => `This is the <b>data lab</b>. Messages arrive at the 📥 <b>inbox</b>, and each creature here is a <b>real text classifier</b>: it reads a message and gives it a label.`,
       show: () => { const p = L().where && L().where(); if (p) look(p.inbox.x, p.inbox.y, 0.9); }, next: true },
     { k: 'travel', text: () => { const b = S.last; return b ? `Seen: ${nm(team()[b.stage])} read “${esc(b.text)}”, said <b>${esc(b.label)}</b> (${b.conf}%) and ${b.bin ? `carried it to the <b>${esc(b.bin)}</b> bin` : 'passed it on to the next stage'}.`
         : `Watch one message travel: the first creature walks to the inbox, picks a message up, and its bubble says what it thinks (a label and how sure it is). Then it carries it on, or into a bin.`; },
       show: () => { const cs = L().crew ? L().crew() : []; const c = cs.find(c => c.lab && c.lab.busy) || cs[0]; if (c) { look(c.x, c.y, 1.3); c.bub.textContent = '👀 watch me'; c.bub.classList.add('on'); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 2500); } }, next: true },
+    { k: 'irc', text: () => `Send your own: type <b>@inbox</b> and a message in 💬 <b>IRC</b> (“@inbox my parcel never arrived and I'm furious”). It lands in the inbox marked ✉ you, and when the team is done IRC tells you what each stage said. (Tick “the inbox also hears IRC” below and every line you type goes in.)`,
+      acts: () => [{ label: 'send an example', run: () => { const c = $('#chat'), b = $('#send'); if (!c || !b) return; try { const rc = $('#roomchat'); if (rc) rc.classList.remove('closed', 'min'); } catch (e) {} c.value = '@inbox ' + EX[Math.floor(Math.random() * EX.length)]; b.click(); } }], next: true },
     { k: 'kinds', text: () => { const r = routerI(), st = team()[r]; return `Three kinds of stage. A <b>filter</b> drops what matches into its own bin (spam). A <b>router</b> sorts into a bin per label. A <b>tagger</b> stamps a label and passes it on. Each has <b>sure at ≥</b>: ` +
         (st ? `below it, ${nm(st)} sends the message to <b>review</b> instead of guessing. Lower its bar and see what changes.` : `below it, a router sends the message to review. (This team has no router: add one to see it.)`); },
       acts: () => { const r = routerI(), st = team()[r]; if (!st) return []; return [{ label: `lower ${esc(st.name || st.head)} to ${Math.round(Math.max(0.3, (st.thr ?? 0.6) - 0.15) * 100)}%`, run: () => lower(r) }]; }, next: true },
@@ -62,7 +65,8 @@
     if (type === 'lab_open') { if (!S) start(false); else draw(); return; }
     if (!active()) return;
     if ((type === 'lab_sort' || type === 'lab_pass') && (step() || {}).k === 'travel' && now() - (S.travelAt || 0) > 2500) { S.last = { stage: x.stage, label: x.label, conf: Math.round((x.conf || 0) * 100), bin: x.bin || null, text: lastText(x) }; S.travelAt = now(); save(); draw(); }   // the step tells what it saw and waits for next ›, so it can be read
-    else if (type === 'lab_team') { if (S.done.kinds) done('team'); } });
+    else if (type === 'lab_team') { if (S.done.kinds) done('team'); }
+    else if (type === 'lab_irc') done('irc'); });
   function lastText(x) { try { const ms = L().msgs || []; const q = ms.filter(m => x.bin ? m.bin === x.bin && m.done : m.stage === x.stage + 1).slice(-1)[0]; return q ? String(q.text).slice(0, 60) + (q.text.length > 60 ? '…' : '') : 'a message'; } catch (e) { return 'a message'; } }
   document.addEventListener('input', e => { if (active() && e.target.dataset && e.target.dataset.st != null) done('kinds'); });
 

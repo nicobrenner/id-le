@@ -118,7 +118,7 @@ async function worlds(req, env, path) {   // the same relay as demo_server.py, s
 const SHARD = Math.floor(Math.random() * 16).toString(16), FEATS = /^[a-z0-9_-]{1,24}$/, BUCKETS = ['<20', '20-40', '40-55', '55+'];
 // where visits came from (the referring site's name only), a campaign tag, time on screen, where a guided start stopped
 const REF = /^[a-z0-9][a-z0-9.-]{0,59}$/, UTM = /^[a-z0-9-]{1,24}$/, DWELL = ['<1', '1-5', '5-20', '20+'];
-const DLSTEP = ['what', 'travel', 'kinds', 'team', 'review', 'stats', 'where', 'finished', 'ended'];   // the data lab walkthrough (idle-dlwalk.js)
+const DLSTEP = ['what', 'travel', 'irc', 'kinds', 'team', 'review', 'stats', 'where', 'finished', 'ended'];   // the data lab walkthrough (idle-dlwalk.js)
 const F5STOP = ['none', 'card', 'hwwiki', 'name', 'feed', 'dream', 'gazette', 'weather', 'reel', 'keep', 'finished', 'skipped'];
 // engagement, per page load and counted once in its last bucket (eg0 takes back the bucket reported before): creatures in the world,
 // and how many were born, charts made, buildings finished and words fed during the page load; plus visible seconds, a plain daily sum
@@ -152,7 +152,7 @@ function addStats(p) {
   if (p.m && typeof p.m === 'object') for (const [k, sec] of Object.entries(p.m).slice(0, 12)) { if (!FEATS.test(k) || !(sec >= 0 && sec < 86400 * 30)) continue;
     const x = d.m[k] = d.m[k] || { n: 0, sum: 0, b: {} }; x.n++; x.sum += Math.round(sec); bump(x.b, sec < 60 ? '<1m' : sec < 180 ? '1-3m' : sec < 600 ? '3-10m' : '10m+'); }
   if (p.f5 === 'finished' || p.f5 === 'skipped') bump(d.f5, p.f5);
-  if (Array.isArray(p.dl)) for (const k of new Set(p.dl.slice(0, 9))) if (DLSTEP.includes(k)) bump(d.dl, k);
+  if (Array.isArray(p.dl)) for (const k of new Set(p.dl.slice(0, 10))) if (DLSTEP.includes(k)) bump(d.dl, k);
   if (p.eg && typeof p.eg === 'object') for (const [k, B] of Object.entries(EG)) { const v = p.eg[k], v0 = p.eg0 && p.eg0[k]; if (v === undefined) continue;
     if (B.includes(v) && (v0 === undefined || B.includes(v0) && v0 !== v)) { bump(d.eg, k + ':' + v); if (v0 !== undefined) bump(d.eg, k + ':' + v0, -1); } }
   if (Number.isInteger(p.sec) && p.sec > 0 && p.sec <= 6 * 3600) d.secs += p.sec;

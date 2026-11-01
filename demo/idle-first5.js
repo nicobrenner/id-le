@@ -27,13 +27,15 @@
     { k: 'card', text: () => `This is a small world, and it is alive. <b>Click a creature</b> to open its card: how it feels, what it wants, who its friends are.`, who: () => meta().friends && meta().friends[0] },
     // Halloween night only (window.__halloween): grow the world from Wikipedia's Halloween page (Nico, 10-31)
     ...(window.__halloween && window.__halloween.on() ? [{ k: 'hwwiki', text: () => `🎃 Tonight only: let the world <b>grow from Wikipedia's Halloween page</b>. Press <b>grow it ›</b>, or paste <code>${HW_URL}</code> into 🎛 studio → Feed the world.`, kind: 'trail' }] : []),
+    // right-click (long-press on phones) anything: a menu of what can happen to it and who does it (the key stays 'keep' for the stats)
+    { k: 'keep', text: () => `<b>Right-click a word</b> (long-press on a phone): pick what should happen to it and who does it, e.g. <b>fetch</b>, and a creature walks over and brings it. The same menu keeps a copy in your 🗄 drawer.`, kind: 'trail', go: () => { try { window.__rclick && window.__rclick.demo(); } catch (e) {} } },
     { k: 'name', text: () => `Every creature can carry a name you choose. Open a card and <b>type over its name</b>.`, who: () => meta().counter || (live()[0] || {}).name },
     { k: 'feed', text: () => `${mn(meta().hungry)} is hungry. <b>Drag a word onto it</b> to feed it.`, who: () => meta().hungry },
     { k: 'dream', text: () => `${mn(sleeperName())} is asleep. Open its card: the mind tab becomes <b>dream 💤</b>.`, who: () => sleeperName() },
     { k: 'gazette', text: () => `The 📰 <b>Id|le Gazette</b> reports firsts, records and disasters. Open <b>🔔</b> and press <b>go ›</b> on one to see where it happened.`, ready: () => gazetteSeen(), kind: 'trail' },
     { k: 'weather', text: () => `Weather changes their mood. Open <b>🎛 studio</b> and try another weather (storms scare the timid ones).`, kind: 'trail', go: () => { const b = $('#studioBtn'); if (b) b.click(); } },
     { k: 'reel', text: () => `The world made its first <b>memory reel</b> out of what they lived through. Open 🎞 and play it.`, ready: () => reelCount() > 0, go: () => { const b = $('#reelsBtn'); if (b) b.click(); } },
-    { k: 'keep', text: () => `Like something? Right-click a chart, a word or a picture and <b>keep a copy</b> in your 🗄 drawer.`, who: () => meta().math }];
+];
   const mn = n => n ? `<a class="mn" data-n="${esc(n)}">${esc(n)}</a>` : 'someone';
   function sleeperName() { const s = live().find(c => c.state === 'sleep'); return s ? s.name : meta().sleeper; }
   function gazetteSeen() { try { return window.__notify.history().some(h => h.kind === 'gazette' && h.t >= (S.t0 || 0)); } catch (e) { return false; } }
@@ -57,7 +59,7 @@
     else if (type === 'dream_open') done('dream');
     else if (type === 'studio_open' && extra.on) done('weather');
     else if (type === 'reel_play') done('reel');
-    else if (type === 'collect_keep') done('keep'); });
+    else if (type === 'collect_keep' || type === 'inspector_task') done('keep'); });
   document.addEventListener('click', e => { if (!S) return; if (e.target.closest('#ntf .np.gazette [data-go], #ntfpanel [data-go]')) { const pill = e.target.closest('.np, .it'); if (!pill || pill.classList.contains('gazette') || /📰/.test(pill.textContent)) done('gazette'); } }, true);
 
   // ---------- the trail's pills
