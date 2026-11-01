@@ -412,6 +412,29 @@ def t_haunted(P):
     return "haunted style + preset, follows the world in Halloween, knock/boo/owl play"
 
 
+def t_operator(P):
+    """The 📟 Operator on a static site: the Tiny Operator (TO) is the default brain; its learned heads (arena_instr_v3.json) turn a few
+    requests into the game's own tools, pass creature commands to IRC, and leave chit-chat alone; 🧠 opens the options; the Operator
+    button never covers the panel's send row"""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.wait_for_function("() => window.__oracle && window.__oracle.ready && window.__idleAI", timeout=90000)
+    pg.click("#lab-toggle"); pg.wait_for_timeout(500)
+    need(pg.evaluate("() => document.querySelector('#ai-brain').value") == "tiny", "the Tiny Operator is not the default brain on a static site")
+    cases = [("make it foggy", "weather", "weather"), ("add a debugger", "spawn", "spawn"), ("fetch coffee", "creature", "creature"), ("how are you today", "none", None)]
+    got = []
+    for text, opt, acted in cases:
+        r = pg.evaluate("t => window.__idleAI.tiny(t)", text)
+        got.append(f"{text!r}→{r['option']}/{r['acted']}")
+        need(r["option"] == opt and r["acted"] == acted, f"{text!r}: expected {opt}/{acted}, got {r['option']}/{r['acted']} (p {r['p']:.2f})")
+        if acted == "weather": need(pg.evaluate("() => window.__idleWorld.summary({ limit: 0 }).weather.kind") == "fog", "the weather did not turn to fog")
+    pg.click("#ai-smart-btn"); pg.wait_for_timeout(200)
+    need(pg.evaluate("() => getComputedStyle(document.querySelector('#ai-smart')).display") != "none", "🧠 panel did not open")
+    top = pg.evaluate("() => { const r = document.querySelector('#lab-send').getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return e && e.id; }")
+    need(top == "lab-send", f"something covers the Operator's send button: {top}")
+    P.clean()
+    return "; ".join(got) + "; 🧠 opens; send row clear"
+
+
 ALLOWED_STATS = {"v", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec"}
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -750,7 +773,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -783,6 +806,7 @@ def main():
                 run("mood migrate", t_mood_migrate)
                 run("lab card", t_lab_card)
                 run("replay", t_replay)
+                run("operator", t_operator)
                 run("halloween", t_halloween)
                 run("halloween light", t_halloween_light, color_scheme="light")
                 run("trick or treat", t_treat)
