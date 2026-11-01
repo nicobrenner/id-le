@@ -148,7 +148,7 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 #reel .ctl{display:flex;gap:6px;align-items:center;width:min(900px,100%);flex-wrap:wrap}#reel .ctl button{font:14px system-ui;padding:3px 10px;border-radius:9px;border:1px solid #fff4;background:#fff1;color:inherit;cursor:pointer}#reel .ctl button:hover{background:#fff2}#reel .ctl .tt{flex:1;opacity:.75;font-size:12px;text-align:center;min-width:80px}
 #herd [data-h=sleepf]{font-size:11px}#herd [data-h=sleepf].on{border-color:#ffd54a;background:#ffd54a22}
 .rtag{font-size:10px;padding:0 5px;border-radius:7px;border:1px solid #8886;opacity:.85;white-space:nowrap}.rtag.clips{border-color:#3a8;color:#3a8}.rtag.mixed{border-color:#a8a;color:#a8a}.wikisign{position:absolute;left:0;top:0;z-index:3;display:inline-flex;align-items:baseline;gap:6px;padding:8px 14px;border-radius:10px;background:#fffdf6;color:#222;border:1px solid #8886;box-shadow:0 4px 14px #0003;font:600 22px Georgia,serif;text-decoration:none;white-space:nowrap;cursor:pointer}.wikisign small{font:12px system-ui;opacity:.6}.wikisign:hover{box-shadow:0 6px 18px #0005}@media (prefers-color-scheme:dark){.wikisign{background:#23252c;color:#eee}}#arena.keep .wikisign{display:none}
-</style></head><body>
+#labExit.armed{background:#c0392b;color:#fff;border-color:#c0392b}</style></head><body>
 <div id="boot" aria-live="polite"><div class="bplace"></div><canvas width="680" height="300"></canvas><div class="bbar"><div class="bfill"></div></div><div class="bstep"></div></div>
 <script>/* the boot cover: a resident plays while the world loads; the bar is the real boot steps, weighted. Never blocks: each step times out, and the cover goes after 9 s whatever happens */
 window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace || { kind: 'home', name: 'Home' }, keep = P.kind === 'keep', el = document.getElementById('boot'), cv = el.querySelector('canvas'), g = cv.getContext('2d'), fill = el.querySelector('.bfill'), stepEl = el.querySelector('.bstep');
@@ -206,7 +206,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
 <div id="team"><div class="ch"><b>🧪 data lab · your team</b><button id="teamClose">×</button></div>
 <div style="opacity:.75;margin-bottom:6px">Messages arrive at the inbox. Each stage is a classifier creature: a real text classifier from Jeffy. The three it starts with (spam, support tickets, mood) run right in your browser after a one-time 23.7 MB download; any other head you pick is asked on Jeffy's server. A <b>filter</b> drops what matches into its own bin; a <b>router</b> sorts into a bin per label, and sends anything it is not sure about to <b>review</b>; a <b>tagger</b> stamps a label and passes it on.</div>
 <div id="stages"></div><button id="addStage">+ add a stage</button>
-<div class="crow"><button id="labPlay">⏸ pause inbox</button> one message every <input id="labRate" type="range" min="1" max="10" step="1" value="4"> <span id="labRateV">4</span> s <button id="labClear">empty the bins</button> <button id="labExit" title="remove the lab from this world: its creatures, messages and bins">⏏ close the lab</button></div>
+<div class="crow"><button id="labPlay">⏸ pause inbox</button> one message every <input id="labRate" type="range" min="1" max="10" step="1" value="4"> <span id="labRateV">4</span> s <button id="labClear">empty the bins</button> <button id="labHome" title="go back to the world this lab came from; the lab keeps its team, messages, bins and stats and carries on when you come back">🏠 back home</button> <button id="labExit" title="remove the lab from this world: its creatures, messages and bins (asks first)">🗑 remove the lab</button></div>
 <div id="labStats"></div></div>
 <div id="insp"></div><div id="notice"></div><div id="roomchat"><div id="rc-head"><b id="rc-title">IRC · Id|le Relay Chat</b><span><button id="rc-min" title="collapse">▾</button><button id="rc-close" title="close">×</button></span></div><div id="rc-body"><div id="quick"></div>
 <div id="chatrow"><input id="chat" placeholder="talk to them: 'fetch the ball word', 'chop coffee', 'say hi', 'come here', 'hand a piece to crawly'…"><button class="mic" data-mic="chat" title="speak to everyone (uses the browser's speech recognition)">🎤</button><button id="send">Send</button><button id="export" title="Download the arena's engagement log (also included in the chat page's engagement export)">export log</button></div>
@@ -346,7 +346,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   (() => { const r = arenaEl.getBoundingClientRect(); SPACE.W = Math.max(1600, Math.round(r.width * 2)); SPACE.H = Math.max(1100, Math.round(r.height * 2)); try { const sv = JSON.parse(localStorage.getItem('arena.space') || 'null'); if (sv && sv.W >= 800 && sv.H >= 600) { SPACE.W = sv.W; SPACE.H = sv.H; } } catch (e) {} cam.x = r.width / 2; cam.y = r.height / 2; floor.style.width = SPACE.W + 'px'; floor.style.height = SPACE.H + 'px'; })();
   const wd = (a, b, L) => { let d = ((b - a) % L + L) % L; if (d > L / 2) d -= L; return d; };   // shortest signed step from a to b around the loop
   const near = (v, c, L) => c + wd(c, v, L);                                                          // the copy of v closest to c
-  const _dq = matchMedia('(prefers-color-scheme: dark)'); let _dark = _dq.matches; try { _dq.addEventListener('change', e => { _dark = e.matches; }); } catch (e) {} const isDark = () => _dark;
+  const _dq = matchMedia('(prefers-color-scheme: dark)'); let _dark = _dq.matches; try { _dq.addEventListener('change', e => { _dark = e.matches; }); } catch (e) {} const isDark = () => _dark || window.__hwNight === true;   // Halloween: the world is at night whatever the OS theme (idle-halloween.js)
   const dist = (p, q) => Math.hypot(wd(p.x, q.x, SPACE.W), wd(p.y, q.y, SPACE.H));
   let _vs = null; function viewSize() { if (!_vs) { const r = arenaEl.getBoundingClientRect(); _vs = { w: r.width, h: r.height, r }; } return _vs; }   // cached: measuring the arena every frame forced a layout each time
   addEventListener('resize', () => { _vs = null; }); addEventListener('scroll', () => { _vs = null; }, true); try { new ResizeObserver(() => { _vs = null; }).observe(arenaEl); } catch (e) {}
@@ -2293,10 +2293,13 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     const msgs = [], bins = {}; let on = false, playing = true, rate = 4, stream = [], si = 0, heads = [], lastEmit = 0, stats = { in: 0, calls: 0, ms: 0, perStage: {} };
     const ROLE_NAMES = { filter: 'filter', route: 'router', tag: 'tagger' };
     let team = (() => { try { return JSON.parse(localStorage.getItem('arena.team') || 'null'); } catch (e) { return null; } })() || [
-      { head: 'sms_spam', role: 'filter', match: 'spam', thr: 0.7, name: 'Spamtrap' }, { head: 'tweet_eval_sentiment', role: 'tag', thr: 0.5, name: 'Moodring' }, { head: 'support_ticket', role: 'route', thr: 0.6, margin: 0.2, name: 'Router' }];
+      { head: 'sms_spam', role: 'filter', match: 'spam', thr: 0.7, name: 'Spamtrap' }, { head: 'support_mood', role: 'tag', thr: 0.5, name: 'Moodring' }, { head: 'support_ticket', role: 'route', thr: 0.6, margin: 0.2, name: 'Router' }];
     // a router bins every message (sure or 'review'), so a stage after it never gets one: the old default had Moodring there. Move the
     // untouched old default (same names, heads, roles) into the working order; any other team is left as made, and the panel says which stages starve.
     if (team.length === 3 && team.map(t => t.name + ':' + t.head + ':' + t.role).join() === 'Spamtrap:sms_spam:filter,Router:support_ticket:route,Moodring:tweet_eval_sentiment:tag') { team = [team[0], team[2], team[1]]; try { localStorage.setItem('arena.team', JSON.stringify(team)); } catch (e) {} }
+    // Moodring's head was tweet_eval_sentiment (trained on tweets; it called most support messages neutral). An untouched default team
+    // moves to support_mood (trained on support-style text); a team the player changed keeps what they chose.
+    if (team.length === 3 && team.map(t => t.name + ':' + t.head + ':' + t.role).join() === 'Spamtrap:sms_spam:filter,Moodring:tweet_eval_sentiment:tag,Router:support_ticket:route') { team[1] = { ...team[1], head: 'support_mood' }; try { localStorage.setItem('arena.team', JSON.stringify(team)); } catch (e) {} }
     const starved = i => team.slice(0, i).some(t => t.role === 'route');   // nothing reaches a stage behind a router
     const saveTeam = () => { try { localStorage.setItem('arena.team', JSON.stringify(team)); } catch (e) {} };
     let base = { x: 0, y: 0 };
@@ -2370,7 +2373,12 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function state() { return { base: { ...base }, bins: JSON.parse(JSON.stringify(bins)), msgs: msgs.map(q => ({ text: q.text, x: Math.round(q.x), y: Math.round(q.y), stage: q.stage, tags: q.tags, done: !!q.done, bin: q.bin || null, cls: q.el.className })), stats, stream: stream.slice(0, 500), si }; }
     function leave() { const st = state(); on = false; creatures.filter(c => c.lab).forEach(c => { const i = creatures.indexOf(c); if (i >= 0) creatures.splice(i, 1); c.el.remove(); c.bub.remove(); if (selected === c) selected = null; });
       msgs.splice(0).forEach(q => q.el.remove()); for (const k of Object.keys(bins)) delete bins[k]; $('#team').classList.remove('on'); $('#labBtn').textContent = '🧪 data lab'; renderEvo(); logEvent('lab_leave', {}); return st; }
-    $('#labExit').addEventListener('click', () => window.__places.closeLab());
+    // ⏏ used to say "close" and removed the lab (its team, messages, bins and stats). Now: 🏠 back home keeps everything (the lab
+    // pauses while you're away and carries on when you return), and 🗑 remove asks first: a second click within 6 s removes it.
+    { const ex = $('#labExit'), EX = ex.textContent; let armed = 0, tm = 0; const disarm = () => { armed = 0; clearTimeout(tm); ex.textContent = EX; ex.classList.remove('armed'); };
+      ex.addEventListener('click', () => { if (armed && Date.now() - armed < 6000) { disarm(); window.__places.closeLab(); return; }
+        armed = Date.now(); ex.textContent = 'really remove? its team, messages and bins go · click again'; ex.classList.add('armed'); tm = setTimeout(disarm, 6000); });
+      $('#labHome').addEventListener('click', () => { disarm(); const id = (window.__places.cur() || '').replace(/^lab-/, ''); window.__places.go(id && id !== window.__places.cur() ? id : 'home').then(r => { if (window.__places.kind() === 'lab') window.__places.go('home'); }); }); }
     $('#labBtn').addEventListener('click', () => window.__places.openLab());   // a lab is its own place, started from this one (from a page: the page becomes its stream)
     setInterval(() => { if (!on) return; if (playing && Date.now() - lastEmit > rate * 1000) { lastEmit = Date.now(); emit(); } for (const c of creatures) if (c.lab) work(c); labStuck(); renderStats(); }, 400);
     function handles() { if (!on) return []; const H = [{ kind: 'inbox', label: 'inbox', x: inbox().x, y: inbox().y, move: (x, y) => { base.x += x - inbox().x; base.y += y - inbox().y; } }];
@@ -2824,7 +2832,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     let cur = 'home', homeSnap = null, P = null, busy = false; const live = new Map();
     const placeOf = id => list.find(p => p.id === id), saveList = () => sv('arena.places', list);
     const ICON = { home: '🏠', page: '📄', lab: '🧪', keep: '🕯️' };
-    function setKind(k) { window.__placeKind = k; window.__traveling = k !== 'home'; $('#arena').classList.toggle('traveling', k !== 'home'); Keep.show(k === 'keep'); }
+    function setKind(k) { window.__placeKind = k; document.documentElement.dataset.place = k; window.__traveling = k !== 'home'; $('#arena').classList.toggle('traveling', k !== 'home'); Keep.show(k === 'keep'); }
     setKind('home');
     function renderBar() { const el = $('#placesBar'); el.innerHTML = list.map(p => { const on = p.id === cur, st = on && P ? ` · ${P.stats.popped} pulled out` : '';
         return `<span class="pchip${on ? ' on' : ''}" data-place="${p.id}" title="${p.kind === 'page' ? String(p.url).replace(/"/g, '') : p.kind === 'lab' ? 'a data lab started from ' + ((placeOf(p.parent) || {}).name || 'somewhere') : p.kind === 'keep' ? 'a keep in one bit: stone, torches, chains, bats and fog' : 'your world'}">${ICON[p.kind]} ${String(p.name).replace(/[<>&]/g, '').slice(0, 26)}${st}${p.id !== 'home' && p.kind !== 'keep' ? `<b data-forget="${p.id}" title="forget this place">×</b>` : ''}</span>`; }).join(''); }
