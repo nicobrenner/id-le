@@ -6,17 +6,19 @@
 // (bass, lead, pad, each soft↔gritty), filter, echo, bitcrush and a drop, plus lights on the beat. While the deck plays
 // it takes over from the background music; stopping it brings the background back. Sets are saved here and in snapshots.
 // The background music can be tweaked too (issue #25): a style (follow the world, Home, Gloamhold, calm, dreamy, chiptune, gloomy,
-// lo-fi), a new variation, speed, key and scale, busyness, brightness, a level for each voice (pluck, pad, bells, drone, beat), and
+// lo-fi, 🎃 haunted), a new variation, speed, key and scale, busyness, brightness, a level for each voice (pluck, pad, bells, drone, beat), and
 // whether it follows the weather and the day. A tweak can be saved as a track: it joins the sets, plays as the background or on the
 // deck (where rave mode hears it), and goes in the set list, which plays sets and tracks in order with a crossfade.
 // #21: one plays at a time (off / background / deck, the same switch here and in the 🔊 popover top right); the deck can play the
 // background as a base tune under its own parts (keyed and chorded to it); every mixer channel and effect has an on/off switch that
 // keeps its setting; all of it goes through the master (window.__audio): one mute, one volume, one AudioContext.
+// Halloween (idle-halloween.js): while the mode is on, "follows the world" plays 🎃 haunted; a haunted deck preset; an owl at night, a knock and a
+// creaking door when a creature knocks (idle:knock), a soft "ooo" when a ghost passes (idle:ghost), all on the creatures-and-weather switch.
 (() => {
   const KEY = 'idle.music', $ = s => document.querySelector(s);
   const esc = t => String(t ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
   const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const SCALES = { minor: [0, 2, 3, 5, 7, 8, 10], major: [0, 2, 4, 5, 7, 9, 11], dorian: [0, 2, 3, 5, 7, 9, 10], phrygian: [0, 1, 3, 5, 7, 8, 10], 'pentatonic minor': [0, 3, 5, 7, 10], 'pentatonic major': [0, 2, 4, 7, 9], blues: [0, 3, 5, 6, 7, 10], lydian: [0, 2, 4, 6, 7, 9, 11] };
+  const SCALES = { minor: [0, 2, 3, 5, 7, 8, 10], major: [0, 2, 4, 5, 7, 9, 11], dorian: [0, 2, 3, 5, 7, 9, 10], phrygian: [0, 1, 3, 5, 7, 8, 10], 'pentatonic minor': [0, 3, 5, 7, 10], 'pentatonic major': [0, 2, 4, 7, 9], blues: [0, 3, 5, 6, 7, 10], lydian: [0, 2, 4, 6, 7, 9, 11], 'harmonic minor': [0, 2, 3, 5, 7, 8, 11] };
   const ROWS = ['kick', 'snare', 'hat', 'clap', 'bass'];
   const P = s => [...(s + '................').slice(0, 16)].map(c => c === 'x' ? 1 : 0);
   const PRESETS = {
@@ -25,6 +27,7 @@
     breakbeat: { bpm: 128, kick: 'x.....x...x.....', snare: '....x.......x..x', hat: 'x.x.x.x.x.x.x.x.', clap: '', bass: 'x.....x...x.....' },
     halftime: { bpm: 140, kick: 'x.......x.x.....', snare: '........x.......', hat: 'x.x.x.xxx.x.x.xx', clap: '........x.......', bass: 'x.......x.x.....' },
     'boom bap': { bpm: 90, kick: 'x......x..x.....', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '', bass: 'x......x..x.....' },
+    haunted: { bpm: 72, kick: 'x..x............', snare: '', hat: '......x.......x.', clap: '', bass: 'x.......x.......' },   // a slow heartbeat (Halloween)
     ambient: { bpm: 76, kick: '', snare: '', hat: '....x.......x...', clap: '', bass: 'x.......' },
     empty: { bpm: 110, kick: '', snare: '', hat: '', clap: '', bass: '' } };
   const presetGrid = p => Object.fromEntries(ROWS.map(r => [r, P(PRESETS[p][r] || '')]));
@@ -131,12 +134,15 @@
     dreamy: { name: 'dreamy', bpm: 62, root: 53, scale: 'lydian', lv: { pluck: 0.7, pad: 1.2, bells: 0.8, drone: 0.3, beat: 0 }, bass: 0.4, prog: [0, 1, 4, 2], pluck: { type: 'sine', p: [0.14, 0.07], cut: 3000, rel: 1.8, oct: 19 }, pad: { type: 'sawtooth', cut: 900, det: 12 }, feat: { drums: 0, bass: 0.2, melody: 0.8 } },
     chiptune: { name: 'chiptune', bpm: 132, root: 48, scale: 'major', lv: { pluck: 1, pad: 0, bells: 0, drone: 0, beat: 0.8 }, bass: 1, arp: true, prog: [0, 5, 3, 4], pluck: { type: 'square', p: [0.7, 0.5], cut: 5000, rel: 0.08, oct: 12 }, pad: { type: 'square', cut: 1500, det: 0 }, drums: 'chip', feat: { drums: 0.6, bass: 0.55, melody: 0.75 } },
     gloomy: { name: 'gloomy', bpm: 58, root: 40, scale: 'minor', lv: { pluck: 0.5, pad: 0.7, bells: 0.6, drone: 1, beat: 0 }, bass: 0.5, prog: [0, 5, 3, 4], pluck: { type: 'triangle', p: [0.12, 0.04], cut: 900, rel: 0.8, oct: 0 }, pad: { type: 'sawtooth', cut: 500, det: 6 }, feat: { drums: 0, bass: 0.4, melody: 0.4 } },
+    // Halloween: harmonic minor round i – VI – ii° – V, a wobbly theremin lead gliding between chord notes, a low organ drone, sparse music-box plucks and bells, now and then a distant thump
+    haunted: { name: '🎃 haunted', bpm: 54, root: 38, scale: 'harmonic minor', lv: { pluck: 0.6, pad: 0.6, bells: 0.7, drone: 1, beat: 0 }, bass: 0.3, prog: [0, 5, 1, 4], theremin: true, thump: true, pluck: { type: 'sine', p: [0.07, 0.03], cut: 5000, rel: 1.6, oct: 24 }, pad: { type: 'sawtooth', cut: 450, det: 9 }, feat: { drums: 0.1, bass: 0.3, melody: 0.5 } },
     lofi: { name: 'lo-fi', bpm: 80, root: 45, scale: 'dorian', lv: { pluck: 0.8, pad: 1, bells: 0, drone: 0, beat: 0.7 }, bass: 1, prog: [1, 4, 0, 3], pluck: { type: 'triangle', p: [0.2, 0.08], cut: 1300, rel: 0.4, oct: 12 }, pad: { type: 'triangle', cut: 800, det: 8 }, drums: 'lofi', crackle: true, feat: { drums: 0.5, bass: 0.5, melody: 0.55 } } };
-  const STYLES = { world: 'follows the world', home: 'Home', gloam: 'Gloamhold', calm: 'calm', dreamy: 'dreamy', chiptune: 'chiptune', gloomy: 'gloomy', lofi: 'lo-fi' };
+  const STYLES = { world: 'follows the world', home: 'Home', gloam: 'Gloamhold', calm: 'calm', dreamy: 'dreamy', chiptune: 'chiptune', gloomy: 'gloomy', lofi: 'lo-fi', haunted: '🎃 haunted' };
+  const hwOn = () => !!(window.__halloween && window.__halloween.on && window.__halloween.on());
   const PROGS = [[0, 3, 1, 4], [0, 5, 3, 4], [0, 4, 5, 3], [0, 1, 4, 2], [1, 4, 0, 3], [0, 2, 5, 4], [5, 3, 0, 4], [0, 3, 4, 4]];
   const VOICES = ['pluck', 'pad', 'bells', 'drone', 'beat'];
   // a track: the background settings with the style made concrete (follow-the-world becomes Home or Gloamhold)
-  const trackOf = (B, W) => ({ style: B.style === 'world' ? (W.keep ? 'gloam' : 'home') : B.style, seed: B.seed, speed: B.speed, key: B.key, scale: B.scale, dens: B.dens, bright: B.bright, voices: { ...B.voices } });
+  const trackOf = (B, W) => ({ style: B.style === 'world' ? (hwOn() ? 'haunted' : W.keep ? 'gloam' : 'home') : B.style, seed: B.seed, speed: B.speed, key: B.key, scale: B.scale, dens: B.dens, bright: B.bright, voices: { ...B.voices } });
   const lvl = (P, T, v) => { const b = P.lv[v] || 0, s = (T.voices || {})[v] ?? 1; return s <= 1 ? b * s : b + (s - 1) * 0.6; };
   const brightCut = b => 300 * Math.pow(2, b * 5.75);   // 0.75 ≈ 6 kHz, the old default
   const trackTempo = (T, W) => (PROF[T.style] || PROF.home).bpm * (T.speed || 1) * (W && has(W.kind, /fog/) ? 0.72 : 1) * (W && isNight(W.day) ? 0.85 : 1);
@@ -174,7 +180,15 @@
       else if (i === 0 && Math.random() < 0.5 * dens) tone(bus, t, mtof(deg(sc, root - 12, st.chord)), { type: 'sine', dur: 0.4, vol: 0.12 * P.bass, d: 0.3, sus: 0.3, rel: 0.4, cut: 600 }); }
     const be = L('bells'); if (be > 0.01) { if (Math.random() < 0.05 * dens) bell(bus, t, mtof(deg(sc, root + 24 + pt.bo, Math.floor(Math.random() * 8))), 0.05 * be);
       if (P.chimes && !night && Math.random() < 0.02 * dens) bell(bus, t, mtof(deg(sc, root + 48, Math.floor(Math.random() * 6))), 0.02 * be); }
+    if (P.theremin && step % 32 === 0 && L('pluck') > 0.01 && Math.random() < 0.75) { const a = [0, 2, 4][Math.floor(Math.random() * 3)], b = [1, 3, 4, 6][Math.floor(Math.random() * 4)];
+      hold(st, theremin(bus, t, deg(sc, root + 24, st.chord + a), deg(sc, root + 24, st.chord + b), 26 * spb, 0.05 * L('pluck'))); }
+    if (P.thump && i === 8 && Math.random() < 0.08 * dens) kickTo(bus, t, 0.2, 62, 30, 0.9);   // something heavy, far away
     const bt = L('beat'); if (bt > 0.01) beatVoice(P, i, t, bus, bt, spb); }
+  // a theremin-ish voice: a sine that holds a note, glides to the next, with a vibrato that grows as it sustains
+  function theremin(bus, t, m1, m2, dur, vol) { const o = ctx.createOscillator(), g = ctx.createGain(), v = ctx.createOscillator(), vg = ctx.createGain(), f = ctx.createBiquadFilter(), f1 = mtof(m1), f2 = mtof(m2);
+    o.type = 'sine'; f.type = 'lowpass'; f.frequency.value = 2400; o.frequency.setValueAtTime(f1, t); o.frequency.setValueAtTime(f1, t + dur * 0.35); o.frequency.exponentialRampToValueAtTime(f2, t + dur * 0.6);
+    v.frequency.value = 5.3; vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f1 * 0.02, t + dur * 0.5); v.connect(vg); vg.connect(o.frequency);
+    o.connect(f); f.connect(g); g.connect(bus); env(g, t, dur * 0.25, vol, 0.6, 0.85, dur * 0.4, dur * 0.7); const end = t + dur * 0.7 + dur * 0.6 + 0.1; o.start(t); v.start(t); o.stop(end); v.stop(end); return { o, g, end }; }
   function bgStep(step, t, W) { const i = step % 16, R = S.bg.react, T = trackOf(S.bg, W), k = T.style + '|' + T.key + '|' + T.scale + '|' + T.seed;
     if (bg.lastKey !== k) { if (bg.lastKey) release(bg, 0.6); bg.lastKey = k; }   // a new style or place: the old pads and drones let go
     const bc = brightCut(S.bg.bright); bgFilt.frequency.setTargetAtTime(R && has(W.kind, /rain|fog/) ? bc * 0.22 : R && isNight(W.day) ? bc * 0.43 : bc, t, 1.5);
@@ -308,7 +322,7 @@
   const pct = v => Math.round(v * 100);
   function render() { if (el.classList.contains('drag')) return; el.classList.toggle('on', !!S.open); btn.classList.toggle('on', deck.playing); if (!S.open) return; const D = S.deck, W = world();
     const B = S.bg, T = trackOf(B, W), R = B.react, var_ = B.seed !== 1 ? ' · variation ' + B.seed : '';
-    const mood = (B.style === 'world' ? (W.keep ? 'Gloamhold: low drones, slow bells' : 'Home: warm plucks and a pad') : (PROF[T.style] || PROF.home).name) + var_;
+    const mood = (B.style === 'world' ? (hwOn() ? '🎃 haunted for Halloween: a theremin, an organ drone, a music box' : W.keep ? 'Gloamhold: low drones, slow bells' : 'Home: warm plucks and a pad') : (PROF[T.style] || PROF.home).name) + var_;
     const wx = /storm/.test(W.kind) ? ', a low pulse for the storm' : /rain/.test(W.kind) ? ', softened by the rain' : /fog/.test(W.kind) ? ', slowed by the fog' : /wind/.test(W.kind) ? ', with the wind breathing' : '';
     const src = source(), sw = (k, on, tip) => `<button class="sw ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-sw="${k}" title="${tip}"></button>`;
     el.innerHTML = `<div class="hd"><b>🎧 music</b><button data-x="close" title="close">✕</button></div>
@@ -381,7 +395,7 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
     else { const [a, b, c] = r.split(':'); if (a === 'ch') D.ch[b][c] = v; if (a === 'fx') { D.fx[b] = v; applyFx(); } }
     save(); });
   el.addEventListener('change', e => { const s = e.target.dataset.s; if (!s) return; const D = S.deck, v = e.target.value;
-    if (s === 'preset') { D.preset = v; D.setName = null; D.grid = presetGrid(v); D.bpm = PRESETS[v].bpm; applyFx(); render(); }
+    if (s === 'preset') { D.preset = v; D.setName = null; D.grid = presetGrid(v); D.bpm = PRESETS[v].bpm; if (v === 'haunted') D.scale = 'harmonic minor'; applyFx(); render(); }
     if (s === 'key') D.key = +v; if (s === 'scale') D.scale = v;
     if (s === 'bgstyle') { S.bg.style = v; bgRestart(); render(); } if (s === 'bgkey') { S.bg.key = +v; bgRestart(); } if (s === 'bgscale') { S.bg.scale = v; bgRestart(); }
     if (s === 'qeach') S.qo.each = +v; if (s === 'qxf') S.qo.xf = +v; save(); });
@@ -392,11 +406,33 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
     el.querySelectorAll('.grid b.now').forEach(b => b.classList.remove('now')); el.querySelectorAll(`.grid b[data-g$=":${i}"]`).forEach(b => b.classList.add('now')); }, 125);
   function toast(t) { try { window.__musicToast ? window.__musicToast(t) : null; } catch (e) {} }
 
+  // ---------- Halloween (window.__halloween, idle-halloween.js): following the world plays 🎃 haunted while the mode is on; a few sounds ----------
+  const onHw = () => { if (S.bg.style === 'world' || S.deck.base) bgRestart(); render(); };
+  document.addEventListener('idle:halloween', onHw); addEventListener('idle:halloween', onHw);
+  // effects (owl, knock and creak, a ghost's "ooo"): through the creatures-and-weather switch, only when it's on and the audio is awake
+  const sfxBus = () => { if (!A() || !A().fxOn() || !hwOn()) return null; ensure(); return ctx.state === 'running' ? A().fxOut() : null; };
+  const lastSfx = {}, gate = (k, ms) => { const n = performance.now(); if (n - (lastSfx[k] || 0) < ms) return false; lastSfx[k] = n; return true; };
+  function glide(bus, t, f0, f1, dur, vol, { type = 'sine', vib = 0, cut = 3000, a = 0.05 } = {}) { const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter(); o.type = type; f.type = 'lowpass'; f.frequency.value = cut;
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur); if (vib) { const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = 6; lg.gain.value = f0 * vib; l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + dur + 0.3); }
+    o.connect(f); f.connect(g); g.connect(bus); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.setTargetAtTime(0.0001, t + dur * 0.6, dur * 0.15); o.start(t); o.stop(t + dur + 0.3); }
+  function owl() { const bus = sfxBus(); if (!bus || !gate('owl', 20000)) return; const t = ctx.currentTime + 0.05;   // hoo … hoo-hoo
+    [[0, 0.42], [0.75, 0.16], [0.98, 0.34]].forEach(([d, len]) => glide(bus, t + d, 410, 360, len, 0.05, { cut: 1200, a: 0.06 })); }
+  function knock() { const bus = sfxBus(); if (!bus || !gate('knock', 4000)) return; const t = ctx.currentTime + 0.03;
+    [0, 0.16, 0.32].forEach(d => noise(bus, t + d, { dur: 0.03, vol: 0.12, type: 'lowpass', freq: 380, q: 1.5, rel: 0.06 }));   // knock, knock, knock
+    const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(), w = ctx.createOscillator(), wg = ctx.createGain(), t1 = t + 0.75;   // then the door creaks open
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(70, t1); o.frequency.linearRampToValueAtTime(110, t1 + 0.9); w.frequency.value = 23; wg.gain.value = 18; w.connect(wg); wg.connect(o.frequency);
+    f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 6; o.connect(f); f.connect(g); g.connect(bus); g.gain.setValueAtTime(0.0001, t1); g.gain.linearRampToValueAtTime(0.06, t1 + 0.15); g.gain.setTargetAtTime(0.0001, t1 + 0.8, 0.12);
+    o.start(t1); w.start(t1); o.stop(t1 + 1.4); w.stop(t1 + 1.4); }
+  function boo() { const bus = sfxBus(); if (!bus || !gate('boo', 6000)) return; const t = ctx.currentTime + 0.03;   // a soft "ooo" sliding down, with a breath of air
+    glide(bus, t, 560, 290, 1.1, 0.045, { vib: 0.03, cut: 1800, a: 0.12 }); noise(bus, t, { dur: 0.6, vol: 0.03, type: 'bandpass', freq: 900, q: 0.8, a: 0.2, rel: 0.4 }); }
+  ['idle:knock', 'idle:ghost'].forEach(n => { const h = n === 'idle:knock' ? knock : boo; document.addEventListener(n, h); addEventListener(n, h); });
+  // the owl: now and then at night (the world's night, or real night outside: it is Halloween)
+  setInterval(() => { if (!hwOn() || Math.random() > 0.3) return; const hr = new Date().getHours(); if (isNight(world().day) || hr >= 19 || hr < 6) owl(); }, 15000);
   window.__music = { playing: false, state: () => ({ bg: copy(S.bg), deck: copy(S.deck), sets: copy(S.sets), queue: [...S.queue], qo: { ...S.qo } }),
     merge(st) { if (!st) return; for (const s of st.sets || []) if (!S.sets.some(x => x.name === s.name && x.t === s.t)) S.sets.push(s); if (st.deck) S.deck = Object.assign(DECK0(), st.deck);
       if (st.bg) { S.bg = Object.assign(BG0(), st.bg, { on: S.bg.on }); S.bg.voices = Object.assign(BG0().voices, S.bg.voices); }
       if (st.queue && !S.queue.length) S.queue = st.queue.filter(id => S.sets.some(s => s.t === id)); if (st.qo) S.qo = Object.assign(S.qo, st.qo); save(); render(); },
     bgTrack: () => trackOf(S.bg, world()), bgSet: o => { Object.assign(S.bg, o); bgRestart(); render(); }, loadSet, bgFromTrack, qPlay, qNext, styles: Object.keys(STYLES), _q: () => deck.q, _out: () => deck.out,
-    setBg, play, drop, features, source, setSource, setBase, baseOn: () => !!(deck.playing && S.deck.base), rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); reDuck(); render(); }, _ducks: () => [...ducks], _gains: () => ctx && { bg: +bgBus.gain.value.toFixed(3), deck: +deckBus.gain.value.toFixed(3) }, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _ctx: () => ctx, _deck: deck, _bg: bg };
+    setBg, play, drop, features, source, setSource, setBase, baseOn: () => !!(deck.playing && S.deck.base), rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); reDuck(); render(); }, _ducks: () => [...ducks], _gains: () => ctx && { bg: +bgBus.gain.value.toFixed(3), deck: +deckBus.gain.value.toFixed(3) }, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _sfx: { owl, knock, boo }, _ctx: () => ctx, _deck: deck, _bg: bg };
   render();
 })();
