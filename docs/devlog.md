@@ -269,3 +269,8 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - Finding: disasters had silently stopped since Oct 28 because the line that runs them each frame had slipped into a comment.
 - Hunger: only Crawly kin could eat → per-family diets. Hangry mode; hangry beats fear (fight or flight).
 - Gloamhold (1-bit world), memory reels v1/v2, family names, Counters and Mathematicians, Designers, the Id|le-pedia, BYO-AI chat v1, static build groundwork.
+
+## 2026-11-01 07:20 · population advisor (#3, 36eb9d2)
+- 📊 advisor: 9 gauges per world (trend + 10-min line), issues with hysteresis, plain causes, wry lines, one-click fixes with undo; Id|le gazette pill (≤1 per 2.5 min); on/quiet/off; records and firsts in snapshots.
+- Numbers (owner's world, headless): calm the weather → fear 0.64 → 0.17 in 11 s; feed → hunger 0.95 → 0.63 in 2 min; spread → crowding 0.81 → 0.05 in 12 s; rest 3 + undo woke all 3. Tick < 1 ms; fps 60 with the panel open.
+- Finding: feeding one diet with ~3 per eater barely moved hunger; feeding every low diet at ~5 per eater did.
