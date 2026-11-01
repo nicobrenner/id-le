@@ -5,7 +5,7 @@
 //      (without one it falls back to memory: fine for a test, forgets on every restart).
 // Limits: only http(s) to public hosts, page reads capped (600 KB text, 2.5 MB HTML, 4 MB images/assets), 60 requests a minute
 // per visitor, and only the origins in ALLOWED_ORIGINS may use it. No cookies, no logging of what is fetched.
-const UA = 'Mozilla/5.0 (Id|le helper; +https://id-le.com)';
+const UA = 'Mozilla/5.0 (compatible; Id|le helper/1.0; +https://id-le.com; https://github.com/nicobrenner/id-le)';   // Wikimedia's User-Agent policy: name the tool and a way to reach us
 const mem = { worlds: { worlds: {} }, hits: new Map() };
 const isPrivate = h => /^(localhost$|.*\.local$|.*\.internal$|0\.|10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[)/i.test(h);   // IPv6 literals ([...]) are refused outright
 
@@ -41,7 +41,44 @@ async function readPage(u, env) {   // /lab/fetch: same fields as demo_server.py
   for (const m of raw.matchAll(/<a\b[^>]*?href="([^"#][^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) { let a; try { a = new URL(unesc(m[1]), u).href.split('#')[0]; } catch (e) { continue; } const t = strip(m[2]);
     if (!/^https?:/.test(a) || seen.has(a) || a === u || t.length < 2 || t.length > 80 || /^(http|www\.)/i.test(t) || /\.(pdf|zip|jpe?g|png|gif|svg)(\?|$)/i.test(a)) continue; seen.add(a); links.push({ href: a, text: t }); if (links.length >= 200) break; }
   const wiki = /(^|\.)wikipedia\.org$/i.test(new URL(u).hostname);   // Wikipedia's menus ("Jump to content", "Donate", "Toggle … subsection") aren't the article
-  return { title: title ? strip(title).slice(0, 120) : u, text, images, ui: wiki ? [] : ui.sort(() => Math.random() - 0.5).slice(0, 14), links, url: u };
+  let credits; try { credits = await wikiCredits(images, env); } catch (e) { credits = undefined; }   // never let credits break a page read
+  return { title: title ? strip(title).slice(0, 120) : u, text, images, ...(credits ? { credits } : {}), ui: wiki ? [] : ui.sort(() => Math.random() - 0.5).slice(0, 14), links, url: u };
+}
+
+// Credits for Wikimedia pictures (Wikipedia worlds): author, license and the file's page, from the Commons (or the wiki's own) API.
+// `credits` is a list parallel to `images` (null where a picture isn't a Wikimedia file), so older pages that only read `images` keep working.
+// One API call per wiki per page read; each file's answer is cached for a day (Cache API in production, memory elsewhere).
+function wikiFile(src) {   // https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Name.jpg/250px-Name.jpg -> { wiki: 'commons', file: 'Name.jpg' }
+  let url; try { url = new URL(src); } catch (e) { return null; }
+  if (!/^(upload|thumb)\.wikimedia\.org$/i.test(url.hostname)) return null;
+  const seg = url.pathname.split('/').filter(Boolean); if (seg[0] !== 'wikipedia' || seg.length < 4) return null;
+  const wiki = seg[1], i = seg[2] === 'thumb' ? 5 : 4, name = seg[i]; if (!name || !/^[a-z-]{2,20}$/i.test(wiki)) return null;
+  let file; try { file = decodeURIComponent(name); } catch (e) { return null; }
+  return { wiki, file: file.replace(/_/g, ' ') };
+}
+const creditMem = new Map();
+async function wikiCredits(images, env) {
+  const files = images.map(wikiFile); if (!files.some(Boolean)) return undefined;
+  const out = images.map(() => null), cache = typeof caches !== 'undefined' ? caches.default : null, key = f => `https://id-le.com/__credits/${f.wiki}/${encodeURIComponent(f.file)}`;
+  const need = new Map();   // wiki -> [index...]
+  for (let i = 0; i < files.length; i++) { const f = files[i]; if (!f) continue; const k = key(f);
+    let hit = creditMem.get(k); if (!hit && cache) { const r = await cache.match(k); if (r) hit = await r.json(); }
+    if (hit && Date.now() - (hit.t || 0) < 86400000) { out[i] = hit.c; continue; }
+    if (!need.has(f.wiki)) need.set(f.wiki, []); need.get(f.wiki).push(i); }
+  for (const [wiki, idx] of need) {
+    const host = wiki === 'commons' ? 'commons.wikimedia.org' : `${wiki}.wikipedia.org`;
+    const titles = [...new Set(idx.map(i => 'File:' + files[i].file))].join('|');
+    const api = `https://${host}/w/api.php?action=query&format=json&prop=imageinfo&iiprop=extmetadata|url&iiextmetadatafilter=Artist|LicenseShortName|LicenseUrl|Credit&titles=${encodeURIComponent(titles)}`;
+    const r = await fetch(api, { headers: { 'User-Agent': UA, Accept: 'application/json' }, cf: { cacheTtl: 86400 } }); if (!r.ok) continue;
+    const pages = Object.values(((await r.json()).query || {}).pages || {});
+    const byTitle = new Map(pages.map(p => [String(p.title || '').replace(/_/g, ' ').toLowerCase(), p]));
+    for (const i of idx) { const p = byTitle.get(('File:' + files[i].file).toLowerCase()); const info = p && p.imageinfo && p.imageinfo[0]; if (!info) continue;
+      const m = info.extmetadata || {}, v = k => m[k] && typeof m[k].value === 'string' ? m[k].value : '';
+      const lic = /^https?:\/\//.test(v('LicenseUrl')) ? v('LicenseUrl') : '', page = /^https?:\/\//.test(info.descriptionurl || '') ? info.descriptionurl : `https://${host}/wiki/${encodeURIComponent('File:' + files[i].file.replace(/ /g, '_'))}`;
+      const c = { file: files[i].file.slice(0, 160), author: strip(v('Artist')).slice(0, 160) || strip(v('Credit')).slice(0, 160) || 'unknown author', license: strip(v('LicenseShortName')).slice(0, 60) || 'see the file page', licenseUrl: lic, page, source: wiki === 'commons' ? 'Wikimedia Commons' : `${wiki}.wikipedia.org` };
+      out[i] = c; const rec = { t: Date.now(), c }; creditMem.set(key(files[i]), rec); if (creditMem.size > 2000) creditMem.clear();
+      if (cache) { try { await cache.put(key(files[i]), new Response(JSON.stringify(rec), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=86400' } })); } catch (e) {} } } }
+  return out;
 }
 
 async function asset(u, env, self) {   // /lab/asset: CSS comes back with url()/@import rewritten to pass through here again
