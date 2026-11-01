@@ -20,7 +20,7 @@ ORT_FILES = ["ort.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded
 ORT_CDN = f"https://cdn.jsdelivr.net/npm/onnxruntime-web@{ORT_VER}/dist/"
 ORT_TAG = f'<script src="{ORT_CDN}ort.min.js"></script>'
 # the one cached model is enough; the two old ones are only a fallback for checkouts without it
-COPY = ["pedia.html", "privacy.html", "idle-runtime.js", "sw.js", "starter_world.json", "pedia_clips.json", "og-image.png", "og-image-square.png", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
+COPY = ["pedia.html", "privacy.html", "idle-runtime.js", "sw.js", "starter_world.json", "pedia_clips.json", "og-image.png", "og-image-square.png", "og-image-halloween.png", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
         "arena_instr_v1.json", "arena_instr_v2.json", "arena_genomes.json", "datalab_stream.json"]
 HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
@@ -107,6 +107,15 @@ export default {
   async fetch(req, env, ctx) {
     const p = new URL(req.url).pathname;
     if (p.startsWith('/lab/') || p.startsWith('/worlds/') || p.startsWith('/jeffy/')) return helper.fetch(req, env, ctx);
+    // link previews: a Halloween link (?halloween, or a Wikipedia world about Halloween) gets the Halloween card and title
+    const u = new URL(req.url), q = u.searchParams, wq = decodeURIComponent((q.get('from_wiki') || '').split('/wiki/')[1] || q.get('wiki') || '');
+    if ((p === '/' || p === '/index.html' || p === '/arena.html') && (q.has('halloween') || /hallowe.?en|jack-o.?-?lantern|samhain|trick-or-treat/i.test(wq))) {
+      const r = await env.ASSETS.fetch(req), img = 'https://id-le.com/og-image-halloween.png', t = "It's Halloween in Id|le", d = 'Creatures in costume go trick-or-treating in a little world that lives in your browser. Free, open source.';
+      const set = v => ({ element(e) { e.setAttribute('content', v); } });
+      return new HTMLRewriter().on('meta[property="og:image"]', set(img)).on('meta[name="twitter:image"]', set(img)).on('meta[property="og:title"]', set(t)).on('meta[name="twitter:title"]', set(t))
+        .on('meta[property="og:description"]', set(d)).on('meta[name="twitter:description"]', set(d)).on('meta[property="og:url"]', set(u.origin + '/?halloween'))
+        .on('meta[property="og:image:alt"]', set('The Id|le wordmark with an orange bar over a moonlit world of words: It\'s Halloween')).transform(r);
+    }
     return env.ASSETS.fetch(req);
   },
 };
