@@ -4,7 +4,7 @@ Status: v1 built (2026-10-29): demo/idle-ai.js (the chat, the brains, the tools)
 
 Nico (2026-10-29): "that would be one of the main features! BYO-AI, you can use either a subscription like you, or API, or local model... (eventually use TO)".
 
-Today the lab chat (the `lab` sidebar) posts notes to `demo_server.py`. They land in `pile_runs/lab/notes.jsonl`, and a Claude Code session on Nico's Mac reads them and answers in `replies.jsonl`. The public game keeps that sidebar as its main way to talk to an AI that can see the world and change it, and the player chooses which AI.
+Update (2026-11-01, #18): running locally with `server.py`, the Operator's brain **🛠 your coding agent (local)** posts notes to `lab/notes.jsonl` and shows `lab/replies.jsonl`; any coding agent (Claude Code on a subscription, etc.) can answer and change the code. See docs/operator-coding-agent.md and AGENTS.md. Before that: the lab chat posted notes to `demo_server.py`, they landed in `pile_runs/lab/notes.jsonl`, and a Claude Code session on Nico's Mac read them and answered in `replies.jsonl`. The public game keeps that sidebar as its main way to talk to an AI that can see the world and change it, and the player chooses which AI.
 
 ## One chat, four kinds of brain
 

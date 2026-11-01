@@ -156,6 +156,69 @@ def worker_unit():
     return "stats allowlist + buckets, engagement, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits"
 
 
+def local_server_unit():   # server.py, the local server anyone who clones the repo runs: no network (a stub site and a stub Jeffy on localhost)
+    import http.server, socket, threading, urllib.request, urllib.error, urllib.parse
+    def free():
+        so = socket.socket(); so.bind(("127.0.0.1", 0)); p = so.getsockname()[1]; so.close(); return p
+    class Stub(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a): pass
+        def reply(self, body, ct):
+            b = body.encode(); self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+        def do_GET(self):
+            if self.path == "/page": return self.reply("<html><title>Owls</title><body><nav>menu</nav><p>" + "Owls are birds of prey that hunt at night. " * 20 + "</p><img src=\"/owl.jpg\"><a href=\"/other\">Other owls</a><button>Hoot</button></body></html>", "text/html")
+            if self.path == "/v1/capabilities": return self.reply(json.dumps({"capabilities": [{"task_id": "sms_spam"}]}), "application/json")
+            self.send_response(404); self.end_headers()
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length", 0)); q = json.loads(self.rfile.read(n) or b"{}")
+            if self.path == "/v1/predict/batch" and q.get("texts") == ["WIN a phone"]: return self.reply(json.dumps({"predictions": [{"label": "spam", "confidence": 0.99, "margin": 0.98}]}), "application/json")
+            self.send_response(400); self.end_headers()
+    sp = free(); stub = http.server.ThreadingHTTPServer(("127.0.0.1", sp), Stub); threading.Thread(target=stub.serve_forever, daemon=True).start()
+    lab = tempfile.mkdtemp(prefix="idle-lab-"); port = free()
+    env = dict(os.environ, IDLE_ALLOW_PRIVATE="1")
+    proc = subprocess.Popen([sys.executable, os.path.join(ROOT, "server.py"), str(port), "--lab", lab, "--jeffy", f"http://127.0.0.1:{sp}"], cwd=tempfile.gettempdir(), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    base = f"http://127.0.0.1:{port}"
+    def get(path):
+        r = urllib.request.urlopen(base + path, timeout=20); return r, r.read()
+    def post(path, obj):
+        r = urllib.request.urlopen(urllib.request.Request(base + path, data=json.dumps(obj).encode(), headers={"Content-Type": "application/json"}), timeout=20); return json.loads(r.read() or b"null")
+    emb = {}
+    try:
+        for _ in range(50):
+            try: get("/lab/notices"); break
+            except Exception: time.sleep(0.2)
+        r, body = get("/arena.html")   # started from another folder: it must find demo/ next to itself
+        need(b"<title>" in body, "the game page did not load")
+        need(r.headers.get("Cross-Origin-Opener-Policy") == "same-origin" and r.headers.get("Cross-Origin-Embedder-Policy") == "require-corp", "no cross-origin isolation headers (the Oracle would run on one thread)")
+        r = urllib.request.urlopen(urllib.request.Request(base + "/oracle_v2_grown_ct2_kv_w8.onnx", method="HEAD"), timeout=20)
+        need(int(r.headers.get("Content-Length", 0)) > 5_000_000, "the Oracle model is not served")
+        need(json.loads(get("/lab/notices")[1]) == [], "notices must be a JSON list (that is how the page knows a server is there)")
+        need(post("/lab/notes", {"text": "make the creatures purple", "ctx": {"page": "arena"}}) == {"ok": True}, "posting a note failed")
+        notes = [json.loads(l) for l in open(os.path.join(lab, "notes.jsonl"))]
+        need(notes[-1]["text"] == "make the creatures purple" and notes[-1]["who"] == "you" and notes[-1]["t"] > 0, f"note on disk: {notes[-1]}")
+        open(os.path.join(lab, "replies.jsonl"), "a").write(json.dumps({"t": time.time(), "who": "agent", "text": "done: purple"}) + "\n{half a line\n")
+        reps = json.loads(get("/lab/replies")[1]); need(reps and reps[-1]["text"] == "done: purple", f"replies: {reps} (a half-written line must be skipped, not break the panel)")
+        info = json.loads(get("/lab/info")[1]); need(info["notes"] == os.path.join(os.path.realpath(lab), "notes.jsonl") or info["notes"] == os.path.join(lab, "notes.jsonl"), f"/lab/info {info}")
+        page = json.loads(get("/lab/fetch?url=" + urllib.parse.quote(f"http://127.0.0.1:{sp}/page", safe=""))[1])
+        need(page.get("title") == "Owls" and "birds of prey" in page.get("text", "") and page.get("images") == [f"http://127.0.0.1:{sp}/owl.jpg"], f"page read: {str(page)[:200]}")
+        need(any(x["text"] == "Hoot" for x in page["ui"]) and page["links"] and page["links"][0]["text"] == "Other owls", "interface words / links missing")
+        post("/lab/sync", {"arena_autosave": {"words": [1, 2, 3]}, "arena_snapshots": [{"t": 1, "name": "a"}]}); post("/lab/sync", {"arena_snapshots": [{"t": 2, "name": "b"}]})
+        w = json.loads(get("/lab/world")[1]); need(w["arena_autosave"] == {"words": [1, 2, 3]} and len(w["arena_snapshots"]) == 2, f"world mirror: {w} (snapshots merge, never shrink)")
+        post("/worlds/register", {"code": "aa", "name": "A"}); post("/worlds/register", {"code": "bb", "name": "B"})
+        post("/worlds/link", {"code": "aa", "other": "bb"}); post("/worlds/approve", {"code": "bb", "other": "aa", "yes": True})
+        st = json.loads(get("/worlds/state?code=aa")[1]); need(st["me"]["links"] == ["bb"] and st["peers"]["bb"]["name"] == "B", f"linking worlds: {st}")
+        need(json.loads(get("/jeffy/capabilities")[1])["capabilities"][0]["task_id"] == "sms_spam", "jeffy capabilities")
+        need(post("/jeffy/predict", {"text": "WIN a phone", "task": "sms_spam"})["label"] == "spam", "jeffy predict")
+        try: urllib.request.urlopen(urllib.request.Request(base + "/jeffy/train", data=b"{}"), timeout=10); need(False, "/jeffy/train must be refused")
+        except urllib.error.HTTPError as e: need(e.code == 404, f"/jeffy/train answered {e.code}")
+        r = urllib.request.urlopen(urllib.request.Request(base + "/lab/stats", data=b"{}"), timeout=10); need(r.status == 204, "stats must be accepted and dropped")
+        emb = post("/lab/embed", {"texts": ["a cat"]}); need(("vecs" in emb and len(emb["vecs"][0]) == 384) or "unavailable" in emb.get("error", ""), f"embed: {str(emb)[:120]}")
+        out = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "operator_watch.py"), "--lab", lab, "--reply", "second reply"], capture_output=True, text=True, timeout=20)
+        need(out.returncode == 0 and json.loads(get("/lab/replies")[1])[-1]["text"] == "second reply", "operator_watch.py --reply")
+    finally:
+        proc.terminate(); stub.shutdown(); shutil.rmtree(lab, ignore_errors=True)
+    return f"page + isolation headers, Operator notes/replies, page reading, world mirror, linked worlds, jeffy allowlist, embed ({'vectors' if 'vecs' in emb else 'unavailable'}), operator_watch"
+
+
 # ---------------------------------------------------------------- the build, served locally
 def build(out):
     r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_static.py"), "--out", out], capture_output=True, text=True)
@@ -871,6 +934,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
+    if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
     browser_names = ["fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
