@@ -28,7 +28,8 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 | `tweet_eval_sentiment` (server, earlier) | 32/50 | 10/20 | 16/23 | 6/7 |
 
   Median 3.2 ms per message. It is Moodring's head in new teams and in untouched default teams (migrated); a team the player changed keeps its choice, and `tweet_eval_sentiment` stays selectable. Jeffy's server has no `support_mood`, so when this browser can't run it (safe mode, failed download) the stage asks the server for `tweet_eval_sentiment` instead. The labels are one person's judgment on 50 messages: the 10-message gap to the tweet head is the signal, not the exact numbers.
-- Tests: `data lab home` (home and back keeps the run; remove asks, then removes; default team uses support_mood), `mood migrate`, `halloween light`.
+- **A lab creature's card opened under the team panel** (Nico, with a screenshot): the card was z-index 10, the panel 11, and the card docks at the right edge, where the panel is. The card now stacks above the panel, and while the panel is open its right-hand dock is just left of the panel. Measured with the new `lab card` test (desktop 1400×900): before, the card covered 168,090 px² of panel and wasn't on top at its centre; after, 0 px² and on top. On phones the sheets replace each other and the card comes out on top (`lab card phone`).
+- Tests: `data lab home` (home and back keeps the run; remove asks, then removes; default team uses support_mood), `mood migrate`, `halloween light`, `lab card` (desktop and phone).
 
 ## 2026-10-31
 

@@ -468,6 +468,38 @@ def t_datalab_home(P):
     return f"home and back kept in={s2['stats']['in']} (was {s1['stats']['in']}); remove asked first, then removed; team {heads}"
 
 
+def t_lab_card(P, phone=False):
+    # a lab creature's card used to open UNDER the team panel (#whisper z 10 < #team z 11, docked at the right edge where the panel is)
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    if pg.evaluate("() => window.__first5 && window.__first5.skip"): pg.evaluate("() => window.__first5.skip()")
+    pg.evaluate("() => window.__places.openLab()")
+    name = wait_for(pg, "() => { const c = window.__lab && window.__lab.crew && window.__lab.crew()[0]; return document.documentElement.dataset.place === 'lab' && c ? c.name : null }", 60, P=P)
+    if not phone: pg.evaluate("() => { const t = document.getElementById('team'); if (!t.classList.contains('on')) document.getElementById('labBtn').click(); }")
+    pg.wait_for_timeout(500)
+    # lab creatures aren't in openCard's lookup (it skips them): open the card the way a player does, by clicking the creature
+    for _ in range(6):
+        if phone:   # on a phone the team sheet covers the lower 72% of the screen: fold it away and bring the creature to the middle, as a player would
+            pg.evaluate("""(n) => { document.getElementById('team').classList.remove('on'); const c = window.__lab.crew().find(k => k.name === n) || window.__lab.crew()[0]; window.__dis.flyTo(c.x, c.y, 1.4); }""", name)
+            pg.wait_for_timeout(900)
+        xy = pg.evaluate("""(n) => { const H = window.__collectHooks, c = window.__lab.crew().find(k => k.name === n) || window.__lab.crew()[0], cam = H.cam(), v = H.viewSize(), a = document.getElementById('arena').getBoundingClientRect();
+            return [a.left + v.w / 2 + (c.x - cam.x) * cam.z, a.top + v.h / 2 + (c.y - cam.y) * cam.z] }""", name)
+        if phone: pg.touchscreen.tap(xy[0], xy[1])
+        else: pg.mouse.click(xy[0], xy[1])
+        pg.wait_for_timeout(900)
+        if pg.evaluate("() => document.getElementById('whisper').style.display === 'block'"): break
+    r = pg.evaluate("""() => { const w = document.getElementById('whisper'), b = w.getBoundingClientRect(), vw = innerWidth, vh = innerHeight;
+        const cx = Math.min(vw - 2, Math.max(1, b.left + b.width / 2)), cy = Math.min(vh - 2, Math.max(1, b.top + Math.min(b.height / 2, 60))), top = document.elementFromPoint(cx, cy);
+        const t = document.getElementById('team'), tb = t.getBoundingClientRect(), tOn = t.classList.contains('on') && getComputedStyle(t).display !== 'none';
+        const overlap = tOn ? Math.max(0, Math.min(b.right, tb.right) - Math.max(b.left, tb.left)) * Math.max(0, Math.min(b.bottom, tb.bottom) - Math.max(b.top, tb.top)) : 0;
+        return { shown: w.style.display === 'block', box: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)], inView: b.width > 50 && b.height > 50 && b.right > 0 && b.bottom > 0 && b.left < vw && b.top < vh,
+                 topmost: !!(top && w.contains(top)), teamOpen: tOn, overlap: Math.round(overlap) } }""")
+    need(r["shown"] and r["inView"], f"the card isn't on screen: {r}")
+    need(r["topmost"], f"the card is covered at its centre (elementFromPoint): {r}")
+    if not phone: need(r["teamOpen"] and r["overlap"] == 0, f"with the team panel open the card should dock beside it, not on it: {r}")
+    P.clean()
+    return f"card {r['box']} on top" + (f", team panel open, overlap {r['overlap']} px" if not phone else "")
+
+
 def t_mood_migrate(P):
     old = [{"head": "sms_spam", "role": "filter", "match": "spam", "thr": 0.7, "name": "Spamtrap"}, {"head": "support_ticket", "role": "route", "thr": 0.6, "margin": 0.2, "name": "Router"},
            {"head": "tweet_eval_sentiment", "role": "tag", "thr": 0.5, "name": "Moodring"}]
@@ -682,7 +714,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -713,6 +745,7 @@ def main():
                 run("data lab stuck", t_datalab_stuck)
                 run("data lab home", t_datalab_home)
                 run("mood migrate", t_mood_migrate)
+                run("lab card", t_lab_card)
                 run("replay", t_replay)
                 run("halloween", t_halloween)
                 run("halloween light", t_halloween_light, color_scheme="light")
@@ -723,11 +756,11 @@ def main():
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()
-            if any(want(n) for n in ("camera phone", "zoom shapes phone", "pedia phone", "pedia halloween phone")):
+            if any(want(n) for n in ("camera phone", "zoom shapes phone", "pedia phone", "pedia halloween phone", "lab card phone")):
                 wk = p.webkit.launch(headless=not a.headed)
                 try:
                     dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
-                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("zoom shapes phone", t_zoom_shapes, {}), ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
+                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("zoom shapes phone", t_zoom_shapes, {}), ("lab card phone", t_lab_card, {"phone": True}), ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
                         if not want(name): continue
                         ctx = wk.new_context(**dev); P = Page(ctx, base)
                         try: check(name, lambda P=P, fn=fn, kw=kw: fn(P, **kw))
