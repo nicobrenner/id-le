@@ -60,7 +60,7 @@
 
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[id]'); if (b && FEAT[b.id]) feats.add(FEAT[b.id]); }, true);
   // a card, a rave, Gloamhold: looked at now and then rather than hooked into each module
-  setInterval(() => { try { const w = document.getElementById('whisper'); if (w && w.style.display === 'block') feats.add('card'); if (window.__rave && window.__rave.active && window.__rave.active()) feats.add('rave'); if (window.__placeKind === 'keep') feats.add('gloamhold'); } catch (e) {} }, 4000);
+  setInterval(() => { try { const w = document.getElementById('whisper'); if (w && w.style.display === 'block') feats.add('card'); if (window.__rave && window.__rave.active && window.__rave.active()) feats.add('rave'); if (window.__placeKind === 'keep') feats.add('gloamhold'); if (window.__halloween && window.__halloween.on && window.__halloween.on()) feats.add('halloween'); } catch (e) {} }, 4000);
 
   const clean = m => String(m || '').replace(/(["'`“‘])(?:(?!\1).){0,200}\1/g, '"…"').replace(/\d{3,}/g, 'N').replace(/https?:\/\/\S+/g, 'URL').slice(0, 120);
   const onErr = (msg, file, line) => { if (errs.size >= 5) return; const f = String(file || '').split(/[?#]/)[0].split('/').pop() || '?'; errs.set(clean(msg) + ' @' + f + ':' + (line || 0), 1); };
