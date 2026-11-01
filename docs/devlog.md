@@ -3,6 +3,14 @@
 What we built, what we measured, and what surprised us. Newest first. Each entry names the commit or issue.
 Numbers come from tests on copies of Nico's world (headless, one browser at a time) unless marked otherwise.
 
+## 2026-11-01
+
+**Trailers (tools/trailer/).** Three cuts for Reddit, recorded from id-le.com on fresh visits (starter world only), assembled with ffmpeg: Halloween (29 s, 16:9 + 9:16), r/aigamedev (39 s, 16:9 + 9:16), r/MachineLearning (26 s). `rec.py` records shots with Chrome's screencast (CDP `Page.startScreencast`, JPEG frames with timestamps, rebuilt at a constant 30 fps), captures the game's own audio (a MediaRecorder on `window.__audio`'s master), renders cards in Georgia/Menlo with PIL, and chains shots with crossfades at about -16 LUFS. `halloween.py` and `cuts.py` stage each moment with the test hooks (`?test` camera, `__halloween.test`, `__treat._recruit`, `__chartTest`/`__chartBreak`, `__dis.volcano`, `__music.setRave`, `__lab.setThr`).
+- Finding: headless Chrome runs the game in its light quality (no bats, no glows); the recorder sets `arena.quality` to high first.
+- Finding: words are drawn on a canvas and their elements are hidden (`display:none`), so aiming the camera at a word must use the word objects' coordinates, not `getBoundingClientRect` (which returned 0×0 and threw the camera off).
+- Finding: the data lab reads well only at 1280×720 ×1.5 (the same 1920×1080 frames with everything half again as large); at 1920×1080 ×1 the labels were unreadable on a phone.
+- Re-cut: `python3 tools/trailer/halloween.py --out <dir>`, `python3 tools/trailer/cuts.py --out <dir> --tests <saved test_smoke output>` (`--only edit` re-assembles from the recorded shots).
+
 ## 2026-10-31
 
 **Wikipedia worlds, polished: Home, the right moment to ask, pictures that arrive, a sign.** After Nico tried `?from_wiki=` links in incognito windows and from Gloamhold.
