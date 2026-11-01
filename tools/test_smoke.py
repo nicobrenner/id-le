@@ -226,8 +226,15 @@ def build(out):
     need(os.path.exists(os.path.join(out, "index.html")) or os.path.exists(os.path.join(out, "arena.html")), "no page in the build")
 
 
+SLOW = {}   # path prefix -> seconds the test server waits before answering (t_fresh_slow)
+
+
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
+    def do_GET(self):
+        for pre, sec in list(SLOW.items()):
+            if self.path.startswith(pre): time.sleep(sec)
+        return super().do_GET()
     def end_headers(self):
         self.send_header("Cache-Control", "no-store"); super().end_headers()
 
@@ -360,6 +367,22 @@ def t_fresh_load(P):
     return f"{n} creatures, Oracle ready={pg.evaluate('() => window.__oracle.ready')}" + (f", fallback: {P.notes[0]}" if P.notes else "") + (f", {len(P.before_reload)} errors before the service worker's reload ignored" if P.before_reload else "")
 
 
+
+def t_fresh_slow(P):
+    """a first visit on a slow network: the service worker's one-time reload (cross-origin isolation) lands while the starter world
+    is still downloading. It used to mark the page ready early, autosave the empty default world on the way out, and the next load took
+    that for the player's own world: 3 creatures, no guided start (2026-11-01)"""
+    SLOW.update({"/sw.js": 1.0, "/starter_world.json": 4.0})
+    try:
+        pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+        with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 40)
+        n = pg.evaluate("() => window.__arena.raw().length")
+        why = pg.evaluate("() => { const a = JSON.parse(localStorage.getItem('arena.autosave') || 'null'); return { guide: !!(window.__first5 && window.__first5.state()), restored: !!window.__restored, savedWords: a ? (a.words || []).length : -1 } }")
+        need(n >= 8, f"only {n} creatures after a slow first visit: {why}")
+        need(why["guide"], f"the guided start did not start after a slow first visit: {why}")
+    finally: SLOW.clear()
+    return f"{n} creatures, guide on, reload mid-download"
+
 def t_camera(P, phone=False):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     cam = "window.__testCam"
@@ -367,6 +390,9 @@ def t_camera(P, phone=False):
     while time.time() - t0 < 20 and not (len(zs) >= 4 and len(set(zs[-4:])) == 1):
         zs.append(pg.evaluate(f"() => {cam}.get().z")); pg.wait_for_timeout(400)
     z0 = zs[-1]; land = 0.7 if pg.evaluate("() => innerWidth < 700") else 0.95   # idle-first5.js: the guide arrives at 70% on phones, 95% elsewhere
+    t1 = time.time()   # the guide's flight (700 ms of animation frames) can stall while the page is busy starting up: give it time to land
+    while not (abs(z0 - land) < 0.01 or abs(z0 - 1) < 0.01) and time.time() - t1 < 8:
+        pg.wait_for_timeout(400); z0 = pg.evaluate(f"() => {cam}.get().z")
     need(abs(z0 - land) < 0.01 or abs(z0 - 1) < 0.01, f"a fresh visit settled at zoom {z0}, expected {land} (the guide's arrival) or 1")
     sp = pg.evaluate(f"() => {cam}.space()"); vw, vh = pg.evaluate(f"() => {{ const v = {cam}.view(); return [v.w, v.h] }}")
     zmin = pg.evaluate(f"() => {cam}.zMin()"); safe = pg.evaluate("() => window.__safeLevel || 0")
@@ -909,7 +935,7 @@ def main():
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -930,6 +956,7 @@ def main():
                     try: check(name, fn, P, *args)
                     finally: ctx.close()
                 run("fresh load", t_fresh_load)
+                run("fresh slow", t_fresh_slow)
                 run("camera desktop", t_camera)
                 run("panels", t_panels)
                 run("sound", t_sound)
