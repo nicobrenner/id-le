@@ -5,7 +5,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; }; globalThis.__statFlushNow = true;
 const kv = () => { const m = new Map(), opts = new Map(); return { m, opts, get: async k => m.get(k) ?? null, put: async (k, v, o) => { m.set(k, v); opts.set(k, o || {}); } }; };
 const W = (await import(process.argv[2])).default, H = (await import(process.argv[3])).default;
-const STATS = kv(), env = { STATS, ASSETS: { fetch: async req => new Response('<!doctype html><title>x</title>', { status: new URL(req.url).pathname.endsWith('.html') && new URL(req.url).pathname !== '/index.html' && new URL(req.url).pathname !== '/arena.html' ? 308 : 200, headers: { 'Content-Type': 'text/html' } }) } };
+const STATS = kv(), env = { STATS, ASSETS: { fetch: async req => req.headers.get('If-None-Match') ? new Response(null, { status: 304 }) : new Response('<!doctype html><title>x</title>', { status: new URL(req.url).pathname.endsWith('.html') && new URL(req.url).pathname !== '/index.html' && new URL(req.url).pathname !== '/arena.html' ? 308 : 200, headers: { 'Content-Type': 'text/html' } }) } };
 const CHROME = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 async function go(path, { ua = CHROME, ip = '203.0.113.7', lang = 'en-US,en;q=0.9', accept = 'text/html,application/xhtml+xml', method = 'GET', ref = '', cc = 'US', extra = {} } = {}) {
@@ -29,6 +29,13 @@ await go('/', { method: 'HEAD' }); await go('/', { extra: { 'Sec-Purpose': 'pref
 await go('/idle-music.js');   // not a page
 await go('/', { ip: '203.0.113.99', extra: { 'Sec-GPC': '1' } });   // asks not to be tracked: a page view only
 out.small = doc();
+// referrers the browser hides, returning visits revalidated by the service worker (304), and the one-time isolation reload (?_coi=1)
+await go('/?utm_source=r_coolgithubprojects', { ip: '198.51.100.20', extra: { 'Sec-Fetch-Site': 'cross-site' } });   // a reader app / rel=noreferrer: 'hidden'
+await go('/pedia', { ip: '198.51.100.21', extra: { 'Sec-Fetch-Site': 'none' } });   // typed or a bookmark: 'direct'
+await go('/?_coi=1', { ip: '198.51.100.22' });   // the isolation reload: not counted at all
+await go('/', { ip: '198.51.100.23', extra: { 'If-None-Match': '"x"' } });   // a returning visit answered 304: a page view and a visit
+await go('/', { ip: '198.51.100.20', ref: 'https://news.ycombinator.com/' });   // the same visitor again within 30 min: a view, not a visit
+{ const now = doc(), d = {}; for (const f of ['views', 'visits', 'ref', 'utm']) { d[f] = {}; for (const [a, n] of Object.entries(now[f])) { const x = n - ((out.small[f] || {})[a] || 0); if (x) d[f][a] = x; } } out.refsw = d; }
 // exactness of the sketch on synthetic uniques, and end to end through the worker
 const est = n => { const reg = new Uint8Array(H._hll.M); for (let i = 0; i < n; i++) H._hll.add(reg, createHash('sha256').update('salt|10.0.' + i + '|ua').digest()); return H._hll.count(reg); };
 out.est = { 1000: est(1000), 10000: est(10000), 100000: est(100000) };

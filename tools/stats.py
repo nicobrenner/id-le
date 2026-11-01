@@ -181,7 +181,7 @@ def main():
         stot = {}
         for d in srv:
             add(stot, days[d].get("pv") or {})
-        for k, title in (("ref", "came from (server, per visit)"), ("utm", "campaign tags (server)"), ("dev", "devices (server)"), ("cc", "countries (server)"), ("botWhy", "bots, by sign")):
+        for k, title in (("ref", "came from (server, per visit; hidden = another site that didn't say which, e.g. a reader app)"), ("utm", "campaign tags (server)"), ("dev", "devices (server)"), ("cc", "countries (server)"), ("botWhy", "bots, by sign")):
             v = {x: n for x, n in (stot.get(k) or {}).items() if n}
             if v:
                 print(f"  {title}: " + ", ".join(f"{x} {n}" for x, n in sorted(v.items(), key=lambda kv: -kv[1])[:15]))

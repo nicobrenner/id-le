@@ -227,9 +227,10 @@ function pvBot(req) {
   return '';
 }
 const pvDev = ua => /iPad|Tablet|Android(?!.*Mobile)/i.test(ua) ? 'tablet' : /Mobi|iPhone|iPod|Android/i.test(ua) ? 'phone' : 'desktop';
-// the referring site's name only (never the path), mapped like idle-ref.js; 'direct' for none or our own pages
-function pvRef(r, self) {
-  if (!r) return 'direct'; if (/^android-app:\/\/com\.reddit\./i.test(r)) return 'reddit.com';
+// the referring site's name only (never the path), mapped like idle-ref.js; 'direct' for none or our own pages, 'hidden' when the
+// browser says the click came from another site (Sec-Fetch-Site: cross-site) but sent no Referer (reader apps, rel=noreferrer…)
+function pvRef(r, self, site) {
+  if (!r) return site === 'cross-site' ? 'hidden' : 'direct'; if (/^android-app:\/\/com\.reddit\./i.test(r)) return 'reddit.com';
   let h = ''; try { h = new URL(r).hostname.toLowerCase(); } catch (e) { return 'other'; }
   if (!h || h === self || /(^|\.)id-le\.(com|pages\.dev)$/.test(h)) return 'direct';
   if (/^(\d+\.){3}\d+$|^\[|localhost|\.local$/.test(h)) return 'other';
@@ -278,7 +279,8 @@ function mergePv(cur, add) {   // counters add up; sketches merge register by re
 const recent = new Map();   // hash prefix → last seen (ms): this isolate's memory only, 30 minutes, never written anywhere
 async function pageview(req, env, page, res) {
   try {
-    if (req.method !== 'GET' || !res || res.status !== 200 || !(req.headers.get('Accept') || '').includes('text/html')) return;
+    if (req.method !== 'GET' || !res || (res.status !== 200 && res.status !== 304) || !(req.headers.get('Accept') || '').includes('text/html')) return;   // 304: a returning visit revalidated by the service worker
+    if (new URL(req.url).searchParams.has('_coi')) return;   // the page's one-time cross-origin-isolation reload (idle-runtime.js): the same visit, not a new view
     const purpose = (req.headers.get('Sec-Purpose') || req.headers.get('Purpose') || '').toLowerCase(); if (/prefetch|prerender/.test(purpose)) return;
     const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY(), P = d.pv = d.pv || EMPTY_PV();
     const why = pvBot(req);
@@ -294,8 +296,8 @@ async function pageview(req, env, page, res) {
     if (recent.size > 20000) for (const [k, t] of recent) if (now - t > 30 * 60e3) recent.delete(k);
     if (!last || now - last > 30 * 60e3) {   // a new visit: where it came from, on what, from which country (counted once per visit)
       const url = new URL(req.url); bump(P.visits, page);
-      capped(P.ref, pvRef(req.headers.get('Referer') || '', url.hostname), 1, PV_CAP.ref);
-      const u = (url.searchParams.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24); if (u) capped(P.utm, u, 1, PV_CAP.utm);
+      capped(P.ref, pvRef(req.headers.get('Referer') || '', url.hostname, req.headers.get('Sec-Fetch-Site') || ''), 1, PV_CAP.ref);
+      const u = (url.searchParams.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24); if (u) capped(P.utm, u, 1, PV_CAP.utm);
       bump(P.dev, pvDev(ua));
       const cc = req.cf && typeof req.cf.country === 'string' && /^[A-Z0-9]{2}$/.test(req.cf.country) ? req.cf.country : 'XX'; capped(P.cc, cc, 1, PV_CAP.cc);
     }

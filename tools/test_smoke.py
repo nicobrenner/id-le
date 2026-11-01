@@ -149,11 +149,15 @@ def pages_unit():
     need(s["visits"] == {"game": 1, "pedia": 1, "privacy": 1}, f"visits {s['visits']} (the isolation reload is not a new visit)")
     need(s["ref"] == {"reddit.com": 1, "news.ycombinator.com": 1, "direct": 1} and s["utm"] == {"r-webgames": 1}, f"ref {s['ref']} utm {s['utm']}")
     need(s["dev"] == {"desktop": 2, "phone": 1} and s["cc"] == {"US": 2, "DE": 1}, f"dev {s['dev']} cc {s['cc']}")
+    r2 = o["refsw"]
+    need(r2["views"] == {"game": 3, "pedia": 1}, f"views {r2['views']} (a 304 revalidation counts, the ?_coi isolation reload doesn't)")
+    need(r2["visits"] == {"game": 2, "pedia": 1}, f"visits {r2['visits']} (the same visitor within 30 min is not a new visit)")
+    need(r2["ref"] == {"hidden": 1, "direct": 2} and r2["utm"] == {"r_coolgithubprojects": 1}, f"ref {r2['ref']} utm {r2['utm']} (cross-site without Referer is 'hidden'; utm keeps underscores)")
     need(o["bots"].get("game") == 4 and sum(o["botWhy"].values()) == 4 and o["botWhy"].get("no-lang") == 1, f"bots {o['bots']} why {o['botWhy']} (curl, Googlebot, HeadlessChrome, no Accept-Language)")
     for n, v in o["est"].items():
         need(abs(v - int(n)) / int(n) < 0.06, f"HyperLogLog estimate {v:.0f} for {n} uniques (more than 6% off)")
     e2e = o["e2e"]
-    need(abs(e2e["uniques"] - 401) / 401 < 0.08 and e2e["visits"] == 401, f"end to end: {e2e}")
+    need(abs(e2e["uniques"] - 401) / 401 < 0.08 and e2e["visits"] == 403, f"end to end: {e2e} (400 + the first visit + the two new game visits above)")
     need(not e2e["ua_stored"], "an IP address or a User-Agent was found in storage")
     need(all(k.startswith(("stats:", "salt:")) for k in o["keys"]), f"unexpected keys {o['keys']}")
     need(o["salt"] and all(x["ttl"] <= 30 * 3600 for x in o["salt"]), f"the daily salt must expire within 30 h: {o['salt']}")

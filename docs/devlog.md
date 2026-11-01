@@ -5,6 +5,23 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-01
 
+**Server page views: referrers, returning visits, the isolation reload.** In its first 20 minutes the server's count (90ff5ca) put every visit under "direct" while HN was still sending people. A real Chromium run against the real Pages worker (`wrangler pages dev`, a fake "HN" page with `<meta name="referrer" content="origin">`, the worker logging each page request) showed what it sees:
+
+| Request | Referer | Sec-Fetch-Site / Dest | Status | Counted before | Now |
+|---|---|---|---|---|---|
+| click from the other site (first visit) | the other site | cross-site / document | 200 | view + visit | same |
+| reload, and a later click (service worker in control) | the other site | cross-site / empty | **304** | **nothing** | view (same visit) |
+| click to the pedia via the service worker | the other site | cross-site / empty | 200 | view | same |
+| `rel=noreferrer` link (like a reader app) | none | cross-site / document | 200 | visit as **direct** | visit as **hidden** |
+| typed address | none | none / document | 200 | direct | direct |
+
+- The referrer itself was never lost, through the service worker included. On id-le.com the pages already arrive cross-origin isolated (`_headers`), so the isolation reload never happens there either.
+- What was wrong: (1) a returning navigation through the service worker is a conditional request answered **304**, and `pageview()` counted only 200, so returning visits weren't counted at all; (2) a click from another site without a Referer (HN reader apps, in-app browsers, `rel=noreferrer`) was filed as "direct"; it's now **hidden**, using the browser's `Sec-Fetch-Site`. "All direct" in that window was most likely both: hidden referrers and returning visitors whose 200-only views never counted, while their sub-page loads did.
+- `utm_source` now keeps underscores (`r_coolgithubprojects` was stored as `rcoolgithubprojects`).
+- Hosts without the isolation headers (GitHub Pages): the page's one-time isolation reload now goes to `?_coi=1`, which the server skips and the page removes from the address bar. Residual: the 30-minute visit memory is per isolate, so a visitor whose requests land on two isolates can still count two visits.
+- Headless Chromium is (rightly) a bot to the server: a test that wants to be counted must send a normal browser User-Agent.
+- Test "pages": 5 new cases (hidden, direct, `?_coi`, a 304 revalidation, the same visitor again within 30 min).
+
 **Visits counted by the server, not by the page.** Nico, on the dashboard's "71 visits" while Cloudflare showed hundreds of game loads: "no way", and "You explicitly recommended against GA and Umami, saying we could do it ourselves better... so now you need to fix it and properly track visits/pageviews". Right: the in-page stats only count visits whose script runs and reports.
 - Was it ad blockers? No. Checked `https://id-le.com/lab/stats` and `/idle-stats.js` (xmlhttprequest, ping, fetch, script) against EasyPrivacy, EasyList, uBlock's filters/privacy/quick-fixes, AdGuard tracking and base, Peter Lowe's list and Brave's lists with Brave's own matcher (adblock-rust): **no list blocks them**; the matcher does catch the controls (google-analytics, `/piwik.js`, `/collect?`). Firefox's tracking protection is about third-party domains (Disconnect), so a first-party path isn't touched either. Still moved to the plainer `/lab/p` (`/lab/stats` still accepted).
 - Where the gap really came from (Cloudflare, Nov 1, `/idle-runtime.js` by browser): **84 of 349 "game loads" were HeadlessChrome on macOS (our own tests and trailer recordings), 16 HeadlessChrome on Linux, 35 Unknown**; real browsers ~214. Reports were lost before the 20 s batching fix (180 received, 50 stored), the first report went out only when the page was hidden or closed (a quick bounce on a phone often never sends it), and Cloudflare's "loads" miss returning visitors whose browser has the file cached.
