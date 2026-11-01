@@ -3624,7 +3624,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       const grow = () => { drop(); try { terrainFrom(fw); logEvent('from_wiki', { first: firstVisit }); } catch (e) { console.warn('from_wiki', e); } if (window.__notify) window.__notify({ kind: 'system', icon: '🌱', html: `This world is growing from Wikipedia: <b>${esc(title)}</b>`, ttl: 9000 }); };
       let k = 0; const iv = setInterval(() => { if (!window.__restoredOrFresh) { if (++k > 80) clearInterval(iv); return; } clearInterval(iv);
         if (firstVisit || !window.__notify) setTimeout(grow, 1500);
-        else window.__notify({ kind: 'system', icon: '🌱', html: `Someone shared a world grown from Wikipedia: <b>${esc(title)}</b>. Grow it into your world? (it grows around where you are looking; nothing is replaced)`, ttl: 0, actions: [{ label: 'grow it ›', run: grow }, { label: 'no thanks', run: drop }] }); }, 500); }
+        else window.__notify({ kind: 'trail', icon: '🌱', html: `Someone shared a world grown from Wikipedia: <b>${esc(title)}</b>. Grow it into your world? (it grows around where you are looking; nothing is replaced)`, ttl: 0, actions: [{ label: 'grow it ›', run: grow }, { label: 'no thanks', run: drop }] }); }, 500); }
     else if (fw) console.warn('from_wiki: only Wikipedia article addresses (https://<lang>.wikipedia.org/wiki/…) are accepted'); }
   // id-le.com/#lab opens the data lab (a link to share it; its walkthrough starts there for first-timers)
   if (/^#(.*&)?lab(&|$)/.test(location.hash)) { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh && window.__places && window.__places.openLab) { clearInterval(iv); try { window.__places.openLab(); } catch (e) {} } else if (++k > 60) clearInterval(iv); }, 500); }
