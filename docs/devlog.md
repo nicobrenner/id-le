@@ -5,6 +5,14 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-01
 
+**Stats v2: what people do, not just how many came.** Nico: "I care about engagement. How long are people staying, which features are they using/discovering, are there some things they like more than others? ... any creatures they particularly liked, or something that maybe frustrated them. How about people who watched the reels or dreams..." Same rules as #34 (daily totals only, fixed key lists, no IDs, nothing from the player's world).
+- Watching: seconds on reels, dreams and minds (daily sums), reels played (a bucket per page load), reels watched to the end (a new `reel_end` event when the player reaches the closing card), dreams opened from the creatures list.
+- Panels: seconds each panel was open (music, studio, data lab, advisor, almanac, drawer, trees, reels list, Operator, IRC, creatures), sampled once a second while the page is visible; the dashboard divides by the visits that opened it.
+- Favorites: attention (card opens, renames, keeps, whispers, dreams) by job, family and body; by name only for the starter world's creatures (checked against starter_world.json in the page, else "other"; the server also caps names at 60 a day). Messages: IRC lines, @inbox lines, Operator messages (a new `op_msg` event for the bring-your-own-AI brains; Tiny Operator already reported its turns) and the Operator actions that ran.
+- Path: the first three features opened, counted once per page load in its last value (like time on screen). Frustration: rage clicks (3 within 600 ms and 24 px) and where, leaving within 30 s of the first click, leaving without clicking (both judged when the page is hidden or closed after at least 5 s: a tab switched away and back counts once, an approximation), errors per visit as a bucket. Dead clicks were left out: telling a click that "did nothing" from one that started a drag or a pan was too noisy to trust.
+- Dashboard: "What people do (engagement v2)" in plain sentences ("41% of visits watched a reel, 23 s on average") with Cloudflare's page loads next to it for scale; the Cloudflare table now scrolls inside its box on phones (it pushed the page to 441 px at 375).
+- Tests: the server keeps only listed keys and small positive integers, favorites by pattern and capped, a path once per page load (4-step and repeated paths dropped); a scripted browser visit (a card and its mind tab, the studio, a rage click, a reel, an IRC line) reports exactly those and nothing outside the allowlist.
+
 **Stats were being lost; the page reader was fine.** With the Show HN post up, the game's own stats said ~33 visits for Nov 1 (UTC) while Cloudflare (now readable with Zone Analytics) said otherwise. Measured, real browsers only:
 
 | Nov 1 (UTC), until ~18:30 | Count |

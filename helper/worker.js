@@ -125,11 +125,29 @@ const F5STOP = ['none', 'card', 'hwwiki', 'name', 'feed', 'dream', 'gazette', 'w
 // engagement, per page load and counted once in its last bucket (eg0 takes back the bucket reported before): creatures in the world,
 // and how many were born, charts made, buildings finished and words fed during the page load; plus visible seconds, a plain daily sum
 const EG = { cr: ['0-12', '13-30', '31-60', '61-150', '151+'], born: ['0', '1-5', '6-20', '21+'], built: ['0', '1-5', '6-20', '21+'], charts: ['0', '1-5', '6-20', '21+'], fed: ['0', '1-5', '6-20', '21+'] };
-const PSEC = /^[a-z0-9-]{1,40}$/;   // the pedia's own section ids (headings it scrolled into view)
+const PSEC = /^[a-z0-9-]{1,40}$/;
+EG.reels = ['0', '1-5', '6-20', '21+']; EG.errs = ['0', '1', '2-5', '6+'];   // v2: reels played, errors seen (a bucket per page load)
+// engagement v2 (11-01), all daily sums of small per-report deltas, keys from fixed lists:
+//   did   page loads that did something (once per page load): watched a reel / one to the end / a dream / a mind, sent an IRC line,
+//         an @inbox line or an Operator message, rage-clicked, left within 30 s of the first click, left without any click, had a panel open
+//   ws    seconds watching (reel, dream, mind) · pt  seconds each panel was open · ct  counts (reels played and finished, dreams opened,
+//   IRC lines, @inbox lines, Operator messages, pedia links) · opa  Operator actions that ran · fav  attention by job, family, body and
+//   starter-world name · rage  where rage clicks happened · path  the first three features opened (counted once, in the last path reached)
+const X_PANELS = ['music', 'studio', 'lab', 'advisor', 'almanac', 'drawer', 'trees', 'reels', 'operator', 'creatures', 'irc'];
+const X = { did: ['w_reel', 'w_reel_end', 'w_dream', 'w_mind', 'irc_msg', 'inbox_msg', 'op_msg', 'rage', 'quick_exit', 'no_interact'].concat(X_PANELS.map(k => 'p_' + k)),
+  ws: ['reel', 'dream', 'mind'], pt: X_PANELS, ct: ['reelplay', 'reelend', 'dream', 'irc', 'inbox', 'op', 'pedia'],
+  opa: ['creature', 'disaster', 'evolve', 'look', 'rave_off', 'rave_on', 'rename', 'spawn', 'weather', 'ai_say', 'ai_weather', 'ai_spawn', 'ai_words', 'ai_disaster'],
+  rage: ['advBtn', 'djBtn', 'reelsBtn', 'drawerBtn', 'treesBtn', 'almanacBtn', 'studioBtn', 'herdBtn', 'ntfBtn', 'pediaBtn', 'labBtn', 'connBtn', 'snapBtn', 'evolveWorldBtn', 'lab-toggle', 'rc-open',
+    'settingsBtn', 'soundBtn', 'mMore', 'collBtn', 'addBtn', 'whisper', 'studio', 'team', 'dj', 'advpanel', 'almanac', 'drawer', 'trees', 'reelpanel', 'reel', 'lab', 'roomchat', 'settings', 'conn', 'herd',
+    'insp', 'quick', 'minimap', 'topbar', 'placesBar', 'ntf', 'mSheet', 'zoomCtl', 'world', 'other'] };
+const FAV = /^(job|fam|body):[a-z_]{1,16}$|^name:[A-Za-z][A-Za-z|' -]{0,19}$/, PATHSEGS = ['advisor', 'music', 'reels', 'drawer', 'trees', 'almanac', 'studio', 'creatures', 'notices', 'pedia', 'datalab',
+  'connect', 'snapshot', 'evolve', 'chat', 'roomchat', 'settings', 'sound', 'more', 'collection', 'add', 'card'];
+const okPath = v => typeof v === 'string' && v.length <= 80 && v.split('>').length <= 3 && v.split('>').every(x => PATHSEGS.includes(x)) && new Set(v.split('>')).size === v.split('>').length;
+const X_CAP = { fav: 60, rage: 50, path: 30 }, EMPTY_X = () => ({ did: {}, ws: {}, pt: {}, ct: {}, opa: {}, fav: {}, rage: {}, path: {} });   // the pedia's own section ids (headings it scrolled into view)
 const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and shard; the rest are counted as 'other'
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
-const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, secs: 0, pd: EMPTY_PD(), batches: 0 });
+const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
@@ -158,6 +176,14 @@ function addStats(p) {
   if (p.eg && typeof p.eg === 'object') for (const [k, B] of Object.entries(EG)) { const v = p.eg[k], v0 = p.eg0 && p.eg0[k]; if (v === undefined) continue;
     if (B.includes(v) && (v0 === undefined || B.includes(v0) && v0 !== v)) { bump(d.eg, k + ':' + v); if (v0 !== undefined) bump(d.eg, k + ':' + v0, -1); } }
   if (Number.isInteger(p.sec) && p.sec > 0 && p.sec <= 6 * 3600) d.secs += p.sec;
+  // engagement v2: every key from a fixed list (or the favorites pattern), every number a small positive integer
+  const x = p.x, D = d.x = d.x || EMPTY_X();
+  if (x && typeof x === 'object') {
+    if (Array.isArray(x.did)) for (const f of new Set(x.did.slice(0, 40))) if (X.did.includes(f)) bump(D.did, f);
+    for (const [k, max] of [['ws', 6 * 3600], ['pt', 6 * 3600], ['ct', 500], ['opa', 500], ['rage', 500]]) { const o = x[k]; if (!o || typeof o !== 'object') continue;
+      for (const [a, n] of Object.entries(o).slice(0, 60)) if (X[k].includes(a) && Number.isInteger(n) && n > 0 && n <= max) (k === 'rage' ? capped(D.rage, a, n, X_CAP.rage) : bump(D[k], a, n)); }
+    if (x.fav && typeof x.fav === 'object') for (const [a, n] of Object.entries(x.fav).slice(0, 60)) if (FAV.test(a) && Number.isInteger(n) && n > 0 && n <= 500) capped(D.fav, a, n, X_CAP.fav); }
+  if (okPath(p.path) && (p.path0 === undefined || okPath(p.path0) && p.path0 !== p.path)) { capped(D.path, p.path, 1, X_CAP.path); if (p.path0 !== undefined) bump(D.path, p.path0, -1); }
 }
 async function flushStats(env) {
   statTimer = null; const buf = statBuf; statBuf = {}; if (!env.STATS) return;
@@ -166,6 +192,7 @@ async function flushStats(env) {
     cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches; cur.writes = (cur.writes || 0) + 1;
     for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
     cur.secs = (cur.secs || 0) + add.secs;
+    { const q = cur.x = cur.x || EMPTY_X(); for (const k of Object.keys(EMPTY_X())) { q[k] = q[k] || {}; for (const [a, n] of Object.entries((add.x || {})[k] || {})) if (n) (X_CAP[k] ? capped(q[k], a, n, X_CAP[k]) : bump(q[k], a, n)); } }
     { const q = cur.pd = cur.pd || EMPTY_PD(), A = add.pd; q.visits += A.visits; q.back += A.back; q.clips += A.clips;
       for (const k of ['dev', 'dw']) for (const [a, n] of Object.entries(A[k])) if (n) bump(q[k], a, n);
       for (const k of ['ref', 'utm']) for (const [a, n] of Object.entries(A[k])) capped(q[k], a, n, CAP[k]);

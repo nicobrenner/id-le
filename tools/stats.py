@@ -16,9 +16,42 @@ STEPS = ["card", "name", "feed", "dream", "gazette", "weather", "reel", "keep"]
 DLSTEPS = ["what", "travel", "irc", "kinds", "team", "review", "stats", "where", "finished", "ended"]   # the data lab walkthrough (demo/idle-dlwalk.js)
 DWELL = ["<1", "1-5", "5-20", "20+"]
 EG = {"cr": ["0-12", "13-30", "31-60", "61-150", "151+"], "born": ["0", "1-5", "6-20", "21+"], "charts": ["0", "1-5", "6-20", "21+"],
-      "built": ["0", "1-5", "6-20", "21+"], "fed": ["0", "1-5", "6-20", "21+"]}   # engagement buckets (demo/idle-stats.js, helper/worker.js)
+      "built": ["0", "1-5", "6-20", "21+"], "fed": ["0", "1-5", "6-20", "21+"], "reels": ["0", "1-5", "6-20", "21+"], "errs": ["0", "1", "2-5", "6+"]}   # engagement buckets (demo/idle-stats.js, helper/worker.js)
 EG_NAMES = {"cr": "creatures in the world when they left", "born": "creatures born during the visit", "charts": "charts made during the visit",
-            "built": "buildings finished during the visit", "fed": "words fed by the player"}
+            "built": "buildings finished during the visit", "fed": "words fed by the player", "reels": "reels played during the visit", "errs": "errors a visit saw"}
+PANELS = {"music": "music", "studio": "studio", "lab": "data lab", "advisor": "advisor", "almanac": "almanac", "drawer": "drawer", "trees": "trees",
+          "reels": "reels list", "operator": "Operator", "creatures": "creatures", "irc": "IRC"}
+
+
+def engage2(tot):
+    """Engagement v2 (11-01) in plain words: [(heading, [(label, value, share or None)], note)] plus a few sentences. Days before v2 have none of it."""
+    x = tot.get("x") or {}
+    pos = lambda o: {k: v for k, v in (o or {}).items() if v and v > 0}
+    did, ws, pt, ct, opa, fav, rage, path = (pos(x.get(k)) for k in ("did", "ws", "pt", "ct", "opa", "fav", "rage", "path"))
+    v = tot.get("visits", 0) or 0
+    if not (did or ws or pt or ct):
+        return [], []
+    pc = lambda n: f"{100 * n / v:.0f}%" if v else "-"
+    avg = lambda secs, n: f"{secs / n:.0f} s" if n else "-"
+    lines = []
+    for key, what in (("reel", "watched a memory reel"), ("dream", "watched a dream"), ("mind", "watched a creature's mind")):
+        n = did.get("w_" + key, 0)
+        lines.append(f"{pc(n)} of visits {what} ({n}), {avg(ws.get(key, 0), n)} on average")
+    lines.append(f"reels played {ct.get('reelplay', 0)}, watched to the end {ct.get('reelend', 0)}; dreams opened from the creatures list {ct.get('dream', 0)}")
+    lines.append(f"messages: IRC {ct.get('irc', 0)} (from {did.get('irc_msg', 0)} visits), @inbox {ct.get('inbox', 0)}, Operator {ct.get('op', 0)} (from {did.get('op_msg', 0)} visits); pedia links {ct.get('pedia', 0)}")
+    lines.append(f"frustration: {pc(did.get('rage', 0))} of visits rage-clicked ({did.get('rage', 0)}); {did.get('quick_exit', 0)} left within 30 s of their first click; {did.get('no_interact', 0)} left without clicking")
+    panels = sorted(((PANELS[k], did.get("p_" + k, 0), pt.get(k, 0)) for k in PANELS if did.get("p_" + k)), key=lambda r: -r[2])
+    groups = [
+        ("Average seconds with each panel open (visits that opened it, in brackets)", [(f"{lab} ({n})", round(secs / n)) for lab, n, secs in panels], None),
+        ("Favorite creatures by name (starter world)", sorted(((k[5:], n) for k, n in fav.items() if k.startswith("name:")), key=lambda r: -r[1])[:15], None),
+        ("Favorites by job", sorted(((k[4:], n) for k, n in fav.items() if k.startswith("job:")), key=lambda r: -r[1]), None),
+        ("Favorites by family and body", sorted(((k.replace("fam:", "family ").replace("body:", "body "), n) for k, n in fav.items() if k[:4] in ("fam:", "body")), key=lambda r: -r[1]), None),
+        ("First three features opened (path)", sorted(path.items(), key=lambda r: -r[1])[:12], None),
+        ("Operator actions that ran", sorted(opa.items(), key=lambda r: -r[1]), None),
+        ("Where rage clicks happened", sorted(rage.items(), key=lambda r: -r[1]), None),
+    ]
+    return lines, [g for g in groups if g[1]]
+
 TEST_FEATS = {"smoketest", "beacontest"}   # feature keys only our own checks send: a day with them includes our tests
 
 
@@ -134,6 +167,13 @@ def main():
         v = [(b, eg.get(f"{k}:{b}", 0)) for b in B]
         if any(n for _, n in v):
             print(f"  {EG_NAMES[k]}: " + ", ".join(f"{b} {n}" for b, n in v))
+    lines, groups = engage2(tot)
+    if lines:
+        print("\nengagement v2 (counted from 11-01 on):")
+        for ln in lines:
+            print("  " + ln)
+        for title, rows, _ in groups:
+            print(f"  {title}: " + ", ".join(f"{k} {n}" for k, n in rows))
     pd = tot.get("pd", {})
     if pd.get("visits"):
         print(f"\npedia: {pd['visits']} visits ({pd.get('back', 0)} returning), clips played {pd.get('clips', 0)}")
@@ -253,8 +293,8 @@ def dashboard(days, since, traffic, note):
         for d in traffic.values():
             add(tb, d["browsers"])
             add(tcn, d["countries"])
-        tr = (f'<table><thead><tr><th>day</th><th>page loads (browsers)</th><th>game starts</th><th>visits the game counted</th>'
-              f'<th>stats reports received</th><th>reports stored</th><th>bots and scripts</th></tr></thead><tbody>{trows}</tbody></table>'
+        tr = (f'<div class="tw"><table><thead><tr><th>day</th><th>page loads (browsers)</th><th>game starts</th><th>visits the game counted</th>'
+              f'<th>stats reports received</th><th>reports stored</th><th>bots and scripts</th></tr></thead><tbody>{trows}</tbody></table></div>'
               '<p class="muted">Page loads count every load of the home page by a real browser (reloads too); game starts count downloads of the game engine, '
               'so a browser that already has it cached is not counted. When reports received is far above reports stored, stats were lost on the way.</p>'
               f'<h2 style="margin-top:12px">Browsers</h2>{bars(sorted(tb.items(), key=lambda kv: -kv[1])[:10], total=sum(tb.values()) or None)}'
@@ -272,6 +312,13 @@ def dashboard(days, since, traffic, note):
     mins_rows = "".join(f'<tr><td>{d}{"*" if is_test(d) else ""}</td><td>{sx / 60:.0f}</td><td>{v}</td><td>{sx / 60 / v:.1f}</td></tr>' for d, sx, v in secs if sx and v)
     eng = (f'<table><thead><tr><th>day</th><th>minutes on screen, total</th><th>visits</th><th>average per visit</th></tr></thead><tbody>{mins_rows}</tbody></table>' if mins_rows else f'<p class="muted">{e(later)}</p>')
     eng += "".join(f'<h2 style="margin-top:12px">{e(EG_NAMES[k][0].upper() + EG_NAMES[k][1:])}</h2>' + bars([(b, eg.get(f"{k}:{b}", 0)) for b in B], total=sum(eg.get(f"{k}:{b}", 0) for b in B) or None, empty=later) for k, B in EG.items())
+    lines2, groups2 = engage2(tot)
+    scale = ""
+    if traffic:
+        tl = sum(t["loads"] for t in traffic.values()); ts = sum(t["starts"] for t in traffic.values())
+        scale = f'<p class="muted">For scale (Cloudflare, same days): {tl} page loads by real browsers, {ts} game starts; the game counted {tot.get("visits", 0)} visits.</p>'
+    eng2 = (scale + "<ul>" + "".join(f"<li>{e(t)}</li>" for t in lines2) + "</ul>" + '<div class="grid g2">' +
+            "".join(f'<section><h2>{e(title)}</h2>{bars(rows)}</section>' for title, rows, _ in groups2) + "</div>") if lines2 else f'<p class="muted">{e(later)}</p>' + scale
     pd = tot.get("pd") or {}
     pdref, pdw, pdsec = nz(pd.get("ref")), nz(pd.get("dw")), nz(pd.get("sec"))
     pedia = (f'<div class="tiles">{tile(pd.get("visits", 0), "pedia visits")}{tile(pd.get("back", 0), "returning")}{tile(nz(pd.get("dev")).get("phone", 0), "on phones")}{tile(pd.get("clips", 0), "clips played")}</div>'
@@ -287,7 +334,7 @@ def dashboard(days, since, traffic, note):
 body{{margin:0;background:var(--surface);color:var(--ink);font:14px/1.45 system-ui,-apple-system,sans-serif}}
 main{{max-width:1080px;margin:0 auto;padding:20px 16px 40px}}h1{{font-size:22px;margin:0 0 2px}}h2{{font-size:14px;margin:0 0 10px;color:var(--ink2);font-weight:600}}
 .sub,.muted{{color:var(--muted)}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:14px}}
-section{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}}section.wide{{grid-column:1/-1}}
+.tw{{overflow-x:auto}}.g2{{grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))}}section{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}}section.wide{{grid-column:1/-1}}
 .tiles{{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}}.tile{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:100px}}
 .tile b{{display:block;font-size:24px}}.tile span{{color:var(--ink2);font-size:12px}}
 .row{{display:grid;grid-template-columns:minmax(70px,34%) 1fr auto;gap:8px;align-items:center;margin:3px 0;font-size:13px}}
@@ -315,6 +362,7 @@ ul{{padding-left:18px;margin:0}}code{{font-size:12px;word-break:break-word}}
 <h2 style="margin-top:12px">Crash guard level at load</h2>{bars([("0 · normal", safe.get("0", 0)), ("1 · lighter", safe.get("1", 0)), ("2 · no Oracle", safe.get("2", 0))])}</section>
 <section><h2>Frame rate (fps)</h2>{bars([(k, fps.get(k, 0)) for k in ["<20", "20-40", "40-55", "55+"]])}</section>
 <section class="wide"><h2>Engagement (game)</h2>{eng}</section>
+<section class="wide"><h2>What people do (engagement v2)</h2>{eng2}</section>
 <section class="wide"><h2>The Id|le-pedia</h2>{pedia}</section>
 <section><h2>Errors</h2><ul>{err_html}</ul></section>
 <!-- errors: "@file:line:col bXXXXXXXX" = where it happened and the game version (build); older ones say "?" for the site root -->
