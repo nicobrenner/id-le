@@ -11,7 +11,9 @@
 //   The first time it turns on in a browser, one notice (key 'idle.halloween.seen').
 (() => {
   const KEY = 'idle.halloween', SEEN = 'idle.halloween.seen';
-  const forced = /[?&]halloween\b/.test(location.search);
+  // ?halloween, or a shared Wikipedia world about Halloween (?from_wiki=…/wiki/Halloween, ?wiki=Jack-o'-lantern, Samhain…): on for this visit
+  const wikiQ = (() => { try { const q = new URLSearchParams(location.search); return decodeURIComponent((q.get('from_wiki') || '').split('/wiki/')[1] || q.get('wiki') || ''); } catch (e) { return ''; } })();
+  const forced = /[?&]halloween\b/.test(location.search) || /hallowe.?en|jack-o.?-?lantern|samhain|all hallows|trick-or-treat/i.test(wikiQ);
   const stored = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
   const night = (d = new Date()) => (d.getMonth() === 9 && d.getDate() === 31) || (d.getMonth() === 10 && d.getDate() === 1 && d.getHours() < 6);
   const on = () => forced || stored() === 'on' || (stored() !== 'off' && night());

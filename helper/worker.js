@@ -81,7 +81,7 @@ const SHARD = Math.floor(Math.random() * 16).toString(16), FEATS = /^[a-z0-9_-]{
 // where visits came from (the referring site's name only), a campaign tag, time on screen, where a guided start stopped
 const REF = /^[a-z0-9][a-z0-9.-]{0,59}$/, UTM = /^[a-z0-9-]{1,24}$/, DWELL = ['<1', '1-5', '5-20', '20+'];
 const DLSTEP = ['what', 'travel', 'kinds', 'team', 'review', 'stats', 'where', 'finished', 'ended'];   // the data lab walkthrough (idle-dlwalk.js)
-const F5STOP = ['none', 'card', 'name', 'feed', 'dream', 'gazette', 'weather', 'reel', 'keep', 'finished', 'skipped'];
+const F5STOP = ['none', 'card', 'hwwiki', 'name', 'feed', 'dream', 'gazette', 'weather', 'reel', 'keep', 'finished', 'skipped'];
 // engagement, per page load and counted once in its last bucket (eg0 takes back the bucket reported before): creatures in the world,
 // and how many were born, charts made, buildings finished and words fed during the page load; plus visible seconds, a plain daily sum
 const EG = { cr: ['0-12', '13-30', '31-60', '61-150', '151+'], born: ['0', '1-5', '6-20', '21+'], built: ['0', '1-5', '6-20', '21+'], charts: ['0', '1-5', '6-20', '21+'], fed: ['0', '1-5', '6-20', '21+'] };
@@ -90,7 +90,7 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, secs: 0, pd: EMPTY_PD(), batches: 0 });
-let statBuf = {}, statTimer = null, statFirst = 0; const STAT_EVERY = 300000;
+let statBuf = {}, statTimer = null, statFirst = 0; const STAT_EVERY = 120000;
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
   const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
@@ -192,6 +192,9 @@ export default {
     const url = new URL(req.url), path = url.pathname, ip = req.headers.get('CF-Connecting-IP') || 'local', min = Math.floor(Date.now() / 60000);
     const k = ip + '|' + min, n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (+env.RATE_PER_MIN || 60)) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
+    // any helper request (world polls every 20 s, notices every 90 s) also writes a stats buffer that is 2 min old, so counts from a
+    // quiet isolate aren't lost waiting for the next /lab/stats
+    if (statFirst && !statTimer && Date.now() - statFirst > STAT_EVERY) { statFirst = 0; statTimer = flushStats(env).catch(() => {}).finally(() => { statTimer = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(statTimer); }
     if (path === '/lab/stats') return stats(req, env, ctx);   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {

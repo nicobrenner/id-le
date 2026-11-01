@@ -3612,6 +3612,20 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   $('#pediaBtn').addEventListener('click', () => { window.open('pedia.html', 'idle-pedia'); logEvent('pedia_open', {}); });
   function focusName(n) { const c = creatures.find(k => k.name === n); if (!c) return false; cam.x = c.x; cam.y = c.y; cam.z = Math.max(cam.z, 0.9); applyCam(); if (window.__lod) window.__lod.onCam(); select(c); setTimeout(() => openWhisper(c), 60); logEvent('pedia_go', { to: n }); return true; }
   try { const bc = new BroadcastChannel('idle-arena'); bc.onmessage = e => { const m = e.data || {}; if (m.ping) bc.postMessage({ pong: 1 }); if (m.focus && !focusName(m.focus) && window.__herd) window.__herd.toggle(true, 'Resting'); }; } catch (e) {}
+  // shareable Wikipedia worlds: id-le.com/?from_wiki=https://en.wikipedia.org/wiki/Halloween (or ?wiki=Halloween for English).
+  // Only Wikipedia articles. A browser's first visit grows its world from the page right away; a returning player is asked first
+  // (their own world grows around where they look; nothing is replaced). The parameter is then dropped so a reload doesn't feed it again.
+  { const Q = new URLSearchParams(location.search); let fw = Q.get('from_wiki') || (Q.get('wiki') ? 'https://en.wikipedia.org/wiki/' + encodeURIComponent(Q.get('wiki').trim().replace(/ /g, '_')) : '');
+    const WIKI = /^https:\/\/([a-z]{2,3}(-[a-z]+)?\.)?(m\.)?wikipedia\.org\/wiki\/[^\s?#]+$/i;
+    let firstVisit = false; try { firstVisit = !localStorage.getItem('idle.visited'); localStorage.setItem('idle.visited', '1'); } catch (e) {}
+    const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    if (fw && WIKI.test(fw)) { const title = decodeURIComponent(fw.split('/wiki/')[1]).replace(/_/g, ' ');
+      const drop = () => { try { const u = new URL(location.href); u.searchParams.delete('from_wiki'); u.searchParams.delete('wiki'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) {} };
+      const grow = () => { drop(); try { terrainFrom(fw); logEvent('from_wiki', { first: firstVisit }); } catch (e) { console.warn('from_wiki', e); } if (window.__notify) window.__notify({ kind: 'system', icon: '🌱', html: `This world is growing from Wikipedia: <b>${esc(title)}</b>`, ttl: 9000 }); };
+      let k = 0; const iv = setInterval(() => { if (!window.__restoredOrFresh) { if (++k > 80) clearInterval(iv); return; } clearInterval(iv);
+        if (firstVisit || !window.__notify) setTimeout(grow, 1500);
+        else window.__notify({ kind: 'trail', icon: '🌱', html: `Someone shared a world grown from Wikipedia: <b>${esc(title)}</b>. Grow it into your world? (it grows around where you are looking; nothing is replaced)`, ttl: 0, actions: [{ label: 'grow it ›', run: grow }, { label: 'no thanks', run: drop }] }); }, 500); }
+    else if (fw) console.warn('from_wiki: only Wikipedia article addresses (https://<lang>.wikipedia.org/wiki/…) are accepted'); }
   // id-le.com/#lab opens the data lab (a link to share it; its walkthrough starts there for first-timers)
   if (/^#(.*&)?lab(&|$)/.test(location.hash)) { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh && window.__places && window.__places.openLab) { clearInterval(iv); try { window.__places.openLab(); } catch (e) {} } else if (++k > 60) clearInterval(iv); }, 500); }
   { const hm = /[#&]c=([^&]+)/.exec(location.hash); if (hm) { const n = decodeURIComponent(hm[1]); let k = 0; const iv = setInterval(() => { if ((window.__restoredOrFresh && focusName(n)) || ++k > 40) clearInterval(iv); }, 500); } }
