@@ -26,7 +26,7 @@ html.bootkeep #boot{background:#000;color:#fff;font-family:ui-monospace,Menlo,mo
 #floor{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
 .word{position:absolute;padding:2px 8px;border-radius:6px;background:#ffe9a8;color:#333;border:1px solid #d9b85a;font:13px ui-monospace,Menlo,monospace;cursor:grab;transform:translate(-50%,-50%);z-index:3}
 .word,.thing{contain:layout style}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}.zl{box-sizing:border-box!important;overflow:hidden}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}.zl{box-sizing:border-box!important;overflow:hidden}#floor .zl>.zin{zoom:var(--zi,1);transform:scale(var(--zz,1));transform-origin:0 0}
 .word.lava{background:#ffb27a;border-color:#e0602a;color:#5a1a00}.disrow button{margin-right:4px}
 .word.code{background:#263040;border-color:#3d4a60;color:#a6e3a1;font-size:11px}.word.carried{opacity:.55;z-index:5}.word.piece{background:#dfe8ff;border-color:#9fb4ff;font-size:11px;}.word.crumb{background:#ffd6e8;border-color:#e89ab9;font-size:10px;padding:0 4px}
 .creature{position:absolute;transform:translate(-50%,-50%);z-index:5;cursor:grab;border-radius:50%;touch-action:none}.creature:active{cursor:grabbing}
@@ -372,15 +372,24 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // Under CSS zoom, iOS Safari keeps zoomed-out text at a readable minimum (and its text autosizing can grow it), so a card whose height
   // comes from its text grew taller than its zoom: charts looked skinnier zoomed out and normal again at 100% (Nico, 10-31). While zoomed
   // out, charts, forms and objects are pinned to the size they have at 100% (measured with the floor briefly at zoom 1: layout only, no paint).
+  // Pinning kept the outlines, but the text inside still stayed at that minimum and spilled out of them (Nico, 10-31). So a pinned card's
+  // contents also sit in one inner box (.zin) that undoes the floor's zoom (its text is laid out at full size, which the minimum leaves alone)
+  // and is then shrunk like a picture with transform: scale(z), which no minimum applies to. Back at 100% the box is taken away again.
+  const zinW = e => { const cs = getComputedStyle(e); return e.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); };
+  function zWrap(e) { const f = e.firstElementChild; if (e.childNodes.length === 1 && f && f.classList.contains('zin')) return; const d = document.createElement('div'); d.className = 'zin'; d.style.width = (+e.dataset.ziw || 0) + 'px'; while (e.firstChild) d.appendChild(e.firstChild); e.appendChild(d); }
+  function zUnwrap(e) { const d = e.firstElementChild; if (d && d.classList.contains('zin') && e.childNodes.length === 1) { while (d.firstChild) e.insertBefore(d.firstChild, d); d.remove(); } }
+  // a card that redraws itself (innerHTML) while zoomed out loses its inner box: put it back (only watched while zoomed out on a phone)
+  const zRewrap = new MutationObserver(ms => { for (const m of ms) { const t = m.target; if (t.parentNode === floor && t.classList && t.classList.contains('zl')) zWrap(t); } });
   function lockShapes(z) { const els = floor.querySelectorAll('.design,.thing');   // the pinned sizes don't depend on z: measured once on the way out, freed back at 100%
-    if (z >= 0.999) els.forEach(e => { if (e.classList.contains('zl')) { e.classList.remove('zl'); e.style.width = e.style.height = ''; } });
-    else { const todo = [...els].filter(e => !e.classList.contains('zl')); if (todo.length) { floor.style.zoom = 1; const m = todo.map(e => [e, e.offsetWidth, e.offsetHeight]);
-      for (const [e, w, h] of m) if (w && h) { e.style.width = w + 'px'; e.style.height = h + 'px'; e.classList.add('zl'); } } }
+    if (z >= 0.999) { zRewrap.disconnect(); els.forEach(e => { if (e.classList.contains('zl')) { zUnwrap(e); e.classList.remove('zl'); e.style.width = e.style.height = ''; delete e.dataset.ziw; } }); floor.style.removeProperty('--zz'); floor.style.removeProperty('--zi'); }
+    else { const todo = [...els].filter(e => !e.classList.contains('zl')); if (todo.length) { floor.style.zoom = 1; const m = todo.map(e => [e, e.offsetWidth, e.offsetHeight, zinW(e)]);
+      for (const [e, w, h, iw] of m) if (w && h) { e.style.width = w + 'px'; e.style.height = h + 'px'; e.dataset.ziw = iw; e.classList.add('zl'); zWrap(e); } }
+      floor.style.setProperty('--zz', z); floor.style.setProperty('--zi', 1 / z); zRewrap.observe(floor, { childList: true, subtree: true }); }
     floor.style.zoom = z; }
   if (ZOOM_LAYOUT) { const sand = document.createElement('div'); sand.style.cssText = 'position:absolute;left:-99999px;top:0;visibility:hidden;pointer-events:none'; document.body.appendChild(sand);
     // a chart, form or object made while zoomed out is measured at 100% outside the floor (no relayout of the floor) and pinned too
     new MutationObserver(ms => { if (!(zBase && zBase < 0.999)) return; for (const m of ms) for (const e of m.addedNodes) { if (e.nodeType !== 1 || e.classList.contains('zl') || !e.matches('.design,.thing')) continue;
-      const nx = e.nextSibling; sand.appendChild(e); const w = e.offsetWidth, h = e.offsetHeight; floor.insertBefore(e, nx && nx.parentNode === floor ? nx : null); if (w && h) { e.style.width = w + 'px'; e.style.height = h + 'px'; e.classList.add('zl'); } } }).observe(floor, { childList: true }); }
+      const nx = e.nextSibling; sand.appendChild(e); const w = e.offsetWidth, h = e.offsetHeight, iw = zinW(e); floor.insertBefore(e, nx && nx.parentNode === floor ? nx : null); if (w && h) { e.style.width = w + 'px'; e.style.height = h + 'px'; e.dataset.ziw = iw; e.classList.add('zl'); zWrap(e); } } }).observe(floor, { childList: true }); }
   function zMin() { const { w, h } = viewSize(); return Math.max(w / SPACE.W, h / SPACE.H, touchy() ? (window.__safeLevel ? 0.5 : 0.35) : 0); }   // the zoom floor, shared by the camera and the zoom control
   function applyCam() { const { w, h } = viewSize(); const zmin = zMin(); cam.z = Math.max(zmin, Math.min(ZMAX, cam.z));   // phones and iPads stop zooming out at a floor (0.35, 0.5 after a crash): iOS Safari kills the tab when too much of the world is drawn at once; the minimap is the overview there
     if (window.__placeKind === 'page') { cam.z = 1; cam.x = SPACE.W / 2; cam.y = Math.min(Math.max(cam.y, h / 2), Math.max(h / 2, SPACE.H - h / 2)); } else if (window.__traveling) { const hx = w / 2 / cam.z, hy = h / 2 / cam.z; cam.x = Math.min(Math.max(cam.x, hx), Math.max(hx, SPACE.W - hx)); cam.y = Math.min(Math.max(cam.y, hy), Math.max(hy, SPACE.H - hy)); } cam.x = ((cam.x % SPACE.W) + SPACE.W) % SPACE.W; cam.y = ((cam.y % SPACE.H) + SPACE.H) % SPACE.H;
