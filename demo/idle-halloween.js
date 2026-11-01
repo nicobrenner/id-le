@@ -134,3 +134,25 @@
     const lab = () => { b.textContent = on() ? '🎃 Halloween: on' : '🎃 Halloween: off'; }; lab(); b.addEventListener('click', () => { set(!on()); lab(); }); cbs.push(lab); const x = sh.querySelector('button'); x ? x.before(b) : sh.appendChild(b); })
     .observe(document.body, { childList: true, subtree: true });
 })();
+
+// Easy to find, clear that it's on (Nico 10-31): while the mode is on, ⚙ (and the phone ☰) wear a small 🎃 badge, and a
+// "🎃 Happy Halloween" chip sits at the top right; the chip opens ⚙ settings, where the switch is. × hides the chip for the night.
+(() => {
+  const H = window.__halloween; if (!H) return;
+  const css = document.createElement('style');
+  css.textContent = `html.hw-on #settingsBtn,html.hw-on #mMore{position:relative}
+html.hw-on #settingsBtn::after,html.hw-on #mMore::after{content:"🎃";position:absolute;top:-7px;right:-7px;font-size:11px;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px #0006)}
+#hwChip{position:absolute;top:44px;right:12px;z-index:31;display:none;align-items:center;gap:6px;font:600 12px system-ui;padding:4px 6px 4px 10px;border-radius:14px;border:1px solid #e07a1f;background:#2a1636e6;color:#ffb35c;box-shadow:0 2px 10px #0005;cursor:pointer}
+html.hw-on #hwChip.show{display:inline-flex}#hwChip button{border:0;background:none;color:inherit;opacity:.7;cursor:pointer;font-size:13px;padding:0 4px}
+@media (prefers-color-scheme:light){#hwChip{background:#fff3e6f2;color:#9a3d00}}
+@media (max-width:500px){#hwChip{top:auto;bottom:96px;right:8px}}`;
+  document.head.appendChild(css);
+  const KEY = 'idle.hwChipGone', night = () => new Date().toDateString();
+  const chip = document.createElement('div'); chip.id = 'hwChip'; chip.title = 'Halloween mode is on: open ⚙ settings to switch it off';
+  chip.innerHTML = '<span>🎃 Happy Halloween</span><button title="hide this for tonight">×</button>';
+  chip.addEventListener('click', e => { if (e.target.tagName === 'BUTTON') { try { localStorage.setItem(KEY, night()); } catch (er) {} chip.classList.remove('show'); return; } if (window.__settings) window.__settings.open(); });
+  const sync = v => { document.documentElement.classList.toggle('hw-on', !!v); let gone = false; try { gone = localStorage.getItem(KEY) === night(); } catch (e) {} chip.classList.toggle('show', !!v && !gone); };
+  const mount = () => { (document.getElementById('arena') || document.body).appendChild(chip); sync(H.on()); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
+  H.onChange(sync);
+})();

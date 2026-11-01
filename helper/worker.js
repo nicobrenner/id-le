@@ -54,11 +54,14 @@ async function asset(u, env, self) {   // /lab/asset: CSS comes back with url()/
 }
 
 async function worlds(req, env, path) {   // the same relay as demo_server.py, stored as one JSON document
-  const load = async () => env.WORLDS ? (JSON.parse(await env.WORLDS.get('worlds') || 'null') || { worlds: {} }) : mem.worlds;
-  const save = async d => { if (env.WORLDS) await env.WORLDS.put('worlds', JSON.stringify(d)); else mem.worlds = d; };
+  // KV on the free plan: 1,000 writes and 100,000 reads a day for the whole account (shared with jeffy's mind-reader), so a poll
+  // reads a copy kept in this isolate for 60 s, and only actions (register, link, send…) read fresh and write
+  const load = async (fresh) => { if (!env.WORLDS) return mem.worlds; if (!fresh && mem.wc && Date.now() - mem.wc.t < 60000) return JSON.parse(mem.wc.s) || { worlds: {} };
+    const s = await env.WORLDS.get('worlds') || 'null'; mem.wc = { t: Date.now(), s }; return JSON.parse(s) || { worlds: {} }; };
+  const save = async d => { if (env.WORLDS) { const s = JSON.stringify(d); await env.WORLDS.put('worlds', s); mem.wc = { t: Date.now(), s }; } else mem.worlds = d; };
   const W = (d, c) => d.worlds[c] || (d.worlds[c] = { name: c, links: [], requests: [], inbox: [], view: null, seen: 0 });
-  const d = await load(), now = Date.now() / 1000;
-  if (path === '/worlds/state') { const code = new URL(req.url).searchParams.get('code') || ''; const fresh = !d.worlds[code], me = W(d, code), stale = now - (me.seen || 0) > 600; me.seen = now; if (fresh || stale) await save(d);   // KV writes are scarce (1,000 a day on the free plan, shared by the whole account): a poll writes only for a new world or when 'seen' is 10 min old
+  const d = await load(path !== '/worlds/state'), now = Date.now() / 1000;
+  if (path === '/worlds/state') { const code = new URL(req.url).searchParams.get('code') || ''; const known = !!d.worlds[code], me = W(d, code), stale = now - (me.seen || 0) > 3600; me.seen = now; if (known && stale && (me.links.length || me.requests.length)) await save(d);   // a poll never creates a world (register does) and refreshes 'seen' at most hourly, only for linked worlds   // KV writes are scarce (1,000 a day on the free plan, shared by the whole account): a poll writes only for a new world or when 'seen' is 10 min old
     return json({ me: { name: me.name, links: me.links, requests: me.requests, inbox: me.inbox }, peers: Object.fromEntries(me.links.concat(me.requests).map(c => [c, { name: (d.worlds[c] || {}).name || c, seen: (d.worlds[c] || {}).seen || 0, view: (d.worlds[c] || {}).view || null }])) }); }
   const q = await req.json().catch(() => ({})), act = path.split('/')[2], me = W(d, q.code || ''); let res = { ok: true };
   if (act === 'register') { me.name = String(q.name || me.name).slice(0, 40); me.seen = now; }
@@ -72,7 +75,7 @@ async function worlds(req, env, path) {   // the same relay as demo_server.py, s
 }
 
 // anonymous stats (#34, POST /lab/stats from idle-stats.js): only daily totals are kept, in the STATS KV namespace, never a
-// single visit and never an address. Each isolate adds visits to a small buffer and writes it at most every 20 s (one
+// single visit and never an address. Each isolate adds visits to a small buffer and writes it at most every 5 min (one
 // read-modify-write of its own shard key, stats:<UTC day>:<shard>), so a busy day stays well inside KV's write limits.
 const SHARD = Math.floor(Math.random() * 16).toString(16), FEATS = /^[a-z0-9_-]{1,24}$/, BUCKETS = ['<20', '20-40', '40-55', '55+'];
 // where visits came from (the referring site's name only), a campaign tag, time on screen, where a guided start stopped
@@ -82,7 +85,7 @@ const F5STOP = ['none', 'card', 'name', 'feed', 'dream', 'gazette', 'weather', '
 const CAP = { ref: 30, utm: 20 };   // distinct names kept per day and shard; the rest are counted as 'other'
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, batches: 0 });
-let statBuf = {}, statTimer = null;
+let statBuf = {}, statTimer = null, statFirst = 0; const STAT_EVERY = 300000;
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
   const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
@@ -118,7 +121,9 @@ async function stats(req, env, ctx) {
   let p; try { p = JSON.parse(txt); } catch (e) { return json({ error: 'not JSON' }, 400); }
   if (!p || p.v !== 1) return json({ error: 'unknown format' }, 400);
   addStats(p);
-  if (!statTimer) { statTimer = new Promise(r => setTimeout(r, 20000)).then(() => flushStats(env)).catch(() => { statTimer = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(statTimer); else await statTimer; }
+  // written when the buffer is 5 minutes old, during a request (a timer that long would outlive the request; KV writes are scarce)
+  if (!statFirst) statFirst = Date.now();
+  if (!statTimer && (Date.now() - statFirst > STAT_EVERY || globalThis.__statFlushNow)) { statFirst = 0; statTimer = flushStats(env).catch(() => {}).finally(() => { statTimer = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(statTimer); else await statTimer; }
   return new Response(null, { status: 204 });
 }
 

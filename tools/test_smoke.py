@@ -58,7 +58,7 @@ def js_syntax():
 
 
 WORKER_TEST = r"""
-globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; };   // the stats flush waits 20 s in production
+globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; }; globalThis.__statFlushNow = true;   // production writes the stats buffer once it is 5 min old; tests flush on every request
 const kv = () => { const m = new Map(), puts = []; return { m, puts, get: async k => m.get(k) ?? null, put: async (k, v) => { puts.push(k); m.set(k, v); } }; };
 const W = (await import(process.argv[2])).default;
 const env = { STATS: kv(), WORLDS: kv(), ALLOWED_ORIGINS: '*', RATE_PER_MIN: '1000' };
@@ -111,7 +111,7 @@ def worker_unit():
     need(o["bad_format"] == 400 and o["too_big"] == 413, f"bad format {o['bad_format']}, too big {o['too_big']}")
     need(o["jeffy_train"] == 404 and o["jeffy_get_predict"] == 404, f"jeffy allowlist: train {o['jeffy_train']}, GET predict {o['jeffy_get_predict']}")
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
-    need(o["world_poll_writes"] == 1, f"5 polls of one world wrote {o['world_poll_writes']} times to KV (expected 1)")
+    need(o["world_poll_writes"] == 0, f"5 polls of an unregistered world wrote {o['world_poll_writes']} times to KV (expected 0: polls never create worlds; KV writes are scarce)")
     need("me" in o["world_state"], "world state has no 'me'")
     need(o["rate_61st"] == 429, f"61st request in a minute: {o['rate_61st']}")
     return "stats allowlist + buckets, jeffy allowlist, KV write throttle, rate limit"

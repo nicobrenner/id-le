@@ -1854,7 +1854,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     $('#myCode').textContent = code; $('#myName').textContent = myName;
     $('#copyCode').addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText(code); say('lab', 'code copied: ' + code, 'lab'); });
     $('#myName').addEventListener('blur', e => { myName = e.target.textContent.trim().slice(0, 30) || code; try { localStorage.setItem('arena.name', myName); } catch (er) {} post('register', { name: myName }); });
-    $('#connBtn').addEventListener('click', () => { $('#conn').classList.toggle('on'); render(); }); $('#connClose').addEventListener('click', () => $('#conn').classList.remove('on'));
+    $('#connBtn').addEventListener('click', () => { $('#conn').classList.toggle('on'); if (!regd && $('#conn').classList.contains('on')) register().then(poll); render(); }); $('#connClose').addEventListener('click', () => $('#conn').classList.remove('on'));
     $('#addBtn').addEventListener('click', async () => { const o = $('#addCode').value.trim().toLowerCase(); if (!o) return; const r = await post('link', { other: o }); say('lab', r.ok ? (r.already ? 'already connected to ' + o : 'request sent to ' + o + ': it appears there for approval') : 'could not connect: ' + r.error, 'lab'); $('#addCode').value = ''; logEvent('world_link_request', { ok: r.ok }); });
     function render() { if (!state) return; const me = state.me;
       $('#reqs').innerHTML = me.requests.length ? '<b>wants to connect</b>' + me.requests.map(o => `<div class="peer">${o} <button data-ap="${o}" data-yes="1">approve</button><button data-ap="${o}">decline</button></div>`).join('') : '';
@@ -1902,7 +1902,11 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       $('#peerLabel').textContent = `${name}: ${v.creatures.length} creatures, ${v.wordCount} words, ${WEATHER_NAMES[v.weather] || v.weather}`; }
     function shareView() { const wx = v => ((v % SPACE.W) + SPACE.W) % SPACE.W, wy = v => ((v % SPACE.H) + SPACE.H) % SPACE.H; const ws = words.filter(w => !w.carriedBy);
       post('view', { view: { W: SPACE.W, H: SPACE.H, weather: world.weather, wordCount: ws.length, words: ws.filter((_, i) => i % Math.max(1, Math.ceil(ws.length / 250)) === 0).map(w => ({ t: w.text, x: Math.round(wx(w.x)), y: Math.round(wy(w.y)) })), creatures: creatures.map(c => ({ n: c.name, x: Math.round(wx(c.x)), y: Math.round(wy(c.y)), h: c.g.hue })) } }); }
-    post('register', { name: myName }).then(poll);
+    // a world registers with the helper only once someone opens 🌐 connect (then on every load after): a register on every page load
+    // would cost one KV write per visit, and the free plan has 1,000 a day for the whole account
+    const REG = 'arena.connReg'; let regd = false; const register = () => { regd = true; try { localStorage.setItem(REG, '1'); } catch (e) {} return post('register', { name: myName }); };
+    let wasReg = false; try { wasReg = localStorage.getItem(REG) === '1'; } catch (e) {}
+    (wasReg ? register() : Promise.resolve()).then(poll);
     // busy only when there is someone to talk to: links, requests, creatures away, or the panel open; otherwise a slow check for new requests
     const busy = () => !!(state && (state.me.links.length || state.me.requests.length)) || Object.keys(away).length > 0 || $('#conn').classList.contains('on'); let lastPoll = 0;
     setInterval(() => { if (busy() || Date.now() - lastPoll > 20000) { lastPoll = Date.now(); poll(); } }, 2000); setInterval(() => { if (state && state.me.links.length) shareView(); }, 3000);
