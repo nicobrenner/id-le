@@ -2487,7 +2487,8 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   function rclickScreen(o) { const { w, h, r } = viewSize(); return { x: r.left + w / 2 + (near(o.x, cam.x, SPACE.W) - cam.x) * cam.z, y: r.top + h / 2 + (near(o.y, cam.y, SPACE.H) - cam.y) * cam.z }; }
   window.__rclick = { demo() { const w = words.filter(x => !x.carriedBy && x.text && x.text.length > 2).sort((a, b) => dist(a, cam) - dist(b, cam))[0]; if (!w) return false;
       if (window.__dis && window.__dis.flyTo) window.__dis.flyTo(w.x, w.y, Math.max(cam.z, 1.1));
-      setTimeout(() => { const p = rclickScreen(w); arenaEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 2 })); }, 900); return true; },
+      // the word's own menu, opened directly: a synthetic right-click there could land on a creature standing next to it (its card instead)
+      setTimeout(() => { const p = rclickScreen(w), h = nearestHandle(w, ['word'], 40); if (h) showInspector(h, p.x, p.y); else arenaEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 2 })); }, 900); return true; },
     at: rclickScreen };
   { const K = 'idle.rclickHint'; let seen = false; try { seen = localStorage.getItem(K) === '1'; } catch (e) {} let tm = 0, last = null;
     if (!seen) arenaEl.addEventListener('mousemove', e => { if (seen || e.buttons) return; const p = toWorld(e.clientX, e.clientY), w = words.find(x => !x.carriedBy && Math.abs(x.x - p.x) < 40 / cam.z + 20 && Math.abs(x.y - p.y) < 14 / cam.z + 8);
