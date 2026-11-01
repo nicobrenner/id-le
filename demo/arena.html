@@ -1947,7 +1947,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     (wasReg ? register() : Promise.resolve()).then(poll);
     // busy only when there is someone to talk to: links, requests, creatures away, or the panel open; otherwise a slow check for new requests
     const busy = () => !!(state && (state.me.links.length || state.me.requests.length)) || Object.keys(away).length > 0 || $('#conn').classList.contains('on'); let lastPoll = 0;
-    setInterval(() => { if (busy() || Date.now() - lastPoll > 20000) { lastPoll = Date.now(); poll(); } }, 2000); setInterval(() => { if (state && state.me.links.length) shareView(); }, 3000);
+    setInterval(() => { if (!regd) return; if (busy() || Date.now() - lastPoll > 20000) { lastPoll = Date.now(); poll(); } }, 2000);   // a world that never opened 🌐 connect can't be linked to, so it doesn't poll setInterval(() => { if (state && state.me.links.length) shareView(); }, 3000);
     return { explore, goHome, _parked: {}, code: () => code }; })();
   // ---------- images and interface elements from fetched pages, and the creatures that work on them ----------
   const things = []; window.__things = things;

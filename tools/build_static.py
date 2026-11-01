@@ -121,6 +121,9 @@ export default {
 };
 """
         open(os.path.join(out, "_worker.js"), "w", encoding="utf-8").write(w)
+        # only these paths invoke the Worker (Pages Functions: 100,000 invocations a day on the free plan); every other file is served
+        # as a plain asset. The pages themselves are in because the Worker swaps the link-preview tags for Halloween links.
+        json.dump({"version": 1, "include": ["/", "/index.html", "/arena.html", "/lab/*", "/worlds/*", "/jeffy/*"], "exclude": []}, open(os.path.join(out, "_routes.json"), "w"))
     size = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(out) for f in fs)
     json.dump({"ort": ORT_VER, "ort_sha256_16": sums, "helper": a.helper, "bytes": size}, open(os.path.join(out, "build.json"), "w"), indent=1)
     print(f"dist ready: {out} ({size / 1e6:.1f} MB). Try: python3 -m http.server 8776 -d {os.path.relpath(out)}")
