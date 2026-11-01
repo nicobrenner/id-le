@@ -40,7 +40,8 @@ async function readPage(u, env) {   // /lab/fetch: same fields as demo_server.py
   for (const m of [...raw0.matchAll(/<input[^>]+placeholder="([^"]{2,40})"/gi)].slice(0, 4)) ui.push({ tag: 'input', text: unesc(m[1]) });
   for (const m of raw.matchAll(/<a\b[^>]*?href="([^"#][^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) { let a; try { a = new URL(unesc(m[1]), u).href.split('#')[0]; } catch (e) { continue; } const t = strip(m[2]);
     if (!/^https?:/.test(a) || seen.has(a) || a === u || t.length < 2 || t.length > 80 || /^(http|www\.)/i.test(t) || /\.(pdf|zip|jpe?g|png|gif|svg)(\?|$)/i.test(a)) continue; seen.add(a); links.push({ href: a, text: t }); if (links.length >= 200) break; }
-  return { title: title ? strip(title).slice(0, 120) : u, text, images, ui: ui.sort(() => Math.random() - 0.5).slice(0, 14), links, url: u };
+  const wiki = /(^|\.)wikipedia\.org$/i.test(new URL(u).hostname);   // Wikipedia's menus ("Jump to content", "Donate", "Toggle … subsection") aren't the article
+  return { title: title ? strip(title).slice(0, 120) : u, text, images, ui: wiki ? [] : ui.sort(() => Math.random() - 0.5).slice(0, 14), links, url: u };
 }
 
 async function asset(u, env, self) {   // /lab/asset: CSS comes back with url()/@import rewritten to pass through here again
