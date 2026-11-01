@@ -82,14 +82,28 @@ const SHARD = Math.floor(Math.random() * 16).toString(16), FEATS = /^[a-z0-9_-]{
 const REF = /^[a-z0-9][a-z0-9.-]{0,59}$/, UTM = /^[a-z0-9-]{1,24}$/, DWELL = ['<1', '1-5', '5-20', '20+'];
 const DLSTEP = ['what', 'travel', 'kinds', 'team', 'review', 'stats', 'where', 'finished', 'ended'];   // the data lab walkthrough (idle-dlwalk.js)
 const F5STOP = ['none', 'card', 'name', 'feed', 'dream', 'gazette', 'weather', 'reel', 'keep', 'finished', 'skipped'];
-const CAP = { ref: 30, utm: 20 };   // distinct names kept per day and shard; the rest are counted as 'other'
+// engagement, per page load and counted once in its last bucket (eg0 takes back the bucket reported before): creatures in the world,
+// and how many were born, charts made, buildings finished and words fed during the page load; plus visible seconds, a plain daily sum
+const EG = { cr: ['0-12', '13-30', '31-60', '61-150', '151+'], born: ['0', '1-5', '6-20', '21+'], built: ['0', '1-5', '6-20', '21+'], charts: ['0', '1-5', '6-20', '21+'], fed: ['0', '1-5', '6-20', '21+'] };
+const PSEC = /^[a-z0-9-]{1,40}$/;   // the pedia's own section ids (headings it scrolled into view)
+const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and shard; the rest are counted as 'other'
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
-const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, batches: 0 });
+const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
+const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, secs: 0, pd: EMPTY_PD(), batches: 0 });
 let statBuf = {}, statTimer = null, statFirst = 0; const STAT_EVERY = 300000;
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
   const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
   d.batches++;
+  if (Array.isArray(p.err)) for (const e of p.err.slice(0, 5)) if (typeof e === 'string') bump(d.err, e.slice(0, 160));
+  const mv = (o, B, v, v0) => { if (B.includes(v) && (v0 === undefined || B.includes(v0) && v0 !== v)) { bump(o, v); if (v0 !== undefined) bump(o, v0, -1); } };   // a page load moving bucket
+  if (p.page === 'pedia') { const q = d.pd;   // the pedia counts on its own, never as a game visit
+    if (p.visit === 1) { q.visits++; if (p.back === 1) q.back++; if (p.dev === 'phone' || p.dev === 'desktop') bump(q.dev, p.dev);
+      if (typeof p.ref === 'string') capped(q.ref, REF.test(p.ref) ? p.ref : 'other', 1, CAP.ref); if (typeof p.utm === 'string' && UTM.test(p.utm)) capped(q.utm, p.utm, 1, CAP.utm); }
+    mv(q.dw, DWELL, p.dw, p.dw0);
+    if (Array.isArray(p.ps)) for (const x of new Set(p.ps.slice(0, 40))) if (typeof x === 'string' && PSEC.test(x)) capped(q.sec, x, 1, CAP.psec);
+    if (Number.isInteger(p.clips) && p.clips > 0 && p.clips <= 50) q.clips += p.clips;
+    return; }
   if (p.visit === 1) { d.visits++; if (p.back === 1) d.back++; if (p.ios === 1) d.ios++; if ([0, 1, 2].includes(p.safe)) bump(d.safe, String(p.safe)); if (p.dev === 'phone' || p.dev === 'desktop') bump(d.dev, p.dev);
     if (typeof p.ref === 'string') capped(d.ref, REF.test(p.ref) ? p.ref : 'other', 1, CAP.ref); if (typeof p.utm === 'string' && UTM.test(p.utm)) capped(d.utm, p.utm, 1, CAP.utm); }
   // a page load moves up through the buckets: add the new one, take back the one it reported before (sums stay one per page load)
@@ -101,14 +115,21 @@ function addStats(p) {
     const x = d.m[k] = d.m[k] || { n: 0, sum: 0, b: {} }; x.n++; x.sum += Math.round(sec); bump(x.b, sec < 60 ? '<1m' : sec < 180 ? '1-3m' : sec < 600 ? '3-10m' : '10m+'); }
   if (p.f5 === 'finished' || p.f5 === 'skipped') bump(d.f5, p.f5);
   if (Array.isArray(p.dl)) for (const k of new Set(p.dl.slice(0, 9))) if (DLSTEP.includes(k)) bump(d.dl, k);
-  if (Array.isArray(p.err)) for (const e of p.err.slice(0, 5)) if (typeof e === 'string') bump(d.err, e.slice(0, 160));
+  if (p.eg && typeof p.eg === 'object') for (const [k, B] of Object.entries(EG)) { const v = p.eg[k], v0 = p.eg0 && p.eg0[k]; if (v === undefined) continue;
+    if (B.includes(v) && (v0 === undefined || B.includes(v0) && v0 !== v)) { bump(d.eg, k + ':' + v); if (v0 !== undefined) bump(d.eg, k + ':' + v0, -1); } }
+  if (Number.isInteger(p.sec) && p.sec > 0 && p.sec <= 6 * 3600) d.secs += p.sec;
 }
 async function flushStats(env) {
   statTimer = null; const buf = statBuf; statBuf = {}; if (!env.STATS) return;
   for (const [day, add] of Object.entries(buf)) {
     const key = `stats:${day}:${SHARD}`, cur = JSON.parse(await env.STATS.get(key) || 'null') || { ...EMPTY(), writes: 0 };
     cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches; cur.writes = (cur.writes || 0) + 1;
-    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
+    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
+    cur.secs = (cur.secs || 0) + add.secs;
+    { const q = cur.pd = cur.pd || EMPTY_PD(), A = add.pd; q.visits += A.visits; q.back += A.back; q.clips += A.clips;
+      for (const k of ['dev', 'dw']) for (const [a, n] of Object.entries(A[k])) if (n) bump(q[k], a, n);
+      for (const k of ['ref', 'utm']) for (const [a, n] of Object.entries(A[k])) capped(q[k], a, n, CAP[k]);
+      for (const [a, n] of Object.entries(A.sec)) capped(q.sec, a, n, CAP.psec); }
     for (const k of ['ref', 'utm']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k])) capped(cur[k], a, n, CAP[k]); }
     for (const [k, x] of Object.entries(add.m)) { const c = cur.m[k] = cur.m[k] || { n: 0, sum: 0, b: {} }; c.n += x.n; c.sum += x.sum; for (const [b, n] of Object.entries(x.b)) bump(c.b, b, n); }
     for (const [e, n] of Object.entries(add.err)) if (cur.err[e] || Object.keys(cur.err).length < 60) bump(cur.err, e, n);
