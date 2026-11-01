@@ -452,13 +452,27 @@ def t_pedia(P, phone=False):
     return f"{len(toc)} sections, {live} live creatures, {len(imgs)} pictures, {len(moving)} clips playing"
 
 
+def t_halloween(P):
+    pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
+    wait_for(pg, "() => !!(window.__halloween && window.__halloween.on() && document.querySelector('#arena.hw'))", 30, P=P)
+    pg.wait_for_timeout(5000)
+    st = pg.evaluate("() => { const cs = window.__arena.raw().filter(c => !c.lab); window.__halloween.test.flock(); return { n: cs.length, dressed: cs.filter(c => c._hw).length, kinds: [...new Set(cs.map(c => c._hw).filter(Boolean))], ...window.__halloween.test.state() }; }")
+    need(st["dressed"] == st["n"] and st["n"] > 0, f"not every creature is in costume: {st}")
+    need(st["flocks"] >= 1, f"no bat flock: {st}")
+    off = pg.evaluate("() => { window.__halloween.set(false); return { forced: window.__halloween.forced(), hw: !!document.querySelector('#arena.hw') }; }")
+    need(off["forced"] and off["hw"], f"?halloween should keep the mode on: {off}")
+    P.clean()
+    return f"{st['n']} in costume ({', '.join(st['kinds'])}), {st['pumpkins']} pumpkins, bats flying"
+
+
 HALLOWEEN_STUB = """(() => { if (window.__halloween) return; let on = true;   // until idle-halloween.js owns the switch, a stand-in that is on
   window.__halloween = { on: () => on, set: v => { on = !!v; dispatchEvent(new CustomEvent('idle:halloween', { detail: { on } })); }, onChange() {} }; })()"""
 
 
-def t_halloween(P):
+def t_treat(P):
     P.ctx.add_init_script(HALLOWEEN_STUB)
-    pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
+    P.ctx.add_init_script("try { if (!sessionStorage.getItem('t_hw')) { localStorage.setItem('idle.halloween', 'on'); sessionStorage.setItem('t_hw', '1'); } } catch (e) {}")   # on through the stored switch (not ?halloween, which set(false) cannot turn off)
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     need(pg.evaluate("() => !!(window.__halloween && window.__halloween.on())"), "?halloween did not turn the Halloween mode on")
     need(pg.evaluate("() => !!window.__treat"), "idle-treat.js did not load")
     t0 = time.time()
@@ -520,7 +534,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "data lab", "data lab stuck", "replay", "trick or treat", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "data lab", "data lab stuck", "replay", "halloween", "trick or treat", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -549,7 +563,8 @@ def main():
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
                 run("replay", t_replay)
-                run("trick or treat", t_halloween)
+                run("halloween", t_halloween)
+                run("trick or treat", t_treat)
                 run("pedia desktop", t_pedia)
                 run("pedia halloween", t_pedia_halloween)
                 if a.full: run("fps", t_fps)

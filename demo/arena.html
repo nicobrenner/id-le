@@ -520,7 +520,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     const marks = [];   // 💤 and 🫣 go on top of every creature, so they are drawn after all of them
     function draw(c, t, ox, oy, hg) { const g = crit, hp = hidePose(c), LK = window.__looks; g.save(); g.translate(ox, oy); if (hg) hangryGlow(g, c, t); if (c.dance && !hp) dancePose(g, c);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
-      keylineFor(c); if (LK) LK.pre(g, c, t); legs(g, c, hp); body(g, c, t); if (LK) LK.post(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
+      keylineFor(c); if (LK) LK.pre(g, c, t); legs(g, c, hp); body(g, c, t); if (window.__hwDraw) window.__hwDraw(g, c, t); if (LK) LK.post(g, c, t); g.restore(); if (c.state === 'sleep') marks.push([c, ox, oy, 0]); else if (hp) marks.push([c, ox, oy, hp.k]); }
     const beams = [];
     function laser(c, T, t) { beams.push([c, T, t]); }
     function drawBeam(g, c, T, t) { const hue = c.g.laserHue ?? 200, j = Math.sin(t / 90) * 2, n = T.text.length, br = n * 4.5 + 22, rr = ((t / 8) % 360) * Math.PI / 180, col = `hsl(${hue},95%,60%)`;
@@ -3156,6 +3156,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   })();
   window.__life = Life;
   // ---------- the BYO-AI chat's door into the world (demo/idle-ai.js): a compact summary to read, and verbs the game already has ----------
+  window.__hwCam = () => cam; window.__oracleSay = t => say('Oracle', String(t || '').slice(0, 200), 'oracle');   // Halloween mode (idle-halloween.js): the camera for its sky layer, and the Oracle's greeting
   window.__idleWorld = (() => {
     const near = (x, y) => creatures.filter(c => !c.lab).sort((a, b) => Math.hypot(wd(a.x, x, SPACE.W), wd(a.y, y, SPACE.H)) - Math.hypot(wd(b.x, x, SPACE.W), wd(b.y, y, SPACE.H)));
     const find = n => { const t = String(n || '').trim().toLowerCase(); return creatures.find(c => !c.lab && c.name && c.name.toLowerCase() === t) || creatures.find(c => !c.lab && c.name && c.name.toLowerCase().startsWith(t)) || null; };
@@ -3635,4 +3636,4 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   })();
 })();
 </script>
-<script src="idle-ai.js"></script><script src="idle-jeffy.js"></script><script src="idle-dlwalk.js"></script><script src="idle-music.js"></script><script src="idle-rave.js"></script><script src="idle-advisor.js"></script><script src="idle-almanac.js"></script><script src="idle-lake.js"></script><script src="idle-build.js"></script><script src="idle-collect.js"></script><script src="idle-trees.js"></script><script src="idle-babies.js"></script><script src="idle-looks.js"></script><script src="idle-treat.js"></script><script src="idle-mobile.js"></script><script src="idle-first5.js"></script><script src="idle-settings.js"></script><script src="idle-stats.js"></script></body></html>
+<script src="idle-ai.js"></script><script src="idle-jeffy.js"></script><script src="idle-dlwalk.js"></script><script src="idle-music.js"></script><script src="idle-rave.js"></script><script src="idle-advisor.js"></script><script src="idle-almanac.js"></script><script src="idle-lake.js"></script><script src="idle-build.js"></script><script src="idle-collect.js"></script><script src="idle-trees.js"></script><script src="idle-babies.js"></script><script src="idle-looks.js"></script><script src="idle-halloween.js"></script><script src="idle-treat.js"></script><script src="idle-mobile.js"></script><script src="idle-first5.js"></script><script src="idle-settings.js"></script><script src="idle-stats.js"></script></body></html>
