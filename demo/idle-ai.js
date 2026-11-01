@@ -1,6 +1,9 @@
 // Id|le BYO-AI: the lab sidebar becomes a chat with an AI the player brings (docs/byo_ai.md).
 // Brains: 'relay' (today's path: notes/replies through demo_server.py, a local agent answers), 'anthropic' and 'openai'
-// (the player's own API key, browser → provider directly), 'local' (Ollama / LM Studio on localhost), 'oracle' (coming).
+// (the player's own API key, browser → provider directly), 'local' (Ollama / LM Studio on localhost), and 'tiny': the Tiny Operator
+// (TO), the Tiny Oracle itself in the Operator's chair: no key, nothing leaves the browser. TO understands with learned heads on the
+// Oracle's hidden states (demo/arena_instr_v3.json, arena_instructions_v3.py: world options + 'creature' + 'none'; creature commands go
+// on to the IRC path and its v2 heads), acts through the same tools as a bigger AI, and answers in the Oracle's own voice.
 // The AI never touches the page: it asks for tools, the game runs them through window.__idleWorld and shows every action.
 // Keys live only in this browser (localStorage 'idle.ai', which world files and snapshots never include) and go only
 // to the provider the player picked.
@@ -74,21 +77,36 @@
 #ai-bar button{font-size:12px;padding:2px 8px}#ai-set{display:none;padding:8px 10px;border-bottom:1px solid #8884;font-size:12px;line-height:1.5}#ai-set.on{display:block}#ai-set label{display:block;margin:4px 0}#ai-set input[type=text],#ai-set input[type=password]{width:100%;box-sizing:border-box;font:12px ui-monospace,Menlo,monospace;background:transparent;color:inherit;border:1px solid #8886;border-radius:5px;padding:3px 5px}
 #ai-set small{display:block;opacity:.65}#ai-set .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}#ai-thread{flex:1;overflow:auto;padding:8px 10px;font-size:13px;display:none}#lab.ai #ai-thread{display:block}#lab.ai #lab-thread{display:none}
 .ai-row{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881;white-space:pre-wrap}.ai-row b{opacity:.7}.ai-row.you{background:#2b5cff22}.ai-row.err{background:#e5484d22}.ai-chip{display:inline-block;margin:3px 0;padding:2px 8px;border-radius:10px;border:1px solid #8886;font-size:12px;opacity:.9}
-.ai-chip.err{border-color:#e5484d;color:#e5484d}.ai-ask{margin:6px 0;padding:6px 8px;border:1px dashed #8888;border-radius:8px;font-size:12px}.ai-ask button{margin:4px 4px 0 0}.ai-busy{opacity:.6;font-size:12px;margin:4px 0}`;
+.ai-chip.err{border-color:#e5484d;color:#e5484d}.ai-ask{margin:6px 0;padding:6px 8px;border:1px dashed #8888;border-radius:8px;font-size:12px}.ai-ask button{margin:4px 4px 0 0}.ai-busy{opacity:.6;font-size:12px;margin:4px 0}
+#ai-smart-btn{margin:6px 10px 0;font-size:12px;padding:4px 10px;border-radius:14px;border:1px solid #b07cff;background:#b07cff18;color:inherit;cursor:pointer;animation:aiGlow 2.6s ease-in-out infinite}
+@keyframes aiGlow{0%,100%{box-shadow:0 0 0 #b07cff00}50%{box-shadow:0 0 12px #b07cff99}}@media (prefers-reduced-motion:reduce){#ai-smart-btn{animation:none}}
+#ai-smart{display:none;padding:8px 10px;border-bottom:1px solid #8884;font-size:12px;line-height:1.45}#ai-smart.on{display:block}#ai-smart p{margin:0 0 6px}#ai-smart .opt{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881}#ai-smart button{font-size:11px;padding:1px 8px;margin:3px 4px 0 0}
+#lab.open~#lab-toggle,#lab.open #lab-toggle{display:none}`;
   document.head.appendChild(css);
   const lab = $('#lab'), head = $('#lab-head'), text = $('#lab-text'), sendBtn = $('#lab-send');
   if (!lab || !head || !text || !sendBtn) return;
   const bar = document.createElement('div'); bar.id = 'ai-bar';
-  bar.innerHTML = `<span title="who answers in this chat">brain</span><select id="ai-brain"><option value="relay">local agent (relay)</option><option value="anthropic">Claude (your key)</option><option value="openai">OpenAI-compatible (your key)</option><option value="local">local model</option><option value="oracle" disabled>Tiny Oracle (coming)</option></select><button id="ai-gear" title="connect your AI">⚙</button><button id="ai-new" title="start a new conversation">new</button>`;
+  bar.innerHTML = `<span title="who answers in this chat">brain</span><select id="ai-brain"><option value="relay">local agent (relay)</option><option value="anthropic">Claude (your key)</option><option value="openai">OpenAI-compatible (your key)</option><option value="local">local model</option><option value="tiny">📟 Tiny Operator (TO): free, in your browser</option></select><button id="ai-gear" title="connect your AI">⚙</button><button id="ai-new" title="start a new conversation">new</button>`;
   const set = document.createElement('div'); set.id = 'ai-set';
+  const smart = document.createElement('div'); smart.id = 'ai-smart';
+  const smartBtn = document.createElement('button'); smartBtn.id = 'ai-smart-btn'; smartBtn.textContent = '🧠 Make your Operator smarter'; smartBtn.title = 'the ways to put a bigger AI in the Operator\'s chair';
   const thread = document.createElement('div'); thread.id = 'ai-thread';
-  head.after(bar); bar.after(set); $('#lab-thread').after(thread);
+  head.after(smartBtn); smartBtn.after(bar); bar.after(smart); smart.after(set); $('#lab-thread').after(thread);
+  const REPO = window.IDLE_REPO || 'https://github.com/nicobrenner/id-le';
+  smart.innerHTML = `<p>Right now the <b>Tiny Operator</b> (the Tiny Oracle, a 10.8 MB model in your browser) sits in the Operator's chair. It's free and private, and it knows very little. Three ways to seat a bigger AI:</p>
+<div class="opt"><b>1 · A model on your own computer</b> (Ollama or LM Studio). Nothing leaves your machine. <button data-smart="local">set it up</button></div>
+<div class="opt"><b>2 · Your own API key</b> (Claude or any OpenAI-compatible API). The key stays in this browser and goes only from this page straight to the provider you pick: your messages, a short summary of the world and the results of its actions go there; nothing goes through id-le.com, and keys are never saved in world files or snapshots. <button data-smart="anthropic">Claude</button><button data-smart="openai">other</button></div>
+<div class="opt"><b>3 · Run Id|le yourself</b>. The whole game is open source (MIT): <a href="${REPO}" target="_blank" rel="noopener">get the code</a>, run it on your computer and connect anything you like. <a href="pedia.html#make-it-yours" target="_blank" rel="noopener">How</a> · <a href="privacy.html" target="_blank" rel="noopener">privacy</a></div>
+<div class="opt"><button data-smart="tiny">back to the Tiny Operator</button></div>`;
+  smartBtn.addEventListener('click', () => smart.classList.toggle('on'));
+  smart.addEventListener('click', e => { const b = e.target.dataset.smart; if (!b) return; cfg.brain = b; cfg.chosen = true; saveCfg(); brainSel.value = b; convo = []; applyBrain(); smart.classList.remove('on'); if (b !== 'tiny') { set.classList.add('on'); renderSet(); } });
   const brainSel = $('#ai-brain');
 
   function renderSet() {
     const b = cfg.brain, A = cfg.anthropic, O = cfg.openai, L = cfg.local;
     const allow = `<div class="row"><label><input type="checkbox" data-allow="disaster"${cfg.allow.disaster ? ' checked' : ''}> let the AI start disasters</label><label><input type="checkbox" data-allow="frenzy"${cfg.allow.frenzy ? ' checked' : ''}> let it start frenzies</label></div><small>Taking apart a design or resting a creature always asks you first. At most ${cfg.perMin} actions a minute and 5 new creatures an hour.</small>`;
     const body = {
+      tiny: `<small>The Tiny Operator needs no key and sends nothing anywhere: it runs in this page. It understands a few kinds of requests (weather, a new creature, rave on/off, a disaster if you allow it, renaming, evolving, a look around) and passes creature commands to IRC; everything else is chit-chat.</small>`,
       relay: `<small>Notes go to the Mac server (demo_server.py) and a local agent session answers them, as before. Nothing leaves this computer.</small>`,
       anthropic: `<label>API key <input type="password" data-k="anthropic.key" value="${esc(A.key)}" placeholder="sk-ant-…" autocomplete="off"></label><label>model <input type="text" data-k="anthropic.model" value="${esc(A.model)}"></label>
         <small>Your key stays in this browser and is sent only to api.anthropic.com (never to the game's helper, never in a world file or snapshot). Calls go straight from this page, so anyone using this browser profile can use the key.</small><div class="row"><button data-forget="anthropic">forget key</button></div>`,
@@ -105,21 +123,23 @@
   $('#ai-gear').addEventListener('click', () => { set.classList.toggle('on'); renderSet(); });
   $('#ai-new').addEventListener('click', () => { convo = []; thread.innerHTML = ''; add('page', 'new conversation'); });
   brainSel.value = cfg.brain;
-  const applyBrain = () => { lab.classList.toggle('ai', cfg.brain !== 'relay'); text.placeholder = cfg.brain === 'relay' ? 'notes to the lab: what to change about the creatures, the arena… (⌘+Enter sends)' : 'talk to your AI about the world, ask it to do things… (⌘+Enter sends)'; renderSet(); };
-  brainSel.addEventListener('change', () => { cfg.brain = brainSel.value; saveCfg(); convo = []; applyBrain(); if (cfg.brain !== 'relay' && !ready()) set.classList.add('on'); });
+  const applyBrain = () => { lab.classList.toggle('ai', cfg.brain !== 'relay');
+    text.placeholder = cfg.brain === 'relay' ? 'notes to the lab: what to change about the creatures, the arena… (⌘+Enter sends)' : cfg.brain === 'tiny' ? 'ask TO: make it rain, add a Mathematician, start a rave, rename Crawly to … (⌘+Enter sends)' : 'talk to your AI about the world, ask it to do things… (⌘+Enter sends)';
+    const cap = $('#lab-form small'); if (cap && cfg.brain !== 'relay') cap.textContent = cfg.brain === 'tiny' ? 'the Tiny Operator runs in this page: weather, new creatures, raves, names, evolving, a look around; creature commands go to IRC' : 'talks to the AI you bring; it can look at the world and use the game\'s own actions';
+    renderSet(); };
+  brainSel.addEventListener('change', () => { cfg.brain = brainSel.value; cfg.chosen = true; saveCfg(); convo = []; applyBrain(); if (cfg.brain !== 'relay' && !ready()) set.classList.add('on'); });
   applyBrain();
   // on a public site (no local server) there is no lab relay: the chat is the player's own AI, and says how to connect one
   (window.__idle ? window.__idle.mode() : Promise.resolve('server')).then(m => { if (m !== 'static') return;
-    const o = brainSel.querySelector('option[value=relay]'); if (o) o.remove(); if (cfg.brain === 'relay') { cfg.brain = 'anthropic'; brainSel.value = 'anthropic'; }
-    { const N = window.IDLE_NAMES; $('#lab-head b').textContent = N ? `${N.op.icon} ${N.op.short} · ${N.op.sub}` : 'Operator · your AI'; } const cap = $('#lab-form small'); if (cap) cap.textContent = 'talks to the AI you bring; it can look at the world and use the game\'s own actions';
-    applyBrain(); if (!ready() && !thread.childElementCount) add('page', (window.IDLE_NAMES ? 'The ' + window.IDLE_NAMES.op.short : 'This chat') + ' talks to an AI you bring: Claude or any OpenAI-compatible API with your own key, or a local model (Ollama, LM Studio). Pick one above and press ⚙ to connect it. Your key stays in this browser.'); });
+    const o = brainSel.querySelector('option[value=relay]'); if (o) o.remove(); if (cfg.brain === 'relay' || (!ready() && !cfg.chosen)) { cfg.brain = 'tiny'; brainSel.value = 'tiny'; }
+    { const N = window.IDLE_NAMES; $('#lab-head b').textContent = N ? `${N.op.icon} ${N.op.short} · ${N.op.sub}` : 'Operator · your AI'; } applyBrain(); if (!thread.childElementCount) add('page', cfg.brain === 'tiny' ? 'The Tiny Operator (TO) is the Oracle sitting in the Operator\'s chair: ask it to change the weather, add a creature, start a rave, rename someone, or just chat. It runs in your browser and knows very little. 🧠 above makes your Operator smarter.' : 'The Operator talks to an AI you bring. 🧠 above shows your options.'); });
 
   function add(who, msg, cls) { const d = document.createElement('div'); d.className = 'ai-row ' + (cls || who); d.innerHTML = '<b>' + esc(who) + '</b> ' + esc(msg); thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   function chip(t, err) { const d = document.createElement('div'); d.className = 'ai-chip' + (err ? ' err' : ''); d.textContent = t; thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   const ask = q => new Promise(ok => { const d = document.createElement('div'); d.className = 'ai-ask'; d.innerHTML = `<b>your AI asks:</b> ${esc(q)}<br><button data-a="1">allow</button><button data-a="0">no</button>`; thread.appendChild(d); thread.scrollTop = 1e9;
     d.addEventListener('click', e => { const a = e.target.dataset.a; if (a == null) return; d.innerHTML = '<b>your AI asked:</b> ' + esc(q) + ' · ' + (a === '1' ? 'allowed' : 'declined'); ok(a === '1'); }); });
 
-  const ready = () => ({ anthropic: !!cfg.anthropic.key && !!cfg.anthropic.model, openai: !!cfg.openai.key && !!cfg.openai.model && !!cfg.openai.base, local: !!cfg.local.base && !!cfg.local.model }[cfg.brain]);
+  const ready = () => cfg.brain === 'tiny' || ({ anthropic: !!cfg.anthropic.key && !!cfg.anthropic.model, openai: !!cfg.openai.key && !!cfg.openai.model && !!cfg.openai.base, local: !!cfg.local.base && !!cfg.local.model }[cfg.brain]);
 
   // ---------- one turn: the brain answers, the game runs its tool calls, until it stops ----------
   const SYSTEM = `You are the player's companion AI inside Id|le, a small world of creatures that live on a floor of words: they have families, jobs, diets, feelings, memories and a mind you can read. You can look at the world and act in it with tools; every action you take is shown to the player as it happens.
@@ -192,9 +212,55 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     return true;
   }
 
+  // ---------- the Tiny Operator (TO): learned heads decide, the same tools act, the Oracle answers ----------
+  let H3 = null; const loadH3 = async () => H3 || (H3 = await (await fetch('arena_instr_v3.json')).json());
+  const WORLD_OPTS = new Set(['weather', 'spawn', 'rave_on', 'rave_off', 'disaster', 'rename', 'evolve', 'look']), SURE = { look: 0.5 }, SURE0 = 0.9;   // the bars measured in arena_instructions_v3.py
+  // an extracted span → the game's closed lists (object resolution by lookup, as the arena grounds words on the floor; not intent routing)
+  const KIND = { rain: 'bitrain', bitrain: 'bitrain', drizzle: 'bitrain', storm: 'storm', thunder: 'storm', thunderstorm: 'storm', fog: 'fog', foggy: 'fog', mist: 'fog', wind: 'wind', windy: 'wind', breeze: 'wind', clear: 'clear', sunny: 'clear', sunshine: 'clear', sun: 'clear', static: 'static', hum: 'hum',
+    math: 'math', mathematician: 'math', debug: 'debug', debugger: 'debug', tok: 'tok', tokenizer: 'tok', counter: 'counter', designer: 'designer', namer: 'namer', sorter: 'sorter', crawler: 'crawler', blursort: 'blursort', crawly: 'crawly', volcano: 'volcano', tornado: 'tornado', quake: 'quake', earthquake: 'quake' };
+  const kindOf = span => { for (const t of String(span || '').toLowerCase().split(/[\s,]+/)) { const k = KIND[t.replace(/[^a-z]/g, '')]; if (k) return k; } return null; };
+  const creatureNamed = (span, text) => { const cs = ((window.__arena && window.__arena.raw()) || []).filter(c => c.name); const s0 = String(span || '').toLowerCase().trim();
+    return (s0 && cs.find(c => c.name.toLowerCase() === s0)) || (s0 && cs.find(c => c.name.toLowerCase().startsWith(s0) || s0.startsWith(c.name.toLowerCase()))) || cs.find(c => String(text).toLowerCase().includes(c.name.toLowerCase())) || null; };
+  async function tinyTurn(t) {
+    const O = window.__oracle; if (!O || !O.ready) { add('page', 'the Tiny Oracle is still waking up; try again in a moment', 'err'); return; }
+    const heads = await loadH3(); const r = await O.classify(t, heads); const p = r.probs[r.option] || 0, tip = `${r.option} · ${Math.round(p * 100)}%`;
+    let seed = '', acted = null;
+    if (WORLD_OPTS.has(r.option) && p >= (SURE[r.option] ?? SURE0)) {
+      const who = creatureNamed(r.target, t), call = (() => { switch (r.option) {
+        case 'weather': { const k = kindOf(r.arg); return k && ['weather', { kind: k }]; }
+        case 'spawn': { const k = kindOf(r.arg); return k && ['spawn', { kind: k }]; }
+        case 'disaster': { const k = kindOf(r.arg); return k && ['disaster', { type: k }]; }
+        case 'rename': { if (!who || !r.arg) return null;   // the new name: the span minus the creature's own name and a leading "to"/"as"/"into"
+          const nn = r.arg.split(/\s+/).filter(w => w.toLowerCase() !== who.name.toLowerCase()).join(' ').replace(/^(to|as|into)\s+/i, '').replace(/[.!?]+$/, '').trim().slice(0, 24); return nn && ['rename', { name: who.name, new_name: nn }]; }
+        case 'evolve': return ['evolve', { name: who ? who.name : 'world' }];
+        case 'look': return ['look', {}];
+        case 'rave_on': case 'rave_off': return [r.option, {}];
+      } })();
+      if (call) {
+        const [name, input] = call; let res;
+        if (name === 'rave_on' || name === 'rave_off') { const M = window.__music; const el = chip((name === 'rave_on' ? '🕺 rave on' : '🔇 rave off')); el.title = tip; if (M) { if (name === 'rave_on') { M.setSource('deck'); M.setRave(true); } else M.setRave(false); res = { ok: true }; } else { res = { error: 'no music deck here' }; el.classList.add('err'); } }
+        else { const el = chip(chipText(name, input)); el.title = tip; try { res = await runTool(name, input); } catch (e) { res = { error: String(e.message || e) }; } if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; } }
+        acted = name;
+        // the Oracle's line starts from what just happened (like its comments on the world), then the model goes on in its own voice
+        const ok = res && !res.error, I = input || {};
+        seed = !ok ? (name === 'disaster' ? 'Disasters are switched off, and honestly, good' : 'That did not work') : ({
+          weather: `${{ bitrain: 'Rain', storm: 'A storm', fog: 'Fog', wind: 'Wind', clear: 'Clear skies', static: 'Static', hum: 'The hum' }[I.kind] || 'New weather'} it is`,
+          spawn: `A new ${{ math: 'Mathematician', debug: 'Debugger', tok: 'tokenizer', crawly: 'crawler' }[I.kind] || I.kind} just walked in`, disaster: `There goes a ${I.type}`,
+          rename: `${I.name} is ${I.new_name} now`, evolve: I.name === 'world' ? 'The whole world just reshuffled its genes' : `${I.name} just mutated`,
+          look: (() => { const c = res.counts || {}; return `${c.creatures ?? 'Some'} creatures, ${c.words ?? 'lots of'} words, ${(res.weather && res.weather.name) || 'quiet weather'}`; })(),
+          rave_on: 'The music is up and they are dancing', rave_off: 'Party over, the floor is quiet again' }[name] || 'Done');
+      }
+    } else if (r.option === 'creature') { const el = chip('💬 to the creatures (IRC): ' + t); el.title = tip; try { await O.chat(t); acted = 'creature'; seed = 'I passed that on to the creatures'; } catch (e) {} }
+    let said = await O.reply(t, seed); if (!said || said.length < 3) said = await O.reply(t, seed);   // one retry: the tiny model sometimes stops at once
+    if (said) add('TO', said, 'ai');
+    try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'tiny_operator', extra: { option: r.option, p: +p.toFixed(2), acted } } })); } catch (e) {}
+    return { option: r.option, p, arg: r.arg, target: r.target, acted, said };
+  }
+
   async function sendAI() {
     const t = text.value.trim(); if (!t || busy) return;
     if (!ready()) { set.classList.add('on'); renderSet(); add('page', 'connect your AI first (⚙): ' + { anthropic: 'an API key and a model', openai: 'a base URL, a key and a model', local: 'a server URL and a model' }[cfg.brain], 'err'); return; }
+    if (cfg.brain === 'tiny') { text.value = ''; add('you', t); busy = true; try { await tinyTurn(t); } catch (e) { add('page', String(e.message || e), 'err'); } finally { busy = false; } return; }
     text.value = ''; add('you', t); busy = true; const spin = document.createElement('div'); spin.className = 'ai-busy'; spin.textContent = 'thinking…'; thread.appendChild(spin);
     const mark = convo.length; convo.push({ role: 'user', content: worldLine() + '\n' + t });
     try { for (let i = 0; i < cfg.rounds; i++) { const more = cfg.brain === 'anthropic' ? await anthropicTurn() : await openaiTurn(cfg.brain); thread.appendChild(spin); if (!more) break; if (i === cfg.rounds - 1) add('page', 'stopped after ' + cfg.rounds + ' rounds of actions'); } }
@@ -204,5 +270,5 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   // take over the lab's send button and Cmd+Enter while an AI brain is chosen; the relay keeps the arena's own path
   sendBtn.addEventListener('click', e => { if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
   text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
-  window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo };
+  window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: t => tinyTurn(t), heads: loadH3 };
 })();
