@@ -161,7 +161,7 @@ CAPS = {"capabilities": [{"task_id": t, "name": t, "n_classes": n, "labels": {st
     ("sms_spam", 2, ["ham", "spam"]), ("support_ticket", 5, ["billing", "technical", "account", "shipping", "other"]), ("tweet_eval_sentiment", 3, ["negative", "neutral", "positive"])]]}
 # the pages' own console.warn() calls that mean a feature switched itself off: a smoke run fails on these (a warning, not an error,
 # hid a real regression: "pedia: drawing code ReferenceError: buildLegs is not defined" left the pedia without creatures or clips)
-FEATURE_WARN = re.compile(r"^(pedia:|in-browser classifiers|reels|babies|cached Oracle unavailable)")
+FEATURE_WARN = re.compile(r"^(pedia:|in-browser classifiers|reels|babies|cached Oracle unavailable|trick or treat)")
 FALLBACK_WARN = re.compile(r"^Oracle worker unavailable")   # a legitimate fallback (the Oracle runs on the page): noted, not failed
 IGNORE_CONSOLE = re.compile(r"favicon|ERR_ABORTED|net::ERR_|Failed to load resource|onnxruntime|ort-wasm|SharedArrayBuffer|AudioContext was not allowed|The AudioContext")
 
@@ -434,6 +434,29 @@ def t_pedia(P, phone=False):
     return f"{len(toc)} sections, {live} live creatures, {len(imgs)} pictures, {len(moving)} clips playing"
 
 
+HALLOWEEN_STUB = """(() => { if (window.__halloween) return; let on = true;   // until idle-halloween.js owns the switch, a stand-in that is on
+  window.__halloween = { on: () => on, set: v => { on = !!v; dispatchEvent(new CustomEvent('idle:halloween', { detail: { on } })); }, onChange() {} }; })()"""
+
+
+def t_halloween(P):
+    P.ctx.add_init_script(HALLOWEEN_STUB)
+    pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
+    need(pg.evaluate("() => !!(window.__halloween && window.__halloween.on())"), "?halloween did not turn the Halloween mode on")
+    need(pg.evaluate("() => !!window.__treat"), "idle-treat.js did not load")
+    t0 = time.time()
+    while time.time() - t0 < 90 and pg.evaluate("() => window.__treat.state().treats") < 1:
+        pg.evaluate("() => { window.__treat._recruit(); window.__treat.tick(); }"); pg.wait_for_timeout(1500); P.clean()
+    s = pg.evaluate("() => window.__treat.state()")
+    need(s["treats"] >= 1, f"no candy handed out in 90 s: {s}")
+    pg.evaluate("() => window.__treat._edition()"); pg.wait_for_timeout(300)
+    need(pg.evaluate("() => (window.__advisor ? window.__advisor.news() : []).some(n => /Halloween edition/.test(n.text))"), "no Halloween edition in the Gazette")
+    pg.evaluate("() => window.__halloween.set ? window.__halloween.set(false) : window.__treat.cleanup()"); pg.wait_for_timeout(2500)
+    left = pg.evaluate("() => ({ candy: window.__lakeHooks.words().filter(w => w.candy).length, tricks: document.querySelectorAll('#floor .trick-wobble,#floor .trick-hide,#floor .trick-swap').length, busy: window.__arena.raw().filter(c => c._treat).length })")
+    need(not any(left.values()), f"turning Halloween off left things behind: {left}")
+    P.clean()
+    return f"{s['treats']} candies, {len(s['haul'])} trick-or-treaters; off leaves nothing behind"
+
+
 def t_fps(P, n=300, floor=20):
     pg = P.open("/arena.html?fresh=1&test&bench"); booted(pg)
     pg.evaluate(f"() => window.__bench.spawn({n})"); pg.wait_for_timeout(6000)
@@ -454,7 +477,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "stats", "data lab", "data lab stuck", "replay", "pedia desktop", "camera phone", "pedia phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "stats", "data lab", "data lab stuck", "replay", "halloween", "pedia desktop", "camera phone", "pedia phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -482,6 +505,7 @@ def main():
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
                 run("replay", t_replay)
+                run("halloween", t_halloween)
                 run("pedia desktop", t_pedia)
                 if a.full: run("fps", t_fps)
             finally:
