@@ -111,7 +111,10 @@
   async function boot(fresh0) { if (Q.has('nofirst5')) return false; const want = Q.has('fresh');
     if (!fresh0) return false;
     if (S && !want) return false;   // the trail ran here before (done or skipped): a fresh browser that has played keeps its own world
-    let sw; try { sw = await (await fetch('starter_world.json', { cache: 'no-store' })).json(); } catch (e) { console.error('starter world', e); return false; }
+    // one retry: a first download can fail on a flaky network (a page being left doesn't retry: the next load starts over)
+    const get = async () => (await fetch('starter_world.json', { cache: 'no-store' })).json();
+    let sw; try { sw = await get(); } catch (e) { if (window.__leavingPage) return false; await new Promise(r => setTimeout(r, 1500)); try { sw = await get(); } catch (e2) { console.error('starter world', e2); return false; } }
+    if (window.__leavingPage) return false;
     S = fresh(); S.meta = sw.first5 || {}; save();
     try { window.__design.restore(sw); } catch (e) { console.error(e); return false; }
     setTimeout(() => { try { const cs = live().filter(c => !c.visitor || c.g); if (cs.length && window.__dis) window.__dis.flyTo(cs.reduce((s, c) => s + c.x, 0) / cs.length, cs.reduce((s, c) => s + c.y, 0) / cs.length, innerWidth < 700 ? 0.7 : 0.95); } catch (e) {} }, 400);   // arrive in the middle of them
@@ -126,6 +129,6 @@
   window.__first5 = { calm, _play: s => { if (S) S.play = s; }, boot, resume, stats, statsLine, skip, state: () => S && JSON.parse(JSON.stringify(S)), steps: STEPS.map(s => s.k), _tick: tick };
   // ?fresh in a browser that already keeps a world: say why nothing happens (the world is never replaced)
   if (Q.has('fresh') && (() => { try { return !!localStorage.getItem('arena.autosave'); } catch (e) { return false; } })()) setTimeout(() => N({ kind: 'system', ttl: 12000, key: 'first5:fresh-refused', html: `<b>?fresh</b> only works in a browser with no saved world (open it in a private window). Your world is untouched.` }), 3500);
-  if (window.__pendingFirst5) boot(window.__pendingFirst5.fresh0);   // the arena got there before this file loaded
+  if (window.__pendingFirst5) { const pf = window.__pendingFirst5; Promise.resolve(boot(pf.fresh0)).catch(e => console.error(e)).finally(() => { if (pf.done) pf.done(); }); }   // the arena got there before this file loaded (and waits for this boot before it counts as ready)
   if (document.readyState === 'complete') resume(); else addEventListener('load', resume);
 })();
