@@ -81,10 +81,13 @@ window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Rel
 
   // --- static mode only: model cache + cross-origin isolation through a service worker, and world files
   function setup() {
+    // the one-time isolation reload carries ?_coi=1 so the server's page-view count (helper/worker.js) skips it; the page drops it again
+    const coiReload = () => { try { const u = new URL(location.href); u.searchParams.set('_coi', '1'); location.replace(u.href); } catch (e) { location.reload(); } };
+    try { if (/[?&]_coi=/.test(location.search)) { const u = new URL(location.href); u.searchParams.delete('_coi'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); } } catch (e) {}
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('sw.js', { scope: './' }).then(reg => { reg.active && reg.active.postMessage({ helper: helperOn() ? CFG.helper : '' }); }).catch(() => {});
-      navigator.serviceWorker.addEventListener('controllerchange', () => { try { if (!crossOriginIsolated && !sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); if (window.__bootOk) window.__bootOk(); location.reload(); } } catch (e) {} });
-      if (navigator.serviceWorker.controller && !crossOriginIsolated) { try { if (!sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); if (window.__bootOk) window.__bootOk(); location.reload(); } } catch (e) {} }
+      navigator.serviceWorker.addEventListener('controllerchange', () => { try { if (!crossOriginIsolated && !sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); if (window.__bootOk) window.__bootOk(); coiReload(); } } catch (e) {} });
+      if (navigator.serviceWorker.controller && !crossOriginIsolated) { try { if (!sessionStorage.getItem('idle.coi')) { sessionStorage.setItem('idle.coi', '1'); if (window.__bootOk) window.__bootOk(); coiReload(); } } catch (e) {} }
     }
     const add = () => { const row = document.getElementById('snaprow'); if (!row || document.getElementById('idleWorldFile')) return; const box = document.createElement('div'); box.id = 'idleWorldFile'; box.style.cssText = 'margin-top:6px;font-size:12px';
       box.innerHTML = '<small style="opacity:.6">no server here: your world lives in this browser. Keep a copy:</small> <button data-idle="dl">⬇ download my world</button> <label class="fileload">⬆ load a world file <input type="file" accept=".json" hidden></label>';
