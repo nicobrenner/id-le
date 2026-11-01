@@ -1478,7 +1478,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     const run = () => { if (!raf) raf = requestAnimationFrame(draw); };
     // drag by the header; the place you drop it is remembered; double-click docks it beside the creature again
     const head = el.querySelector('.chead'); let dr = null;
-    head.addEventListener('pointerdown', e => { if (e.target.closest('button,input')) return; const r = el.getBoundingClientRect(), a = el.offsetParent.getBoundingClientRect(); dr = { dx: e.clientX - (r.left - a.left), dy: e.clientY - (r.top - a.top) }; el.classList.add('drag'); head.setPointerCapture(e.pointerId); e.preventDefault(); });
+    head.addEventListener('pointerdown', e => { if (e.target.closest('button,input')) return; const r = el.getBoundingClientRect(), a = el.offsetParent ? el.offsetParent.getBoundingClientRect() : { left: 0, top: 0 }; dr = { dx: e.clientX - (r.left - a.left), dy: e.clientY - (r.top - a.top) }; el.classList.add('drag'); head.setPointerCapture(e.pointerId); e.preventDefault(); });
     head.addEventListener('pointermove', e => { if (!dr) return; el.style.left = (e.clientX - dr.dx) + 'px'; el.style.top = (e.clientY - dr.dy) + 'px'; });
     head.addEventListener('pointerup', () => { if (!dr) return; dr = null; el.classList.remove('drag'); fitPop(el); pos = { x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0 }; try { localStorage.setItem('arena.cardDock', JSON.stringify(pos)); } catch (e) {} });
     head.addEventListener('dblclick', e => { if (e.target.closest('button,input')) return; pos = null; try { localStorage.removeItem('arena.cardDock'); } catch (er) {} if (lastWhisper) place(lastWhisper); });
