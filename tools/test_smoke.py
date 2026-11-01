@@ -578,6 +578,78 @@ def t_datalab_stuck(P):
     return "stuck line: " + line.strip()[:90]
 
 
+def t_irc_inbox(P):
+    # IRC → the data lab's inbox: "@inbox …" queues without a lab and lands once one opens; marked ✉ you; IRC gets the result line;
+    # plain lines go in only when "the inbox also hears IRC" is ticked
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    if pg.evaluate("() => window.__first5 && window.__first5.skip"): pg.evaluate("() => window.__first5.skip()")
+    pg.evaluate("() => { document.getElementById('roomchat').classList.remove('closed', 'min'); const c = document.getElementById('chat'); c.value = '@inbox I was charged twice for the same order, this is ridiculous'; document.getElementById('send').click(); }")
+    q = pg.evaluate("() => window.__lab.pending()")
+    need(q == 1, f"@inbox with no lab open should wait in a queue: pending={q}")
+    pg.evaluate("() => window.__places.openLab()")
+    m = wait_for(pg, """() => { const s = window.__lab && window.__lab.state && window.__lab.state(); const m = s && s.msgs.find(m => m.you); return m && m.done ? m : null }""", 150, P=P)
+    need(len(m.get("trail") or []) >= 1, f"no stage left a label on the trail: {m}")
+    line = wait_for(pg, "() => [...document.querySelectorAll('#log .ln')].map(d => d.textContent).find(t => /your message “I was charged twice/.test(t)) || null", 20, P=P)
+    cls = pg.evaluate("() => [...document.querySelectorAll('.msg.you')].length")
+    need(cls >= 1, "the message on the floor is not marked ✉ you")
+    n0 = pg.evaluate("() => window.__lab.state().msgs.filter(m => m.you).length")
+    pg.evaluate("() => { const c = document.getElementById('chat'); c.value = 'say hi'; document.getElementById('send').click(); }"); pg.wait_for_timeout(600)
+    n1 = pg.evaluate("() => window.__lab.state().msgs.filter(m => m.you).length")
+    need(n1 == n0, f"a plain IRC line went into the inbox although 'the inbox also hears IRC' is off ({n0} -> {n1})")
+    pg.evaluate("() => { const b = document.getElementById('labIrc'); if (!b.checked) b.click(); }")
+    pg.evaluate("() => { const c = document.getElementById('chat'); c.value = 'thanks, the refund arrived today'; document.getElementById('send').click(); }"); pg.wait_for_timeout(600)
+    n2 = pg.evaluate("() => window.__lab.state().msgs.filter(m => m.you).length")
+    need(n2 == n1 + 1, f"with 'the inbox also hears IRC' on, a plain line should go in too ({n1} -> {n2})")
+    P.clean()
+    return f"queued then landed in bin '{m.get('bin')}' after {len(m['trail'])} stage(s); IRC: “{line[:90]}…”; listen toggle ok"
+
+
+def t_quick(P):
+    # ⚡ quick commands: slots show the real target and can be changed, × hides (⋯ restores), ✎ edits, hover lights up the target
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    if pg.evaluate("() => window.__first5 && window.__first5.skip"): pg.evaluate("() => window.__first5.skip()")
+    pg.evaluate("() => document.getElementById('roomchat').classList.remove('closed', 'min')")
+    r = pg.evaluate("() => ({ head: !!document.querySelector('#quick .qh'), n: document.querySelectorAll('#quick .qc[data-q]').length, slot: (document.querySelector('#quick .qs') || {}).textContent || '' })")
+    need(r["head"] and r["n"] >= 5 and r["slot"].strip("▾ "), f"quick row: {r}")
+    pg.click("#quick .qs"); pg.wait_for_timeout(200)
+    opts = pg.evaluate("() => [...document.querySelectorAll('#quickMenu [data-qpick]')].map(b => b.textContent)")
+    need(len(opts) >= 2, f"the word picker offers {opts}")
+    pg.click("#quickMenu [data-qpick]:nth-of-type(2)"); pg.wait_for_timeout(200)
+    s2 = pg.evaluate("() => document.querySelector('#quick .qs').textContent.replace('▾', '')")
+    need(s2 == opts[1], f"picking '{opts[1]}' left the slot at '{s2}'")
+    pg.hover("#quick .qc[data-q='0']"); pg.wait_for_timeout(300)
+    rings = pg.evaluate("() => document.querySelectorAll('.qring').length")
+    need(rings >= 1, "hovering a command lit up nothing in the world")
+    n0 = r["n"]; pg.click("#quick .qc[data-q='1'] .x"); pg.wait_for_timeout(200)
+    h = pg.evaluate("() => ({ n: document.querySelectorAll('#quick .qc[data-q]').length, hidden: JSON.parse(localStorage.getItem('arena.quickHidden') || '[]').length })")
+    need(h["n"] == n0 - 1 and h["hidden"] == 1, f"× should hide one: {h}")
+    pg.click("#quickMore"); pg.wait_for_timeout(200); pg.click("#quickMenu [data-qr]"); pg.wait_for_timeout(200)
+    n2 = pg.evaluate("() => document.querySelectorAll('#quick .qc[data-q]').length")
+    need(n2 == n0, f"⋯ → ↩ should bring it back: {n2} vs {n0}")
+    pg.click("#quick .qc[data-q='0'] .qe"); pg.wait_for_timeout(200)
+    v = pg.evaluate("() => document.getElementById('chat').value")
+    need("{word}" in v, f"✎ should put the template in the chat box: '{v}'")
+    pg.evaluate("() => { document.getElementById('chat').value = 'fetch {word} quickly'; }"); pg.click("#quickAdd"); pg.wait_for_timeout(200)
+    e = pg.evaluate("() => JSON.parse(localStorage.getItem('arena.quick'))[0]")
+    need(e == "fetch {word} quickly", f"✓ save edit stored '{e}'")
+    P.clean()
+    return f"{n0} commands, slot picker {len(opts)} words, hover rings {rings}, hide/restore and edit ok"
+
+
+def t_rclick(P):
+    # right-click (long-press) a word: the menu offers what can happen and who does it; the tour's step completes on the real event
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    wait_for(pg, "() => !!(window.__first5 && window.__first5.state() && window.__first5.state().active)", 30, P=P)   # the tour starts a moment after boot
+    pg.evaluate("() => window.__rclick.demo()")
+    wait_for(pg, "() => document.getElementById('insp').style.display === 'block' && document.querySelectorAll('#insp [data-iv]').length > 0", 15, P=P)
+    verbs = pg.evaluate("() => [...document.querySelectorAll('#insp [data-iv]')].map(b => b.dataset.iv)")
+    v = "fetch" if "fetch" in verbs else verbs[0]
+    pg.click(f"#insp [data-iv='{v}']"); pg.wait_for_timeout(200); pg.click("#insp [data-isend='1']")
+    ok = wait_for(pg, "() => { const s = window.__first5 && window.__first5.state(); return s && s.done && s.done.keep ? true : null }", 10, P=P)
+    P.clean()
+    return f"menu offered {verbs}; sent '{v}'; the tour's right-click step ticked off"
+
+
 def t_replay(P):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     r = pg.evaluate("""async () => { const C = await (await fetch('pedia_clips.json')).json(), cl = C.clips.storm; const cv = document.createElement('canvas'); cv.width = 320; cv.height = 200;
@@ -773,7 +845,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -805,6 +877,9 @@ def main():
                 run("data lab home", t_datalab_home)
                 run("mood migrate", t_mood_migrate)
                 run("lab card", t_lab_card)
+                run("irc inbox", t_irc_inbox)
+                run("quick commands", t_quick)
+                run("right-click", t_rclick)
                 run("replay", t_replay)
                 run("operator", t_operator)
                 run("halloween", t_halloween)

@@ -13,7 +13,7 @@ import argparse, datetime as dt, html, json, os, sys, urllib.error, urllib.parse
 API = "https://api.cloudflare.com/client/v4"
 NS_TITLE = "id-le-stats"
 STEPS = ["card", "name", "feed", "dream", "gazette", "weather", "reel", "keep"]
-DLSTEPS = ["what", "travel", "kinds", "team", "review", "stats", "where", "finished", "ended"]   # the data lab walkthrough (demo/idle-dlwalk.js)
+DLSTEPS = ["what", "travel", "irc", "kinds", "team", "review", "stats", "where", "finished", "ended"]   # the data lab walkthrough (demo/idle-dlwalk.js)
 DWELL = ["<1", "1-5", "5-20", "20+"]
 EG = {"cr": ["0-12", "13-30", "31-60", "61-150", "151+"], "born": ["0", "1-5", "6-20", "21+"], "charts": ["0", "1-5", "6-20", "21+"],
       "built": ["0", "1-5", "6-20", "21+"], "fed": ["0", "1-5", "6-20", "21+"]}   # engagement buckets (demo/idle-stats.js, helper/worker.js)
