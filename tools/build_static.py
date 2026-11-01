@@ -109,21 +109,25 @@ export default {
     if (p.startsWith('/lab/') || p.startsWith('/worlds/') || p.startsWith('/jeffy/')) return helper.fetch(req, env, ctx);
     // link previews: a Halloween link (?halloween, or a Wikipedia world about Halloween) gets the Halloween card and title
     const u = new URL(req.url), q = u.searchParams, wq = decodeURIComponent((q.get('from_wiki') || '').split('/wiki/')[1] || q.get('wiki') || '');
+    let r;
     if ((p === '/' || p === '/index.html' || p === '/arena.html') && (q.has('halloween') || /hallowe.?en|jack-o.?-?lantern|samhain|trick-or-treat/i.test(wq))) {
-      const r = await env.ASSETS.fetch(req), img = 'https://id-le.com/og-image-halloween.png', t = "It's Halloween in Id|le", d = 'Creatures in costume go trick-or-treating in a little world that lives in your browser. Free, open source.';
+      const a = await env.ASSETS.fetch(req), img = 'https://id-le.com/og-image-halloween.png', t = "It's Halloween in Id|le", d = 'Creatures in costume go trick-or-treating in a little world that lives in your browser. Free, open source.';
       const set = v => ({ element(e) { e.setAttribute('content', v); } });
-      return new HTMLRewriter().on('meta[property="og:image"]', set(img)).on('meta[name="twitter:image"]', set(img)).on('meta[property="og:title"]', set(t)).on('meta[name="twitter:title"]', set(t))
+      r = new HTMLRewriter().on('meta[property="og:image"]', set(img)).on('meta[name="twitter:image"]', set(img)).on('meta[property="og:title"]', set(t)).on('meta[name="twitter:title"]', set(t))
         .on('meta[property="og:description"]', set(d)).on('meta[name="twitter:description"]', set(d)).on('meta[property="og:url"]', set(u.origin + '/?halloween'))
-        .on('meta[property="og:image:alt"]', set("The Id|le wordmark with an orange bar over a moonlit world of words: it is Halloween")).transform(r);
-    }
-    return env.ASSETS.fetch(req);
+        .on('meta[property="og:image:alt"]', set("The Id|le wordmark with an orange bar over a moonlit world of words: it is Halloween")).transform(a);
+    } else r = await env.ASSETS.fetch(req);
+    // every HTML page served here is counted by the server (pageview in helper/worker.js), after the response and never delaying it
+    const page = helper.pages[p]; if (page && ctx && ctx.waitUntil) ctx.waitUntil(helper.pageview(req, env, page, r));
+    return r;
   },
 };
 """
         open(os.path.join(out, "_worker.js"), "w", encoding="utf-8").write(w)
         # only these paths invoke the Worker (Pages Functions: 100,000 invocations a day on the free plan); every other file is served
-        # as a plain asset. The pages themselves are in because the Worker swaps the link-preview tags for Halloween links.
-        json.dump({"version": 1, "include": ["/", "/index.html", "/arena.html", "/lab/*", "/worlds/*", "/jeffy/*"], "exclude": []}, open(os.path.join(out, "_routes.json"), "w"))
+        # as a plain asset. The pages themselves are in because the Worker counts page views (and swaps the link-preview tags for
+        # Halloween links).
+        json.dump({"version": 1, "include": ["/", "/index.html", "/arena.html", "/pedia", "/pedia.html", "/privacy", "/privacy.html", "/lab/*", "/worlds/*", "/jeffy/*"], "exclude": []}, open(os.path.join(out, "_routes.json"), "w"))
     size = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(out) for f in fs)
     json.dump({"ort": ORT_VER, "ort_sha256_16": sums, "helper": a.helper, "bytes": size}, open(os.path.join(out, "build.json"), "w"), indent=1)
     print(f"dist ready: {out} ({size / 1e6:.1f} MB). Try: python3 -m http.server 8776 -d {os.path.relpath(out)}")

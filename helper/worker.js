@@ -147,7 +147,7 @@ const X_CAP = { fav: 60, rage: 50, path: 30 }, EMPTY_X = () => ({ did: {}, ws: {
 const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and shard; the rest are counted as 'other'
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
-const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
+const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
@@ -162,6 +162,7 @@ function addStats(p) {
     if (Array.isArray(p.ps)) for (const x of new Set(p.ps.slice(0, 40))) if (typeof x === 'string' && PSEC.test(x)) capped(q.sec, x, 1, CAP.psec);
     if (Number.isInteger(p.clips) && p.clips > 0 && p.clips <= 50) q.clips += p.clips;
     return; }
+  if (p.visit === 1 && p.v2 === 1) d.v2visits++;
   if (p.visit === 1) { d.visits++; if (p.back === 1) d.back++; if (p.ios === 1) d.ios++; if ([0, 1, 2].includes(p.safe)) bump(d.safe, String(p.safe)); if (p.dev === 'phone' || p.dev === 'desktop') bump(d.dev, p.dev);
     if (typeof p.ref === 'string') capped(d.ref, REF.test(p.ref) ? p.ref : 'other', 1, CAP.ref); if (typeof p.utm === 'string' && UTM.test(p.utm)) capped(d.utm, p.utm, 1, CAP.utm); }
   // a page load moves up through the buckets: add the new one, take back the one it reported before (sums stay one per page load)
@@ -191,7 +192,8 @@ async function flushStats(env) {
     const key = `stats:${day}:${SHARD}`, cur = JSON.parse(await env.STATS.get(key) || 'null') || { ...EMPTY(), writes: 0 };
     cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches; cur.writes = (cur.writes || 0) + 1;
     for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
-    cur.secs = (cur.secs || 0) + add.secs;
+    cur.secs = (cur.secs || 0) + add.secs; cur.v2visits = (cur.v2visits || 0) + (add.v2visits || 0);
+    cur.pv = mergePv(cur.pv, add.pv);
     { const q = cur.x = cur.x || EMPTY_X(); for (const k of Object.keys(EMPTY_X())) { q[k] = q[k] || {}; for (const [a, n] of Object.entries((add.x || {})[k] || {})) if (n) (X_CAP[k] ? capped(q[k], a, n, X_CAP[k]) : bump(q[k], a, n)); } }
     { const q = cur.pd = cur.pd || EMPTY_PD(), A = add.pd; q.visits += A.visits; q.back += A.back; q.clips += A.clips;
       for (const k of ['dev', 'dw']) for (const [a, n] of Object.entries(A[k])) if (n) bump(q[k], a, n);
@@ -203,6 +205,104 @@ async function flushStats(env) {
     await env.STATS.put(key, JSON.stringify(cur), { expirationTtl: 60 * 60 * 24 * 400 });
   }
 }
+// ---------- page views, counted by the server (11-01) ----------
+// Every HTML page request that reaches the Pages worker ('/', the pedia, the privacy page) is counted here, so a visit counts whether
+// or not the page's own script ever runs. Only daily totals are kept, in the same batched write as the in-page stats (the pv block
+// of stats:<day>:<shard>): page views and visits per page, bots apart, the referring site's name, utm_source, phone/tablet/desktop,
+// country (Cloudflare's request.cf.country). Unique visitors without cookies or IDs, the way Plausible does it: SHA-256 of a daily
+// salt + IP + User-Agent goes into a HyperLogLog sketch (2,048 one-byte registers, standard error about 2.3%); the sketch is all that
+// is stored. The salt is new each UTC day (from the UV_SECRET env var + the date, or a random value kept in KV that expires 30 hours
+// after its day starts), so a hash can't be linked across days. A visit is a page view whose hash wasn't seen in the last 30 minutes
+// in this isolate's memory (so the one-time reload for cross-origin isolation doesn't count twice); that memory is never written.
+const PV_PAGES = { '/': 'game', '/index.html': 'game', '/arena.html': 'game', '/pedia': 'pedia', '/pedia.html': 'pedia', '/privacy': 'privacy', '/privacy.html': 'privacy' };
+const HLL_P = 11, HLL_M = 1 << HLL_P, PV_CAP = { ref: 40, utm: 30, cc: 80 };
+const EMPTY_PV = () => ({ views: {}, visits: {}, gpc: {}, bots: {}, botWhy: {}, ref: {}, utm: {}, dev: {}, cc: {}, hll: {} });
+// bots, previews and scripts: never counted with people. Real browsers send a long UA and Accept-Language; these don't, or say so.
+const BOT_UA = /bot\b|bot\/|crawl|spider|slurp|preview|scan|monitor|uptime|pingdom|lighthouse|headless|phantom|selenium|puppeteer|playwright|curl|wget|python|httpie|go-http|java\/|okhttp|axios|node-fetch|undici|libwww|perl\/|ruby|php\/|facebookexternalhit|embedly|quora link|whatsapp|telegram|discord|slack|skype|vkshare|w3c_validator|feedfetcher|mediapartners|apis-google|bingpreview|yandex|baidu|semrush|ahrefs|mj12|dotbot|petal|bytespider|gptbot|claude|anthropic|perplexity|ccbot|chatgpt|amazonbot|applebot|duckduckgo|qwant|seznam|archive\.org|ia_archiver|validator|linkchecker|nutch|scrapy|httpclient|dataprovider|googleother|google-inspectiontool|cloudflare/i;
+function pvBot(req) {
+  const ua = req.headers.get('User-Agent') || '';
+  if (ua.length < 25) return 'no-ua';
+  if (BOT_UA.test(ua)) return 'ua';
+  if (!req.headers.get('Accept-Language')) return 'no-lang';
+  return '';
+}
+const pvDev = ua => /iPad|Tablet|Android(?!.*Mobile)/i.test(ua) ? 'tablet' : /Mobi|iPhone|iPod|Android/i.test(ua) ? 'phone' : 'desktop';
+// the referring site's name only (never the path), mapped like idle-ref.js; 'direct' for none or our own pages
+function pvRef(r, self) {
+  if (!r) return 'direct'; if (/^android-app:\/\/com\.reddit\./i.test(r)) return 'reddit.com';
+  let h = ''; try { h = new URL(r).hostname.toLowerCase(); } catch (e) { return 'other'; }
+  if (!h || h === self || /(^|\.)id-le\.(com|pages\.dev)$/.test(h)) return 'direct';
+  if (/^(\d+\.){3}\d+$|^\[|localhost|\.local$/.test(h)) return 'other';
+  h = h.replace(/^(www|m|l|lm|old|new|out|np|i)\./, '');
+  if (/(^|\.)reddit\.com$|^redd\.it$/.test(h)) return 'reddit.com';
+  if (h === 'news.ycombinator.com' || h === 'ycombinator.com') return 'news.ycombinator.com';
+  if (/^(t\.co|x\.com|twitter\.com|mobile\.twitter\.com)$/.test(h)) return 'x.com';
+  if (/^google\.[a-z.]+$/.test(h) || h === 'news.google.com') return 'google';
+  if (/(^|\.)bing\.com$/.test(h)) return 'bing';
+  if (/(^|\.)duckduckgo\.com$/.test(h)) return 'duckduckgo';
+  if (/(^|\.)facebook\.com$/.test(h)) return 'facebook.com';
+  if (/(^|\.)linkedin\.com$|^lnkd\.in$/.test(h)) return 'linkedin.com';
+  if (/(^|\.)github\.com$|\.github\.io$/.test(h)) return 'github.com';
+  return /^[a-z0-9][a-z0-9.-]{0,59}$/.test(h) ? h : 'other';
+}
+const pvSalt = { day: '', v: '' };
+async function saltFor(day, env) {
+  if (pvSalt.day === day) return pvSalt.v;
+  let v = env.UV_SECRET ? env.UV_SECRET + '|' + day : '';
+  if (!v && env.STATS) { const k = 'salt:' + day; v = await env.STATS.get(k) || '';
+    if (!v) { v = crypto.randomUUID() + crypto.randomUUID(); await env.STATS.put(k, v, { expirationTtl: 30 * 3600 }); } }   // one write a day; gone the next day
+  if (!v) v = crypto.randomUUID() + day;   // no KV (a local test): this isolate's own salt
+  pvSalt.day = day; pvSalt.v = v; return v;
+}
+function hllAdd(reg, b) {   // b: 32 bytes of SHA-256; the first 11 bits pick a register, the next 53 give the rank (position of the first 1)
+  const idx = (b[0] << 3) | (b[1] >> 5); let r = 1;
+  for (let i = HLL_P; i < 64; i++) { if ((b[i >> 3] >> (7 - (i & 7))) & 1) break; r++; }
+  if (r > reg[idx]) reg[idx] = r;
+}
+function hllCount(reg) {   // the standard estimate with the small-range correction
+  let z = 0, sum = 0; for (let i = 0; i < HLL_M; i++) { sum += Math.pow(2, -reg[i]); if (!reg[i]) z++; }
+  const e = (0.7213 / (1 + 1.079 / HLL_M)) * HLL_M * HLL_M / sum;
+  return e <= 2.5 * HLL_M && z ? HLL_M * Math.log(HLL_M / z) : e;
+}
+const b64e = reg => { let s = ''; for (let i = 0; i < reg.length; i++) s += String.fromCharCode(reg[i]); return btoa(s); };
+const b64d = s => { try { const t = atob(s); if (t.length !== HLL_M) return null; const r = new Uint8Array(HLL_M); for (let i = 0; i < HLL_M; i++) r[i] = t.charCodeAt(i); return r; } catch (e) { return null; } };
+function mergePv(cur, add) {   // counters add up; sketches merge register by register (max); distinct names are capped per day and shard
+  cur = cur || EMPTY_PV(); if (!add) return cur;
+  for (const k of ['views', 'visits', 'gpc', 'bots', 'botWhy', 'dev']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
+  for (const k of ['ref', 'utm', 'cc']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) capped(cur[k], a, n, PV_CAP[k]); }
+  cur.hll = cur.hll || {};
+  for (const [k, reg] of Object.entries(add.hll || {})) { const r = reg instanceof Uint8Array ? reg : b64d(reg); if (!r) continue;
+    const c = (cur.hll[k] && b64d(cur.hll[k])) || new Uint8Array(HLL_M); for (let i = 0; i < HLL_M; i++) if (r[i] > c[i]) c[i] = r[i]; cur.hll[k] = b64e(c); }
+  return cur;
+}
+const recent = new Map();   // hash prefix → last seen (ms): this isolate's memory only, 30 minutes, never written anywhere
+async function pageview(req, env, page, res) {
+  try {
+    if (req.method !== 'GET' || !res || res.status !== 200 || !(req.headers.get('Accept') || '').includes('text/html')) return;
+    const purpose = (req.headers.get('Sec-Purpose') || req.headers.get('Purpose') || '').toLowerCase(); if (/prefetch|prerender/.test(purpose)) return;
+    const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY(), P = d.pv = d.pv || EMPTY_PV();
+    const why = pvBot(req);
+    if (why) { bump(P.bots, page); bump(P.botWhy, why); return; }   // bots never start a write of their own: they ride along with the next batch
+    bump(P.views, page);
+    // a browser that asks not to be tracked (Global Privacy Control or Do Not Track) is a page view only: no visitor sketch, no visit,
+    // no referrer, device or country
+    if (req.headers.get('Sec-GPC') === '1' || req.headers.get('DNT') === '1') { bump(P.gpc, page); return batch(env) || undefined; }
+    const ip = req.headers.get('CF-Connecting-IP') || '', ua = req.headers.get('User-Agent') || '';
+    const b = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode((await saltFor(day, env)) + '|' + ip + '|' + ua)));
+    for (const k of ['all', page]) hllAdd(P.hll[k] = P.hll[k] instanceof Uint8Array ? P.hll[k] : new Uint8Array(HLL_M), b);
+    const hk = day + ':' + Array.from(b.slice(0, 8)).join('.'), now = Date.now(), last = recent.get(hk); recent.set(hk, now);
+    if (recent.size > 20000) for (const [k, t] of recent) if (now - t > 30 * 60e3) recent.delete(k);
+    if (!last || now - last > 30 * 60e3) {   // a new visit: where it came from, on what, from which country (counted once per visit)
+      const url = new URL(req.url); bump(P.visits, page);
+      capped(P.ref, pvRef(req.headers.get('Referer') || '', url.hostname), 1, PV_CAP.ref);
+      const u = (url.searchParams.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24); if (u) capped(P.utm, u, 1, PV_CAP.utm);
+      bump(P.dev, pvDev(ua));
+      const cc = req.cf && typeof req.cf.country === 'string' && /^[A-Z0-9]{2}$/.test(req.cf.country) ? req.cf.country : 'XX'; capped(P.cc, cc, 1, PV_CAP.cc);
+    }
+    return batch(env) || undefined;
+  } catch (e) {}
+}
+
 async function stats(req, env, ctx) {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
   const txt = await req.text(); if (txt.length > 8000) return json({ error: 'too big' }, 413);
@@ -211,8 +311,13 @@ async function stats(req, env, ctx) {
   addStats(p);
   // the first report of a batch starts the timer and holds its request open (waitUntil) until the batch is written; reports that
   // arrive meanwhile join the same buffer, so a busy isolate writes at most once per STAT_EVERY
-  if (!statTimer) { statTimer = new Promise(r => setTimeout(r, globalThis.__statFlushNow ? 0 : STAT_EVERY)).then(() => flushStats(env)).catch(() => {}).finally(() => { statTimer = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(statTimer); else await statTimer; }
+  const t = batch(env); if (t) { if (ctx && ctx.waitUntil) ctx.waitUntil(t); else await t; }
   return new Response(null, { status: 204 });
+}
+function batch(env) {   // starts the batch timer if none runs; returns its promise only to the request that started it
+  if (statTimer) return null;
+  statTimer = new Promise(r => setTimeout(r, globalThis.__statFlushNow ? 0 : STAT_EVERY)).then(() => flushStats(env)).catch(() => {}).finally(() => { statTimer = null; });
+  return statTimer;
 }
 
 // the data lab's classifiers, through Jeffy's public server (playground.jeffyclassify.com, run by the Jeffy side; agreed 2026-10-30).
@@ -253,16 +358,20 @@ async function jeffy(req, path, ip, ctx) {
 }
 
 export default {
+  pages: PV_PAGES,
+  // the Pages wrapper (tools/build_static.py) calls this for every HTML page it serves, once the response is ready
+  pageview: (req, env, page, res) => pageview(req, env, page, res),
+  _hll: { add: hllAdd, count: hllCount, decode: b64d, M: HLL_M },   // for the tests
   async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return cors(env, req, new Response(null, { status: 204 }));
     if (new URL(req.url).pathname.startsWith('/jeffy/')) { try { return cors(env, req, await jeffy(req, new URL(req.url).pathname, req.headers.get('CF-Connecting-IP') || 'local', ctx)); } catch (e) { return cors(env, req, json({ error: String(e.message || e).slice(0, 120) }, 502)); } }
     const url = new URL(req.url), path = url.pathname, ip = req.headers.get('CF-Connecting-IP') || 'local', min = Math.floor(Date.now() / 60000);
     // background calls a page makes by itself (stats batches, world-link polls, notices) count in their own, larger budget, so they
     // never use up what the player's own actions (reading a page, its pictures) may do in a minute
-    const bg = path === '/lab/stats' || path === '/worlds/state' || path === '/lab/notices';
+    const bg = path === '/lab/stats' || path === '/lab/p' || path === '/worlds/state' || path === '/lab/notices';
     const k = ip + '|' + min + (bg ? '|bg' : ''), n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (bg ? 240 : (+env.RATE_PER_MIN || 60))) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
-    if (path === '/lab/stats') return stats(req, env, ctx);   // rate-limited like the rest (that count lives in memory for a minute, never stored)
+    if (path === '/lab/stats' || path === '/lab/p') return stats(req, env, ctx);   // /lab/p: the same reports under a plain name   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {
       if (path === '/lab/fetch') return cors(env, req, json(await readPage(u, env)));
