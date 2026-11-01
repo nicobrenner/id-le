@@ -514,6 +514,28 @@ def t_pedia_halloween(P, phone=False):
     return f"{len(kinds)} creatures in costume ({', '.join(sorted(set(kinds)))})"
 
 
+def t_zoom_shapes(P):
+    """phones zoom the floor with CSS zoom; with iOS Safari's minimum font size simulated, charts, forms and objects must keep their
+    shape zoomed out (they got skinnier) and keep their text inside them (it spilled out): tools/check_zoom_shapes.py, as a check"""
+    from check_zoom_shapes import SIM, ASPECTS, SPILL
+    P.ctx.add_init_script(SIM)
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    if not pg.evaluate("'zoom' in document.documentElement.style"): return "this WebKit has no CSS zoom: nothing to check"
+    wait_for(pg, "() => document.querySelectorAll('#floor .design, #floor .thing').length > 0", 60)
+    pg.evaluate("__arena.cam(1600, 1100, 1)"); pg.wait_for_timeout(800)
+    base = pg.evaluate(ASPECTS); need(base, "no charts, forms or objects on the starter floor")
+    ref = sum(x[1] for x in base) / len(base); seen = []
+    for z in (0.5, 0.35, 1):
+        pg.evaluate(f"__arena.cam(1600, 1100, {z})"); pg.wait_for_timeout(800)
+        now = pg.evaluate(ASPECTS); m = sum(x[1] for x in now) / len(now)
+        need(abs(m / ref - 1) <= 0.05, f"at {z:.0%} the cards' mean shape is {m:.3f}, at 100% {ref:.3f}")
+        cards, n, worst = pg.evaluate(SPILL)
+        need(n == 0, f"at {z:.0%}, {n} pieces of text spill out of {cards} cards (worst {worst:.0%} of a card's width)")
+        seen.append(f"{z:.0%} ok")
+    P.clean()
+    return f"{len(base)} cards keep shape and text: " + ", ".join(seen)
+
+
 def t_fps(P, n=300, floor=20):
     pg = P.open("/arena.html?fresh=1&test&bench"); booted(pg)
     pg.evaluate(f"() => window.__bench.spawn({n})"); pg.wait_for_timeout(6000)
@@ -570,11 +592,11 @@ def main():
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()
-            if any(want(n) for n in ("camera phone", "pedia phone", "pedia halloween phone")):
+            if any(want(n) for n in ("camera phone", "zoom shapes phone", "pedia phone", "pedia halloween phone")):
                 wk = p.webkit.launch(headless=not a.headed)
                 try:
                     dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
-                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
+                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("zoom shapes phone", t_zoom_shapes, {}), ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
                         if not want(name): continue
                         ctx = wk.new_context(**dev); P = Page(ctx, base)
                         try: check(name, lambda P=P, fn=fn, kw=kw: fn(P, **kw))
