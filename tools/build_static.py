@@ -114,7 +114,7 @@ export default {
       const set = v => ({ element(e) { e.setAttribute('content', v); } });
       return new HTMLRewriter().on('meta[property="og:image"]', set(img)).on('meta[name="twitter:image"]', set(img)).on('meta[property="og:title"]', set(t)).on('meta[name="twitter:title"]', set(t))
         .on('meta[property="og:description"]', set(d)).on('meta[name="twitter:description"]', set(d)).on('meta[property="og:url"]', set(u.origin + '/?halloween'))
-        .on('meta[property="og:image:alt"]', set('The Id|le wordmark with an orange bar over a moonlit world of words: It\'s Halloween')).transform(r);
+        .on('meta[property="og:image:alt"]', set("The Id|le wordmark with an orange bar over a moonlit world of words: it is Halloween")).transform(r);
     }
     return env.ASSETS.fetch(req);
   },
