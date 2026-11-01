@@ -122,6 +122,11 @@
   window.addEventListener('idle:ev', e => { const { type, extra: x } = e.detail || {}; if (!x || S.mode === 'off') return;
     try {
       if (type === 'birth') { first('baby', x.bud ? `${nm(x.who)} budded from ${nm(x.a)}` : `a baby: ${nm(x.who)}, born to ${nm(x.a)} & ${nm(x.b)}`, x.at); if (x.twin) first('twins', `twins: ${nm(x.who)} and ${nm(x.twin)}`, x.at); if (x.b && x.famA !== x.famB) first('mixed', `a child of two families: ${nm(x.who)} (${esc(x.famA)} × ${esc(x.famB)})`, x.at); }
+      else if (type === 'halloween') {   // trick or treat (idle-treat.js): firsts, the candy-haul record, and a Halloween edition now and then
+        if (x.kind === 'treat') first('halloween', `trick-or-treating: ${nm(x.who)} knocked at ${esc(x.door)} and came home with “${esc(x.candy)}”`, pos(x.who));
+        else if (x.kind === 'trick') first('trick', `a Halloween trick: ${nm(x.who)} got no candy and ${esc(x.how)}`, pos(x.who));
+        else if (x.kind === 'haul' && x.n) record('candy', x.n, `${nm(x.who)} hauled ${x.n} candies in one Halloween night`, pos(x.who));
+        else if (x.kind === 'edition') news('🎃 Halloween edition: ' + [`${x.treats} candies handed out`, x.haul ? `biggest haul: ${nm(x.haul.who)} (${x.haul.n})` : '', x.trick ? `first trick: ${nm(x.trick.who)} ${esc(x.trick.how)}` : '', x.costume ? `best costume: ${nm(x.costume.who)} as ${esc(x.costume.what)}` : ''].filter(Boolean).join(' · '), x.haul ? pos(x.haul.who) : null, true); }
       else if (type === 'looks' && x.kind === 'dazzle') first('dazzle', `a dazzle herd: ${nm(x.who)} and ${x.n - 1} kin, striped alike so no one of them stands out`, x.at);
       else if (type === 'hangry' && !x.end) first('hangry', `${nm(x.who)} went hangry`, pos(x.who));
       else if (type === 'rename' && x.to) first('name', `${nm(x.from || 'someone')} is now called ${nm(x.to)}`, pos(x.to));
