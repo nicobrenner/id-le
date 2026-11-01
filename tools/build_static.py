@@ -77,7 +77,10 @@ def main():
     html = open(os.path.join(DEMO, "arena.html"), encoding="utf-8").read()
     assert html.count(ORT_TAG) == 1, "onnxruntime script tag not found; update ORT_VER/ORT_TAG"
     assert html.count('<script src="idle-runtime.js"></script>') == 1, "arena.html must load idle-runtime.js"
-    cfg = json.dumps({"mode": "static", "helper": a.helper.rstrip("/")})
+    # the game's version, for stats: an error's line number only means something together with the version it came from
+    import hashlib
+    build = hashlib.sha256(html.encode("utf-8")).hexdigest()[:8]
+    cfg = json.dumps({"mode": "static", "helper": a.helper.rstrip("/"), "build": build})
     html = html.replace('<script src="idle-runtime.js"></script>', f'<script>window.IDLE_CFG = {cfg};</script><script src="idle-runtime.js"></script>')
     html = html.replace(ORT_TAG, '<script src="vendor/ort/ort.min.js"></script>')
     for name in ("index.html", "arena.html"):   # index for the site root; arena.html because the pedia reads the game's own source
