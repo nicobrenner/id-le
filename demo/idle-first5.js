@@ -22,8 +22,11 @@
   const meta = () => (S && S.meta) || {};
 
   // the trail, in order; `ready` holds a step back until it makes sense (no reel yet, no Gazette pill yet)
+  const HW_URL = 'https://en.wikipedia.org/wiki/Halloween';
   const STEPS = [
     { k: 'card', text: () => `This is a small world, and it is alive. <b>Click a creature</b> to open its card: how it feels, what it wants, who its friends are.`, who: () => meta().friends && meta().friends[0] },
+    // Halloween night only (window.__halloween): grow the world from Wikipedia's Halloween page (Nico, 10-31)
+    ...(window.__halloween && window.__halloween.on() ? [{ k: 'hwwiki', text: () => `🎃 Tonight only: let the world <b>grow from Wikipedia's Halloween page</b>. Press <b>grow it ›</b>, or paste <code>${HW_URL}</code> into 🎛 studio → Feed the world.`, kind: 'trail' }] : []),
     { k: 'name', text: () => `Every creature can carry a name you choose. Open a card and <b>type over its name</b>.`, who: () => meta().counter || (live()[0] || {}).name },
     { k: 'feed', text: () => `${mn(meta().hungry)} is hungry. <b>Drag a word onto it</b> to feed it.`, who: () => meta().hungry },
     { k: 'dream', text: () => `${mn(sleeperName())} is asleep. Open its card: the mind tab becomes <b>dream 💤</b>.`, who: () => sleeperName() },
@@ -50,6 +53,7 @@
   addEventListener('idle:ev', e => { const { type, extra } = e.detail || {}; if (!S) return;
     if (type === 'rename' && extra.by === 'you') done('name');
     else if (type === 'feed') done('feed');
+    else if (type === 'terrain' && extra && extra.url && S.done && !S.done.hwwiki && STEPS.some(x => x.k === 'hwwiki')) done('hwwiki');
     else if (type === 'dream_open') done('dream');
     else if (type === 'studio_open' && extra.on) done('weather');
     else if (type === 'reel_play') done('reel');
@@ -64,6 +68,7 @@
     if (step.k === 'card' || step.k === 'name' || step.k === 'dream') actions[0].run = () => { if (c && W()) W().openCard(c.name); };
     if (step.k === 'feed') actions[0].run = () => { if (c && window.__dis) window.__dis.flyTo(c.x, c.y, 1.4); };
     if (step.k === 'gazette') actions[0].run = () => { if (window.__notify) window.__notify.toggle(true); };
+    if (step.k === 'hwwiki') { actions[0].label = 'grow it ›'; actions[0].run = () => { const i = $('#terrain'), g = $('#terrainGo'); if (i && g) { i.value = HW_URL; g.click(); } }; }
     S.shown[step.k] = (S.shown[step.k] || 0) + 1; save();
     const nth = STEPS.filter(s => S.done[s.k]).length + 1;
     const h = N({ kind: 'trail', icon: '🧭', key: 'first5:' + step.k + ':' + S.shown[step.k], html: `<span class="stp">step ${nth} of ${STEPS.length}</span>` + step.text(), actions, ttl: 30000, gap: 1000 });

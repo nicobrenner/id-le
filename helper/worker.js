@@ -81,7 +81,7 @@ const SHARD = Math.floor(Math.random() * 16).toString(16), FEATS = /^[a-z0-9_-]{
 // where visits came from (the referring site's name only), a campaign tag, time on screen, where a guided start stopped
 const REF = /^[a-z0-9][a-z0-9.-]{0,59}$/, UTM = /^[a-z0-9-]{1,24}$/, DWELL = ['<1', '1-5', '5-20', '20+'];
 const DLSTEP = ['what', 'travel', 'kinds', 'team', 'review', 'stats', 'where', 'finished', 'ended'];   // the data lab walkthrough (idle-dlwalk.js)
-const F5STOP = ['none', 'card', 'name', 'feed', 'dream', 'gazette', 'weather', 'reel', 'keep', 'finished', 'skipped'];
+const F5STOP = ['none', 'card', 'hwwiki', 'name', 'feed', 'dream', 'gazette', 'weather', 'reel', 'keep', 'finished', 'skipped'];
 const CAP = { ref: 30, utm: 20 };   // distinct names kept per day and shard; the rest are counted as 'other'
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, batches: 0 });
