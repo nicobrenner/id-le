@@ -344,6 +344,24 @@ def t_sound(P):
     return "unmute → running, mute → suspended"
 
 
+def t_haunted(P):
+    """Halloween music (idle-music.js): the 🎃 haunted style and deck preset exist; with the mode on, following the world plays it; the effects run"""
+    pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
+    pg.evaluate("() => { if (!window.__halloween) window.__halloween = { on: () => true, set() {}, onChange() {} }; }")   # until idle-halloween.js is there
+    if pg.evaluate("() => window.__audio.muted()"): pg.click("#soundBtn"); pg.wait_for_timeout(400)
+    need(pg.evaluate("() => window.__music.styles.includes('haunted') && window.__music.PRESETS.includes('haunted') && window.__music.SCALES.includes('harmonic minor')"), "haunted style, preset or harmonic minor scale missing")
+    pg.evaluate("() => { window.__music.bgSet({ style: 'world' }); window.__music.setBg(true); }")
+    need(pg.evaluate("() => window.__music.bgTrack().style") == "haunted", "following the world did not play haunted while the mode is on")
+    pg.wait_for_timeout(2500)
+    g = pg.evaluate("() => window.__music._gains()")
+    need(g and g["bg"] > 0.01, f"background bus silent while haunted plays: {g}")
+    pg.evaluate("() => { const s = window.__music._sfx; s.knock(); s.boo(); s.owl(); document.dispatchEvent(new CustomEvent('idle:knock')); }")
+    pg.wait_for_timeout(1500)
+    pg.evaluate("() => { window.__music.setBg(false); }")
+    P.clean()
+    return "haunted style + preset, follows the world in Halloween, knock/boo/owl play"
+
+
 ALLOWED_STATS = {"v", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0"}
 
 
@@ -454,7 +472,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "stats", "data lab", "data lab stuck", "replay", "pedia desktop", "camera phone", "pedia phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "data lab", "data lab stuck", "replay", "pedia desktop", "camera phone", "pedia phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -478,6 +496,7 @@ def main():
                 run("camera desktop", t_camera)
                 run("panels", t_panels)
                 run("sound", t_sound)
+                run("haunted music", t_haunted)
                 run("stats", t_stats)
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
