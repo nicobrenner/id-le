@@ -49,6 +49,22 @@ def vendor_ort(out):
     return {f: hashlib.sha256(open(os.path.join(dst, f), "rb").read()).hexdigest()[:16] for f in ORT_FILES}
 
 
+def stamp_versions(out):
+    """Cloudflare keeps .js files in browsers for 4 hours (the zone's browser cache TTL), while pages are always fresh.
+    So every page names its scripts with a fingerprint of their contents (idle-music.js?v=1a2b3c4d): a new deploy means
+    new addresses for exactly the files that changed, and browsers fetch those at once."""
+    import hashlib, re
+    ver = {}
+    for f in os.listdir(out):
+        if f.endswith(".js") and not f.startswith("_"):
+            ver[f] = hashlib.sha256(open(os.path.join(out, f), "rb").read()).hexdigest()[:8]
+    pat = re.compile(r"""(["'])((?:\./)?(%s))\1""" % "|".join(re.escape(f) for f in sorted(ver, key=len, reverse=True)))
+    for f in os.listdir(out):
+        if not f.endswith(".html"): continue
+        path = os.path.join(out, f); html = open(path, encoding="utf-8").read()
+        html = pat.sub(lambda m: f"{m.group(1)}{m.group(2)}?v={ver[m.group(3)]}{m.group(1)}", html)
+        open(path, "w", encoding="utf-8").write(html)
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--helper", default="", help="base URL of the deployed helper worker (page fetch + world links); empty = without")
@@ -78,6 +94,7 @@ def main():
     # the data lab's in-browser classifiers (idle-jeffy.js): fetched only when the lab opens, never on a first visit
     shutil.copytree(os.path.join(DEMO, "jeffy-heads"), os.path.join(out, "jeffy-heads"))
     sums = vendor_ort(out)
+    stamp_versions(out)
     open(os.path.join(out, "_headers"), "w").write(HEADERS)
     if a.pages_helper:   # Pages advanced mode: static files as usual, the helper (helper/worker.js) on the same origin
         w = open(os.path.join(ROOT, "helper", "worker.js"), encoding="utf-8").read()
