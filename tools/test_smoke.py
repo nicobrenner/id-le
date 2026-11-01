@@ -434,6 +434,31 @@ def t_pedia(P, phone=False):
     return f"{len(toc)} sections, {live} live creatures, {len(imgs)} pictures, {len(moving)} clips playing"
 
 
+def t_pedia_halloween(P, phone=False):
+    # ?halloween forces the pedia's Halloween mode on any day: palette class, moon and bats in the header, the ribbon, and a costume
+    # on every drawn creature (they ride on the game's own body drawing); ?halloween=0 forces it off, even on Oct 31
+    pg = P.open("/pedia.html?halloween")
+    wait_for(pg, "() => document.querySelectorAll('#toc a').length > 20", 30)
+    need(pg.evaluate("() => document.documentElement.classList.contains('hw')"), "?halloween did not switch the pedia's Halloween mode on")
+    need(pg.evaluate("() => !!document.querySelector('header .hwmoon') && document.querySelectorAll('header .hwbat').length >= 3"), "the moon and bats are missing from the header")
+    need(pg.evaluate("() => getComputedStyle(document.getElementById('hwrib')).display !== 'none'"), "the Happy Halloween ribbon is not showing")
+    need(pg.evaluate("() => !!document.querySelector('main .hwweb')"), "the cobweb is missing")
+    wait_for(pg, "() => document.querySelectorAll('svg.live').length >= 5", 30)
+    kinds = pg.evaluate("""async () => { const out = []; for (const s of document.querySelectorAll('svg.live')) { s.scrollIntoView({ block: 'center' });
+        for (let k = 0; k < 20 && !s.querySelector('g.hwc'); k++) await new Promise(r => setTimeout(r, 100)); const c = s.querySelector('g.hwc'); out.push(c ? c.dataset.c : null); } scrollTo(0, 0); return out; }""")
+    bare = [i for i, k in enumerate(kinds) if not k]
+    need(not bare, f"{len(bare)} of {len(kinds)} pedia creatures have no costume")
+    if phone:
+        sw = pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
+        need(sw <= 1, f"sideways scroll of {sw}px at phone width in Halloween mode")
+    P.clean("halloween pedia")   # before the next page: its first navigation clears what this one collected
+    off = P.open("/pedia.html?halloween=0")
+    wait_for(off, "() => document.querySelectorAll('#toc a').length > 20", 30)
+    need(not off.evaluate("() => document.documentElement.classList.contains('hw') || !!document.querySelector('g.hwc')"), "?halloween=0 left the Halloween mode on")
+    P.clean()
+    return f"{len(kinds)} creatures in costume ({', '.join(sorted(set(kinds)))})"
+
+
 def t_fps(P, n=300, floor=20):
     pg = P.open("/arena.html?fresh=1&test&bench"); booted(pg)
     pg.evaluate(f"() => window.__bench.spawn({n})"); pg.wait_for_timeout(6000)
@@ -454,7 +479,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "stats", "data lab", "data lab stuck", "replay", "pedia desktop", "camera phone", "pedia phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "stats", "data lab", "data lab stuck", "replay", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -483,14 +508,15 @@ def main():
                 run("data lab stuck", t_datalab_stuck)
                 run("replay", t_replay)
                 run("pedia desktop", t_pedia)
+                run("pedia halloween", t_pedia_halloween)
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()
-            if any(want(n) for n in ("camera phone", "pedia phone")):
+            if any(want(n) for n in ("camera phone", "pedia phone", "pedia halloween phone")):
                 wk = p.webkit.launch(headless=not a.headed)
                 try:
                     dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
-                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("pedia phone", t_pedia, {"phone": True})):
+                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
                         if not want(name): continue
                         ctx = wk.new_context(**dev); P = Page(ctx, base)
                         try: check(name, lambda P=P, fn=fn, kw=kw: fn(P, **kw))
