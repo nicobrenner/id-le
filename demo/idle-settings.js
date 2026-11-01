@@ -19,7 +19,7 @@
 #settings.on{display:block}#settings .hd{display:flex;justify-content:space-between;align-items:center;margin:-8px -10px 6px;padding:8px 10px 6px;position:sticky;top:-8px;z-index:2;background:var(--floor);border-bottom:1px solid #8883;cursor:grab;user-select:none;touch-action:none}#settings.drag .hd{cursor:grabbing}
 #settings .hd b{font-size:13px}#settings button{font:inherit;font-size:12px;padding:2px 9px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}
 #settings .row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #8882}#settings .row .t{flex:1}#settings .row .t b{display:block;font-size:12.5px}#settings .row small{opacity:.7}
-#settings .sw{flex:none;min-width:52px;min-height:30px;height:auto;line-height:1.2;padding:4px 10px;align-self:flex-start}@media (max-width:500px){#settings .sw{min-height:40px;min-width:60px;font-size:14px}#settings .hd button{min-height:40px;min-width:44px}}#settings .sw.on{background:#2b5cff;color:#fff;border-color:#2b5cff}#settings .sw[disabled]{opacity:.45;cursor:default}
+#settings .sw{flex:none;min-width:52px;min-height:30px;height:auto;line-height:1.2;padding:4px 10px;align-self:flex-start}@media (max-width:500px){#settings .sw{min-height:40px;min-width:60px;font-size:14px}#settings .hd button{min-height:40px;min-width:44px}}#settings .sw.on{background:#2b5cff;color:#fff;border-color:#2b5cff}#settings .sw[disabled]{opacity:.45;cursor:default}#settings .sw::after{display:none}
 #settings a{color:inherit}#settings .ft{padding-top:8px;opacity:.8}`;
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'settings'; document.body.appendChild(el);
