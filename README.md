@@ -73,11 +73,15 @@ An encyclopedia of the game that reads the game's own code: families, jobs, gene
 ## Run locally
 
 ```
-python3 demo_server.py 8765        # serves demo/ on http://localhost:8765 (the default port is 8766)
-open http://localhost:8765/arena.html
+git clone https://github.com/nicobrenner/id-le && cd id-le
+python3 server.py                  # http://localhost:8766 · Python's standard library only
 ```
 
-`demo_server.py` is a copy of the research server the arena grew up in, so some endpoints (the lab chat, classifier heads, the lab folder) still expect that project's layout. The game itself runs in the browser and keeps its worlds in browser storage and snapshots.
+`server.py` serves the game with everything the public site has: creatures that read web pages, Wikipedia worlds, linked worlds, the data lab (its three starting classifiers run in the browser; other heads go to Jeffy's public server), your world mirrored to disk in `lab/`. Optional: `pip install onnxruntime tokenizers` so the Crawler scores pages by meaning.
+
+## Change anything with your own coding agent
+
+Run it locally and the 📟 Operator chat becomes a line to **your coding agent** (Claude Code, on a subscription or a key, or any agent that reads files and runs commands): what you type lands in `lab/notes.jsonl`, the agent answers in `lab/replies.jsonl`, and it can change anything, the game's code included. That's how Id|le was built. Setup: [docs/operator-coding-agent.md](docs/operator-coding-agent.md); the agent's house rules: [AGENTS.md](AGENTS.md).
 
 Static build, no server needed (see `tools/build_static.py`):
 

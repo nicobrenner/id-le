@@ -1,5 +1,5 @@
 // Id|le BYO-AI: the lab sidebar becomes a chat with an AI the player brings (docs/byo_ai.md).
-// Brains: 'relay' (today's path: notes/replies through demo_server.py, a local agent answers), 'anthropic' and 'openai'
+// Brains: 'relay' (your coding agent: notes/replies through server.py's lab folder, a local agent such as Claude Code answers), 'anthropic' and 'openai'
 // (the player's own API key, browser → provider directly), 'local' (Ollama / LM Studio on localhost), and 'tiny': the Tiny Operator
 // (TO), the Tiny Oracle itself in the Operator's chair: no key, nothing leaves the browser. TO understands with learned heads on the
 // Oracle's hidden states (demo/arena_instr_v3.json, arena_instructions_v3.py: world options + 'creature' + 'none'; creature commands go
@@ -86,7 +86,7 @@
   const lab = $('#lab'), head = $('#lab-head'), text = $('#lab-text'), sendBtn = $('#lab-send');
   if (!lab || !head || !text || !sendBtn) return;
   const bar = document.createElement('div'); bar.id = 'ai-bar';
-  bar.innerHTML = `<span title="who answers in this chat">brain</span><select id="ai-brain"><option value="relay">local agent (relay)</option><option value="anthropic">Claude (your key)</option><option value="openai">OpenAI-compatible (your key)</option><option value="local">local model</option><option value="tiny">📟 Tiny Operator (TO): free, in your browser</option></select><button id="ai-gear" title="connect your AI">⚙</button><button id="ai-new" title="start a new conversation">new</button>`;
+  bar.innerHTML = `<span title="who answers in this chat">brain</span><select id="ai-brain"><option value="relay">🛠 your coding agent (local)</option><option value="anthropic">Claude (your key)</option><option value="openai">OpenAI-compatible (your key)</option><option value="local">local model</option><option value="tiny">📟 Tiny Operator (TO): free, in your browser</option></select><button id="ai-gear" title="connect your AI">⚙</button><button id="ai-new" title="start a new conversation">new</button>`;
   const set = document.createElement('div'); set.id = 'ai-set';
   const smart = document.createElement('div'); smart.id = 'ai-smart';
   const smartBtn = document.createElement('button'); smartBtn.id = 'ai-smart-btn'; smartBtn.textContent = '🧠 Make your Operator smarter'; smartBtn.title = 'the ways to put a bigger AI in the Operator\'s chair';
@@ -96,18 +96,19 @@
   smart.innerHTML = `<p>Right now the <b>Tiny Operator</b> (the Tiny Oracle, a 10.8 MB model in your browser) sits in the Operator's chair. It's free and private, and it knows very little. Three ways to seat a bigger AI:</p>
 <div class="opt"><b>1 · A model on your own computer</b> (Ollama or LM Studio). Nothing leaves your machine. <button data-smart="local">set it up</button></div>
 <div class="opt"><b>2 · Your own API key</b> (Claude or any OpenAI-compatible API). The key stays in this browser and goes only from this page straight to the provider you pick: your messages, a short summary of the world and the results of its actions go there; nothing goes through id-le.com, and keys are never saved in world files or snapshots. <button data-smart="anthropic">Claude</button><button data-smart="openai">other</button></div>
-<div class="opt"><b>3 · Run Id|le yourself</b>. The whole game is open source (MIT): <a href="${REPO}" target="_blank" rel="noopener">get the code</a>, run it on your computer and connect anything you like. <a href="pedia.html#make-it-yours" target="_blank" rel="noopener">How</a> · <a href="privacy.html" target="_blank" rel="noopener">privacy</a></div>
+<div class="opt"><b>3 · Run Id|le yourself, with your coding agent</b>. The whole game is open source (MIT): <a href="${REPO}" target="_blank" rel="noopener">get the code</a>, start it with <code>python3 server.py</code>, and seat your own coding agent (Claude Code, on a subscription or a key, or any other) in this chair: it can change anything, the game's code included. That's how Id|le was built. <a href="${REPO}/blob/main/docs/operator-coding-agent.md" target="_blank" rel="noopener">How</a> · <a href="privacy.html" target="_blank" rel="noopener">privacy</a></div>
 <div class="opt"><button data-smart="tiny">back to the Tiny Operator</button></div>`;
   smartBtn.addEventListener('click', () => smart.classList.toggle('on'));
   smart.addEventListener('click', e => { const b = e.target.dataset.smart; if (!b) return; cfg.brain = b; cfg.chosen = true; saveCfg(); brainSel.value = b; convo = []; applyBrain(); smart.classList.remove('on'); if (b !== 'tiny') { set.classList.add('on'); renderSet(); } });
   const brainSel = $('#ai-brain');
 
+  fetch('/lab/info').then(r => r.ok ? r.json() : null).then(i => { if (i && i.notes) { window.__labInfo = i; if (cfg.brain === 'relay') renderSet(); } }).catch(() => {});
   function renderSet() {
     const b = cfg.brain, A = cfg.anthropic, O = cfg.openai, L = cfg.local;
     const allow = `<div class="row"><label><input type="checkbox" data-allow="disaster"${cfg.allow.disaster ? ' checked' : ''}> let the AI start disasters</label><label><input type="checkbox" data-allow="frenzy"${cfg.allow.frenzy ? ' checked' : ''}> let it start frenzies</label></div><small>Taking apart a design or resting a creature always asks you first. At most ${cfg.perMin} actions a minute and 5 new creatures an hour.</small>`;
     const body = {
       tiny: `<small>The Tiny Operator needs no key and sends nothing anywhere: it runs in this page. It understands a few kinds of requests (weather, a new creature, rave on/off, a disaster if you allow it, renaming, evolving, a look around) and passes creature commands to IRC; everything else is chit-chat.</small>`,
-      relay: `<small>Notes go to the Mac server (demo_server.py) and a local agent session answers them, as before. Nothing leaves this computer.</small>`,
+      relay: `<small>Connected to <b>your coding agent</b> through this computer's server (<code>server.py</code>): what you write here is appended to <code>${esc(window.__labInfo ? window.__labInfo.notes : 'lab/notes.jsonl')}</code>, and whatever your agent (Claude Code, or any coding agent) writes to <code>${esc(window.__labInfo ? window.__labInfo.replies : 'lab/replies.jsonl')}</code> shows up here. It can change anything, the game's code included. How to set it up: <a href="${REPO}/blob/main/docs/operator-coding-agent.md" target="_blank" rel="noopener">docs/operator-coding-agent.md</a>. Nothing leaves this computer unless your agent sends it.</small>`,
       anthropic: `<label>API key <input type="password" data-k="anthropic.key" value="${esc(A.key)}" placeholder="sk-ant-…" autocomplete="off"></label><label>model <input type="text" data-k="anthropic.model" value="${esc(A.model)}"></label>
         <small>Your key stays in this browser and is sent only to api.anthropic.com (never to the game's helper, never in a world file or snapshot). Calls go straight from this page, so anyone using this browser profile can use the key.</small><div class="row"><button data-forget="anthropic">forget key</button></div>`,
       openai: `<label>API base URL <input type="text" data-k="openai.base" value="${esc(O.base)}"></label><label>API key <input type="password" data-k="openai.key" value="${esc(O.key)}" autocomplete="off"></label><label>model <input type="text" data-k="openai.model" value="${esc(O.model)}" placeholder="the provider's model name"></label>
@@ -124,8 +125,8 @@
   $('#ai-new').addEventListener('click', () => { convo = []; thread.innerHTML = ''; add('page', 'new conversation'); });
   brainSel.value = cfg.brain;
   const applyBrain = () => { lab.classList.toggle('ai', cfg.brain !== 'relay');
-    text.placeholder = cfg.brain === 'relay' ? 'notes to the lab: what to change about the creatures, the arena… (⌘+Enter sends)' : cfg.brain === 'tiny' ? 'ask TO: make it rain, add a Mathematician, start a rave, rename Crawly to … (⌘+Enter sends)' : 'talk to your AI about the world, ask it to do things… (⌘+Enter sends)';
-    const cap = $('#lab-form small'); if (cap && cfg.brain !== 'relay') cap.textContent = cfg.brain === 'tiny' ? 'the Tiny Operator runs in this page: weather, new creatures, raves, names, evolving, a look around; creature commands go to IRC' : 'talks to the AI you bring; it can look at the world and use the game\'s own actions';
+    text.placeholder = cfg.brain === 'relay' ? 'tell your coding agent what to change: the creatures, the world, the game itself… (⌘+Enter sends)' : cfg.brain === 'tiny' ? 'ask TO: make it rain, add a Mathematician, start a rave, rename Crawly to … (⌘+Enter sends)' : 'talk to your AI about the world, ask it to do things… (⌘+Enter sends)';
+    const cap = $('#lab-form small'); if (cap) cap.textContent = cfg.brain === 'relay' ? 'replies from your coding agent appear here' : cfg.brain === 'tiny' ? 'the Tiny Operator runs in this page: weather, new creatures, raves, names, evolving, a look around; creature commands go to IRC' : 'talks to the AI you bring; it can look at the world and use the game\'s own actions';
     renderSet(); };
   brainSel.addEventListener('change', () => { cfg.brain = brainSel.value; cfg.chosen = true; saveCfg(); convo = []; applyBrain(); if (cfg.brain !== 'relay' && !ready()) set.classList.add('on'); });
   applyBrain();

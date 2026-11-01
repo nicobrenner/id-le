@@ -1,5 +1,5 @@
 // Id|le runtime: where the game's back end lives.
-// With the local server (demo_server.py) everything passes straight through. Without one (a static site such as
+// With the local server (server.py) everything passes straight through. Without one (a static site such as
 // id-le.com, or `python3 -m http.server`), the /lab/* and /worlds/* calls are answered here instead:
 //   saving        /lab/sync, /lab/world      -> IndexedDB in this browser (snapshots merge, never shrink)
 //   the web       /lab/fetch, /lab/page, /lab/asset, /lab/img, /worlds/*  -> the optional helper (helper/worker.js), else a clear error
@@ -40,7 +40,7 @@ window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Rel
   const tx = async (store, mode, fn) => { const d = await db; return new Promise((ok, bad) => { const t = d.transaction(store, mode), s = t.objectStore(store); const r = fn(s); t.oncomplete = () => ok(r && r.result); t.onerror = () => bad(t.error); }); };
   const get = k => tx('kv', 'readonly', s => s.get(k)), put = (k, v) => tx('kv', 'readwrite', s => s.put(v, k));
 
-  async function sync(data) {   // same rules as demo_server.py: snapshots merge and never shrink; a much smaller world never replaces a bigger one without a copy
+  async function sync(data) {   // same rules as server.py: snapshots merge and never shrink; a much smaller world never replaces a bigger one without a copy
     if (Array.isArray(data.arena_snapshots)) {
       const old = (await get('arena_snapshots')) || [], seen = new Set(data.arena_snapshots.map(x => x.t + '|' + x.name));
       data.arena_snapshots = old.filter(x => !seen.has(x.t + '|' + x.name)).concat(data.arena_snapshots).sort((a, b) => (a.t || 0) - (b.t || 0)).slice(-60);
