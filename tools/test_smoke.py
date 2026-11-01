@@ -94,6 +94,8 @@ out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})
 out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
 // a lone report, with no later request to that isolate, must still be written (the 2-min buffer of 11-01 lost these: 180 received, 50 stored)
 { globalThis.__statFlushNow = false; const before = env.STATS.puts.length; await post('/lab/stats', { v: 1, feat: ['lonetest'] }); out.lone_report_written = env.STATS.puts.length > before; globalThis.__statFlushNow = true; }
+// /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
+{ out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
 // jeffy proxy: an allowlist of two paths; nothing else is relayed (no network needed for these answers)
 out.jeffy_train = (await post('/jeffy/train', { text: 'x', task: 'sms_spam' })).status;
 out.jeffy_get_predict = (await go('/jeffy/predict')).status;
@@ -126,6 +128,38 @@ console.log(JSON.stringify(out));
 """
 
 
+def pages_unit():
+    """Server-side page views (helper/worker.js pageview through the generated Pages worker): people vs bots, visits vs reloads,
+    referrer and utm, pages, the HyperLogLog estimate on synthetic uniques, and nothing that identifies a person stored."""
+    tmp = tempfile.mkdtemp(prefix="idle-pages-")
+    try:
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_static.py"), "--helper", "https://id-le.com", "--pages-helper", "--out", os.path.join(tmp, "dist")], capture_output=True, text=True, timeout=180)
+        need(r.returncode == 0, "build failed: " + (r.stderr or r.stdout)[-300:])
+        routes = json.load(open(os.path.join(tmp, "dist", "_routes.json")))["include"]
+        need(all(p in routes for p in ("/", "/pedia", "/privacy")), f"_routes.json misses a page: {routes}")
+        shutil.copy(os.path.join(tmp, "dist", "_worker.js"), os.path.join(tmp, "w.mjs")); shutil.copy(os.path.join(ROOT, "helper", "worker.js"), os.path.join(tmp, "h.mjs"))
+        r = subprocess.run(["node", os.path.join(ROOT, "tools", "pages_test.mjs"), "file://" + os.path.join(tmp, "w.mjs"), "file://" + os.path.join(tmp, "h.mjs")], capture_output=True, text=True, timeout=120)
+        need(r.returncode == 0, (r.stderr or r.stdout)[-400:])
+        o = json.loads(r.stdout.strip().splitlines()[-1])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    s = o["small"]
+    need(s["views"] == {"game": 3, "pedia": 1, "privacy": 1}, f"page views {s['views']} (a redirect, HEAD, prefetch, non-HTML or a script must not count)")
+    need(s["gpc"] == {"game": 1}, f"Global Privacy Control: {s['gpc']} (a page view only, no visit)")
+    need(s["visits"] == {"game": 1, "pedia": 1, "privacy": 1}, f"visits {s['visits']} (the isolation reload is not a new visit)")
+    need(s["ref"] == {"reddit.com": 1, "news.ycombinator.com": 1, "direct": 1} and s["utm"] == {"r-webgames": 1}, f"ref {s['ref']} utm {s['utm']}")
+    need(s["dev"] == {"desktop": 2, "phone": 1} and s["cc"] == {"US": 2, "DE": 1}, f"dev {s['dev']} cc {s['cc']}")
+    need(o["bots"].get("game") == 4 and sum(o["botWhy"].values()) == 4 and o["botWhy"].get("no-lang") == 1, f"bots {o['bots']} why {o['botWhy']} (curl, Googlebot, HeadlessChrome, no Accept-Language)")
+    for n, v in o["est"].items():
+        need(abs(v - int(n)) / int(n) < 0.06, f"HyperLogLog estimate {v:.0f} for {n} uniques (more than 6% off)")
+    e2e = o["e2e"]
+    need(abs(e2e["uniques"] - 401) / 401 < 0.08 and e2e["visits"] == 401, f"end to end: {e2e}")
+    need(not e2e["ua_stored"], "an IP address or a User-Agent was found in storage")
+    need(all(k.startswith(("stats:", "salt:")) for k in o["keys"]), f"unexpected keys {o['keys']}")
+    need(o["salt"] and all(x["ttl"] <= 30 * 3600 for x in o["salt"]), f"the daily salt must expire within 30 h: {o['salt']}")
+    return f"views {s['views']}, bots {o['bots']}, 1k/10k/100k uniques → {o['est']['1000']:.0f}/{o['est']['10000']:.0f}/{o['est']['100000']:.0f}, 401 through the worker → {e2e['uniques']}"
+
+
 def worker_unit():
     tmp = tempfile.mkdtemp(prefix="idle-worker-")
     try:
@@ -148,6 +182,7 @@ def worker_unit():
     need(o["jeffy_train"] == 404 and o["jeffy_get_predict"] == 404, f"jeffy allowlist: train {o['jeffy_train']}, GET predict {o['jeffy_get_predict']}")
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
+    need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
     ev = re.search(r"STAT_EVERY = (\d+)", open(os.path.join(ROOT, "helper", "worker.js")).read())
     need(ev and int(ev.group(1)) <= 25000, f"STAT_EVERY {ev and ev.group(1)} ms: must stay under the ~30 s a Worker's waitUntil may run after the response")
     need(o["world_poll_writes"] == 0, f"5 polls of an unregistered world wrote {o['world_poll_writes']} times to KV (expected 0: polls never create worlds; KV writes are scarce)")
@@ -319,7 +354,7 @@ class Page:
             path = u[len(self.base):].split("?")[0]
             if path.startswith("/jeffy/capabilities"): return route.fulfill(status=200, content_type="application/json", body=json.dumps(CAPS))
             if path.startswith("/jeffy/"): return route.fulfill(status=503, content_type="application/json", body='{"error":"busy"}')
-            if path == "/lab/stats": self.stats.append(route.request.post_data or ""); return route.fulfill(status=204, body="")
+            if path in ("/lab/stats", "/lab/p"): self.stats.append(route.request.post_data or ""); return route.fulfill(status=204, body="")
             if path == "/lab/notices": return route.fulfill(status=200, content_type="application/json", body="[]")
             if path.startswith("/worlds/state"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"me": {"name": "", "links": [], "requests": [], "inbox": []}, "peers": {}}))
             if path == "/lab/fetch": return route.fulfill(status=200, content_type="application/json", body=json.dumps(WIKI_PAGE))
@@ -554,7 +589,7 @@ def t_operator(P):
     return "; ".join(got) + "; 🧠 opens; send row clear"
 
 
-ALLOWED_STATS = {"v", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0"}
+ALLOWED_STATS = {"v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0"}
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -592,6 +627,7 @@ def t_stats_v2(P):
     pg.evaluate("() => window.__stats._send('3m')"); pg.wait_for_timeout(500)
     need(P.stats, "nothing was sent with ?statstest")
     sent = [json.loads(b) for b in P.stats]
+    need(sent[0].get("why") == "open" and sent[0].get("visit") == 1 and sent[0].get("v2") == 1, f"the first report must be the visit itself, sent soon after the page opens: {sent[0]}")
     keys = set().union(*[set(q) for q in sent])
     need(keys <= ALLOWED_STATS | {"why"}, f"payload keys outside the allowlist: {sorted(keys - ALLOWED_STATS - {'why'})}")
     x = {}
@@ -1011,6 +1047,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
+    if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
     browser_names = ["fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)

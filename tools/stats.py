@@ -28,7 +28,7 @@ def engage2(tot):
     x = tot.get("x") or {}
     pos = lambda o: {k: v for k, v in (o or {}).items() if v and v > 0}
     did, ws, pt, ct, opa, fav, rage, path = (pos(x.get(k)) for k in ("did", "ws", "pt", "ct", "opa", "fav", "rage", "path"))
-    v = tot.get("visits", 0) or 0
+    v = tot.get("v2visits", 0) or 0   # visit reports from pages that send engagement v2 (older days and pages are not in it)
     if not (did or ws or pt or ct):
         return [], []
     pc = lambda n: f"{100 * n / v:.0f}%" if v else "-"
@@ -83,6 +83,48 @@ def add(a, b):
     return a
 
 
+HLL_M = 2048
+
+
+def hll_merge(sketches):
+    """Register-wise max of base64 sketches (one per shard); None if there is none."""
+    import base64
+    out = None
+    for sv in sketches:
+        try:
+            b = base64.b64decode(sv)
+        except Exception:
+            continue
+        if len(b) != HLL_M:
+            continue
+        out = bytearray(b) if out is None else bytearray(max(x, y) for x, y in zip(out, b))
+    return out
+
+
+def hll_count(reg):
+    """The standard HyperLogLog estimate with the small-range correction (about 2.3% standard error at 2,048 registers)."""
+    import math
+    if not reg:
+        return 0
+    z = sum(1 for r in reg if r == 0)
+    e = (0.7213 / (1 + 1.079 / HLL_M)) * HLL_M * HLL_M / sum(2.0 ** -r for r in reg)
+    return HLL_M * math.log(HLL_M / z) if e <= 2.5 * HLL_M and z else e
+
+
+def server_days(days):
+    """Per day, what the server counted itself (the pv block): page views, visits, bots, visitors (estimated), and the in-page reports."""
+    rows = {}
+    for d in sorted(days):
+        pv = days[d].get("pv") or {}
+        views, visits, bots = pv.get("views") or {}, pv.get("visits") or {}, pv.get("bots") or {}
+        if not (views or bots):
+            continue
+        uv = days[d].get("uv") or {}
+        rows[d] = {"visitors": uv.get("all", 0), "visitors_game": uv.get("game", 0), "visits": sum(visits.values()), "visits_game": visits.get("game", 0),
+                   "views": sum(views.values()), "views_by": views, "bots": sum(bots.values()), "gpc": sum((pv.get("gpc") or {}).values()), "reported": days[d].get("visits", 0)}
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=14)
@@ -104,13 +146,18 @@ def main():
         cursor = (r.get("result_info") or {}).get("cursor") or ""
         if not cursor:
             break
-    days = {}
+    days, sketches = {}, {}
     for k in sorted(keys):
         day = k.split(":")[1]
         if day < since:
             continue
         v = json.loads(call(f"/accounts/{acct}/storage/kv/namespaces/{nsid}/values/{urllib.parse.quote(k, safe='')}", tok, raw=True))
+        for kk, sv in ((v.get("pv") or {}).get("hll") or {}).items():   # sketches merge by max, never add
+            sketches.setdefault(day, {}).setdefault(kk, []).append(sv)
         add(days.setdefault(day, {}), v)
+    for day, by in sketches.items():
+        if day in days:
+            days[day]["uv"] = {kk: round(hll_count(hll_merge(lst))) for kk, lst in by.items()}
     if a.json:
         print(json.dumps(days, indent=1, sort_keys=True))
         return
@@ -123,6 +170,22 @@ def main():
         print(f"no stats since {since}")
         return
     print(f"id-le.com anonymous stats, {since} .. today (UTC)\n")
+    srv = server_days(days)
+    if srv:
+        print("Counted by our server (every page request; bots apart; visitors estimated without cookies, about ±2-3%)")
+        print(f"  {'day':<11}{'visitors':>9}{'visits':>8}{'views':>7}  game/pedia/privacy views   {'bots':>5}  {'no-track':>8}   in-page reports from")
+        for d, r in srv.items():
+            vb = r["views_by"]
+            share = f"{r['reported']} visits ({100 * r['reported'] / r['visits_game']:.0f}% of game visits)" if r["visits_game"] else f"{r['reported']} visits"
+            print(f"  {d:<11}{r['visitors']:>9}{r['visits']:>8}{r['views']:>7}  {vb.get('game', 0):>5}/{vb.get('pedia', 0)}/{vb.get('privacy', 0):<16}{r['bots']:>5}  {r['gpc']:>8}   {share}")
+        stot = {}
+        for d in srv:
+            add(stot, days[d].get("pv") or {})
+        for k, title in (("ref", "came from (server, per visit)"), ("utm", "campaign tags (server)"), ("dev", "devices (server)"), ("cc", "countries (server)"), ("botWhy", "bots, by sign")):
+            v = {x: n for x, n in (stot.get(k) or {}).items() if n}
+            if v:
+                print(f"  {title}: " + ", ".join(f"{x} {n}" for x, n in sorted(v.items(), key=lambda kv: -kv[1])[:15]))
+        print()
     traffic, note = zone_traffic(tok, since)
     if traffic:
         print("Cloudflare (real browsers): page loads, game starts, stats reports received / stored")
@@ -132,6 +195,7 @@ def main():
         print()
     elif note:
         print(note + "\n")
+    print("In-page stats (from the page loads whose script reported: see the share above)")
     print(f"{'day':<11}{'visits':>7}{'back':>6}{'phone':>7}{'desk':>6}{'iOS':>5}  safe 0/1/2   fps <20/20-40/40-55/55+   batches  writes")
     for day in sorted(days):
         d = days[day]
@@ -325,6 +389,26 @@ def dashboard(days, since, traffic, note):
              f'<h2 style="margin-top:12px">Came from</h2>{bars(sorted(pdref.items(), key=lambda kv: -kv[1])[:10], total=sum(pdref.values()) or None, empty=later)}'
              f'<h2 style="margin-top:12px">Time on screen (minutes)</h2>{bars([(k, pdw.get(k, 0)) for k in DWELL], total=sum(pdw.values()) or None, empty=later)}'
              f'<h2 style="margin-top:12px">Sections seen</h2>{bars(sorted(pdsec.items(), key=lambda kv: -kv[1])[:20], empty=later)}') if pd.get("visits") else f'<p class="muted">{e(later)}</p>'
+    srv = server_days(days)
+    stot = {}
+    for d in srv:
+        add(stot, days[d].get("pv") or {})
+    if srv:
+        sv_visitors = sum(r["visitors"] for r in srv.values()); sv_visits = sum(r["visits"] for r in srv.values()); sv_views = sum(r["views"] for r in srv.values())
+        sv_bots = sum(r["bots"] for r in srv.values()); sv_game = sum(r["visits_game"] for r in srv.values()); sv_rep = sum(r["reported"] for r in srv.values())
+        srows = ""
+        for d, r in srv.items():
+            vb = r["views_by"]; pct = f" ({100 * r['reported'] / r['visits_game']:.0f}%)" if r["visits_game"] else ""
+            srows += (f'<tr><td>{d}</td><td>{r["visitors"]}</td><td>{r["visits"]}</td><td>{r["views"]}</td><td>{vb.get("game", 0)}</td><td>{vb.get("pedia", 0)}</td>'
+                      f'<td>{vb.get("privacy", 0)}</td><td>{r["bots"]}</td><td>{r["gpc"]}</td><td>{r["reported"]}{pct}</td></tr>')
+        sb = lambda k, n=12: bars(sorted(nz(stot.get(k)).items(), key=lambda kv: -kv[1])[:n], total=sum(nz(stot.get(k)).values()) or None)
+        server = (f'<div class="tiles">{tile(sv_visitors, "visitors (estimated)")}{tile(sv_visits, "visits")}{tile(sv_views, "page views")}{tile(sv_bots, "bot requests (apart)")}</div>'
+                  f'<p class="muted">Counted by our server on every page request, whether or not the page\'s script runs. Visitors are estimated without cookies or IDs (a daily HyperLogLog sketch, about ±2–3%); a visitor on two days counts on each day. A visit is a page view not preceded by one from the same visitor in the last 30 minutes. The in-page stats below come from {sv_rep} visits that reported ({100 * sv_rep / sv_game:.0f}% of the server\'s game visits).</p>' if sv_game else "")
+        server += (f'<div style="overflow-x:auto"><table><thead><tr><th>day</th><th>visitors</th><th>visits</th><th>page views</th><th>game</th><th>pedia</th><th>privacy</th><th>bots</th><th>asked not to be tracked</th><th>reported in-page</th></tr></thead><tbody>{srows}</tbody></table></div>'
+                   f'<div class="grid g2"><section><h2>Came from (per visit)</h2>{sb("ref", 15)}</section><section><h2>Campaign tags</h2>{sb("utm", 12)}</section>'
+                   f'<section><h2>Devices</h2>{sb("dev")}</section><section><h2>Countries</h2>{sb("cc", 15)}</section><section><h2>Bots, by sign</h2>{sb("botWhy")}</section></div>')
+    else:
+        server = f'<p class="muted">{e("no server counts yet (counted from this version on)")}</p>'
     dark = "color-scheme:dark;--surface:#1a1a19;--card:#222220;--ink:#ffffff;--ink2:#c3c2b7;--muted:#8f8e86;--line:#3a3a37;--s1:#3987e5;--s2:#d95926;--track:#2c2c2a"
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Id|le stats</title><style>
@@ -348,7 +432,9 @@ td:first-child,th:first-child{{text-align:left}}details{{margin-top:8px}}summary
 ul{{padding-left:18px;margin:0}}code{{font-size:12px;word-break:break-word}}
 </style></head><body><main>
 <h1>Id|le stats</h1><div class="sub">id-le.com · anonymous daily totals since {since} (UTC) · made {made}{" · * = day includes our own tests (" + ", ".join(tested) + ")" if tested else ""}</div>
-<div class="tiles">{tile(tot.get("visits", 0), "visits")}{tile(new_visits, "new browsers")}{tile(tot.get("back", 0), "returning")}{tile(dev.get("phone", 0), "on phones")}{tile(f5.get("finished", 0), "finished the guided start")}{tile(ref.get("reddit.com", 0) + ref.get("news.ycombinator.com", 0), "from Reddit + HN")}</div>
+<section class="wide" style="margin-bottom:14px"><h2>Visitors and page views (counted by our server)</h2>{server}</section>
+<h2>In-page stats (from the visits whose page reported)</h2>
+<div class="tiles">{tile(tot.get("visits", 0), "visits that reported")}{tile(new_visits, "new browsers")}{tile(tot.get("back", 0), "returning")}{tile(dev.get("phone", 0), "on phones")}{tile(f5.get("finished", 0), "finished the guided start")}{tile(ref.get("reddit.com", 0) + ref.get("news.ycombinator.com", 0), "from Reddit + HN")}</div>
 <div class="grid">
 <section class="wide"><h2>Visits per day</h2><div class="legend"><span><i class="sw" style="background:var(--s1)"></i>new</span><span><i class="sw" style="background:var(--s2)"></i>returning</span></div>{visits_svg}
 <details><summary>table</summary><table><thead><tr><th>day</th><th>visits</th><th>new</th><th>returning</th><th>phone</th><th>iOS</th></tr></thead><tbody>{vrows}</tbody></table></details></section>

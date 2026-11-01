@@ -11,7 +11,7 @@ What it does, next to serving demo/:
       /worlds/*                                  linking worlds (kept in <lab>/worlds.json)
       /jeffy/capabilities, /jeffy/predict        the data lab's other classifier heads, via Jeffy's public server (or --jeffy URL)
       /lab/embed                                 sentence vectors for the Crawler (optional: onnxruntime + tokenizers, or sentence-transformers)
-      /lab/stats                                 accepted and dropped: a local game sends nothing anywhere
+      /lab/stats, /lab/p                         accepted and dropped: a local game sends nothing anywhere
   - your world mirrored to disk (/lab/sync, /lab/world, /lab/recover): <lab>/sync_*.json, with a rolling history;
   - the Operator's line to your own coding agent (/lab/notes, /lab/replies): what you type in the 📟 Operator panel
     (brain: "your coding agent") is appended to <lab>/notes.jsonl; whatever your agent writes to <lab>/replies.jsonl shows
@@ -316,7 +316,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if not isinstance(row, dict) or not str(row.get("text", "")).strip(): return self.send({"ok": False, "error": "a note needs text"}, code=400)
                 add_note(row); return self.send({"ok": True})
             if p == "/lab/sync": lab_sync(self.body()); return self.send({"ok": True})
-            if p == "/lab/stats": return self.send(b"", "text/plain", 204)   # a local game sends nothing anywhere
+            if p in ("/lab/stats", "/lab/p"): return self.send(b"", "text/plain", 204)   # a local game sends nothing anywhere
             if p == "/lab/embed":
                 texts = [str(t)[:300] for t in (self.body().get("texts") or [])][:1200]; enc = encoder()
                 if not enc: return self.send({"error": "unavailable: install onnxruntime and tokenizers (pip install onnxruntime tokenizers) for the Crawler's sentence vectors; it uses word vectors meanwhile"})

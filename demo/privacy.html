@@ -44,8 +44,20 @@ th{background:var(--box);font-weight:600}
 <li><b>The chat and your AI keys</b>: if you connect an AI in the chat, your key is stored in this browser and is sent only to the provider you chose (for example <code>api.anthropic.com</code>, or the address you typed for an OpenAI-compatible or local model). It never goes to id-le.com, and it is never put in a world file or a snapshot. What you type in the chat goes to that provider too, under their terms, and nowhere else.</li>
 </ul>
 
+<h2>Page views, counted by the server</h2>
+<p>When your browser asks id-le.com for a page (the game, the Id|le-pedia or this page), the server adds it to that day's totals. Nothing runs in your browser for this, and nothing is stored about you. What the totals hold:</p>
+<table>
+<tr><th>What</th><th>How</th></tr>
+<tr><td>Page views and visits, per page</td><td>a visit is a page view that the same visitor didn't make in the previous 30 minutes (so a reload isn't a new visit)</td></tr>
+<tr><td>Visitors, as an estimate</td><td>without cookies or identifiers: the server takes a one-way hash (SHA-256) of a <b>salt that changes every day</b>, your network address and your browser's User-Agent, and uses it only to set a few bits in a HyperLogLog sketch, a compact counter of distinct values (2,048 one-byte cells). Only the sketch is stored. It can say "about 600 visitors today" (within about ±2–3%), but nothing in it can be traced back to a person, an address or a browser. The hash itself is never written down; to tell a reload from a new visit, the server keeps it in its memory for at most 30 minutes. The day's salt is deleted within 30 hours, so hashes from different days can't be linked, and a visitor on two days counts on each day</td></tr>
+<tr><td>Where visits came from</td><td>the name of the site whose link brought you (for example reddit.com), never the full address, plus a campaign tag (<code>utm_source</code>) if the link had one</td></tr>
+<tr><td>Phone, tablet or desktop; country</td><td>from the browser's User-Agent and the country the hosting network reports for the connection, counted once per visit</td></tr>
+<tr><td>Bots, link previews and scripts</td><td>counted apart, never mixed with people: a request whose User-Agent says it's a bot, crawler, preview, headless browser or script, or that doesn't say which languages it accepts</td></tr>
+</table>
+<p>If your browser sends <b>Global Privacy Control</b> or <b>Do Not Track</b>, your page views are only added to the page-view count: no visitor estimate, no visit, no referring site, device or country. This counting happens on the server for every request, so the ⚙ switch below (which lives in your browser) doesn't reach it; the GPC / DNT setting of your browser does.</p>
+
 <h2>Anonymous stats</h2>
-<p>To see how new players get on, the public site sends a few counts from each visit. On by default; turn it off in <b>⚙ settings → Anonymous stats</b>, and nothing more is sent from that browser.</p>
+<p>To see how new players get on, the public site sends a few counts from each visit, to <code>id-le.com/lab/p</code>: the first a few seconds after the page opens (so a short visit is counted too), the rest when the page is hidden or closed. On by default; turn it off in <b>⚙ settings → Anonymous stats</b>, and nothing more is sent from that browser.</p>
 <table>
 <tr><th>What</th><th>Why</th></tr>
 <tr><td>That a visit happened, and whether this browser had been here before (a yes/no, not an identifier)</td><td>to count visits and returning players</td></tr>
@@ -69,7 +81,7 @@ th{background:var(--box);font-weight:600}
 <tr><td>Signs of frustration: rage clicks (three fast clicks in one spot) and where (a known panel or button, else "the world"), leaving within 30 seconds of the first click, leaving without any click, and how many errors a visit saw (a range)</td><td>to find what annoys people</td></tr>
 </table>
 <p><b>Not sent:</b> anything from your world (names of creatures you made or renamed, words, pictures, buildings), your chats, AI keys, your address, or an identifier that follows you between visits. Id|le sets no cookies.</p>
-<p><b>Where it goes:</b> to id-le.com itself, which only adds the counts to <b>daily totals</b> (for example "41 visits, 30 on phones"). Single visits are not stored, and neither are addresses. The totals are kept for about a year. Stats are only counted on the public site: never on a copy you run yourself.</p>
+<p><b>Where it goes:</b> to id-le.com itself, which only adds the counts to <b>daily totals</b> (for example "41 visits, 30 on phones"). Single visits are not stored, and neither are addresses. (The address used to be <code>/lab/stats</code>; it still works for older pages, and receives the same counts.) The totals are kept for about a year. Stats are only counted on the public site: never on a copy you run yourself.</p>
 
 <h2>The public helper (reading web pages)</h2>
 <p>Some creatures read real web pages (Crawlers, and travel mode). A web page isn't allowed to fetch other sites by itself, so id-le.com does it for you: it fetches the public page you or your creatures asked for and hands it back to your browser.</p>

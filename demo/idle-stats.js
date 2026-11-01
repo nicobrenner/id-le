@@ -1,6 +1,8 @@
 // idle-stats.js: anonymous stats for the public site (#34). Only when all of these hold: the page runs without a local
 // server (id-le.com), it isn't a ?fresh test or a localhost copy, and "anonymous stats" is on in ⚙ settings.
-// What one page load may send, as small batches to /lab/stats on the same site (navigator.sendBeacon), never more:
+// What one page load may send, as small batches to /lab/p on the same site (sendBeacon, or fetch with keepalive), never more. The
+// first batch goes a few seconds after the page opens (so a visit that leaves early is still counted), the rest when the page is
+// hidden or closed and at 3 and 15 minutes. (Page views themselves are counted by the server on every page request: helper/worker.js.)
 //   visit         this page load happened (and whether this browser had been here before: a yes/no, not an ID)
 //   device        phone or desktop; iOS yes/no; the crash guard's level (0 normal, 1 lighter, 2 no Oracle: how often it fires)
 //   fps           a rough bucket of the frame rate (<20, 20-40, 40-55, 55+)
@@ -122,7 +124,7 @@
 
   function payload(final) {
     const p = { v: 1 }; let any = false;
-    if (!sent.visit) { p.visit = 1; p.back = returning ? 1 : 0; p.dev = phone() ? 'phone' : 'desktop'; p.ios = window.__isIOS ? 1 : 0; p.safe = [0, 1, 2].includes(window.__safeLevel) ? window.__safeLevel : 0; p.ref = refHost(); const u = utm(); if (u) p.utm = u; any = true; }
+    if (!sent.visit) { p.visit = 1; p.v2 = 1; p.back = returning ? 1 : 0; p.dev = phone() ? 'phone' : 'desktop'; p.ios = window.__isIOS ? 1 : 0; p.safe = [0, 1, 2].includes(window.__safeLevel) ? window.__safeLevel : 0; p.ref = refHost(); const u = utm(); if (u) p.utm = u; any = true; }
     const fb = fpsBucket(); if (fb && !sent.fps) { p.fps = fb; any = true; }
     try { const w = window.__dlwalk && window.__dlwalk.state && window.__dlwalk.state(); if (w) { const ks = Object.keys(w.done || {}).concat(w.finished ? ['finished'] : w.skipped ? ['ended'] : []).filter(k => !ahaSent['dl:' + k]); if (ks.length) { p.dl = ks; any = true; } } } catch (e) {}
     const nf = [...feats].filter(f => !sent.feats.includes(f)); if (nf.length) { p.feat = nf; any = true; }
@@ -144,14 +146,18 @@
   }
   function send(why) {
     if (!live()) return; if (why === 'hide' || why === 'leave') leaveFlags(); const p = payload(why !== 'peek'); if (!p) return; p.why = why;
-    let ok = false; try { ok = navigator.sendBeacon('/lab/stats', new Blob([JSON.stringify(p)], { type: 'application/json' })); } catch (e) {}
+    const body = JSON.stringify(p); let ok = false; try { ok = navigator.sendBeacon('/lab/p', new Blob([body], { type: 'application/json' })); } catch (e) {}
+    if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = body.length < 60000; } catch (e) {}
     if (!ok) return;
     if (p.visit) sent.visit = true; if (p.fps) sent.fps = true; if (p.feat) sent.feats.push(...p.feat); if (p.err) sent.errs.push(...p.err);
     if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dl) p.dl.forEach(k => { ahaSent['dl:' + k] = 1; }); if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; if (p.eg) Object.assign(sent.eng, p.eg); if (p.sec) secSent += p.sec;
     if (p.path) E2sent.path = p.path; if (p.x) { for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage']) for (const [a, n] of Object.entries(p.x[k] || {})) { E2[k][a] -= n; if (E2[k][a] <= 0) delete E2[k][a]; } (p.x.did || []).forEach(f => E2sent.did.add(f)); }
     try { localStorage.setItem(SENT, JSON.stringify(ahaSent)); } catch (e) {}
   }
-  // batches: when the page is hidden or closed, and at 3 and 15 minutes for tabs that stay open
+  // batches: a first one soon after the page opens (the visit itself, so leaving early still counts), then when the page is hidden
+  // or closed, and at 3 and 15 minutes for tabs that stay open
+  const opened = () => setTimeout(() => send('open'), 3000);
+  if (document.readyState === 'complete') opened(); else addEventListener('load', opened, { once: true });
   addEventListener('visibilitychange', () => { if (document.hidden) send('hide'); });
   addEventListener('pagehide', () => send('leave'));
   setTimeout(() => send('3m'), 180000); setTimeout(() => send('15m'), 900000);
