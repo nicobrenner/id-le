@@ -681,7 +681,17 @@ def t_irc_inbox(P):
     q = pg.evaluate("() => window.__lab.pending()")
     need(q == 1, f"@inbox with no lab open should wait in a queue: pending={q}")
     pg.evaluate("() => window.__places.openLab()")
-    m = wait_for(pg, """() => { const s = window.__lab && window.__lab.state && window.__lab.state(); const m = s && s.msgs.find(m => m.you); return m && m.done ? m : null }""", 150, P=P)
+    # pause the demo stream so the run doesn't depend on how fast this machine sorts it (CI is slower than a laptop)
+    wait_for(pg, "() => window.__lab && window.__lab.isOn() && document.getElementById('labPlay') ? true : null", 30, P=P)
+    pg.evaluate("() => { const b = document.getElementById('labPlay'); if (/pause/.test(b.textContent)) b.click(); }")
+    probe = """() => { const s = window.__lab && window.__lab.state && window.__lab.state(); const m = s && s.msgs.find(m => m.you); return m && m.done ? m : null }"""
+    try:
+        m = wait_for(pg, probe, 90, P=P)
+    except AssertionError:
+        st = pg.evaluate("""() => { const s = window.__lab.state(), y = s.msgs.find(m => m.you); return { you: y && { stage: y.stage, done: y.done, bin: y.bin, trail: (y.trail || []).length },
+            waiting: s.msgs.filter(m => !m.done).length, stages: window.__lab.team().map(t => t.role + ':' + t.head), crew: window.__lab.crew().map(c => (c.lab.busy ? 'busy' : 'idle') + (c.lab.wait > Date.now() ? '/wait' : '')),
+            heads: window.__jeffy && window.__jeffy.state() } }""")
+        raise AssertionError(f"the @inbox message did not land in 90 s: {st}")
     need(len(m.get("trail") or []) >= 1, f"no stage left a label on the trail: {m}")
     line = wait_for(pg, "() => [...document.querySelectorAll('#log .ln')].map(d => d.textContent).find(t => /your message “I was charged twice/.test(t)) || null", 20, P=P)
     cls = pg.evaluate("() => [...document.querySelectorAll('.msg.you')].length")

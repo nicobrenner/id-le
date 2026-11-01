@@ -5,6 +5,8 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-01
 
+**Your @inbox message goes first; CI's "irc inbox" check is deterministic.** GitHub Actions failed this check on every push from 3a2dce7 on ("timed out after 150s", 5 runs), while it passed locally in ~36 s. Cause: a lab creature takes the *nearest* waiting message, and the demo stream keeps adding one every 4 s near the inbox; on CI's slower runner the team sorts slower than messages arrive, so the player's single @inbox message could be passed over indefinitely (starvation, a real game issue on any slow device, not only a test problem). Fix: stages pick the player's own messages first, then the nearest (arena.html, DataLab work()). The test now pauses the stream after opening the lab, waits at most 90 s, and on timeout prints where the message is (stage, waiting count, crew busy/waiting, classifier state). Locally: 36 s → 17 s; the data lab checks still pass (4/4). Why it began exactly at 3a2dce7 is not proven: that merge added the local-server check ahead of the browser checks and touched no lab code, so the likeliest reading is CI timing tipping over a margin that was already thin.
+
 **Stats were being lost; the page reader was fine.** With the Show HN post up, the game's own stats said ~33 visits for Nov 1 (UTC) while Cloudflare (now readable with Zone Analytics) said otherwise. Measured, real browsers only:
 
 | Nov 1 (UTC), until ~18:30 | Count |
