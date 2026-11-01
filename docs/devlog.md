@@ -255,7 +255,6 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 
 **Population advisor (#3, 36eb9d2).** Gauges, issues with plain-word causes, one-click fixes, the Id|le Gazette.
 - Storm with half hiding → "calm the weather": fear 0.64 → 0.17 in 11 s. Food stripped → "feed them": hunger 0.95 → 0.63 in 2 min. 30 packed → "spread them out": crowding 0.81 → 0.05.
-- Numbers (owner's world, headless): calm the weather → fear 0.64 → 0.17 in 11 s; feed → hunger 0.95 → 0.63 in 2 min; spread → crowding 0.81 → 0.05 in 12 s; rest 3 + undo woke all 3. Tick < 1 ms; fps 60 with the panel open.
 - Finding: feeding one diet with ~3 per eater barely moved hunger; feeding every low diet at ~5 per eater did.
 
 **Rave mode (#2, 236e0c5).** Music taste genes (tempo, loudness, drums/bass/melody).
