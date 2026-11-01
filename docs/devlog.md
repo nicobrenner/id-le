@@ -28,7 +28,6 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 - Finding: the data lab reads well only at 1280×720 ×1.5 (the same 1920×1080 frames with everything half again as large); at 1920×1080 ×1 the labels were unreadable on a phone.
 - Re-cut: `python3 tools/trailer/halloween.py --out <dir>`, `python3 tools/trailer/cuts.py --out <dir> --tests <saved test_smoke output>` (`--only edit` re-assembles from the recorded shots).
 
-## 2026-11-01
 
 **Four things the Jeffy side found while filming the game.**
 - **"⏏ close the lab" removed the lab.** It called `closeLab()`, which deletes the lab place: its team, messages, bins and stats (35 in / 4 sorted before, 3 / 0 after "closing" and reopening). Now **🏠 back home** goes to the world the lab came from and keeps everything (the lab waits and carries on when you return), and **🗑 remove the lab** asks first: the first click turns it red ("really remove?"), only a second click within 6 s removes it.
