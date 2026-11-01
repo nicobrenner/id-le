@@ -76,6 +76,15 @@ await post('/lab/stats', { v: 1, eg: { cr: 'lots', fed: '9999' }, sec: 99999999 
 // the pedia counts on its own: its visit is not a game visit; sections are the pedia's ids only
 await post('/lab/stats', { v: 1, page: 'pedia', visit: 1, back: 0, dev: 'desktop', ref: 'news.ycombinator.com', dw: '1-5', ps: ['the-oracle', 'halloween', 'BAD id!'], clips: 2 });
 await post('/lab/stats', { v: 1, page: 'pedia', dw: '5-20', dw0: '1-5', ps: ['halloween'], clips: 1, err: ['x is null @pedia-draw.js:3:9'] });
+// engagement v2: fixed key lists, small positive integers, favorites by pattern, flags once, a path counted once in its last value
+await post('/lab/stats', { v: 1, x: { did: ['w_reel', 'w_dream', 'rage', 'p_music', 'w_reel', 'hacked'], ws: { reel: 40, dream: 12, mind: 7, evil: 5 }, pt: { music: 30, studio: 10, nope: 9 },
+  ct: { reelplay: 2, reelend: 1, irc: 3, inbox: 1, op: 2, pedia: 1, bad: 4 }, opa: { weather: 1, ai_spawn: 1, rm_rf: 1 }, fav: { 'job:math': 3, 'fam:crawly': 1, 'name:Plotkin': 2, 'name:<script>': 1, 'secret:x': 1 },
+  rage: { studioBtn: 1, world: 2, 'body > div': 1 } }, path: 'card>studio', eg: { reels: '1-5', errs: '0' } });
+await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
+await post('/lab/stats', { v: 1, path: 'card>card', x: { ct: { op: 9999 } } });
+await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
+// many distinct favorites from many page loads: capped, the rest counted as 'other'
+for (let i = 0; i < 70; i++) await post('/lab/stats', { v: 1, x: { fav: { ['name:Zz' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26))]: 1 } } });
 out.bad_format = (await post('/lab/stats', { v: 2 })).status;
 out.too_big = (await go('/lab/stats', { method: 'POST', body: 'x'.repeat(9000) })).status;
 const days = [...env.STATS.m.values()].map(v => JSON.parse(v));
@@ -111,6 +120,8 @@ out.rate_61st = last;
     const b = await (await go('/lab/fetch?url=' + encodeURIComponent('https://en.wikipedia.org/wiki/Owl'))).json();
     out.credits = { images: a.images, credits: a.credits, api_first: api1, api_second: api - api1, again: JSON.stringify(b.credits) === JSON.stringify(a.credits) }; }
   finally { globalThis.fetch = real; } }
+{ const xs = [...env.STATS.m.values()].map(v => JSON.parse(v).x).filter(Boolean); const sum = k => xs.reduce((a, x) => { for (const [n, v] of Object.entries(x[k] || {})) a[n] = (a[n] || 0) + v; return a; }, {});
+  out.x = Object.fromEntries(['did', 'ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'path'].map(k => [k, sum(k)])); }
 console.log(JSON.stringify(out));
 """
 
@@ -149,7 +160,7 @@ def worker_unit():
     need(c[2] and c[2]["author"] == "Ann" and c[2]["source"] == "en.wikipedia.org", f"a picture from the wiki itself: {c[2]}")
     need(cr["api_first"] == 2 and cr["api_second"] == 0 and cr["again"], f"one API call per wiki, then cached: first {cr['api_first']}, second {cr['api_second']}")
     need("id-le.com" in o["credit_ua"] and "github.com/nicobrenner/id-le" in o["credit_ua"], f"User-Agent must name Id|le and a contact: {o['credit_ua']}")
-    eg = {k: v for k, v in o["eg"].items() if v}
+    eg = {k: v for k, v in o["eg"].items() if v and k.split(":")[0] in ("cr", "born", "charts", "built", "fed")}
     need(eg == {"cr:13-30": 1, "born:0": 1, "charts:6-20": 1, "fed:0": 1}, f"engagement buckets {eg} (each page load once, in its last bucket; junk dropped)")
     need(o["secs"] == 420, f"seconds on screen {o['secs']} != 420 (an absurd value must be dropped)")
     pd = o["pd"]
@@ -158,7 +169,21 @@ def worker_unit():
     need(set(k for k, v in pd["sec"].items() if v) == {"the-oracle", "halloween"}, f"pedia sections {pd['sec']} (only the pedia's own ids)")
     need(pd["clips"] == 3 and pd["ref"] == {"news.ycombinator.com": 1}, f"pedia clips {pd['clips']}, ref {pd['ref']}")
     need("x is null @pedia-draw.js:3:9" in o["err_all"], "a pedia error was not kept")
-    return "stats allowlist + buckets, engagement, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits"
+    x = {k: {a: n for a, n in v.items() if n} for k, v in o["x"].items()}
+    need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
+    need(x["ws"] == {"reel": 40, "dream": 12, "mind": 7}, f"v2 watch seconds {x['ws']} (negative, fractional, absurd and unknown dropped)")
+    need(x["pt"] == {"music": 30, "studio": 10}, f"v2 panel seconds {x['pt']}")
+    need(x["ct"] == {"reelplay": 2, "reelend": 1, "irc": 3, "inbox": 1, "op": 2, "pedia": 1}, f"v2 counts {x['ct']} (an absurd count must be dropped)")
+    need(x["opa"] == {"weather": 1, "ai_spawn": 1}, f"v2 Operator actions {x['opa']}")
+    fav = x["fav"]
+    need(fav.get("job:math") == 3 and fav.get("fam:crawly") == 1 and fav.get("name:Plotkin") == 2, f"v2 favorites {dict(list(fav.items())[:6])}")
+    need(not any(k.startswith("secret") or "<" in k for k in fav), f"a favorite outside the pattern was stored: {[k for k in fav if k.startswith('secret') or '<' in k]}")
+    need(len(fav) <= 61 and fav.get("other", 0) >= 1, f"favorites must be capped (60 names + 'other'): {len(fav)} kept, other {fav.get('other')}")
+    need(x["rage"] == {"studioBtn": 1, "world": 2}, f"v2 rage clicks {x['rage']}")
+    need(x["path"] == {"card>studio>reels": 1}, f"v2 path {x['path']} (once per page load in its last value; repeats and 4-step paths dropped)")
+    egx = {k: v for k, v in o["eg"].items() if v and (k.startswith("reels") or k.startswith("errs"))}
+    need(egx == {"reels:1-5": 1, "errs:1": 1}, f"v2 buckets {egx}")
+    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits"
 
 
 def local_server_unit():   # server.py, the local server anyone who clones the repo runs: no network (a stub site and a stub Jeffy on localhost)
@@ -529,7 +554,8 @@ def t_operator(P):
     return "; ".join(got) + "; 🧠 opens; send row clear"
 
 
-ALLOWED_STATS = {"v", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec"}
+ALLOWED_STATS = {"v", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0"}
+ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
 
@@ -543,7 +569,7 @@ def t_stats(P):
     need(parts.get("ref") in ("direct", None), f"referrer for a direct visit: {parts.get('ref')}")
     if parts.get("utm"): need(re.fullmatch(r"[a-z0-9-]{1,24}", parts["utm"]), f"utm not cleaned: {parts['utm']}")
     eg = parts.get("eg") or {}
-    need(eg.get("cr") == "0-12" and set(eg) <= {"cr", "born", "built", "charts", "fed"}, f"engagement for a fresh world: {eg}")
+    need(eg.get("cr") == "0-12" and set(eg) <= {"cr", "born", "built", "charts", "fed", "reels", "errs"}, f"engagement for a fresh world: {eg}")
     # errors are located by the first stack frame: file:line:col, the site root called index.html, generated code by its sourceURL
     loc = pg.evaluate("""() => [window.__idleRef.err('x is null', '', 0, 0, 'f@https://id-le.com/idle-music.js?v=ab12:120:7\\ng@https://id-le.com/:9:1'),
       window.__idleRef.err('y', 'https://id-le.com/', 1449, 3, ''), window.__idleRef.err('z', '', 0, 0, 'draw@pedia-draw.js:3:9')]""")
@@ -551,6 +577,42 @@ def t_stats(P):
     need(not P.stats, f"{len(P.stats)} stats requests were sent from a test page")
     P.clean()
     return f"{len(keys)} keys, all allowlisted; engagement {eg}; errors located; nothing sent"
+
+
+def t_stats_v2(P):
+    """engagement v2: a scripted visit (a card, its mind tab, the studio, a rage click, a reel and an IRC line) reports what it did, and nothing else"""
+    pg = P.open("/arena.html?statstest&test"); booted(pg)
+    need(pg.evaluate("() => window.__settings.statsLive()"), "?statstest must make stats live on localhost (the test switch)")
+    name = pg.evaluate("() => { const c = window.__arena.raw().find(k => !k.guest && k.name); window.__idleWorld.openCard(c.name); return c.name; }")
+    pg.wait_for_timeout(900)
+    pg.evaluate("() => { const t = document.querySelector('#ctabs [data-ct=\"mind\"]'); if (t) t.click(); }"); pg.wait_for_timeout(2300)
+    pg.evaluate("() => { document.querySelector('#whisper .cx') && document.querySelector('#whisper .cx').click(); document.getElementById('studioBtn').click(); }"); pg.wait_for_timeout(2300)
+    for _ in range(3): pg.mouse.click(400, 500)   # three fast clicks in one spot: a rage click
+    pg.evaluate("""() => { for (const t of ['reel_play', 'reel_end', 'chat']) dispatchEvent(new CustomEvent('idle:ev', { detail: { type: t, extra: {} } })); }""")
+    pg.evaluate("() => window.__stats._send('3m')"); pg.wait_for_timeout(500)
+    need(P.stats, "nothing was sent with ?statstest")
+    sent = [json.loads(b) for b in P.stats]
+    keys = set().union(*[set(q) for q in sent])
+    need(keys <= ALLOWED_STATS | {"why"}, f"payload keys outside the allowlist: {sorted(keys - ALLOWED_STATS - {'why'})}")
+    x = {}
+    for q in sent:
+        for k, v in (q.get("x") or {}).items():
+            need(k in ALLOWED_X, f"v2 key outside the allowlist: {k}")
+            if isinstance(v, list): x.setdefault(k, set()).update(v)
+            else:
+                for a2, n in v.items(): x.setdefault(k, {})[a2] = x.get(k, {}).get(a2, 0) + n
+    path = next((q["path"] for q in sent if q.get("path")), "")
+    need(x.get("pt", {}).get("studio", 0) >= 1 and "p_studio" in x.get("did", set()), f"studio time not reported: pt {x.get('pt')}, did {x.get('did')}")
+    need(x.get("ws", {}).get("mind", 0) + x.get("ws", {}).get("dream", 0) >= 1, f"watching a mind not reported: ws {x.get('ws')}")
+    need(any(k.startswith("job:") for k in x.get("fav", {})) and any(k.startswith("name:") for k in x.get("fav", {})), f"favorites: {x.get('fav')}")
+    need(x.get("rage", {}).get("world", 0) + sum(x.get("rage", {}).values()) >= 1 and "rage" in x.get("did", set()), f"rage click not reported: {x.get('rage')}")
+    need(x.get("ct", {}).get("reelplay") == 1 and x.get("ct", {}).get("reelend") == 1 and x.get("ct", {}).get("irc") == 1, f"counts: {x.get('ct')}")
+    need(path.startswith("card") and "studio" in path, f"path {path!r} (card, then studio)")
+    names = [k[5:] for k in x.get("fav", {}) if k.startswith("name:")]
+    starter = {"Crawly", "Id|le"} | {r.get("name") for r in json.load(open(os.path.join(ROOT, "demo", "starter_world.json"))).get("residents", [])}
+    need(all(n in starter or n == "other" for n in names), f"a name outside the starter world was sent: {names}")
+    P.clean()
+    return f"card {name}: pt {x.get('pt')}, ws {x.get('ws')}, path {path}, rage {x.get('rage')}, {len(x.get('fav', {}))} favorite keys"
 
 
 def t_pedia_stats(P):
@@ -950,7 +1012,7 @@ def main():
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -977,6 +1039,7 @@ def main():
                 run("sound", t_sound)
                 run("haunted music", t_haunted)
                 run("stats", t_stats)
+                run("stats v2", t_stats_v2)
                 run("pedia stats", t_pedia_stats)
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)

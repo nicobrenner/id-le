@@ -262,6 +262,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     const t = text.value.trim(); if (!t || busy) return;
     if (!ready()) { set.classList.add('on'); renderSet(); add('page', 'connect your AI first (⚙): ' + { anthropic: 'an API key and a model', openai: 'a base URL, a key and a model', local: 'a server URL and a model' }[cfg.brain], 'err'); return; }
     if (cfg.brain === 'tiny') { text.value = ''; add('you', t); busy = true; try { await tinyTurn(t); } catch (e) { add('page', String(e.message || e), 'err'); } finally { busy = false; } return; }
+    try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_msg', extra: { brain: cfg.brain } } })); } catch (e) {}
     text.value = ''; add('you', t); busy = true; const spin = document.createElement('div'); spin.className = 'ai-busy'; spin.textContent = 'thinking…'; thread.appendChild(spin);
     const mark = convo.length; convo.push({ role: 'user', content: worldLine() + '\n' + t });
     try { for (let i = 0; i < cfg.rounds; i++) { const more = cfg.brain === 'anthropic' ? await anthropicTurn() : await openaiTurn(cfg.brain); thread.appendChild(spin); if (!more) break; if (i === cfg.rounds - 1) add('page', 'stopped after ' + cfg.rounds + ' rounds of actions'); } }
