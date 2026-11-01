@@ -214,8 +214,32 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   }
 
   // ---------- the Tiny Operator (TO): learned heads decide, the same tools act, the Oracle answers ----------
-  let H3 = null; const loadH3 = async () => H3 || (H3 = await (await fetch('arena_instr_v3.json')).json());
-  const WORLD_OPTS = new Set(['weather', 'spawn', 'rave_on', 'rave_off', 'disaster', 'rename', 'evolve', 'look']), SURE = { look: 0.5 }, SURE0 = 0.9;   // the bars measured in arena_instructions_v3.py
+  // heads v4 (arena_instructions_v4.py): v3 + the genesis options words / first_creatures / light / music; v3 if v4 can't be fetched
+  let H3 = null; const loadH3 = async () => H3 || (H3 = await (await fetch('arena_instr_v4.json')).json().catch(() => null) || await (await fetch('arena_instr_v3.json')).json());
+  const WORLD_OPTS = new Set(['weather', 'spawn', 'rave_on', 'rave_off', 'disaster', 'rename', 'evolve', 'look', 'words', 'first_creatures', 'light', 'music']), SURE = { look: 0.5 }, SURE0 = 0.9;   // the bars measured in arena_instructions_v3/v4.py
+  // genesis actions: window.__genesis.actions (idle-genesis.js) when it is loaded, else the Operator's own tools; each returns { ok } or { error }
+  const G = () => (window.__genesis && window.__genesis.actions) || null;
+  const FAMILY = { crawly: 'crawly', crawler: 'crawly', spider: 'crawly', bug: 'crawly', tok: 'tok', tokenizer: 'tok' };
+  const familyOf = span => { for (const t of String(span || '').toLowerCase().split(/[\s,]+/)) { const k = FAMILY[t.replace(/[^a-z]/g, '')]; if (k) return k; } return null; };
+  // the extracted span → a topic: keep what follows the last about / on / of / from ("let there be words about the ocean" → "the ocean"),
+  // drop a leading creation phrase the span sometimes includes; the heads decided the intent, this only trims the argument (like rename's "to")
+  const topicOf = span => { let t = String(span || '').trim(); const m = t.match(/\b(?:about|on|of|from)\s+([^]+)$/i); if (m) t = m[1];
+    t = t.replace(/^(?:let there be words|let there be|in the beginning|make a world|grow the world|start with|begin with|words)\b[\s,:]*/i, ''); return t.replace(/[.!?]+$/, '').trim().slice(0, 80); };
+  async function genesisAct(name, arg) {
+    const g = G();
+    try {
+      if (name === 'words') { const topic = topicOf(arg) || 'Language';
+        if (g && g.letThereBeWords) return { ...(await g.letThereBeWords(topic) || { ok: true }), topic };
+        const i = document.getElementById('terrain'), b = document.getElementById('terrainGo'); if (!i || !b) return { error: 'nothing to grow the world with here' };
+        i.value = topic.split(/\s+/).length <= 4 ? 'https://en.wikipedia.org/wiki/' + encodeURIComponent(topic.replace(/^(the|a|an)\s+/i, '').replace(/\s+/g, '_')) : topic; b.click(); return { ok: true, topic }; }
+      if (name === 'first_creatures') { const fam = familyOf(arg);
+        if (g && g.firstCreatures) return { ...(await g.firstCreatures(fam || undefined) || { ok: true }), fam };
+        const kinds = fam ? [fam, fam] : ['crawly', 'tok']; for (const k of kinds) { const r = await runTool('spawn', { kind: k }); if (r && r.error) return r; } return { ok: true, fam }; }
+      if (name === 'light') { if (g && g.light) return await g.light() || { ok: true }; return await runTool('weather', { kind: 'clear' }); }
+      if (name === 'music') { if (g && g.music) return await g.music() || { ok: true }; const M = window.__music; if (!M) return { error: 'no music here' }; M.setSource('bg'); return { ok: true }; }
+    } catch (e) { return { error: String(e.message || e) }; }
+    return { error: 'unknown' };
+  }
   // an extracted span → the game's closed lists (object resolution by lookup, as the arena grounds words on the floor; not intent routing)
   const KIND = { rain: 'bitrain', bitrain: 'bitrain', drizzle: 'bitrain', storm: 'storm', thunder: 'storm', thunderstorm: 'storm', fog: 'fog', foggy: 'fog', mist: 'fog', wind: 'wind', windy: 'wind', breeze: 'wind', clear: 'clear', sunny: 'clear', sunshine: 'clear', sun: 'clear', static: 'static', hum: 'hum',
     math: 'math', mathematician: 'math', debug: 'debug', debugger: 'debug', tok: 'tok', tokenizer: 'tok', counter: 'counter', designer: 'designer', namer: 'namer', sorter: 'sorter', crawler: 'crawler', blursort: 'blursort', crawly: 'crawly', volcano: 'volcano', tornado: 'tornado', quake: 'quake', earthquake: 'quake' };
@@ -236,10 +260,13 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
         case 'evolve': return ['evolve', { name: who ? who.name : 'world' }];
         case 'look': return ['look', {}];
         case 'rave_on': case 'rave_off': return [r.option, {}];
+        case 'words': case 'first_creatures': case 'light': case 'music': return [r.option, { arg: r.arg }];
       } })();
       if (call) {
         const [name, input] = call; let res;
-        if (name === 'rave_on' || name === 'rave_off') { const M = window.__music; const el = chip((name === 'rave_on' ? '🕺 rave on' : '🔇 rave off')); el.title = tip; if (M) { if (name === 'rave_on') { M.setSource('deck'); M.setRave(true); } else M.setRave(false); res = { ok: true }; } else { res = { error: 'no music deck here' }; el.classList.add('err'); } }
+        if (name === 'words' || name === 'first_creatures' || name === 'light' || name === 'music') { res = await genesisAct(name, input.arg);
+          const el = chip({ words: '🔤 let there be words' + (res.topic ? ': ' + res.topic : ''), first_creatures: '🐣 the first creatures' + (res.fam ? ' (' + res.fam + ')' : ''), light: '☀ let there be light', music: '🎵 music' }[name]); el.title = tip; if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; } }
+        else if (name === 'rave_on' || name === 'rave_off') { const M = window.__music; const el = chip((name === 'rave_on' ? '🕺 rave on' : '🔇 rave off')); el.title = tip; if (M) { if (name === 'rave_on') { M.setSource('deck'); M.setRave(true); } else M.setRave(false); res = { ok: true }; } else { res = { error: 'no music deck here' }; el.classList.add('err'); } }
         else { const el = chip(chipText(name, input)); el.title = tip; try { res = await runTool(name, input); } catch (e) { res = { error: String(e.message || e) }; } if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; } }
         acted = name;
         // the Oracle's line starts from what just happened (like its comments on the world), then the model goes on in its own voice
@@ -249,7 +276,10 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
           spawn: `A new ${{ math: 'Mathematician', debug: 'Debugger', tok: 'tokenizer', crawly: 'crawler' }[I.kind] || I.kind} just walked in`, disaster: `There goes a ${I.type}`,
           rename: `${I.name} is ${I.new_name} now`, evolve: I.name === 'world' ? 'The whole world just reshuffled its genes' : `${I.name} just mutated`,
           look: (() => { const c = res.counts || {}; return `${c.creatures ?? 'Some'} creatures, ${c.words ?? 'lots of'} words, ${(res.weather && res.weather.name) || 'quiet weather'}`; })(),
-          rave_on: 'The music is up and they are dancing', rave_off: 'Party over, the floor is quiet again' }[name] || 'Done');
+          rave_on: 'The music is up and they are dancing', rave_off: 'Party over, the floor is quiet again',
+          // genesis: the Oracle narrates creation in its own voice (the seed is the first clause, the model goes on)
+          words: `In the beginning there were words${res && res.topic && res.topic !== 'Language' ? ' about ' + res.topic.toLowerCase() : ''}`, first_creatures: 'And then something with legs crawled out of the words',
+          light: 'And there was light. The words look different now', music: 'And the world started to hum' }[name] || 'Done');
       }
     } else if (r.option === 'creature') { const el = chip('💬 to the creatures (IRC): ' + t); el.title = tip; try { await O.chat(t); acted = 'creature'; seed = 'I passed that on to the creatures'; } catch (e) {} }
     let said = await O.reply(t, seed); if (!said || said.length < 3) said = await O.reply(t, seed);   // one retry: the tiny model sometimes stops at once

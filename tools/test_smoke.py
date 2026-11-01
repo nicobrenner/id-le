@@ -593,6 +593,33 @@ def t_operator(P):
     return "; ".join(got) + "; 🧠 opens; send row clear"
 
 
+
+def t_tiny_genesis(P):
+    """The Tiny Operator's genesis options (arena_instr_v4.json, arena_instructions_v4.py): genesis phrasings route through the learned heads
+    to words / first_creatures / light / music; with window.__genesis.actions present TO calls them (with the extracted topic/family);
+    without it, light falls back to the weather tool; chit-chat about the void does nothing"""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.wait_for_function("() => window.__oracle && window.__oracle.ready && window.__idleAI", timeout=90000)
+    need(pg.evaluate("async () => (await window.__idleAI.heads()).options.includes('first_creatures')"), "the Operator did not load the v4 heads")
+    pg.evaluate("""() => { window.__gcalls = []; window.__genesis = { actions: {
+        letThereBeWords: t => (window.__gcalls.push(['words', t]), { ok: true }), firstCreatures: f => (window.__gcalls.push(['first_creatures', f || null]), { ok: true }),
+        light: () => (window.__gcalls.push(['light']), { ok: true }), music: () => (window.__gcalls.push(['music']), { ok: true }) } }; }""")
+    cases = [("let there be words about whales", "words"), ("now bring life", "first_creatures"), ("let there be light", "light"), ("put some music on", "music"), ("the void is quiet", None)]
+    got = []
+    for text, want in cases:
+        r = pg.evaluate("t => window.__idleAI.tiny(t)", text)
+        got.append(f"{text!r}→{r['option']}/{r['acted']} {r['p']:.2f}")
+        need(r["acted"] == want, f"{text!r}: expected {want}, got {r['option']}/{r['acted']} (p {r['p']:.2f})")
+    calls = pg.evaluate("() => window.__gcalls")
+    need([c[0] for c in calls] == ["words", "first_creatures", "light", "music"], f"genesis actions called: {calls}")
+    need("whale" in (calls[0][1] or "").lower(), f"the topic span did not reach letThereBeWords: {calls[0]}")
+    pg.evaluate("() => { delete window.__genesis; }")
+    r = pg.evaluate("t => window.__idleAI.tiny(t)", "let there be light")
+    need(r["acted"] == "light" and pg.evaluate("() => window.__idleWorld.summary({ limit: 0 }).weather.kind") == "clear", f"light without the genesis module should clear the sky: {r}")
+    P.clean()
+    return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
+
+
 ALLOWED_STATS = {"v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0"}
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
@@ -1053,7 +1080,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1092,6 +1119,7 @@ def main():
                 run("right-click", t_rclick)
                 run("replay", t_replay)
                 run("operator", t_operator)
+                run("tiny genesis", t_tiny_genesis)
                 run("halloween", t_halloween)
                 run("halloween light", t_halloween_light, color_scheme="light")
                 run("trick or treat", t_treat)
