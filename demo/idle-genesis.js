@@ -141,8 +141,10 @@ html.gen-void #daylight,html.gen-void #weather,html.gen-void #buildCv{opacity:0!
   async function _music() { { if (S && S.steps.music) return 'already'; const m = window.__music; if (!m) return null;
       try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} try { m.setSource ? m.setSource('background') : m.setBg(true); } catch (e) { try { m.setBg(true); } catch (e2) { return null; } }
       done('music'); return true; } }
-  const actions = { letThereBeWords: x => step('words', () => _letThereBeWords(x)), firstCreatures: f => step('creatures', () => _firstCreatures(f)), light: () => step('light', _light),
-    weather: k => step('weather', () => _weather(k)), hut: () => step('hut', _hut), music: () => step('music', _music) };
+  // every action answers { ok, result } or { error } (the Tiny Operator and the Operator's tools read that shape)
+  const answer = r => r === 'busy' ? { error: 'another step is still happening' } : r === 'already' ? { ok: true, already: true } : r ? { ok: true, result: r } : { error: 'that step did not work' };
+  const actions = { letThereBeWords: async x => answer(await step('words', () => _letThereBeWords(x))), firstCreatures: async f => answer(await step('creatures', () => _firstCreatures(f))), light: async () => answer(await step('light', _light)),
+    weather: async k => answer(await step('weather', () => _weather(k))), hut: async () => answer(await step('hut', _hut)), music: async () => answer(await step('music', _music)) };
 
   // ---------- boot (a first visit with ?genesis, or the genesis side of the A/B), and a new universe for anyone
   async function boot() { if (!H()) return false; S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1 }; save(); toVoid(); await intro(); openConsole(); try { H().log('genesis', { step: 'start' }); } catch (e) {} return true; }

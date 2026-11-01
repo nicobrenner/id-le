@@ -21,7 +21,7 @@ ORT_CDN = f"https://cdn.jsdelivr.net/npm/onnxruntime-web@{ORT_VER}/dist/"
 ORT_TAG = f'<script src="{ORT_CDN}ort.min.js"></script>'
 # the one cached model is enough; the two old ones are only a fallback for checkouts without it
 COPY = ["pedia.html", "privacy.html", "idle-runtime.js", "sw.js", "starter_world.json", "pedia_clips.json", "og-image.png", "og-image-square.png", "og-image-halloween.png", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
-        "arena_instr_v1.json", "arena_instr_v2.json", "arena_instr_v3.json", "arena_genomes.json", "datalab_stream.json"]
+        "arena_instr_v1.json", "arena_instr_v2.json", "arena_instr_v3.json", "arena_instr_v4.json", "arena_genomes.json", "datalab_stream.json"]
 HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
