@@ -40,6 +40,11 @@
 #hwsky{position:absolute;inset:0;pointer-events:none;z-index:6;display:none}
 @media (prefers-color-scheme:dark){#hwnight{mix-blend-mode:normal;background:radial-gradient(120% 90% at 82% 8%,#7b5cff22,transparent 55%),linear-gradient(180deg,#1a083033,#0a041833 60%,#ff6a0018)}#hwfog{background:linear-gradient(0deg,#9b86d844,#9b86d814 45%,transparent)}}
 #arena.hw #hwnight,#arena.hw #hwfog,#arena.hw #hwmoon,#arena.hw #hwsky{display:block}
+/* a light OS theme used to wash the night out to a pale day with a 🎃 chip: while the mode is on, the world (floor, words, creatures,
+   charts and the panels that sit in it) takes the dark palette; the pages around it keep the OS theme */
+#arena.hw-night{--bg:#15161a;--ink:#e8e6e1;--floor:#1c1e24;--m-see:#6ab0ff;--m-body:#9a9a9a;--m-want:#ffd54a;--m-feel:#ff7eb6;--m-say:#9be37a;--m-do:#5fd7d7;--m-rem:#c39bff;--m-world:#ffa04d;--m-s:#ffcf7a;--m-n:#7cc4ff;color:var(--ink);color-scheme:dark}
+#arena.hw-night #hwnight{mix-blend-mode:normal;background:radial-gradient(120% 90% at 82% 8%,#7b5cff22,transparent 55%),linear-gradient(180deg,#1a083033,#0a041833 60%,#ff6a0018)}#arena.hw-night #hwfog{background:linear-gradient(0deg,#9b86d844,#9b86d814 45%,transparent)}
+#arena.hw-night .wikisign{background:#23252c;color:#eee}
 #arena.hw.keep #hwnight,#arena.hw.keep #hwfog{display:none}#arena.hw.keep #hwmoon{filter:grayscale(1) contrast(1.6)}#arena.hw.keep #hwsky{filter:grayscale(1) contrast(2)}
 #arena.hw .word.hwpk{background:#e8620c!important;color:#ffe27a!important;border:1px solid #7a2c04!important;border-radius:11px!important;font-weight:700;text-shadow:0 0 3px #ffb300,0 0 7px #ff8a00;animation:hwflick 2.8s infinite steps(6)}
 #arena.hw .word.hwpk::before{content:'▴▴ ';font-size:10px;color:#ffe27a}
@@ -121,7 +126,10 @@
     setTimeout(spawnFlock, 4000); nb(); ng(); }
 
   // ---------- turning it on and off ----------
-  function apply(v) { arena.classList.toggle('hw', v); if (v) { fit(); pumpkins(); schedule(); } else { unpumpkin(); clearTimeout(tB); clearTimeout(tG); flocks = []; ghosts = []; go(); } }
+  // night for the world even under a light OS theme (not in Gloamhold, which has its own 1-bit ink and paper)
+  function nightLook() { const nv = arena.classList.contains('hw') && !keep() && !matchMedia('(prefers-color-scheme: dark)').matches; if (nv !== arena.classList.contains('hw-night')) arena.classList.toggle('hw-night', nv); window.__hwNight = nv; }
+  setInterval(nightLook, 1000); try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', nightLook); } catch (e) {}
+  function apply(v) { arena.classList.toggle('hw', v); nightLook(); if (v) { fit(); pumpkins(); schedule(); } else { unpumpkin(); clearTimeout(tB); clearTimeout(tG); flocks = []; ghosts = []; go(); } }
   function greet() { const lines = ['Happy Halloween from the Oracle: everyone is in costume tonight, and some words have turned into pumpkins', 'The moon is up and the costumes are on. Resting creatures may drift by as ghosts, do not mind them'];
     const say = () => { if (window.__oracleSay) window.__oracleSay(lines[(Math.random() * lines.length) | 0]); else setTimeout(say, 1500); }; setTimeout(say, 6000); }
   function firstNotice() { let seen = false; try { seen = localStorage.getItem(SEEN) === '1'; localStorage.setItem(SEEN, '1'); } catch (e) {} if (seen) return;
@@ -145,7 +153,7 @@
   css.textContent = `html.hw-on #settingsBtn,html.hw-on #mMore{position:relative}
 html.hw-on #settingsBtn::after,html.hw-on #mMore::after{content:"🎃";position:absolute;top:-7px;right:-7px;font-size:11px;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px #0006)}
 #hwChip{position:absolute;top:44px;right:12px;z-index:31;display:none;align-items:center;gap:6px;font:600 12px system-ui;padding:4px 6px 4px 10px;border-radius:14px;border:1px solid #e07a1f;background:#2a1636e6;color:#ffb35c;box-shadow:0 2px 10px #0005;cursor:pointer}
-html.hw-on #hwChip.show{display:inline-flex}#hwChip button{border:0;background:none;color:inherit;opacity:.7;cursor:pointer;font-size:13px;padding:0 4px}
+html.hw-on #hwChip.show{display:inline-flex}html:has(#team.on) #hwChip,html:has(#dj.on) #hwChip{display:none!important}#hwChip button{border:0;background:none;color:inherit;opacity:.7;cursor:pointer;font-size:13px;padding:0 4px}
 @media (prefers-color-scheme:light){#hwChip{background:#fff3e6f2;color:#9a3d00}}
 @media (max-width:500px){#hwChip{top:auto;bottom:96px;right:8px}}`;
   document.head.appendChild(css);

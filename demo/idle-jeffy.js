@@ -1,5 +1,6 @@
 // idle-jeffy.js: the data lab's three default classifiers running in this browser (#18), so the lab needs no server for them.
-// Heads: sms_spam (Spamtrap), support_ticket (Router), tweet_eval_sentiment (Moodring), refitted by the Jeffy side on
+// Heads: sms_spam (Spamtrap), support_ticket (Router), support_mood (Moodring since Nov 1; tweet_eval_sentiment stays selectable),
+// refitted by the Jeffy side on
 // all-MiniLM-L6-v2 (int8, 384-dim): a different space from the server's bge-large heads, so these are new coefficients, not an export.
 // Accuracy vs the server's heads on the same test sets: spam 0.992 vs 0.991, tickets 0.998 vs 0.996, sentiment 0.626 vs 0.663.
 // Files in jeffy-heads/ (23.7 MB: encoder 23.0, tokenizer 0.7, heads 0.06), fetched only when something asks for one of these heads
@@ -7,7 +8,9 @@
 // Any other head still goes to /jeffy/predict (Jeffy's public server through the helper, or a local Jeffy server).
 // Tokenizer and pooling follow the Jeffy side's jeffy-browser.js; one run at a time, unpadded (padding isn't masked cleanly in this graph).
 (() => {
-  const BASE = 'jeffy-heads/', MODEL = 'minilm-l6-v2-quantized.onnx', LOCAL = ['sms_spam', 'support_ticket', 'tweet_eval_sentiment'];
+  const BASE = 'jeffy-heads/', MODEL = 'minilm-l6-v2-quantized.onnx', LOCAL = ['sms_spam', 'support_ticket', 'support_mood', 'tweet_eval_sentiment'];
+  // support_mood exists only here (Jeffy's server has no such head): when this browser can't run it, ask the server for the nearest one
+  const SERVER_TWIN = { support_mood: 'tweet_eval_sentiment' };
   let state = 'idle', loading = null, enc = null, heads = null, tok = null, chain = Promise.resolve(), progress = 0;
   const off = () => (window.__safeLevel || 0) >= 2 || typeof ort === 'undefined';   // safe mode after crashes: no second model
 
@@ -62,7 +65,7 @@
     chain = run.catch(() => {}); return run;
   }
 
-  async function remote(head, text) { const t0 = performance.now(); const r = await (await fetch('/jeffy/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, task: head }) })).json(); return { ...r, ms: performance.now() - t0, where: 'server' }; }
+  async function remote(head, text) { const t0 = performance.now(); head = SERVER_TWIN[head] || head; const r = await (await fetch('/jeffy/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, task: head }) })).json(); return { ...r, ms: performance.now() - t0, where: 'server' }; }
 
   // predict(head, text, { load }): in this browser when the head is one of ours and the files are here (or load is set and they can be
   // fetched); otherwise the server, exactly as before. A failed download falls back to the server for this session.

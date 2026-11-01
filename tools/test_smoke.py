@@ -95,6 +95,20 @@ out.world_state = await (await go('/worlds/state?code=testworld')).json();
 // rate limit: the 61st request in a minute from one address is refused
 env.RATE_PER_MIN = '60'; let last = 0; for (let i = 0; i < 61; i++) last = (await go('/lab/nothing', {}, '9.9.9.9')).status;
 out.rate_61st = last;
+// credits for Wikimedia pictures: parallel to images, null for others, one API call per wiki per page read, then cached
+{ const real = globalThis.fetch; let api = 0; const html = '<html><title>Owl - Wikipedia</title><body><p>' + 'Owls are birds. '.repeat(40) + '</p>'
+    + '<img src="//upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Barn_owl.jpg/250px-Barn_owl.jpg"><img src="https://example.org/pic.png"><img src="//upload.wikimedia.org/wikipedia/en/b/b2/Local_owl.png"></body></html>';
+  globalThis.fetch = async (u, init) => { const s = String(u.url || u);
+    if (s.startsWith('https://en.wikipedia.org/wiki/')) return new Response(html, { headers: { 'Content-Type': 'text/html' } });
+    if (s.includes('/w/api.php')) { api++; out.credit_ua = (init && init.headers && init.headers['User-Agent']) || ''; const commons = s.startsWith('https://commons.wikimedia.org/');
+      const pages = commons ? { 1: { title: 'File:Barn owl.jpg', imageinfo: [{ descriptionurl: 'https://commons.wikimedia.org/wiki/File:Barn_owl.jpg', extmetadata: { Artist: { value: '<a href="x">Jo Doe</a>' }, LicenseShortName: { value: 'CC BY-SA 4.0' }, LicenseUrl: { value: 'https://creativecommons.org/licenses/by-sa/4.0' } } }] } }
+        : { 2: { title: 'File:Local owl.png', imageinfo: [{ descriptionurl: 'https://en.wikipedia.org/wiki/File:Local_owl.png', extmetadata: { Artist: { value: 'Ann' }, LicenseShortName: { value: 'Fair use' } } }] } };
+      return new Response(JSON.stringify({ query: { pages } }), { headers: { 'Content-Type': 'application/json' } }); }
+    return new Response('', { status: 404 }); };
+  try { const a = await (await go('/lab/fetch?url=' + encodeURIComponent('https://en.wikipedia.org/wiki/Owl'))).json(); const api1 = api;
+    const b = await (await go('/lab/fetch?url=' + encodeURIComponent('https://en.wikipedia.org/wiki/Owl'))).json();
+    out.credits = { images: a.images, credits: a.credits, api_first: api1, api_second: api - api1, again: JSON.stringify(b.credits) === JSON.stringify(a.credits) }; }
+  finally { globalThis.fetch = real; } }
 console.log(JSON.stringify(out));
 """
 
@@ -123,6 +137,13 @@ def worker_unit():
     need(o["world_poll_writes"] == 0, f"5 polls of an unregistered world wrote {o['world_poll_writes']} times to KV (expected 0: polls never create worlds; KV writes are scarce)")
     need("me" in o["world_state"], "world state has no 'me'")
     need(o["rate_61st"] == 429, f"61st request in a minute: {o['rate_61st']}")
+    cr = o["credits"]; c = cr["credits"] or []
+    need(len(cr["images"]) == 3 and len(c) == 3, f"credits must run parallel to images: {cr}")
+    need(c[0] and c[0]["author"] == "Jo Doe" and c[0]["license"] == "CC BY-SA 4.0" and c[0]["page"].startswith("https://commons.wikimedia.org/wiki/File:Barn_owl"), f"Commons credit: {c[0]}")
+    need(c[1] is None, f"a non-Wikimedia picture got a credit: {c[1]}")
+    need(c[2] and c[2]["author"] == "Ann" and c[2]["source"] == "en.wikipedia.org", f"a picture from the wiki itself: {c[2]}")
+    need(cr["api_first"] == 2 and cr["api_second"] == 0 and cr["again"], f"one API call per wiki, then cached: first {cr['api_first']}, second {cr['api_second']}")
+    need("id-le.com" in o["credit_ua"] and "github.com/nicobrenner/id-le" in o["credit_ua"], f"User-Agent must name Id|le and a contact: {o['credit_ua']}")
     eg = {k: v for k, v in o["eg"].items() if v}
     need(eg == {"cr:13-30": 1, "born:0": 1, "charts:6-20": 1, "fed:0": 1}, f"engagement buckets {eg} (each page load once, in its last bucket; junk dropped)")
     need(o["secs"] == 420, f"seconds on screen {o['secs']} != 420 (an absurd value must be dropped)")
@@ -132,7 +153,7 @@ def worker_unit():
     need(set(k for k, v in pd["sec"].items() if v) == {"the-oracle", "halloween"}, f"pedia sections {pd['sec']} (only the pedia's own ids)")
     need(pd["clips"] == 3 and pd["ref"] == {"news.ycombinator.com": 1}, f"pedia clips {pd['clips']}, ref {pd['ref']}")
     need("x is null @pedia-draw.js:3:9" in o["err_all"], "a pedia error was not kept")
-    return "stats allowlist + buckets, engagement, pedia block, jeffy allowlist, KV write throttle, rate limit"
+    return "stats allowlist + buckets, engagement, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits"
 
 
 # ---------------------------------------------------------------- the build, served locally
@@ -446,6 +467,82 @@ def t_datalab(P, secs=45):
     return f"{done} sorted, in {s['stats']['in']}, where={where}"
 
 
+def t_datalab_home(P):
+    # 🏠 back home keeps the lab (team, messages, bins, stats); 🗑 remove asks first (a lab was lost to a button labelled "close")
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => window.__places.openLab()")
+    s1 = wait_for(pg, """() => { const s = window.__lab && window.__lab.state && window.__lab.state(); return s && s.msgs.filter(m => m.done).length >= 2 ? s : null }""", 120, P=P)
+    heads = pg.evaluate("() => window.__lab.team().map(t => t.head)")
+    need("support_mood" in heads, f"the default team's mood tagger is not support_mood: {heads}")
+    pg.evaluate("() => document.getElementById('labHome').click()")
+    wait_for(pg, "() => document.documentElement.dataset.place === 'home'", 20, P=P)
+    pg.evaluate("() => window.__places.openLab()")
+    s2 = wait_for(pg, "() => document.documentElement.dataset.place === 'lab' && window.__lab.state()", 30, P=P)
+    need(s2["stats"]["in"] >= s1["stats"]["in"] and sum(1 for m in s2["msgs"] if m.get("done")) >= sum(1 for m in s1["msgs"] if m.get("done")),
+         f"coming back lost the lab's run: in {s1['stats']['in']} -> {s2['stats']['in']}")
+    pg.evaluate("() => document.getElementById('labExit').click()"); pg.wait_for_timeout(400)
+    one = pg.evaluate("() => ({ place: document.documentElement.dataset.place, armed: document.getElementById('labExit').classList.contains('armed') })")
+    need(one["place"] == "lab" and one["armed"], f"one click on remove should only ask: {one}")
+    pg.evaluate("() => document.getElementById('labExit').click()")
+    wait_for(pg, "() => document.documentElement.dataset.place !== 'lab'", 20, P=P)
+    P.clean()
+    return f"home and back kept in={s2['stats']['in']} (was {s1['stats']['in']}); remove asked first, then removed; team {heads}"
+
+
+def t_lab_card(P, phone=False):
+    # a lab creature's card used to open UNDER the team panel (#whisper z 10 < #team z 11, docked at the right edge where the panel is)
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    if pg.evaluate("() => window.__first5 && window.__first5.skip"): pg.evaluate("() => window.__first5.skip()")
+    pg.evaluate("() => window.__places.openLab()")
+    name = wait_for(pg, "() => { const c = window.__lab && window.__lab.crew && window.__lab.crew()[0]; return document.documentElement.dataset.place === 'lab' && c ? c.name : null }", 60, P=P)
+    if not phone: pg.evaluate("() => { const t = document.getElementById('team'); if (!t.classList.contains('on')) document.getElementById('labBtn').click(); }")
+    pg.wait_for_timeout(500)
+    # lab creatures aren't in openCard's lookup (it skips them): open the card the way a player does, by clicking the creature
+    for _ in range(6):
+        if phone:   # on a phone the team sheet covers the lower 72% of the screen: fold it away and bring the creature to the middle, as a player would
+            pg.evaluate("""(n) => { document.getElementById('team').classList.remove('on'); const c = window.__lab.crew().find(k => k.name === n) || window.__lab.crew()[0]; window.__dis.flyTo(c.x, c.y, 1.4); }""", name)
+            pg.wait_for_timeout(900)
+        xy = pg.evaluate("""(n) => { const H = window.__collectHooks, c = window.__lab.crew().find(k => k.name === n) || window.__lab.crew()[0], cam = H.cam(), v = H.viewSize(), a = document.getElementById('arena').getBoundingClientRect();
+            return [a.left + v.w / 2 + (c.x - cam.x) * cam.z, a.top + v.h / 2 + (c.y - cam.y) * cam.z] }""", name)
+        if phone: pg.touchscreen.tap(xy[0], xy[1])
+        else: pg.mouse.click(xy[0], xy[1])
+        pg.wait_for_timeout(900)
+        if pg.evaluate("() => document.getElementById('whisper').style.display === 'block'"): break
+    r = pg.evaluate("""() => { const w = document.getElementById('whisper'), b = w.getBoundingClientRect(), vw = innerWidth, vh = innerHeight;
+        const cx = Math.min(vw - 2, Math.max(1, b.left + b.width / 2)), cy = Math.min(vh - 2, Math.max(1, b.top + Math.min(b.height / 2, 60))), top = document.elementFromPoint(cx, cy);
+        const t = document.getElementById('team'), tb = t.getBoundingClientRect(), tOn = t.classList.contains('on') && getComputedStyle(t).display !== 'none';
+        const overlap = tOn ? Math.max(0, Math.min(b.right, tb.right) - Math.max(b.left, tb.left)) * Math.max(0, Math.min(b.bottom, tb.bottom) - Math.max(b.top, tb.top)) : 0;
+        return { shown: w.style.display === 'block', box: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)], inView: b.width > 50 && b.height > 50 && b.right > 0 && b.bottom > 0 && b.left < vw && b.top < vh,
+                 topmost: !!(top && w.contains(top)), teamOpen: tOn, overlap: Math.round(overlap) } }""")
+    need(r["shown"] and r["inView"], f"the card isn't on screen: {r}")
+    need(r["topmost"], f"the card is covered at its centre (elementFromPoint): {r}")
+    if not phone: need(r["teamOpen"] and r["overlap"] == 0, f"with the team panel open the card should dock beside it, not on it: {r}")
+    P.clean()
+    return f"card {r['box']} on top" + (f", team panel open, overlap {r['overlap']} px" if not phone else "")
+
+
+def t_mood_migrate(P):
+    old = [{"head": "sms_spam", "role": "filter", "match": "spam", "thr": 0.7, "name": "Spamtrap"}, {"head": "support_ticket", "role": "route", "thr": 0.6, "margin": 0.2, "name": "Router"},
+           {"head": "tweet_eval_sentiment", "role": "tag", "thr": 0.5, "name": "Moodring"}]
+    P.ctx.add_init_script("try { if (!sessionStorage.getItem('t')) { localStorage.setItem('arena.team', %s); sessionStorage.setItem('t', '1'); } } catch (e) {}" % json.dumps(json.dumps(old)))
+    pg = P.open("/arena.html?test"); booted(pg)
+    team = pg.evaluate("() => JSON.parse(localStorage.getItem('arena.team')).map(t => t.name + ':' + t.head)")
+    need(team == ["Spamtrap:sms_spam", "Moodring:support_mood", "Router:support_ticket"], f"untouched old default not migrated: {team}")
+    P.clean()
+    return " → ".join(team)
+
+
+def t_halloween_light(P):
+    # under a light OS theme the night used to wash out to a pale day: the world must be at night while the mode is on
+    pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
+    st = wait_for(pg, """() => { const a = document.getElementById('arena'); if (!a.classList.contains('hw-night') || window.__hwNight !== true) return null;
+        const m = getComputedStyle(a).backgroundColor.match(/\\d+/g).map(Number); return { bg: m.slice(0, 3), dark: window.__collectHooks && window.__collectHooks.isDark ? window.__collectHooks.isDark() : null } }""", 30, P=P)
+    need(sum(st["bg"]) < 200, f"the world isn't dark under a light OS theme: background {st['bg']}")
+    pg.evaluate("() => window.__halloween.set(false)")
+    P.clean()
+    return f"light OS theme + Halloween: world background rgb{tuple(st['bg'])}, canvas isDark={st['dark']}"
+
+
 def t_datalab_stuck(P):
     team = [{"head": "sms_spam", "role": "filter", "match": "spam", "thr": 0.7, "name": "Mine"}, {"head": "support_ticket", "role": "route", "thr": 0.6, "margin": 0.2, "name": "Rtr"},
             {"head": "tweet_eval_sentiment", "role": "tag", "thr": 0.5, "name": "Late"}]
@@ -524,6 +621,8 @@ def t_halloween(P):
 
 WIKI_PAGE = {"title": "Halloween - Wikipedia", "url": "https://en.wikipedia.org/wiki/Halloween", "links": [], "ui": [],
              "images": ["https://upload.example/lantern.png", "https://upload.example/costumes.png", "https://upload.example/bonfire.png"],
+             "credits": [{"file": "Lantern.png", "author": "Test Author", "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0", "page": "https://commons.wikimedia.org/wiki/File:Lantern.png", "source": "Wikimedia Commons"},
+                         {"file": "Costumes.png", "author": "Second Author", "license": "Public domain", "licenseUrl": "", "page": "https://commons.wikimedia.org/wiki/File:Costumes.png", "source": "Wikimedia Commons"}, None],
              "text": " ".join(["Halloween or Hallowe'en is a celebration observed in many countries on 31 October, the eve of the Western Christian feast of All Hallows' Day.",
                                "Popular activities include trick-or-treating, attending costume parties, carving pumpkins into jack-o'-lanterns, lighting bonfires, apple bobbing,",
                                "visiting haunted attractions, telling scary stories and watching horror films."] * 6)}
@@ -543,8 +642,21 @@ def t_wiki(P):
     need("Halloween" in st["sign"] and st["href"].startswith("https://en.wikipedia.org/wiki/Halloween"), f"no sign for the article: {st}")
     need(st["hw"], "a Halloween article should turn Halloween mode on")
     need("wiki" not in st["url"], f"the address still carries the article: {st['url']}")
+    # credits: a © on the credited pictures (not on the uncredited one), its tooltip names author and license, a click opens the card,
+    # and the credit is saved with the picture (thingOut) and comes back with it (thingIn)
+    cr = pg.evaluate("""async () => { const marks = [...document.querySelectorAll('#floor .thing .cr')], tips = marks.map(b => b.title);
+        if (marks[0]) marks[0].click(); await new Promise(r => setTimeout(r, 200)); const pop = document.getElementById('crPop');
+        const H = window.__collectHooks, L = window.__lakeHooks, t = L.things().find(x => x.credit && x.credit.author === 'Test Author'), o = t && H.thingOut(t);
+        let back = null; if (o && H.thingIn) { const n = H.thingIn(o); back = n && n.credit ? n.credit.author : null; if (n && n.el) { n.el.remove(); L.things().splice(L.things().indexOf(n), 1); } }
+        return { n: marks.length, tips, pop: pop && pop.style.display === 'block' ? pop.textContent : '', links: pop ? [...pop.querySelectorAll('a')].map(a => a.href) : [], saved: o && o.credit ? o.credit.author : null, back, sign: document.querySelector('.wikisign').title }; }""")
+    need(cr["n"] == 2, f"expected a © on the 2 credited pictures, got {cr['n']}")
+    need(any("Test Author" in t and "CC BY-SA 4.0" in t for t in cr["tips"]), f"© tooltips: {cr['tips']}")
+    need("Test Author" in cr["pop"] and any(h.startswith("https://commons.wikimedia.org/wiki/File:") for h in cr["links"]), f"credit card: {cr['pop']} {cr['links']}")
+    need(cr["saved"] == "Test Author", f"the credit isn't saved with the picture: {cr['saved']}")
+    need(cr["back"] == "Test Author", f"a restored picture lost its credit: {cr['back']}")
+    need("CC BY-SA 4.0" in cr["sign"], f"the sign's tooltip doesn't name the text license: {cr['sign']}")
     P.clean()
-    return f"grew in Home from Gloamhold, {st['imgs']} pictures, sign '{st['sign'].strip()}', Halloween on"
+    return f"grew in Home from Gloamhold, {st['imgs']} pictures ({cr['n']} credited ©), sign '{st['sign'].strip()}', Halloween on"
 
 
 HALLOWEEN_STUB = """(() => { if (window.__halloween) return; let on = true;   // until idle-halloween.js owns the switch, a stand-in that is on
@@ -638,7 +750,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "pedia stats", "data lab", "data lab stuck", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -667,8 +779,12 @@ def main():
                 run("pedia stats", t_pedia_stats)
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
+                run("data lab home", t_datalab_home)
+                run("mood migrate", t_mood_migrate)
+                run("lab card", t_lab_card)
                 run("replay", t_replay)
                 run("halloween", t_halloween)
+                run("halloween light", t_halloween_light, color_scheme="light")
                 run("trick or treat", t_treat)
                 run("wikipedia world", t_wiki)
                 run("pedia desktop", t_pedia)
@@ -676,11 +792,11 @@ def main():
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()
-            if any(want(n) for n in ("camera phone", "zoom shapes phone", "pedia phone", "pedia halloween phone")):
+            if any(want(n) for n in ("camera phone", "zoom shapes phone", "pedia phone", "pedia halloween phone", "lab card phone")):
                 wk = p.webkit.launch(headless=not a.headed)
                 try:
                     dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
-                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("zoom shapes phone", t_zoom_shapes, {}), ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
+                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("zoom shapes phone", t_zoom_shapes, {}), ("lab card phone", t_lab_card, {"phone": True}), ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
                         if not want(name): continue
                         ctx = wk.new_context(**dev); P = Page(ctx, base)
                         try: check(name, lambda P=P, fn=fn, kw=kw: fn(P, **kw))

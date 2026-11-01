@@ -2,10 +2,21 @@ minilm-l6-v2-quantized.onnx and tokenizer.json: all-MiniLM-L6-v2 by sentence-tra
 (https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2), int8 ONNX build from Xenova/all-MiniLM-L6-v2.
 Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
 
-heads.json: logistic-regression heads (sms_spam, support_ticket, tweet_eval_sentiment) fitted on that encoder's
+heads.json: logistic-regression heads (sms_spam, support_ticket, support_mood, tweet_eval_sentiment) fitted on that encoder's
 embeddings by the Jeffy project (https://github.com/nicobrenner/jeffy). The fitting code is MIT; each head is
 derived from a public dataset and follows that dataset's terms:
   - sms_spam: SMS Spam Collection (Almeida & Gomez Hidalgo, UCI Machine Learning Repository), CC BY 4.0.
   - support_ticket: Apache-2.0 dataset, as listed in Jeffy's catalog.
   - tweet_eval_sentiment: TweetEval sentiment (Barbieri et al., 2020), built from tweets under Twitter's terms;
     for research and non-commercial use, as listed in Jeffy's catalog.
+  - support_mood (negative / neutral / positive; the data lab's default mood tagger since 2026-11-01), trained by the Jeffy side
+    on four public sources, all credited:
+      GoEmotions (Demszky et al., 2020), Apache-2.0: Reddit comments, single-label examples collapsed into
+        negative / neutral / positive with the paper's sentiment grouping ("ambiguous" folded into neutral).
+        https://github.com/google-research/google-research/tree/master/goemotions
+      Amazon Reviews Polarity (Zhang, Zhao & LeCun, 2015), Apache-2.0 redistribution of scraped Amazon review text
+        (1-2 stars negative, 4-5 positive). https://huggingface.co/datasets/fancyzhx/amazon_polarity
+      Bitext Customer Support LLM Chatbot Training Dataset, CDLA-Sharing-1.0: support requests, labelled neutral.
+        https://huggingface.co/datasets/bitext/Bitext-customer-support-llm-chatbot-training-dataset
+      Customer Complaints (hblim), MIT: synthetic, generated with ChatGPT-4o from an "angry customer" prompt,
+        labelled negative. https://huggingface.co/datasets/hblim/customer-complaints
