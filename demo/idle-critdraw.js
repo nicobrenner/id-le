@@ -109,7 +109,7 @@
     // the same drawing onto another canvas (reel replays): body, legs, hiding pose, 💤/🫣, hangry glow
     function drawTo(g, c, t, hg) { const hp = hidePose(c); g.save(); if (hg) hangryGlow(g, c, t); if (c.dance && !hp) dancePose(g, c);
       if (hp) { g.globalAlpha = hp.a; g.translate(c.x + hp.jx, c.y + hp.jy); g.scale(hp.s, hp.s); g.translate(-c.x, -c.y); }
-      keylineFor(c); if (window.__looks) window.__looks.pre(g, c, t, true); legs(g, c, hp); body(g, c, t); g.restore(); g.save(); if (c.state === 'sleep') zz(g, c, t); else if (hp) peek(g, c, t, hp.k); g.restore(); }
+      keylineFor(c); if (window.__looks) window.__looks.pre(g, c, t, true); legs(g, c, hp); body(g, c, t); if (window.__hwDraw) window.__hwDraw(g, c, t); g.restore(); g.save(); if (c.state === 'sleep') zz(g, c, t); else if (hp) peek(g, c, t, hp.k); g.restore(); }
   Object.assign(K, { sizeUp, buildLegs, restSpot, hip, knee, stepLegs, circ, ell, rrect, fs, legs, body, hangryGlow, emoAt, zz, hidePose, peek, dancePose, drawTo, keylineFrame, keylineFor, KL });
   window.__critDraw = K;
 })();

@@ -41,13 +41,14 @@
     el.innerHTML = `<div class="hd"><b>⚙ settings</b><button data-a="close" title="close">✕</button></div>
 <div class="row"><div class="t"><b>Public helper</b><small>${helperNote}</small></div>${sw('helper', pub() ? helperOn() : false, !pub())}</div>
 <div class="row"><div class="t"><b>Anonymous stats</b><small>${statsNote}</small></div>${sw('stats', pub() && !sandbox() ? statsOn() : false, !pub() || sandbox())}</div>
+${window.__halloween ? `<div class="row"><div class="t"><b>🎃 Halloween</b><small>Costumes on every creature, pumpkins on the floor, bats and ghosts. On by itself on Oct 31 (until 6 am on Nov 1); mode only, your world is not changed.${window.__halloween.forced() ? ' On for this page because of ?halloween in the address.' : ''}</small></div>${sw('halloween', window.__halloween.on())}</div>` : ''}
 ${window.__looks ? `<div class="row"><div class="t"><b>Highlight creatures</b><small>A ring around every creature, the camouflaged ones too, so you can find them in a busy world. Tip: hold H to see them for a moment, tap H to switch.</small></div>${sw('hilite', window.__looks.state().hilite)}</div>` : ''}
 <div class="ft">Your worlds, your drawer and any AI keys stay in this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy: what Id|le keeps and sends ›</a></div>
 <div class="ft">Id|le is open source: <a href="${window.IDLE_REPO}" target="_blank" rel="noopener">read or change the code on GitHub ›</a></div>`;
   }
   el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.a === 'close') return toggle(false);
-    const k = b.dataset.k; if (!k || b.disabled) return; if (k === 'hilite') { window.__looks.hilite(); render(); return; } S[k] = !(S[k] !== false); save(); render();
+    const k = b.dataset.k; if (!k || b.disabled) return; if (k === 'hilite') { window.__looks.hilite(); render(); return; } if (k === 'halloween') { window.__halloween.set(!window.__halloween.on()); render(); return; } S[k] = !(S[k] !== false); save(); render();
     if (k === 'helper' && window.__idle && window.__idle.swHelper) window.__idle.swHelper();
     if (window.__notify) window.__notify({ kind: 'system', text: k === 'helper' ? (helperOn() ? 'public helper on: creatures can read web pages again' : 'public helper off: no web pages are read for this browser') : (statsOn() ? 'anonymous stats on: thank you' : 'anonymous stats off: nothing more is sent from this browser') }); });
   // drag it by the header (not on phones, where it is a bottom sheet); its place is remembered and kept inside the window
@@ -71,5 +72,5 @@ ${window.__looks ? `<div class="row"><div class="t"><b>Highlight creatures</b><s
   (window.__idle ? window.__idle.mode() : Promise.resolve('server')).then(m => { mode = m; render();
     if (!pub()) return; const t0 = Date.now(), iv = setInterval(() => { if (noticeSeen() || !statsLive()) return clearInterval(iv); if (Date.now() - t0 > 20000 && notice()) clearInterval(iv); }, 3000); });
 
-  window.__settings = { helperOn, statsOn, statsLive, open: () => toggle(true), close: () => toggle(false), noticeLine: () => (statsLive() && !noticeSeen()) ? NOTE : '', markNotice: () => { try { localStorage.setItem(NOTICE, '1'); } catch (e) {} } };
+  window.__settings = { rerender: () => render(), helperOn, statsOn, statsLive, open: () => toggle(true), close: () => toggle(false), noticeLine: () => (statsLive() && !noticeSeen()) ? NOTE : '', markNotice: () => { try { localStorage.setItem(NOTICE, '1'); } catch (e) {} } };
 })();

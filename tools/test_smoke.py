@@ -434,6 +434,19 @@ def t_pedia(P, phone=False):
     return f"{len(toc)} sections, {live} live creatures, {len(imgs)} pictures, {len(moving)} clips playing"
 
 
+def t_halloween(P):
+    pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
+    wait_for(pg, "() => !!(window.__halloween && window.__halloween.on() && document.querySelector('#arena.hw'))", 30, P=P)
+    pg.wait_for_timeout(5000)
+    st = pg.evaluate("() => { const cs = window.__arena.raw().filter(c => !c.lab); window.__halloween.test.flock(); return { n: cs.length, dressed: cs.filter(c => c._hw).length, kinds: [...new Set(cs.map(c => c._hw).filter(Boolean))], ...window.__halloween.test.state() }; }")
+    need(st["dressed"] == st["n"] and st["n"] > 0, f"not every creature is in costume: {st}")
+    need(st["flocks"] >= 1, f"no bat flock: {st}")
+    off = pg.evaluate("() => { window.__halloween.set(false); return { forced: window.__halloween.forced(), hw: !!document.querySelector('#arena.hw') }; }")
+    need(off["forced"] and off["hw"], f"?halloween should keep the mode on: {off}")
+    P.clean()
+    return f"{st['n']} in costume ({', '.join(st['kinds'])}), {st['pumpkins']} pumpkins, bats flying"
+
+
 def t_fps(P, n=300, floor=20):
     pg = P.open("/arena.html?fresh=1&test&bench"); booted(pg)
     pg.evaluate(f"() => window.__bench.spawn({n})"); pg.wait_for_timeout(6000)
@@ -454,7 +467,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "stats", "data lab", "data lab stuck", "replay", "pedia desktop", "camera phone", "pedia phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "stats", "data lab", "data lab stuck", "replay", "halloween", "pedia desktop", "camera phone", "pedia phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -482,6 +495,7 @@ def main():
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
                 run("replay", t_replay)
+                run("halloween", t_halloween)
                 run("pedia desktop", t_pedia)
                 if a.full: run("fps", t_fps)
             finally:
