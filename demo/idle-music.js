@@ -38,7 +38,7 @@
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } };
   const S = Object.assign({ bg: BG0(), deck: DECK0(), sets: [], open: false, rave: false, queue: [], qo: { each: 2, xf: 6 }, ui: {} }, load() || {});
   S.deck = Object.assign(DECK0(), S.deck); S.deck.lights = Object.assign(DECK0().lights, S.deck.lights);
-  S.bg = Object.assign(BG0(), S.bg); S.bg.voices = Object.assign(BG0().voices, S.bg.voices); S.qo = Object.assign({ each: 2, xf: 6 }, S.qo); S.queue = S.queue || []; S.ui = S.ui || {};
+  S.bg = Object.assign(BG0(), S.bg); if (!S.bg.chosen) S.bg.on = true;   /* background music is on by default (Oct 31) unless the player turned it off or on themselves */ S.bg.voices = Object.assign(BG0().voices, S.bg.voices); S.qo = Object.assign({ each: 2, xf: 6 }, S.qo); S.queue = S.queue || []; S.ui = S.ui || {};
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ bg: S.bg, deck: S.deck, sets: S.sets, open: S.open, rave: S.rave, queue: S.queue, qo: S.qo, ui: S.ui })); } catch (e) {} };
   const copy = o => JSON.parse(JSON.stringify(o));
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -231,7 +231,7 @@
   // what plays: one at a time. 'deck' keeps the background's own on/off, so stopping the deck brings it back as before
   const source = () => deck.playing ? 'deck' : S.bg.on ? 'bg' : 'off';
   const srcEv = () => { try { dispatchEvent(new CustomEvent('idle:musicsrc', { detail: { src: source() } })); } catch (e) {} };
-  function setSource(k) { if (k !== 'off' && A()) A().wantSound(); if (k === 'deck') { if (!deck.playing) play(true); } else { if (deck.playing) play(false); if (S.bg.on !== (k === 'bg')) setBg(k === 'bg'); } render(); srcEv(); }
+  function setSource(k) { S.bg.chosen = true; if (k !== 'off' && A()) A().wantSound(); if (k === 'deck') { if (!deck.playing) play(true); } else { if (deck.playing) play(false); if (S.bg.on !== (k === 'bg')) setBg(k === 'bg'); } render(); srcEv(); }
   // the base tune: the background music as it is set now, played by the deck at the deck's tempo, key and scale, your parts on top
   function setBase(on) { const D = S.deck; if (on) { if (D.track && !D.base) D.prevTrack = { track: D.track, layer: D.layer, setName: D.setName }; D.track = trackOf(S.bg, world()); D.base = true; D.layer = true; D.setName = 'base tune: ' + (PROF[D.track.style] || PROF.home).name; }
     else { const pv = D.prevTrack; D.base = false; D.track = pv ? pv.track : null; D.layer = pv ? pv.layer : false; D.setName = pv ? pv.setName : null; D.prevTrack = null; } if (ctx) release(deck.tst, 0.3); deck.tst = newTst(); save(); render(); srcEv(); }
@@ -252,7 +252,7 @@
     deck.q = { i, next: now + S.qo.each * 60 }; render(); }
   setInterval(() => { if (deck.q && (!deck.playing || !ctx)) deck.q = null; if (deck.q && ctx.currentTime >= deck.q.next - S.qo.xf) qNext(); }, 500);
   // the first click anywhere wakes the audio if the background music was left on (browsers only start sound on a gesture)
-  addEventListener('pointerdown', function wake() { if (S.bg.on && !(A() && A().muted())) { ensure(); setBg(true); } removeEventListener('pointerdown', wake, true); }, true);
+  const WAKE = ['pointerdown', 'keydown', 'touchend']; function wake() { if (S.bg.on && !(A() && A().muted())) { ensure(); setBg(true); } WAKE.forEach(t => removeEventListener(t, wake, true)); } WAKE.forEach(t => addEventListener(t, wake, true));   // the first gesture starts the background music (browsers need one)
 
   // ---------- event marks (only with the background music on and following the world; at most one per kind every 8 s) ----------
   const lastMark = {};
@@ -360,7 +360,7 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
   + (deck.q && ctx ? `<div class="sub">next: ${esc(it[(deck.q.i + 1) % it.length].name)} in ${Math.max(0, Math.round((deck.q.next - S.qo.xf - ctx.currentTime) / 60 * 10) / 10)} min</div>` : ''); })()}`; }
   el.addEventListener('click', e => { const b = e.target.closest('button,[data-g]'); if (!b) return; const D = S.deck, x = b.dataset.x;
     if (x === 'close') { S.open = false; save(); render(); }
-    else if (x === 'bg') setBg(!S.bg.on);
+    else if (x === 'bg') { S.bg.chosen = true; setBg(!S.bg.on); }
     else if (x && x.startsWith('src:')) setSource(x.slice(4));
     else if (x === 'base') setBase(!S.deck.base);
     else if (b.dataset.sw) { const [a, k] = b.dataset.sw.split(':'); if (a === 'ch') { D.ch[k].off = !D.ch[k].off; } else { D.fx.off = Object.assign({}, D.fx.off); D.fx.off[k] = !D.fx.off[k]; applyFx(); } save(); render(); }

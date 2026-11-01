@@ -333,15 +333,24 @@ def t_panels(P):
 
 
 def t_sound(P):
+    # sound is on by default (Oct 31): unmuted, background music on, ambience bed running after the first gesture; an explicit mute
+    # suspends the audio and survives a reload
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     st = lambda: pg.evaluate("() => { const c = window.__audio.ctx(); return [window.__audio.muted(), c ? c.state : 'none'] }")
-    if not pg.evaluate("() => window.__audio.muted()"): pg.click("#soundBtn"); pg.wait_for_timeout(600)
-    pg.click("#soundBtn"); pg.wait_for_timeout(400); m, s = st()
-    need(not m and s == "running", f"after unmute: muted={m} context={s}")
+    need(not pg.evaluate("() => window.__audio.muted()"), "a fresh visit should start unmuted (sound on by default)")
+    pg.mouse.click(400, 500); pg.wait_for_timeout(900); m, s = st()
+    need(not m and s == "running", f"after the first gesture: muted={m} context={s}")
+    src = pg.evaluate("() => window.__music && window.__music.source ? window.__music.source() : '?'")
+    need(src == "bg", f"background music should be on by default, source={src}")
+    need(pg.evaluate("() => window.__snd.bedOn()"), "the ambience bed should be running")
     pg.click("#soundBtn"); pg.wait_for_timeout(700); m, s = st()
     need(m and s == "suspended", f"after mute: muted={m} context={s} (a muted game should suspend its audio)")
+    pg.reload(); booted(pg); pg.mouse.click(400, 500); pg.wait_for_timeout(700); m, s = st()
+    need(m and s != "running", f"an explicit mute should survive a reload: muted={m} context={s}")
+    pg.click("#soundBtn"); pg.wait_for_timeout(600); m, s = st()
+    need(not m and s == "running", f"after unmute: muted={m} context={s}")
     P.clean()
-    return "unmute → running, mute → suspended"
+    return "on by default (bg + ambience), mute → suspended and kept across reload, unmute → running"
 
 
 def t_haunted(P):
