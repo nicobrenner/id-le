@@ -153,7 +153,7 @@
   css.textContent = `html.hw-on #settingsBtn,html.hw-on #mMore{position:relative}
 html.hw-on #settingsBtn::after,html.hw-on #mMore::after{content:"🎃";position:absolute;top:-7px;right:-7px;font-size:11px;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px #0006)}
 #hwChip{position:absolute;top:44px;right:12px;z-index:31;display:none;align-items:center;gap:6px;font:600 12px system-ui;padding:4px 6px 4px 10px;border-radius:14px;border:1px solid #e07a1f;background:#2a1636e6;color:#ffb35c;box-shadow:0 2px 10px #0005;cursor:pointer}
-html.hw-on #hwChip.show{display:inline-flex}#hwChip button{border:0;background:none;color:inherit;opacity:.7;cursor:pointer;font-size:13px;padding:0 4px}
+html.hw-on #hwChip.show{display:inline-flex}html:has(#team.on) #hwChip,html:has(#dj.on) #hwChip{display:none!important}#hwChip button{border:0;background:none;color:inherit;opacity:.7;cursor:pointer;font-size:13px;padding:0 4px}
 @media (prefers-color-scheme:light){#hwChip{background:#fff3e6f2;color:#9a3d00}}
 @media (max-width:500px){#hwChip{top:auto;bottom:96px;right:8px}}`;
   document.head.appendChild(css);
