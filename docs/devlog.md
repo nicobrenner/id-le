@@ -13,6 +13,23 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 - Finding: the data lab reads well only at 1280×720 ×1.5 (the same 1920×1080 frames with everything half again as large); at 1920×1080 ×1 the labels were unreadable on a phone.
 - Re-cut: `python3 tools/trailer/halloween.py --out <dir>`, `python3 tools/trailer/cuts.py --out <dir> --tests <saved test_smoke output>` (`--only edit` re-assembles from the recorded shots).
 
+## 2026-11-01
+
+**Four things the Jeffy side found while filming the game.**
+- **"⏏ close the lab" removed the lab.** It called `closeLab()`, which deletes the lab place: its team, messages, bins and stats (35 in / 4 sorted before, 3 / 0 after "closing" and reopening). Now **🏠 back home** goes to the world the lab came from and keeps everything (the lab waits and carries on when you return), and **🗑 remove the lab** asks first: the first click turns it red ("really remove?"), only a second click within 6 s removes it.
+- **`#lab` was never the data lab.** It is the 📟 Operator chat's panel, so its visibility says nothing about the lab. The current place is now on `<html data-place="home|lab|keep|page">`; the suite already used the places API.
+- **Halloween under a light OS theme looked like a pale day with a 🎃 chip.** The night overlay is a multiply over a light floor. While the mode is on, `#arena.hw-night` gives the world the dark palette (floor, words, creatures, charts and the panels inside it) and the page's `isDark()` returns true, so canvas drawing follows; the pages around the world keep the OS theme. Measured under `color_scheme: light`: world background rgb(28, 30, 36), canvas `isDark` true.
+- **A mood tagger for support-style messages.** The Jeffy side trained `support_mood` (same MiniLM encoder, +11.9 KB of head) on GoEmotions, Amazon review polarity, Bitext support requests and a synthetic complaints set (licenses in `demo/jeffy-heads/NOTICE`). Measured here, in the browser, on the 50 hand-labelled demo messages:
+
+| head | correct | negative | neutral | positive |
+|---|---|---|---|---|
+| `support_mood` (browser) | **40/50** ↑ | **16/20** ↑ | 19/23 | 5/7 |
+| `tweet_eval_sentiment` (browser) | 30/50 | 5/20 | 21/23 | 4/7 |
+| `tweet_eval_sentiment` (server, earlier) | 32/50 | 10/20 | 16/23 | 6/7 |
+
+  Median 3.2 ms per message. It is Moodring's head in new teams and in untouched default teams (migrated); a team the player changed keeps its choice, and `tweet_eval_sentiment` stays selectable. Jeffy's server has no `support_mood`, so when this browser can't run it (safe mode, failed download) the stage asks the server for `tweet_eval_sentiment` instead. The labels are one person's judgment on 50 messages: the 10-message gap to the tweet head is the signal, not the exact numbers.
+- Tests: `data lab home` (home and back keeps the run; remove asks, then removes; default team uses support_mood), `mood migrate`, `halloween light`.
+
 ## 2026-10-31
 
 **Wikipedia worlds, polished: Home, the right moment to ask, pictures that arrive, a sign.** After Nico tried `?from_wiki=` links in incognito windows and from Gloamhold.

@@ -446,6 +446,50 @@ def t_datalab(P, secs=45):
     return f"{done} sorted, in {s['stats']['in']}, where={where}"
 
 
+def t_datalab_home(P):
+    # 🏠 back home keeps the lab (team, messages, bins, stats); 🗑 remove asks first (a lab was lost to a button labelled "close")
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => window.__places.openLab()")
+    s1 = wait_for(pg, """() => { const s = window.__lab && window.__lab.state && window.__lab.state(); return s && s.msgs.filter(m => m.done).length >= 2 ? s : null }""", 120, P=P)
+    heads = pg.evaluate("() => window.__lab.team().map(t => t.head)")
+    need("support_mood" in heads, f"the default team's mood tagger is not support_mood: {heads}")
+    pg.evaluate("() => document.getElementById('labHome').click()")
+    wait_for(pg, "() => document.documentElement.dataset.place === 'home'", 20, P=P)
+    pg.evaluate("() => window.__places.openLab()")
+    s2 = wait_for(pg, "() => document.documentElement.dataset.place === 'lab' && window.__lab.state()", 30, P=P)
+    need(s2["stats"]["in"] >= s1["stats"]["in"] and sum(1 for m in s2["msgs"] if m.get("done")) >= sum(1 for m in s1["msgs"] if m.get("done")),
+         f"coming back lost the lab's run: in {s1['stats']['in']} -> {s2['stats']['in']}")
+    pg.evaluate("() => document.getElementById('labExit').click()"); pg.wait_for_timeout(400)
+    one = pg.evaluate("() => ({ place: document.documentElement.dataset.place, armed: document.getElementById('labExit').classList.contains('armed') })")
+    need(one["place"] == "lab" and one["armed"], f"one click on remove should only ask: {one}")
+    pg.evaluate("() => document.getElementById('labExit').click()")
+    wait_for(pg, "() => document.documentElement.dataset.place !== 'lab'", 20, P=P)
+    P.clean()
+    return f"home and back kept in={s2['stats']['in']} (was {s1['stats']['in']}); remove asked first, then removed; team {heads}"
+
+
+def t_mood_migrate(P):
+    old = [{"head": "sms_spam", "role": "filter", "match": "spam", "thr": 0.7, "name": "Spamtrap"}, {"head": "support_ticket", "role": "route", "thr": 0.6, "margin": 0.2, "name": "Router"},
+           {"head": "tweet_eval_sentiment", "role": "tag", "thr": 0.5, "name": "Moodring"}]
+    P.ctx.add_init_script("try { if (!sessionStorage.getItem('t')) { localStorage.setItem('arena.team', %s); sessionStorage.setItem('t', '1'); } } catch (e) {}" % json.dumps(json.dumps(old)))
+    pg = P.open("/arena.html?test"); booted(pg)
+    team = pg.evaluate("() => JSON.parse(localStorage.getItem('arena.team')).map(t => t.name + ':' + t.head)")
+    need(team == ["Spamtrap:sms_spam", "Moodring:support_mood", "Router:support_ticket"], f"untouched old default not migrated: {team}")
+    P.clean()
+    return " → ".join(team)
+
+
+def t_halloween_light(P):
+    # under a light OS theme the night used to wash out to a pale day: the world must be at night while the mode is on
+    pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
+    st = wait_for(pg, """() => { const a = document.getElementById('arena'); if (!a.classList.contains('hw-night') || window.__hwNight !== true) return null;
+        const m = getComputedStyle(a).backgroundColor.match(/\\d+/g).map(Number); return { bg: m.slice(0, 3), dark: window.__collectHooks && window.__collectHooks.isDark ? window.__collectHooks.isDark() : null } }""", 30, P=P)
+    need(sum(st["bg"]) < 200, f"the world isn't dark under a light OS theme: background {st['bg']}")
+    pg.evaluate("() => window.__halloween.set(false)")
+    P.clean()
+    return f"light OS theme + Halloween: world background rgb{tuple(st['bg'])}, canvas isDark={st['dark']}"
+
+
 def t_datalab_stuck(P):
     team = [{"head": "sms_spam", "role": "filter", "match": "spam", "thr": 0.7, "name": "Mine"}, {"head": "support_ticket", "role": "route", "thr": 0.6, "margin": 0.2, "name": "Rtr"},
             {"head": "tweet_eval_sentiment", "role": "tag", "thr": 0.5, "name": "Late"}]
@@ -638,7 +682,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "pedia stats", "data lab", "data lab stuck", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "halloween light", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -667,8 +711,11 @@ def main():
                 run("pedia stats", t_pedia_stats)
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
+                run("data lab home", t_datalab_home)
+                run("mood migrate", t_mood_migrate)
                 run("replay", t_replay)
                 run("halloween", t_halloween)
+                run("halloween light", t_halloween_light, color_scheme="light")
                 run("trick or treat", t_treat)
                 run("wikipedia world", t_wiki)
                 run("pedia desktop", t_pedia)
