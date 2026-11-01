@@ -90,6 +90,15 @@ def main():
         print(f"no stats since {since}")
         return
     print(f"id-le.com anonymous stats, {since} .. today (UTC)\n")
+    traffic, note = zone_traffic(tok, since)
+    if traffic:
+        print("Cloudflare (real browsers): page loads, game starts, stats reports received / stored")
+        for d in sorted(traffic):
+            t = traffic[d]
+            print(f"  {d}  loads {t['loads']:>5}  starts {t['starts']:>4}  reports {t['reports']:>4} / {days.get(d, {}).get('batches', 0):<4}  (bots {t['bots']})")
+        print()
+    elif note:
+        print(note + "\n")
     print(f"{'day':<11}{'visits':>7}{'back':>6}{'phone':>7}{'desk':>6}{'iOS':>5}  safe 0/1/2   fps <20/20-40/40-55/55+   batches  writes")
     for day in sorted(days):
         d = days[day]
@@ -114,7 +123,7 @@ def main():
     print("\nopened (visits that opened it): " + (", ".join(f"{k} {v}" for k, v in feats[:20]) or "-"))
     errs = sorted(tot.get("err", {}).items(), key=lambda kv: -kv[1])
     for k, title in (("ref", "came from"), ("utm", "campaign tags"), ("dw", "time on screen (minutes)"), ("fl", "guided start stopped at"), ("dl", "data lab walkthrough steps reached")):
-        v = {x: n for x, n in tot.get(k, {}).items() if n}
+        v = {x: n for x, n in tot.get(k, {}).items() if n and n > 0}
         if v:
             items = [(x, v.get(x, 0)) for x in DWELL] if k == "dw" else sorted(v.items(), key=lambda kv: -kv[1])
             print(f"\n{title}: " + ", ".join(f"{x} {n}" for x, n in items))
@@ -137,14 +146,26 @@ def main():
         print(f"  {n:>4}  {e}")
 
 
+BOTS = {"Unknown", "Curl", "ChromeHeadless", "LinkedInBot", "YandexBot", "AppleBot", "BingBot", "GoogleBot", "Googlebot", "FacebookBot", "TwitterBot",
+        "SlackBot", "DiscordBot", "Python", "Go", "Wget", "HeadlessChrome", "PhantomJS", "Applebot", "AhrefsBot", "SemrushBot", "DuckDuckBot", "Baiduspider", "PetalBot"}
+EMPTY_T = lambda: {"loads": 0, "bots": 0, "browsers": {}, "starts": 0, "reports": 0, "countries": {}}
+
+
 def zone_traffic(tok, since):
-    """Daily requests for the id-le.com zone: real browsers vs Cloudflare's own early-hints fetches. Needs the token to have
-    Zone Analytics: Read; without it this returns no rows and a note saying how to enable it."""
+    """Cloudflare's own counts for id-le.com, per day (real browsers only: requestSource eyeball), to compare with what the game
+    counted: page loads of / by browser (bots and scripts set aside), game starts (downloads of the ONNX runtime, which only a
+    running game fetches; a browser that has it cached doesn't count, so this is a floor), stats reports received, and countries.
+    Needs the token to have Zone Analytics: Read; without it this returns no rows and a note saying how to enable it."""
     try:
         z = call("/zones?name=id-le.com", tok)["result"]
         if not z:
             return None, "zone id-le.com isn't visible to this token"
-        q = {"query": "query($z:String!,$d:Date!){viewer{zones(filter:{zoneTag:$z}){httpRequestsAdaptiveGroups(limit:2000,filter:{date_geq:$d}){count dimensions{date requestSource}}}}}",
+        g = 'httpRequestsAdaptiveGroups(limit:5000,filter:{date_geq:$d,requestSource:"eyeball"%s}){count dimensions{date %s}}'
+        q = {"query": "query($z:String!,$d:Date!){viewer{zones(filter:{zoneTag:$z}){"
+                      + "p:" + g % (',clientRequestPath:"/"', "userAgentBrowser")
+                      + " o:" + g % (',clientRequestPath:"/vendor/ort/ort.min.js"', "")
+                      + " s:" + g % (',clientRequestPath:"/lab/stats",edgeResponseStatus:204', "")
+                      + " c:" + g % (',clientRequestPath:"/"', "clientCountryName") + "}}}",
              "variables": {"z": z[0]["id"], "d": since}}
         r = call("/graphql", tok, body=json.dumps(q).encode())
         if r.get("errors"):
@@ -152,10 +173,20 @@ def zone_traffic(tok, since):
             if "permission" in err or "authz" in err:
                 return None, "Traffic needs one more permission on the token: Cloudflare → My Profile → API Tokens → Edit → add Zone · Analytics · Read for id-le.com."
             return None, "traffic query failed: " + r["errors"][0].get("message", "")[:120]
-        out = {}
-        for g in r["data"]["viewer"]["zones"][0]["httpRequestsAdaptiveGroups"]:
-            d = g["dimensions"]
-            add(out.setdefault(d["date"], {}), {d["requestSource"]: g["count"]})
+        Z, out = r["data"]["viewer"]["zones"][0], {}
+        for x in Z["p"]:
+            d = out.setdefault(x["dimensions"]["date"], EMPTY_T())
+            b = x["dimensions"]["userAgentBrowser"] or "Unknown"
+            if b in BOTS or b.lower().endswith("bot"):
+                d["bots"] += x["count"]
+            else:
+                d["loads"] += x["count"]
+                add(d["browsers"], {b: x["count"]})
+        for key, f in (("o", "starts"), ("s", "reports")):
+            for x in Z[key]:
+                out.setdefault(x["dimensions"]["date"], EMPTY_T())[f] += x["count"]
+        for x in Z["c"]:
+            add(out.setdefault(x["dimensions"]["date"], EMPTY_T())["countries"], {x["dimensions"]["clientCountryName"] or "?": x["count"]})
         return out, ""
     except (urllib.error.URLError, KeyError, IndexError, ValueError, TypeError) as ex:
         return None, f"traffic unavailable ({type(ex).__name__})"
@@ -168,7 +199,7 @@ def dashboard(days, since, traffic, note):
     for d in days.values():
         add(tot, d)
     order = sorted(days)
-    nz = lambda o: {k: v for k, v in (o or {}).items() if v}
+    nz = lambda o: {k: v for k, v in (o or {}).items() if v and v > 0}   # a bucket taken back that was never added (e.g. "hwwiki -1") shows as nothing
     is_test = lambda day: bool(TEST_FEATS & set(nz(days[day].get("feat"))))
 
     def bars(rows, total=None, empty="nothing yet"):
@@ -216,10 +247,18 @@ def dashboard(days, since, traffic, note):
     feats = sorted(((k, n) for k, n in nz(tot.get("feat")).items() if k not in TEST_FEATS), key=lambda kv: -kv[1])[:20]
     dev, safe, fps = nz(tot.get("dev")), nz(tot.get("safe")), nz(tot.get("fps"))
     if traffic:
-        trows = "".join(f'<tr><td>{d}</td><td>{traffic[d].get("eyeball", 0)}</td><td>{traffic[d].get("earlyHintsCache", 0)}</td>'
-                        f'<td>{sum(v for k, v in traffic[d].items() if k not in ("eyeball", "earlyHintsCache"))}</td></tr>' for d in sorted(traffic))
-        tr = (f'<table><thead><tr><th>day</th><th>browser requests</th><th>Cloudflare early-hints fetches</th><th>other</th></tr></thead><tbody>{trows}</tbody></table>'
-              '<p class="muted">Requests include bots and scanners and every file a page loads; visits (above) are what the game itself counted.</p>')
+        trows = "".join(f'<tr><td>{d}</td><td>{traffic[d]["loads"]}</td><td>{traffic[d]["starts"]}</td><td>{days.get(d, {}).get("visits", 0)}</td>'
+                        f'<td>{traffic[d]["reports"]}</td><td>{days.get(d, {}).get("batches", 0)}</td><td>{traffic[d]["bots"]}</td></tr>' for d in sorted(traffic))
+        tb, tcn = {}, {}
+        for d in traffic.values():
+            add(tb, d["browsers"])
+            add(tcn, d["countries"])
+        tr = (f'<table><thead><tr><th>day</th><th>page loads (browsers)</th><th>game starts</th><th>visits the game counted</th>'
+              f'<th>stats reports received</th><th>reports stored</th><th>bots and scripts</th></tr></thead><tbody>{trows}</tbody></table>'
+              '<p class="muted">Page loads count every load of the home page by a real browser (reloads too); game starts count downloads of the game engine, '
+              'so a browser that already has it cached is not counted. When reports received is far above reports stored, stats were lost on the way.</p>'
+              f'<h2 style="margin-top:12px">Browsers</h2>{bars(sorted(tb.items(), key=lambda kv: -kv[1])[:10], total=sum(tb.values()) or None)}'
+              f'<h2 style="margin-top:12px">Countries (page loads)</h2>{bars(sorted(tcn.items(), key=lambda kv: -kv[1])[:12], total=sum(tcn.values()) or None)}')
     else:
         tr = f'<p class="muted">{e(note)}</p>'
     errs = sorted(nz(tot.get("err")).items(), key=lambda kv: -kv[1])[:12]

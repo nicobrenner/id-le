@@ -5,6 +5,21 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-01
 
+**Stats were being lost; the page reader was fine.** With the Show HN post up, the game's own stats said ~33 visits for Nov 1 (UTC) while Cloudflare (now readable with Zone Analytics) said otherwise. Measured, real browsers only:
+
+| Nov 1 (UTC), until ~18:30 | Count |
+|---|---|
+| page loads of the home page (bots and scripts set aside) | 614 |
+| game starts (downloads of the ONNX runtime; cached ones not counted) | 273 |
+| stats reports accepted (`POST /lab/stats` → 204) | 180 |
+| stats reports stored | 50 |
+
+Oct 31 had 30 received and 31 stored, so the loss began with the 11-01 change that made each isolate hold its buffer until it was 2 min (then 5 min) old and write it on a *later* request: after `_routes.json` and the world-poll gate, few later requests reach an isolate, and it was evicted with the counts. Fix: the first report of a batch starts a 20 s timer inside its own request's `waitUntil` (Workers allow about 30 s after the response), reports meanwhile join it, so a busy isolate still writes at most once per 20 s. New test: a lone report with no later request must be written (fails on the old worker, passes now), and `STAT_EVERY` must stay ≤ 25 s.
+- Why not Analytics Engine (asked for): it stores one data point per report, which breaks the privacy page's promise ("only daily totals… no single visit"); D1 counters would keep totals only, but this token has no D1 access. At today's volume (~180 reports a day) KV with 20 s batches stays far under its 1,000 writes a day.
+- The `/lab/*` 504s (102 of 207 `/lab/img`, 31 of 63 `/lab/fetch` today) are all `requestSource: earlyHintsCache`, Cloudflare re-fetching for early hints, the same thing the VM agent found for `/worlds/state` on 10-30. Real visitors' page reads and pictures all answered 200 (two 502s on 10-31). Nothing to fix.
+- "Guided start stopped at: hwwiki −1": a bucket taken back that was never added (the +1 was in a lost batch, or the step was allowlisted mid-visit); the dashboard now shows only positive counts.
+- `tools/stats.py` and the dashboard now show Cloudflare's own numbers per day next to the game's: page loads by browser (bots apart), game starts, stats reports received vs stored, browsers and countries.
+
 **First visits could land in an almost empty world.** The smoke test "fresh load" failed now and then with 3 creatures, no guided start and a saved world. Cause: when the restore code ran before `idle-first5.js` had loaded, it parked the guided start's boot (`__pendingFirst5`) and marked the page ready at once, without waiting for the starter world. The service worker's one-time reload for cross-origin isolation then aborted the starter world's download, and the autosave on the way out wrote the empty default world; the next load took that for the player's own (no starter world, no guide). Real first visitors whose service worker took a moment to install (slow network, busy phone) hit the same ordering.
 - Fix: the page counts as ready only once that parked boot has finished (or 20 s); a page being left is never marked ready; the starter world's download is retried once.
 - Measured, the reload forced to land mid-download (the test server delays `sw.js` 1 s and `starter_world.json` 6 s): before **10/10 failed** (Chromium, 4× CPU throttle) and 3/3 (iPhone WebKit); after **0/30** (Chromium, 4× throttle), 0/10 (iPhone WebKit, where every first load's starter download was cancelled by the reload), 0/10 unforced with throttling.
