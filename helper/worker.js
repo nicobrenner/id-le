@@ -169,8 +169,11 @@ export default {
     if (req.method === 'OPTIONS') return cors(env, req, new Response(null, { status: 204 }));
     if (new URL(req.url).pathname.startsWith('/jeffy/')) { try { return cors(env, req, await jeffy(req, new URL(req.url).pathname, req.headers.get('CF-Connecting-IP') || 'local', ctx)); } catch (e) { return cors(env, req, json({ error: String(e.message || e).slice(0, 120) }, 502)); } }
     const url = new URL(req.url), path = url.pathname, ip = req.headers.get('CF-Connecting-IP') || 'local', min = Math.floor(Date.now() / 60000);
-    const k = ip + '|' + min, n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
-    if (n > (+env.RATE_PER_MIN || 60)) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
+    // background calls a page makes by itself (stats batches, world-link polls, notices) count in their own, larger budget, so they
+    // never use up what the player's own actions (reading a page, its pictures) may do in a minute
+    const bg = path === '/lab/stats' || path === '/worlds/state' || path === '/lab/notices';
+    const k = ip + '|' + min + (bg ? '|bg' : ''), n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
+    if (n > (bg ? 240 : (+env.RATE_PER_MIN || 60))) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
     if (path === '/lab/stats') return stats(req, env, ctx);   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {

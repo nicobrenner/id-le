@@ -5,6 +5,15 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-10-31
 
+**Wikipedia worlds, polished: Home, the right moment to ask, pictures that arrive, a sign.** After Nico tried `?from_wiki=` links in incognito windows and from Gloamhold.
+- Pictures: in three fresh visits to the live site, all four `/lab/img` requests answered **502** every time, while the same request from curl answered 200. The 502 came from our own service worker: it learns the helper's address by a message from the page and keeps it only in memory, and the browser restarts a service worker whenever it likes (the first visit's isolation reload, after idling), so the address was often unknown and it refused. Unknown now means "same site" (id-le.com serves its helper itself); `''` still means the player switched the helper off. In the new test the three pictures arrive through the service worker (200).
+- The helper's per-visitor limit (60 a minute) also counted a page's own background calls (stats batches, world-link polls, notices); those now have their own budget of 240, so they can't use up what reading a page and its pictures needs.
+- Place: the world always grows in **Home**; from Gloamhold, the lab or a travelled page it goes Home first ("Growing a world in Home from Wikipedia: …").
+- Asking: the old rule ("never visited this browser before") asked anyone who had opened id-le.com once in the same incognito session. Now it grows at once unless the player has something of their own: something made on purpose (`idle.made`: grown text, kept items, kept worlds, snapshots, designs, renames), the guided start two or more steps in or finished, or begun over two days ago (a browser from before the guided start counts as a player).
+- A sign "📖 title · Wikipedia" stands where the article grew and links to it (kept in `idle.wikiSigns`, shown in Home), and the Oracle greets the topic. `terrainFrom` now reports success, so a failed fetch leaves no sign.
+- Test: "wikipedia world" (stubbed `/lab/fetch` and `/lab/img`, no network): from Gloamhold, `?wiki=Halloween` grows in Home with 3 pictures, a sign, Halloween on, the address cleaned.
+
+
 **Sound on by default, and an ambience bed.** Nico on Halloween night: background music and sounds should be on by default, "especially something like the wind or hum… it makes a huge difference in the vibe".
 - Master unmuted by default (volume 0.5 for new visitors); browsers need a gesture, so the first pointerdown, key or touchend starts the AudioContext and the master fades in over ~3 s. A small "🔊 tap anywhere for sound" hint shows by 🔊 for up to 8 s. Only an explicit choice (🔊, the popover switch) is kept as muted (`explicit` in idle.audio); saved states without it get the new default.
 - Background music on by default ("follows the world": haunted on Halloween) unless the player switched it themselves (`bg.chosen`).

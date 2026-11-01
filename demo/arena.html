@@ -147,7 +147,8 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 #reel .bar{display:flex;gap:3px;width:min(900px,100%)}#reel .bar i{flex:1;height:5px;border-radius:3px;background:color-mix(in srgb,var(--c) 30%,#333);overflow:hidden}#reel .bar i b{display:block;height:100%;width:0;background:var(--c)}#reel .bar i.done b{width:100%}
 #reel .ctl{display:flex;gap:6px;align-items:center;width:min(900px,100%);flex-wrap:wrap}#reel .ctl button{font:14px system-ui;padding:3px 10px;border-radius:9px;border:1px solid #fff4;background:#fff1;color:inherit;cursor:pointer}#reel .ctl button:hover{background:#fff2}#reel .ctl .tt{flex:1;opacity:.75;font-size:12px;text-align:center;min-width:80px}
 #herd [data-h=sleepf]{font-size:11px}#herd [data-h=sleepf].on{border-color:#ffd54a;background:#ffd54a22}
-.rtag{font-size:10px;padding:0 5px;border-radius:7px;border:1px solid #8886;opacity:.85;white-space:nowrap}.rtag.clips{border-color:#3a8;color:#3a8}.rtag.mixed{border-color:#a8a;color:#a8a}</style></head><body>
+.rtag{font-size:10px;padding:0 5px;border-radius:7px;border:1px solid #8886;opacity:.85;white-space:nowrap}.rtag.clips{border-color:#3a8;color:#3a8}.rtag.mixed{border-color:#a8a;color:#a8a}.wikisign{position:absolute;left:0;top:0;z-index:3;display:inline-flex;align-items:baseline;gap:6px;padding:8px 14px;border-radius:10px;background:#fffdf6;color:#222;border:1px solid #8886;box-shadow:0 4px 14px #0003;font:600 22px Georgia,serif;text-decoration:none;white-space:nowrap;cursor:pointer}.wikisign small{font:12px system-ui;opacity:.6}.wikisign:hover{box-shadow:0 6px 18px #0005}@media (prefers-color-scheme:dark){.wikisign{background:#23252c;color:#eee}}#arena.keep .wikisign{display:none}
+</style></head><body>
 <div id="boot" aria-live="polite"><div class="bplace"></div><canvas width="680" height="300"></canvas><div class="bbar"><div class="bfill"></div></div><div class="bstep"></div></div>
 <script>/* the boot cover: a resident plays while the world loads; the bar is the real boot steps, weighted. Never blocks: each step times out, and the cover goes after 9 s whatever happens */
 window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace || { kind: 'home', name: 'Home' }, keep = P.kind === 'keep', el = document.getElementById('boot'), cv = el.querySelector('canvas'), g = cv.getContext('2d'), fill = el.querySelector('.bfill'), stepEl = el.querySelector('.bstep');
@@ -1344,7 +1345,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     if (/^https?:\/\//i.test(v)) { say('lab', 'fetching ' + v.slice(0, 80) + '…', 'lab'); try { const j = await (await fetch('/lab/fetch?url=' + encodeURIComponent(v))).json(); if (j.error) { say('lab', 'could not fetch: ' + j.error, 'lab'); return; } layTerrain(j.text, j.title || v);
         (j.images || []).forEach((u, k) => addImage(u, cam.x + (k - 1.5) * 260, cam.y - 180 + (k % 2) * 140)); (j.ui || []).forEach((u, k) => addUI(u, cam.x + (Math.random() - .5) * 900, cam.y + 120 + (Math.random() - .5) * 300));
         if ((j.images || []).length && !creatures.some(c => jobOf(c) === 'blursort')) spawnSpecial('blursort'); if ((j.ui || []).length && !creatures.some(c => jobOf(c) === 'debug')) spawnSpecial('debug');
-        if ((j.images || []).length || (j.ui || []).length) say('lab', `the page also brought ${(j.images || []).length} images and ${(j.ui || []).length} interface elements`, 'lab'); } catch (e) { say('lab', 'could not fetch (is demo_server.py running?)', 'lab'); } }
+        if ((j.images || []).length || (j.ui || []).length) say('lab', `the page also brought ${(j.images || []).length} images and ${(j.ui || []).length} interface elements`, 'lab'); return true; } catch (e) { say('lab', 'could not fetch (is demo_server.py running?)', 'lab'); } }
     else layTerrain(v, null);
   }
   // world evolution: mutate / revert / keep, a world collection, and direct controls; layout changes regrow the text, weather changes do not
@@ -3613,18 +3614,40 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   function focusName(n) { const c = creatures.find(k => k.name === n); if (!c) return false; cam.x = c.x; cam.y = c.y; cam.z = Math.max(cam.z, 0.9); applyCam(); if (window.__lod) window.__lod.onCam(); select(c); setTimeout(() => openWhisper(c), 60); logEvent('pedia_go', { to: n }); return true; }
   try { const bc = new BroadcastChannel('idle-arena'); bc.onmessage = e => { const m = e.data || {}; if (m.ping) bc.postMessage({ pong: 1 }); if (m.focus && !focusName(m.focus) && window.__herd) window.__herd.toggle(true, 'Resting'); }; } catch (e) {}
   // shareable Wikipedia worlds: id-le.com/?from_wiki=https://en.wikipedia.org/wiki/Halloween (or ?wiki=Halloween for English).
-  // Only Wikipedia articles. A browser's first visit grows its world from the page right away; a returning player is asked first
-  // (their own world grows around where they look; nothing is replaced). The parameter is then dropped so a reload doesn't feed it again.
+  // Only Wikipedia articles. The world always grows in Home (from Gloamhold, the lab or a travelled page it goes Home first). A player with
+  // nothing of their own yet grows it right away; a player who has built something is asked first (it grows around where they look,
+  // nothing is replaced). A sign "📖 <title> · Wikipedia" stands where it grew (a link to the article), and the Oracle greets the topic.
+  // The parameter is then dropped so a reload doesn't feed it again (Halloween articles also turn Halloween mode on: idle-halloween.js).
   { const Q = new URLSearchParams(location.search); let fw = Q.get('from_wiki') || (Q.get('wiki') ? 'https://en.wikipedia.org/wiki/' + encodeURIComponent(Q.get('wiki').trim().replace(/ /g, '_')) : '');
     const WIKI = /^https:\/\/([a-z]{2,3}(-[a-z]+)?\.)?(m\.)?wikipedia\.org\/wiki\/[^\s?#]+$/i;
-    let firstVisit = false; try { firstVisit = !localStorage.getItem('idle.visited'); localStorage.setItem('idle.visited', '1'); } catch (e) {}
     const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const SIGNS = 'idle.wikiSigns', getSigns = () => { try { return JSON.parse(localStorage.getItem(SIGNS) || '[]'); } catch (e) { return []; } };
+    let firstVisit = false; try { firstVisit = !localStorage.getItem('idle.visited'); localStorage.setItem('idle.visited', '1'); } catch (e) {}
+    // "has a world of their own": something made on purpose (idle.made, counted below), or the guided start well under way, finished,
+    // or begun more than two days ago; a browser that came before the guided start existed (no idle.first5) counts as a player too
+    const ownWorld = () => { if (firstVisit) return false; let made = 0, f5 = null; try { made = +localStorage.getItem('idle.made') || 0; f5 = JSON.parse(localStorage.getItem('idle.first5') || 'null'); } catch (e) {}
+      if (made > 0) return true; if (!f5) return true; const done = Object.keys(f5.done || {}).filter(k => k !== 'card' && k !== 'hwwiki').length;
+      return done >= 2 || !!f5.finished || !!(f5.t0 && Date.now() - f5.t0 > 2 * 86400000); };
+    let growingWiki = false;
+    addEventListener('idle:ev', e => { const t = (e.detail || {}).type, x = (e.detail || {}).extra || {}; if (growingWiki && t === 'terrain') return;
+      if (['terrain', 'collect_keep', 'world_keep', 'snapshot', 'design_save'].includes(t) || (t === 'rename' && x.by === 'you')) { try { localStorage.setItem('idle.made', String((+localStorage.getItem('idle.made') || 0) + 1)); } catch (er) {} } });
+    function sign(o) { if (!o || [...document.querySelectorAll('.wikisign')].some(e => e.dataset.u === o.url)) return; const a = document.createElement('a'); a.className = 'wikisign'; a.dataset.u = o.url; a.href = o.url; a.target = '_blank'; a.rel = 'noopener';
+      a.title = 'open the article on Wikipedia (a new tab)'; a.innerHTML = `<span>📖</span><b>${esc(o.title)}</b><small>· Wikipedia</small>`; a.style.transform = `translate(${Math.round(o.x)}px,${Math.round(o.y)}px)`; ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => a.addEventListener(ev, e => e.stopPropagation(), { passive: true })); floor.appendChild(a); }
+    // the signs of earlier Wikipedia worlds stand in Home (they belong to that place)
+    const showSigns = () => { document.querySelectorAll('.wikisign').forEach(e => e.remove()); if ((window.__placeKind || 'home') === 'home') getSigns().forEach(sign); };
+    { let k = 0; const iv = setInterval(() => { if (!window.__restoredOrFresh) { if (++k > 80) clearInterval(iv); return; } clearInterval(iv); showSigns(); setInterval(() => { const home = (window.__placeKind || 'home') === 'home', shown = !!document.querySelector('.wikisign'); if (home !== shown && getSigns().length) showSigns(); }, 2000); }, 600); }
     if (fw && WIKI.test(fw)) { const title = decodeURIComponent(fw.split('/wiki/')[1]).replace(/_/g, ' ');
       const drop = () => { try { const u = new URL(location.href); u.searchParams.delete('from_wiki'); u.searchParams.delete('wiki'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) {} };
-      const grow = () => { drop(); try { terrainFrom(fw); logEvent('from_wiki', { first: firstVisit }); } catch (e) { console.warn('from_wiki', e); } if (window.__notify) window.__notify({ kind: 'system', icon: '🌱', html: `This world is growing from Wikipedia: <b>${esc(title)}</b>`, ttl: 9000 }); };
+      const grow = async () => { drop();
+        try { if (window.__places && window.__places.kind && window.__places.kind() !== 'home') { await window.__places.go('home'); await new Promise(r => setTimeout(r, 900)); } } catch (e) { console.warn('from_wiki: could not go Home', e); }
+        if (window.__notify) window.__notify({ kind: 'system', icon: '🌱', html: `Growing a world in Home from Wikipedia: <b>${esc(title)}</b>`, ttl: 9000 });
+        const at = { x: cam.x, y: cam.y - 330 };
+        growingWiki = true; let ok = false; try { ok = await terrainFrom(fw); logEvent('from_wiki', { first: firstVisit, ok: !!ok }); } catch (e) { console.warn('from_wiki', e); } growingWiki = false; if (!ok) return;
+        const o = { url: fw, title, x: at.x - 90, y: at.y, t: Date.now() }; try { const L = getSigns().filter(x => x.url !== fw); L.push(o); localStorage.setItem(SIGNS, JSON.stringify(L.slice(-12))); } catch (e) {} sign(o);
+        setTimeout(() => { try { window.__oracleSay && window.__oracleSay(`a world grown from ${title}: its words are on the floor now, and the creatures are already reading`); } catch (e) {} }, 2500); };
       let k = 0; const iv = setInterval(() => { if (!window.__restoredOrFresh) { if (++k > 80) clearInterval(iv); return; } clearInterval(iv);
-        if (firstVisit || !window.__notify) setTimeout(grow, 1500);
-        else window.__notify({ kind: 'trail', icon: '🌱', html: `Someone shared a world grown from Wikipedia: <b>${esc(title)}</b>. Grow it into your world? (it grows around where you are looking; nothing is replaced)`, ttl: 0, actions: [{ label: 'grow it ›', run: grow }, { label: 'no thanks', run: drop }] }); }, 500); }
+        if (!ownWorld() || !window.__notify) setTimeout(grow, 1500);
+        else window.__notify({ kind: 'trail', icon: '🌱', html: `<b>A shared world: ${esc(title)}</b> (Wikipedia). Grow it into your Home? It grows around where you are looking; nothing of yours is replaced.`, ttl: 0, actions: [{ label: 'grow it ›', run: grow }, { label: 'no thanks', run: drop }] }); }, 500); }
     else if (fw) console.warn('from_wiki: only Wikipedia article addresses (https://<lang>.wikipedia.org/wiki/…) are accepted'); }
   // id-le.com/#lab opens the data lab (a link to share it; its walkthrough starts there for first-timers)
   if (/^#(.*&)?lab(&|$)/.test(location.hash)) { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh && window.__places && window.__places.openLab) { clearInterval(iv); try { window.__places.openLab(); } catch (e) {} } else if (++k > 60) clearInterval(iv); }, 500); }

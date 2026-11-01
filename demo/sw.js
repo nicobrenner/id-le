@@ -4,7 +4,10 @@
 //    (the same idea as coi-serviceworker; a host that sends them itself, like the _headers file, makes this a no-op);
 // 3. forwards /lab/img and /lab/asset (used as <img src> and CSS urls, which never pass through window.fetch) to the helper.
 const CACHE = 'idle-v1', BIG = /\.(onnx|wasm|mjs)$|vendor\/|jeffy-heads\/|tokenizer_.*\.json$|assoc_v1\.json$/;
-let helper = '';
+// the helper's address arrives by message from the page and lives only in memory: the browser restarts a service worker
+// whenever it likes (after idling, on the first visit's isolation reload), and then it is unknown (null). Unknown means "same site"
+// (id-le.com serves its helper itself); '' means the player switched the public helper off.
+let helper = null;
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('message', e => { if (e.data && typeof e.data.helper === 'string') helper = e.data.helper; });
@@ -17,7 +20,8 @@ self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (u.origin !== location.origin || e.request.method !== 'GET') return;
   if (/^\/lab\/(img|asset)/.test(u.pathname)) {
-    e.respondWith(helper ? fetch(helper.replace(/\/$/, '') + u.pathname + u.search, { mode: 'cors' }).then(isolate) : new Response('', { status: 502 }));
+    e.respondWith(helper === null ? fetch(e.request).then(isolate)
+      : helper ? fetch(helper.replace(/\/$/, '') + u.pathname + u.search, { mode: 'cors' }).then(isolate) : new Response('', { status: 502 }));
     return;
   }
   if (BIG.test(u.pathname)) {

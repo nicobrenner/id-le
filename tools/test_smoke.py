@@ -12,7 +12,7 @@ stub (fonts, CDNs, Jeffy's server, id-le.com), and /lab/* and /worlds/* are stub
 Why: each feature so far was tested by a one-off script, and a regression slipped through (applyCam's travel clamp and
 wrap-around sat inside a // comment for a day). Add a check here for whatever you build.
 """
-import argparse, contextlib, functools, http.server, json, os, re, shutil, socket, socketserver, subprocess, sys, tempfile, threading, time, traceback
+import base64, argparse, contextlib, functools, http.server, json, os, re, shutil, socket, socketserver, subprocess, sys, tempfile, threading, time, traceback
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEMO = os.path.join(ROOT, "demo")
@@ -183,6 +183,8 @@ class Page:
             if path == "/lab/stats": self.stats.append(route.request.post_data or ""); return route.fulfill(status=204, body="")
             if path == "/lab/notices": return route.fulfill(status=200, content_type="application/json", body="[]")
             if path.startswith("/worlds/state"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"me": {"name": "", "links": [], "requests": [], "inbox": []}, "peers": {}}))
+            if path == "/lab/fetch": return route.fulfill(status=200, content_type="application/json", body=json.dumps(WIKI_PAGE))
+            if path == "/lab/img": return route.fulfill(status=200, content_type="image/png", body=base64.b64decode(PNG))
             if path.startswith("/lab/") or path.startswith("/worlds/"): return route.fulfill(status=200, content_type="application/json", body='{"ok":false,"error":"test stub"}')
             return route.continue_()
         if u.startswith("data:") or u.startswith("blob:"): return route.continue_()
@@ -474,6 +476,31 @@ def t_halloween(P):
     return f"{st['n']} in costume ({', '.join(st['kinds'])}), {st['pumpkins']} pumpkins, bats flying"
 
 
+WIKI_PAGE = {"title": "Halloween - Wikipedia", "url": "https://en.wikipedia.org/wiki/Halloween", "links": [], "ui": [],
+             "images": ["https://upload.example/lantern.png", "https://upload.example/costumes.png", "https://upload.example/bonfire.png"],
+             "text": " ".join(["Halloween or Hallowe'en is a celebration observed in many countries on 31 October, the eve of the Western Christian feast of All Hallows' Day.",
+                               "Popular activities include trick-or-treating, attending costume parties, carving pumpkins into jack-o'-lanterns, lighting bonfires, apple bobbing,",
+                               "visiting haunted attractions, telling scary stories and watching horror films."] * 6)}
+PNG = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGN4ViFHEmIY1TCqYfhqAADNKnwQbWjC+AAAAABJRU5ErkJggg=="
+
+
+def t_wiki(P):
+    # a shared Wikipedia world: from Gloamhold, a player with nothing of their own gets it grown at once, in Home, with its pictures,
+    # a sign linking the article, Halloween on (a Halloween article), and the address cleaned (a reload must not feed it again)
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => window.__places.go('keep')"); wait_for(pg, "() => window.__placeKind === 'keep'", 20, P=P); pg.wait_for_timeout(1500)
+    # the test build has no helper: this page names the test server as its helper, whose /lab/fetch and /lab/img are stubbed
+    pg.add_init_script("Object.defineProperty(window, 'IDLE_CFG', { value: { mode: 'static', helper: location.origin }, writable: false, configurable: false })")
+    pg.goto(P.base + "/arena.html?test&wiki=Halloween", wait_until="load"); booted(pg)
+    st = wait_for(pg, """() => { const imgs = [...document.querySelectorAll('#floor .thing canvas')].filter(c => c.width > 0).length, sign = document.querySelector('.wikisign');
+        return window.__placeKind === 'home' && sign && imgs >= 2 ? { imgs, sign: sign.textContent, href: sign.href, hw: window.__halloween.forced(), url: location.search } : null; }""", 45, P=P)
+    need("Halloween" in st["sign"] and st["href"].startswith("https://en.wikipedia.org/wiki/Halloween"), f"no sign for the article: {st}")
+    need(st["hw"], "a Halloween article should turn Halloween mode on")
+    need("wiki" not in st["url"], f"the address still carries the article: {st['url']}")
+    P.clean()
+    return f"grew in Home from Gloamhold, {st['imgs']} pictures, sign '{st['sign'].strip()}', Halloween on"
+
+
 HALLOWEEN_STUB = """(() => { if (window.__halloween) return; let on = true;   // until idle-halloween.js owns the switch, a stand-in that is on
   window.__halloween = { on: () => on, set: v => { on = !!v; dispatchEvent(new CustomEvent('idle:halloween', { detail: { on } })); }, onChange() {} }; })()"""
 
@@ -565,7 +592,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "data lab", "data lab stuck", "replay", "halloween", "trick or treat", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "data lab", "data lab stuck", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -596,6 +623,7 @@ def main():
                 run("replay", t_replay)
                 run("halloween", t_halloween)
                 run("trick or treat", t_treat)
+                run("wikipedia world", t_wiki)
                 run("pedia desktop", t_pedia)
                 run("pedia halloween", t_pedia_halloween)
                 if a.full: run("fps", t_fps)
