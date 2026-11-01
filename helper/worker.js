@@ -85,7 +85,7 @@ const F5STOP = ['none', 'card', 'hwwiki', 'name', 'feed', 'dream', 'gazette', 'w
 const CAP = { ref: 30, utm: 20 };   // distinct names kept per day and shard; the rest are counted as 'other'
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY = () => ({ visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, batches: 0 });
-let statBuf = {}, statTimer = null, statFirst = 0; const STAT_EVERY = 300000;
+let statBuf = {}, statTimer = null, statFirst = 0; const STAT_EVERY = 120000;
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
   const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
@@ -171,6 +171,9 @@ export default {
     const url = new URL(req.url), path = url.pathname, ip = req.headers.get('CF-Connecting-IP') || 'local', min = Math.floor(Date.now() / 60000);
     const k = ip + '|' + min, n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (+env.RATE_PER_MIN || 60)) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
+    // any helper request (world polls every 20 s, notices every 90 s) also writes a stats buffer that is 2 min old, so counts from a
+    // quiet isolate aren't lost waiting for the next /lab/stats
+    if (statFirst && !statTimer && Date.now() - statFirst > STAT_EVERY) { statFirst = 0; statTimer = flushStats(env).catch(() => {}).finally(() => { statTimer = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(statTimer); }
     if (path === '/lab/stats') return stats(req, env, ctx);   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {
