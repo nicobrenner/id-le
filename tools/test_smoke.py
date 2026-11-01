@@ -69,11 +69,20 @@ const out = {};
 await post('/lab/stats', { v: 1, visit: 1, dev: 'phone', ref: 'reddit.com', utm: 'r-webgames', fps: '55+', feat: ['datalab'], dw: '<1', fl: 'card', evil: 'x' });
 await post('/lab/stats', { v: 1, dw: '1-5', dw0: '<1', fl: 'finished', fl0: 'card' });
 await post('/lab/stats', { v: 1, visit: 1, ref: 'https://evil.example/path?q=1', dev: 'toaster', dw: '20+' });
+// engagement: buckets move once per page load (eg0 takes back), seconds add up, junk buckets and absurd seconds are dropped
+await post('/lab/stats', { v: 1, eg: { cr: '0-12', born: '0', charts: '1-5', fed: '0' }, sec: 120 });
+await post('/lab/stats', { v: 1, eg: { cr: '13-30', charts: '6-20' }, eg0: { cr: '0-12', charts: '1-5' }, sec: 300 });
+await post('/lab/stats', { v: 1, eg: { cr: 'lots', fed: '9999' }, sec: 99999999 });
+// the pedia counts on its own: its visit is not a game visit; sections are the pedia's ids only
+await post('/lab/stats', { v: 1, page: 'pedia', visit: 1, back: 0, dev: 'desktop', ref: 'news.ycombinator.com', dw: '1-5', ps: ['the-oracle', 'halloween', 'BAD id!'], clips: 2 });
+await post('/lab/stats', { v: 1, page: 'pedia', dw: '5-20', dw0: '1-5', ps: ['halloween'], clips: 1, err: ['x is null @pedia-draw.js:3:9'] });
 out.bad_format = (await post('/lab/stats', { v: 2 })).status;
 out.too_big = (await go('/lab/stats', { method: 'POST', body: 'x'.repeat(9000) })).status;
 const days = [...env.STATS.m.values()].map(v => JSON.parse(v));
 out.stats = days.reduce((a, d) => { for (const k of ['visits', 'dev', 'ref', 'utm', 'dw', 'fl', 'feat']) a[k] = typeof d[k] === 'number' ? (a[k] || 0) + d[k] : { ...(a[k] || {}), ...d[k] }; return a; }, {});
 out.stat_keys = [...new Set(days.flatMap(d => Object.keys(d)))].sort();
+out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})) a[k] = (a[k] || 0) + n; return a; }, {}); out.secs = days.reduce((a, d) => a + (d.secs || 0), 0);
+out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
 // jeffy proxy: an allowlist of two paths; nothing else is relayed (no network needed for these answers)
 out.jeffy_train = (await post('/jeffy/train', { text: 'x', task: 'sms_spam' })).status;
 out.jeffy_get_predict = (await go('/jeffy/predict')).status;
@@ -114,7 +123,16 @@ def worker_unit():
     need(o["world_poll_writes"] == 0, f"5 polls of an unregistered world wrote {o['world_poll_writes']} times to KV (expected 0: polls never create worlds; KV writes are scarce)")
     need("me" in o["world_state"], "world state has no 'me'")
     need(o["rate_61st"] == 429, f"61st request in a minute: {o['rate_61st']}")
-    return "stats allowlist + buckets, jeffy allowlist, KV write throttle, rate limit"
+    eg = {k: v for k, v in o["eg"].items() if v}
+    need(eg == {"cr:13-30": 1, "born:0": 1, "charts:6-20": 1, "fed:0": 1}, f"engagement buckets {eg} (each page load once, in its last bucket; junk dropped)")
+    need(o["secs"] == 420, f"seconds on screen {o['secs']} != 420 (an absurd value must be dropped)")
+    pd = o["pd"]
+    need(s["visits"] == 2 and pd["visits"] == 1, f"pedia visits {pd['visits']}, game visits {s['visits']} (a pedia visit is not a game visit)")
+    need({k: v for k, v in pd["dw"].items() if v} == {"5-20": 1}, f"pedia time {pd['dw']}")
+    need(set(k for k, v in pd["sec"].items() if v) == {"the-oracle", "halloween"}, f"pedia sections {pd['sec']} (only the pedia's own ids)")
+    need(pd["clips"] == 3 and pd["ref"] == {"news.ycombinator.com": 1}, f"pedia clips {pd['clips']}, ref {pd['ref']}")
+    need("x is null @pedia-draw.js:3:9" in o["err_all"], "a pedia error was not kept")
+    return "stats allowlist + buckets, engagement, pedia block, jeffy allowlist, KV write throttle, rate limit"
 
 
 # ---------------------------------------------------------------- the build, served locally
@@ -373,7 +391,8 @@ def t_haunted(P):
     return "haunted style + preset, follows the world in Halloween, knock/boo/owl play"
 
 
-ALLOWED_STATS = {"v", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0"}
+ALLOWED_STATS = {"v", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec"}
+ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
 
 def t_stats(P):
@@ -385,9 +404,36 @@ def t_stats(P):
     parts = pg.evaluate("() => window.__stats._parts()")
     need(parts.get("ref") in ("direct", None), f"referrer for a direct visit: {parts.get('ref')}")
     if parts.get("utm"): need(re.fullmatch(r"[a-z0-9-]{1,24}", parts["utm"]), f"utm not cleaned: {parts['utm']}")
+    eg = parts.get("eg") or {}
+    need(eg.get("cr") == "0-12" and set(eg) <= {"cr", "born", "built", "charts", "fed"}, f"engagement for a fresh world: {eg}")
+    # errors are located by the first stack frame: file:line:col, the site root called index.html, generated code by its sourceURL
+    loc = pg.evaluate("""() => [window.__idleRef.err('x is null', '', 0, 0, 'f@https://id-le.com/idle-music.js?v=ab12:120:7\\ng@https://id-le.com/:9:1'),
+      window.__idleRef.err('y', 'https://id-le.com/', 1449, 3, ''), window.__idleRef.err('z', '', 0, 0, 'draw@pedia-draw.js:3:9')]""")
+    need(loc[0].startswith("x is null @idle-music.js:120:7") and "@index.html:1449:3" in loc[1] and "@pedia-draw.js:3:9" in loc[2], f"error locations: {loc}")
     need(not P.stats, f"{len(P.stats)} stats requests were sent from a test page")
     P.clean()
-    return f"{len(keys)} keys, all allowlisted; nothing sent"
+    return f"{len(keys)} keys, all allowlisted; engagement {eg}; errors located; nothing sent"
+
+
+def t_pedia_stats(P):
+    """the pedia's own beacon: off for ?fresh, on for ?statstest (a localhost test switch), allowlisted keys, page 'pedia'"""
+    pg = P.open("/pedia.html?fresh=1")
+    wait_for(pg, "() => window.__pedia && window.__pediaStats", 30, P=P)
+    need(not pg.evaluate("() => window.__pediaStats.live()"), "pedia stats must never be live on a ?fresh test")
+    pg.evaluate("() => window.__pediaStats._send(true)"); pg.wait_for_timeout(300)
+    need(not P.stats, "the pedia sent stats from a ?fresh test page")
+    pg2 = P.open("/pedia.html?statstest&utm_source=Smoke_Test!")
+    wait_for(pg2, "() => window.__pedia && window.__pediaStats", 30, P=P)
+    pg2.evaluate("() => { document.getElementById('oracle') && document.getElementById('oracle').scrollIntoView(); }"); pg2.wait_for_timeout(1200)
+    pg2.evaluate("() => window.__pediaStats._send(true)"); pg2.wait_for_timeout(500)
+    need(P.stats, "the pedia sent nothing with ?statstest")
+    p = json.loads(P.stats[0]); keys = set(p)
+    need(p.get("page") == "pedia" and p.get("visit") == 1, f"pedia payload: {p}")
+    need(keys <= ALLOWED_PEDIA, f"pedia payload keys outside the allowlist: {sorted(keys - ALLOWED_PEDIA)}")
+    need(all(re.fullmatch(r"[a-z0-9-]{1,40}", x) for x in p.get("ps", [])), f"section ids: {p.get('ps')}")
+    need(p.get("utm") == "smoke_test" or p.get("utm") is None or re.fullmatch(r"[a-z0-9-]{1,24}", p["utm"]), f"utm not cleaned: {p.get('utm')}")
+    P.clean("pedia")
+    return f"{len(keys)} keys, page=pedia, {len(p.get('ps', []))} sections seen, off on ?fresh"
 
 
 def t_datalab(P, secs=45):
@@ -592,7 +638,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "data lab", "data lab stuck", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["fresh load", "camera desktop", "panels", "sound", "haunted music", "stats", "pedia stats", "data lab", "data lab stuck", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -618,6 +664,7 @@ def main():
                 run("sound", t_sound)
                 run("haunted music", t_haunted)
                 run("stats", t_stats)
+                run("pedia stats", t_pedia_stats)
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
                 run("replay", t_replay)
