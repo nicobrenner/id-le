@@ -390,8 +390,11 @@
 #idleIntro .ib{position:absolute;bottom:14px;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}
 #idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro.out{opacity:0}`;
   (document.head || document.documentElement).appendChild(css);
-  const TONES = ['storm', 'eerie', 'epic'], toneOf = x => TONES.includes(x) ? x : 'storm';
+  // 'epoch0' (Nico's pick, Nov 1) is the default: the Oracle learns to speak, drawn by idle-epoch0.js (live model output, so not a fixed film);
+  // storm / eerie / epic stay selectable for comparison (?intro=storm)
+  const TONES = ['storm', 'eerie', 'epic'], ALL = TONES.concat('epoch0'), DEF = () => window.__epoch0 ? 'epoch0' : 'storm', toneOf = x => TONES.includes(x) ? x : 'storm', pick = x => ALL.includes(x) ? (x === 'epoch0' && !window.__epoch0 ? 'storm' : x) : DEF();
   function play(opts = {}) {
+    if (pick(opts.tone) === 'epoch0') return window.__epoch0.play(opts);
     if (cur) return cur.promise; const tone = toneOf(opts.tone), P = phone(), RM = reduce(), scenes = film(tone, P), total = scenes.reduce((a, s) => a + s.d, 0);
     const el = document.createElement('div'); el.id = 'idleIntro'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)'); el.dataset.tone = tone;
     const cv = document.createElement('canvas'); el.appendChild(cv); const g = cv.getContext('2d');
@@ -438,7 +441,8 @@
     w(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 4, true);
     for (let i = 0; i < n; i++) { dv.setInt16(44 + i * 4, clamp(L[i], -1, 1) * 32767, true); dv.setInt16(46 + i * 4, clamp(R[i], -1, 1) * 32767, true); }
     let bin = ''; const u8 = new Uint8Array(dv.buffer); for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 32768)); return btoa(bin); }
-  window.__intro = { play, render, renderAudio, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, off: qi === '0', tone: toneOf(qi), scenes: tone => film(toneOf(tone), false).map(s => s.d) };
-  // debug and comparison: ?intro=eerie | ?intro=epic plays on load (the genesis flow, ?genesis, calls play() itself)
-  if (TONES.includes(qi) && !Q.has('genesis')) { const go = () => setTimeout(() => play({ tone: qi }), 300); if (document.readyState === 'complete') go(); else addEventListener('load', go, { once: true }); }
+  window.__intro = { play, render, renderAudio, close: () => { if (cur) cur.close(); else if (window.__epoch0) window.__epoch0.close(); },
+    playing: () => (!!cur && !!cur.el && cur.el.isConnected) || !!(window.__epoch0 && window.__epoch0.playing()), off: qi === '0', get tone() { return pick(qi); }, tones: ALL, scenes: tone => film(toneOf(tone), false).map(s => s.d) };
+  // debug and comparison: ?intro=epoch0 | storm | eerie | epic plays on load (the genesis flow, ?genesis, calls play() itself)
+  if (ALL.includes(qi) && !Q.has('genesis')) { const go = () => setTimeout(() => play({ tone: qi }), 300); if (document.readyState === 'complete') go(); else addEventListener('load', go, { once: true }); }
 })();

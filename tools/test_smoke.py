@@ -804,6 +804,27 @@ def t_intro_reduced(P):
     P.clean("intro reduced"); return f"still sequence resolved in {dt:.1f}s"
 
 
+def t_intro_epoch0(P):
+    """the Epoch 0 intro (idle-epoch0.js): the default tone; the blocklist; the bank is clean; two visits differ; it draws and plays to the end"""
+    pg = P.open("/arena.html?intro=0&fresh=1&test"); booted(pg)
+    tone = pg.evaluate("() => window.__intro.tone"); need(tone == "epoch0", f"the default intro is {tone!r}, expected epoch0")
+    chk = pg.evaluate("""async () => { const E = window.__epoch0; await E.loadBank(); const f = E.fit;
+      const bad = ['I want to kill it', 'my daughter likes it', 'Gabry went there', 'visit www.x.com', 'call 5551234'].filter(f), good = ['a small world of words', 'I think you are right'].filter(s => !f(s));
+      const bank = await (await fetch('intro_babble.json')).json(), lines = Object.values(bank.lines).flat(), unfit = lines.filter(s => !f(s));
+      const a = E.makeContent({ seed: 1 }), b = E.makeContent({ seed: 2 }); const same = a.lines.every((l, i) => l.text === b.lines[i].text);
+      return { bad, good, n: lines.length, unfit: unfit.slice(0, 3), epochs: Object.keys(bank.lines).length, same }; }""")
+    need(not chk["bad"], f"the blocklist let through {chk['bad']}"); need(not chk["good"], f"the blocklist rejected {chk['good']}")
+    need(chk["epochs"] == 8 and chk["n"] >= 200, f"the bank has {chk['n']} lines in {chk['epochs']} epochs"); need(not chk["unfit"], f"bank lines fail the blocklist: {chk['unfit']}")
+    need(not chk["same"], "two seeds gave the same intro")
+    pg.evaluate("() => { window.__t_r = null; window.__intro.play().then(r => window.__t_r = r); }")
+    wait_for(pg, "() => document.getElementById('idleIntro') && document.getElementById('idleIntro').dataset.tone === 'epoch0'", 5); pg.wait_for_timeout(4500)
+    lit = pg.evaluate("""() => { const c = document.querySelector('#idleIntro canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 53) if (d[i] + d[i + 1] + d[i + 2] > 120) n++; return n; }""")
+    need(lit > 20, f"no babble drawn after 4.5 s ({lit} lit samples)")
+    t0 = time.time(); r = wait_for(pg, "() => window.__t_r", 40); dt = time.time() - t0 + 4.5
+    need(r.get("tone") == "epoch0" and r.get("skipped") is False, f"the intro ended with {r}")
+    P.clean("intro epoch0"); return f"default tone epoch0; blocklist ok; bank {chk['n']} lines clean; seeds differ; played to the end in {dt:.1f}s ({r.get('live')} live lines, ending: {r.get('cont')})"
+
+
 def t_halloween_light(P):
     # under a light OS theme the night used to wash out to a pale day: the world must be at night while the mode is on
     pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
@@ -1135,7 +1156,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["genesis", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["genesis", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1179,6 +1200,7 @@ def main():
                 run("halloween light", t_halloween_light, color_scheme="light")
                 run("intro", t_intro)
                 run("intro reduced", t_intro_reduced, reduced_motion="reduce")
+                run("intro epoch0", t_intro_epoch0)
                 run("trick or treat", t_treat)
                 run("wikipedia world", t_wiki)
                 run("genesis", t_genesis)
