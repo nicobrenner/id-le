@@ -97,7 +97,7 @@
   bar.innerHTML = `<span title="who answers in this chat">brain</span><select id="ai-brain"><option value="relay">🛠 your coding agent (local)</option><option value="anthropic">Claude (your key)</option><option value="openai">OpenAI-compatible (your key)</option><option value="local">local model</option><option value="tiny">📟 Tiny Operator (TO): free, in your browser</option></select><button id="ai-gear" title="connect your AI">⚙</button><button id="ai-new" title="start a new conversation">new</button>`;
   const set = document.createElement('div'); set.id = 'ai-set';
   const smart = document.createElement('div'); smart.id = 'ai-smart';
-  const smartBtn = document.createElement('button'); smartBtn.id = 'ai-smart-btn'; smartBtn.textContent = '🧠 Make your Operator smarter'; smartBtn.title = 'the ways to put a bigger AI in the Operator\'s chair';
+  const smartBtn = document.createElement('button'); smartBtn.id = 'ai-smart-btn'; smartBtn.textContent = '🧠 Bring your own AI'; smartBtn.title = 'the ways to seat a bigger AI here, in place of the Tiny Operator';
   const thread = document.createElement('div'); thread.id = 'ai-thread';
   head.after(smartBtn); smartBtn.after(bar); bar.after(smart); smart.after(set); $('#lab-thread').after(thread);
   const REPO = window.IDLE_REPO || 'https://github.com/nicobrenner/id-le';
@@ -141,7 +141,7 @@
   // on a public site (no local server) there is no lab relay: the chat is the player's own AI, and says how to connect one
   (window.__idle ? window.__idle.mode() : Promise.resolve('server')).then(m => { if (m !== 'static') return;
     const o = brainSel.querySelector('option[value=relay]'); if (o) o.remove(); if (cfg.brain === 'relay' || (!ready() && !cfg.chosen)) { cfg.brain = 'tiny'; brainSel.value = 'tiny'; }
-    { const N = window.IDLE_NAMES; const hb = $('#lab-head b'); hb.textContent = N ? `${N.op.icon} ${N.op.short}` : '📟 Operator'; hb.title = N ? N.op.sub : 'your AI changes this world'; } applyBrain(); if (!thread.childElementCount) add('page', cfg.brain === 'tiny' ? 'The Tiny Operator (TO) is the Oracle sitting in the Operator\'s chair: ask it to change the weather, add a creature, start a rave, rename someone, or just chat. It runs in your browser and knows very little. 🧠 above makes your Operator smarter.' : 'The Operator talks to an AI you bring. 🧠 above shows your options.'); });
+    { const N = window.IDLE_NAMES; const hb = $('#lab-head b'); const P_ = N && (N.oracle || N.op); hb.textContent = P_ ? `${P_.icon} ${P_.short}` : '🔮 Oracle'; hb.title = P_ ? P_.sub : 'bring your own AI: it can change this world, even its code'; } applyBrain(); if (!thread.childElementCount) add('page', cfg.brain === 'tiny' ? 'The Tiny Operator (TO) is the Oracle sitting in the Operator\'s chair: ask it to change the weather, add a creature, start a rave, rename someone, or just chat. It runs in your browser and knows very little. 🧠 above makes your Operator smarter.' : 'The Operator talks to an AI you bring. 🧠 above shows your options.'); });
 
   function add(who, msg, cls) { const d = document.createElement('div'); d.className = 'ai-row ' + (cls || who); d.innerHTML = '<b>' + esc(who) + '</b> ' + esc(msg); thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   function chip(t, err) { const d = document.createElement('div'); d.className = 'ai-chip' + (err ? ' err' : ''); d.textContent = t; thread.appendChild(d); thread.scrollTop = 1e9; return d; }

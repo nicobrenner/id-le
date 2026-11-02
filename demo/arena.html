@@ -154,11 +154,11 @@ button{font:13px system-ui;padding:6px 10px;border:1px solid #8886;border-radius
 window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace || { kind: 'home', name: 'Home' }, keep = P.kind === 'keep', el = document.getElementById('boot'), cv = el.querySelector('canvas'), g = cv.getContext('2d'), fill = el.querySelector('.bfill'), stepEl = el.querySelector('.bstep');
   el.querySelector('.bplace').textContent = keep ? (P.name || 'the keep') : P.kind === 'home' ? 'Home' : (P.name || 'back where you were');
   const W = { state: 10, place: 20, creatures: 15, words: 20, oracle: 25, frame: 10 }, done = {}, part = {}, MIN = 600, CAP = 9000;
-  const LABEL = keep ? { state: 'unbarring the gate…', place: 'lighting torches…', creatures: 'waking the creatures…', words: 'sweeping the words in…', oracle: 'rousing the Oracle…', frame: 'first light…' }
-    : { state: 'reading your world…', place: P.kind === 'home' ? 'opening the door…' : 'finding ' + (P.name || 'the place') + '…', creatures: 'waking the creatures…', words: 'laying out the words…', oracle: 'loading the Oracle…', frame: 'first light…' };
+  const LABEL = keep ? { state: 'unbarring the gate…', place: 'lighting torches…', creatures: 'waking the creatures…', words: 'sweeping the words in…', oracle: 'rousing the Tiny Oracle…', frame: 'first light…' }
+    : { state: 'reading your world…', place: P.kind === 'home' ? 'opening the door…' : 'finding ' + (P.name || 'the place') + '…', creatures: 'waking the creatures…', words: 'laying out the words…', oracle: 'loading the Tiny Oracle…', frame: 'first light…' };
   let shown = 0, fin = false, kit = null, crit = null, word = null, raf = 0;
   const pct = () => { let p = 0; for (const k in W) p += W[k] * (done[k] ? 1 : Math.min(0.95, part[k] || 0)); return p; };
-  function paint() { const p = fin ? 100 : pct(); shown = Math.max(shown, p); fill.style.width = shown.toFixed(1) + '%'; const next = Object.keys(W).find(k => !done[k]); stepEl.textContent = fin ? (done.oracle ? 'here we go' : 'the Oracle joins in a moment') : next ? LABEL[next] : ''; }
+  function paint() { const p = fin ? 100 : pct(); shown = Math.max(shown, p); fill.style.width = shown.toFixed(1) + '%'; const next = Object.keys(W).find(k => !done[k]); stepEl.textContent = fin ? (done.oracle ? 'here we go' : 'the Tiny Oracle joins in a moment') : next ? LABEL[next] : ''; }
   function step(k, f) { if (done[k]) return; if (f == null || f >= 1) done[k] = true; else part[k] = Math.max(part[k] || 0, f); paint(); }
   function ready() { return done.state && done.place && done.creatures && done.words; }
   function frame() { if (fin || !ready()) return; step('frame'); finish(); }   // called by the world's animate() once it has drawn with everything in place
@@ -225,15 +225,15 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
 <div class="disrow">disasters: <button data-disaster="volcano">🌋 volcano</button><button data-disaster="tornado">🌪 tornado</button><button data-disaster="quake">〰 earthquake</button><button data-frenzy="1" title="every creature that eats goes hangry at once, for about 50 s">😤 feeding frenzy</button> <label><input type="checkbox" id="wcDis"> now and then</label></div>
 </div><div id="worldColl"></div></div><div id="specialrow"><b>special creatures</b> <button data-spawn="blursort">+ Blursort</button><button data-spawn="debug">+ Debugger</button><button data-spawn="namer">+ Namer</button><button data-spawn="counter">+ Counter</button><button data-spawn="math">+ Mathematician</button><button data-spawn="designer">+ Designer</button><button data-spawn="architect">+ Architect</button> <button data-spawn="crawler">+ Crawler</button> <input id="crawlList" placeholder="Crawler's list: web addresses, separated by spaces" style="width:280px"> <button data-spawn="sorter">+ Sorter</button> using <select id="sorterHead"><option>emotion</option><option>tweet_eval_sentiment</option><option>ag_news</option><option>tweet_eval_offensive</option><option>sst2</option><option>clinc_oos</option></select> <small style="opacity:.6">sorters need the local Jeffy server; images and page elements come with a fetched web page</small></div><div id="snaprow"><b>snapshots</b> <small style="opacity:.6">the whole arena as it was: creatures, residents, world, every word, images and page elements. Kept in this browser and copied to the lab folder on your Mac.</small><br><label><input type="checkbox" id="autoRestore"> bring back my last session on reload (saved every 15 s)</label> <button id="freshStart" title="empty the floor; creatures, worlds and snapshots stay">start fresh</button> <label class="fileload">load file <input type="file" id="snapFile" accept=".json" hidden></label><div id="snaps"></div></div></details>
 <div id="palette"><span>toys:</span><input id="newword" placeholder="type a word, press enter, drag it in"><span id="chips"></span></div>
-<aside id="lab"><div id="lab-head"><b>📟 Operator</b><button id="lab-close">close</button></div><div id="lab-thread"></div><div id="lab-form"><textarea id="lab-text" placeholder="tell your coding agent what to change: the creatures, the world, the game itself… (⌘+Enter sends)"></textarea><button id="lab-send">send</button> <small style="opacity:.6">replies from your coding agent appear here</small></div></aside><button id="lab-toggle">📟 Operator</button>
+<aside id="lab"><div id="lab-head"><b>🔮 Oracle</b><button id="lab-close">close</button></div><div id="lab-thread"></div><div id="lab-form"><textarea id="lab-text" placeholder="tell your coding agent what to change: the creatures, the world, the game itself… (⌘+Enter sends)"></textarea><button id="lab-send">send</button> <small style="opacity:.6">replies from your coding agent appear here</small></div></aside><button id="lab-toggle">🔮 Oracle</button>
 <script>
   // typing in a text box (lab chat, card, AI chat…) belongs to the box: the game's own key shortcuts step aside
   function isTyping(e) { const t = e && e.target; return !!(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))); }
   // panels you use WHILE looking at a creature card (the lab / AI chat, hover previews): clicking them keeps the card open
   const KEEP_CARD = '#lab,#lab-toggle,#mtip'; let keepCardUntil = 0;
   { const N = window.IDLE_NAMES; if (N) { const t = (id, s) => { const e = document.getElementById(id); if (e) e.textContent = s; };   // the chats' names come from idle-runtime.js (one place)
-    t('rc-title', N.irc.long); t('rc-open', N.irc.icon + ' ' + N.irc.short); t('lab-toggle', N.op.icon + ' ' + N.op.short); const lh = document.querySelector('#lab-head b'); if (lh) lh.textContent = N.op.icon + ' ' + N.op.short;
-    const ro = document.getElementById('rc-open'), lt = document.getElementById('lab-toggle'); if (ro) ro.title = N.irc.long + ': ' + N.irc.sub; if (lt) lt.title = N.op.short + ': ' + N.op.sub; } }
+    t('rc-title', N.irc.long); t('rc-open', N.irc.icon + ' ' + N.irc.short); const P_ = N.oracle || N.op; t('lab-toggle', P_.icon + ' ' + P_.short); const lh = document.querySelector('#lab-head b'); if (lh) lh.textContent = P_.icon + ' ' + P_.short;
+    const ro = document.getElementById('rc-open'), lt = document.getElementById('lab-toggle'); if (ro) ro.title = N.irc.long + ': ' + N.irc.sub; if (lt) lt.title = (N.oracle || N.op).short + ': ' + (N.oracle || N.op).sub; } }
   document.addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest(KEEP_CARD)) keepCardUntil = Date.now() + 800; }, true);
 (() => {
   function buildByteEncoder() {
@@ -1049,14 +1049,14 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // ---------- the Oracle's voice (Room path: seed + model continuation) ----------
   const oracleBusy = { v: false };
   async function oracleComment(seed, why) {
-    if (!genSession || oracleBusy.v) { say('Oracle', seed, 'oracle'); return; } oracleBusy.v = true;
+    if (!genSession || oracleBusy.v) { say('Tiny Oracle', seed, 'oracle'); return; } oracleBusy.v = true;
     try { const ctx = tokenizer.encode('<|system|> ' + SYSTEM + '\n<|user|> ' + ($('#chat').value || 'look') + '\n<|oracle|> *tell ' + seed); const ids = ctx.slice(-256); const gen = [];
       const cached = oracleKV && ids.length + 28 <= 256; let out = null;
       for (let i = 0; i < 28; i++) { out = cached ? await genSession.run(i ? oraFeeds(gen.slice(-1), out) : oraFeeds(ids)) : await genSession.run(oraFeeds(ids.concat(gen).slice(-256))); const lg = out.logits.data, V = out.logits.dims[2], off = (out.logits.dims[1] - 1) * V;
         const arr = []; for (let v = 0; v < V; v++) { let z = lg[off + v]; if (gen.includes(v)) z = z > 0 ? z / 1.3 : z * 1.3; arr.push([z / 0.3, v]); } arr.sort((a, b) => b[0] - a[0]); const top = arr.slice(0, 40); const mx = top[0][0]; let s = 0; for (const t of top) { t[0] = Math.exp(t[0] - mx); s += t[0]; } let r = Math.random() * s, nxt = top[0][1]; for (const [p, v] of top) { r -= p; if (r <= 0) { nxt = v; break; } }
         const tk = tokenizer.invVocab[nxt] || ''; if (tk === '<|user|>' || tk === '<|system|>' || tk === '<eos>' || nxt === 0) break; gen.push(nxt); if (tokenizer.decode(gen).includes('\n')) break; }
-      say('Oracle', (seed + tokenizer.decode(gen)).replace(/\n.*$/s, '').replace(/\.\s*$/, ''), 'oracle'); logEvent('oracle', { why });
-    } catch (e) { console.error(e); say('Oracle', seed, 'oracle'); } finally { oracleBusy.v = false; }
+      say('Tiny Oracle', (seed + tokenizer.decode(gen)).replace(/\n.*$/s, '').replace(/\.\s*$/, ''), 'oracle'); logEvent('oracle', { why });
+    } catch (e) { console.error(e); say('Tiny Oracle', seed, 'oracle'); } finally { oracleBusy.v = false; }
   }
   // the Tiny Operator's voice (idle-ai.js): a reply to the player's own line, optionally steered by a seed (what it just did); returns the text
   async function oracleReply(userText, seed) {
@@ -1128,7 +1128,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     else say('lab', 'your message waits for a data lab: press 🧪 data lab', 'lab'); }
   $('#send').addEventListener('click', () => { const t = $('#chat').value.trim(); if (!t) return;
     if (INBOX.test(t)) { $('#chat').value = ''; toInbox(t.replace(INBOX, '').trim()); return; }
-    if (window.__feedback && window.__feedback.fromIrc(t)) { $('#chat').value = ''; return; }   // "tell the Oracle …" opens 🔮 with those words (idle-feedback.js)
+    if (window.__feedback && window.__feedback.fromIrc(t)) { $('#chat').value = ''; return; }   // "tell the scientists …" (or the older "tell the Oracle …") opens 🧪 with those words (idle-feedback.js)
     if (!hidSession) return; $('#chat').value = ''; handleChat(t); if (DataLab.isOn() && DataLab.hearsIrc()) DataLab.fromYou(t); });
   $('#chat').addEventListener('keydown', e => { if (e.key === 'Enter') $('#send').click(); });
   $('#newword').addEventListener('keydown', e => { if (e.key !== 'Enter') return; const t = e.target.value.trim(); if (!t) return; e.target.value = ''; const ch = document.createElement('span'); ch.className = 'chip'; ch.textContent = t; ch.draggable = true; ch.addEventListener('dragstart', ev => ev.dataTransfer.setData('text', t)); ch.addEventListener('click', () => addWord(t, cam.x + (Math.random() - .5) * 400, cam.y + (Math.random() - .5) * 260)); $('#chips').appendChild(ch); logEvent('toy', { word: t }); });
@@ -1463,7 +1463,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       qMenu(opts.length ? `<small>pick a ${k}${k === 'word' ? ' (near where you are looking)' : ''}</small><br>` + opts.map(([t, j]) => `<button data-qpick="${i}:${k}:${j}">${qEsc(t)}</button>`).join('') : `<small>no ${k}s nearby</small>`, sl); return; }
     const pk = e.target.closest('[data-qpick]'); if (pk) { const [i, k, j] = pk.dataset.qpick.split(':'); (qSlot[i] = qSlot[i] || {})[k] = k === 'word' ? words[+j] : creatures[+j]; qMenu(''); renderQuick(); return; }
     if (e.target.closest('[data-qlab]')) { $('#chat').value = '@inbox '; $('#chat').focus(); return; }
-    const b = e.target.closest('#quick .qc[data-q]'); if (b) { if (!hidSession) { say('lab', 'the creatures are still waking up (the Oracle is loading); try again in a moment', 'lab'); return; } const i = +b.dataset.q, t = qText(i); logEvent('quick', { i }); handleChat(t); return; }
+    const b = e.target.closest('#quick .qc[data-q]'); if (b) { if (!hidSession) { say('lab', 'the creatures are still waking up (the Tiny Oracle is loading); try again in a moment', 'lab'); return; } const i = +b.dataset.q, t = qText(i); logEvent('quick', { i }); handleChat(t); return; }
     if (e.target.id === 'quickAdd') { const t = $('#chat').value.trim(); if (!t) { say('lab', 'type a command in the chat box first, then + saves it (use {word} or {creature} for a slot you can pick)', 'lab'); return; }
       if (qEdit >= 0 && quick[qEdit] != null) { quick[qEdit] = t; delete qSlot[qEdit]; } else quick.push(t); qEdit = -1; qSave(); $('#chat').value = ''; renderQuick(); return; }
     if (e.target.id === 'quickMore') { qMenu((qHidden.length ? '<small>hidden commands (click one to bring it back)</small><br>' + qHidden.map((q, i) => `<button data-qr="${i}">↩ ${qEsc(q)}</button>`).join('') : '<small>nothing hidden</small>') + '<br><button data-qdef>restore the defaults</button>', e.target); return; }
@@ -3331,7 +3331,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   })();
   window.__life = Life;
   // ---------- the BYO-AI chat's door into the world (demo/idle-ai.js): a compact summary to read, and verbs the game already has ----------
-  window.__hwCam = () => cam; window.__oracleSay = t => say('Oracle', String(t || '').slice(0, 200), 'oracle');   // Halloween mode (idle-halloween.js): the camera for its sky layer, and the Oracle's greeting
+  window.__hwCam = () => cam; window.__oracleSay = t => say('Tiny Oracle', String(t || '').slice(0, 200), 'oracle');   // Halloween mode (idle-halloween.js): the camera for its sky layer, and the Oracle's greeting
   window.__idleWorld = (() => {
     const near = (x, y) => creatures.filter(c => !c.lab).sort((a, b) => Math.hypot(wd(a.x, x, SPACE.W), wd(a.y, y, SPACE.H)) - Math.hypot(wd(b.x, x, SPACE.W), wd(b.y, y, SPACE.H)));
     const find = n => { const t = String(n || '').trim().toLowerCase(); return creatures.find(c => !c.lab && c.name && c.name.toLowerCase() === t) || creatures.find(c => !c.lab && c.name && c.name.toLowerCase().startsWith(t)) || null; };
@@ -3833,18 +3833,18 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     try {
       statusEl.textContent = 'loading tokenizer…'; tokenizer = new BPETokenizer(await (await fetch('tokenizer_chat_v2.json')).json());
       statusEl.textContent = 'loading the instruction model…'; instr = await (await fetch('arena_instr_v2.json')).json(); ort.env.wasm.numThreads = (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && !window.__isIOS && !window.__safeLevel) ? Math.min(4, navigator.hardwareConcurrency || 4) : 1;   // iOS: one thread (threaded wasm reserves shared memory iOS Safari kills tabs over)
-      if (window.__safeLevel) { setLow(true); const t = window.__safeLevel >= 2 ? 'This page crashed while loading, so it is running safely: the Oracle is off on this device (creatures still live; they just say less).' : 'This page crashed while loading, so it is running lighter: the Oracle on one thread, light graphics.'; setTimeout(() => window.__notify ? window.__notify({ kind: 'system', text: t, ttl: 0, actions: [{ label: window.__safeLevel >= 2 ? 'turn the Oracle back on' : 'back to normal', title: 'forget the crash and reload normally', run: () => { if (window.__guard) window.__guard.reset(); } }] }) : say('lab', t, 'lab'), 4000); }
-      if (window.__safeLevel >= 2) throw new Error('the Oracle is off on this device (safe mode after a crash)');
+      if (window.__safeLevel) { setLow(true); const t = window.__safeLevel >= 2 ? 'This page crashed while loading, so it is running safely: the Tiny Oracle is off on this device (creatures still live; they just say less).' : 'This page crashed while loading, so it is running lighter: the Tiny Oracle on one thread, light graphics.'; setTimeout(() => window.__notify ? window.__notify({ kind: 'system', text: t, ttl: 0, actions: [{ label: window.__safeLevel >= 2 ? 'turn the Tiny Oracle back on' : 'back to normal', title: 'forget the crash and reload normally', run: () => { if (window.__guard) window.__guard.reset(); } }] }) : say('lab', t, 'lab'), 4000); }
+      if (window.__safeLevel >= 2) throw new Error('the Tiny Oracle is off on this device (safe mode after a crash)');
       ort.env.wasm.proxy = true;   // the Oracle thinks in a worker, so a 28-step comment no longer freezes the world for most of a second
       const mkSession = async f => { try { return await ort.InferenceSession.create(f, { executionProviders: ['wasm'] }); } catch (e) { if (!ort.env.wasm.proxy) throw e; console.warn('Oracle worker unavailable, running on the page', e); ort.env.wasm.proxy = false; return await ort.InferenceSession.create(f, { executionProviders: ['wasm'] }); } };
-      statusEl.textContent = 'loading the Oracle…';
+      statusEl.textContent = 'loading the Tiny Oracle…';
       // one model: logits + hidden + a K/V cache (tools/export_oracle_kv.py); fetched first so a missing file falls back without upsetting the worker set-up
       const kvBuf = await fetch('oracle_v2_grown_ct2_kv_w8.onnx').then(async r => { if (!r.ok) return null; const n = +r.headers.get('content-length') || 0; if (!n || !r.body || !window.__boot) return r.arrayBuffer(); const rd = r.body.getReader(), buf = new Uint8Array(n); let got = 0; for (;;) { const { done, value } = await rd.read(); if (done) break; if (got + value.length > n) return null; buf.set(value, got); got += value.length; window.__boot.step('oracle', 0.8 * got / n); } return got === n ? buf.buffer : null; }).catch(() => null);   // streamed so the boot bar can show it
       if (kvBuf) { hidSession = genSession = await mkSession(new Uint8Array(kvBuf)); oracleKV = true; }
       else { console.warn('cached Oracle unavailable, loading the two-model version'); hidSession = await mkSession('oracle_v2_grown_ct2_judge_int8.onnx'); genSession = await mkSession('oracle_v2_grown_ct2_int8.onnx'); }
       if (window.__boot) window.__boot.step('oracle');
       if (!window.__restored && !window.__genesisVoid) ['ball', 'coffee', 'cat'].forEach((w, i) => addWord(w, 260 + i * 120, 220 + (i % 2) * 70)); statusEl.textContent = 'ready · instruction model held-out accuracy ' + instr.heldout.option_acc + ', argument ' + instr.heldout.arg_exact;
-      say('Oracle', 'My room, with the pets in it. Talk to them, or drag a word in and see who wants it', 'oracle'); logEvent('load'); if (window.__guardReady) window.__guardReady();
+      say('Tiny Oracle', 'My room, with the pets in it. Talk to them, or drag a word in and see who wants it', 'oracle'); logEvent('load'); if (window.__guardReady) window.__guardReady();
     } catch (e) { statusEl.textContent = 'error: ' + e.message; console.error(e); if (window.__boot) window.__boot.step('oracle'); if (window.__guardReady) window.__guardReady(); }
   })();
 })();

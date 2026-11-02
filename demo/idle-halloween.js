@@ -130,7 +130,7 @@
   function nightLook() { const nv = arena.classList.contains('hw') && !keep() && !matchMedia('(prefers-color-scheme: dark)').matches; if (nv !== arena.classList.contains('hw-night')) arena.classList.toggle('hw-night', nv); window.__hwNight = nv; }
   setInterval(nightLook, 1000); try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', nightLook); } catch (e) {}
   function apply(v) { arena.classList.toggle('hw', v); nightLook(); if (v) { fit(); pumpkins(); schedule(); } else { unpumpkin(); clearTimeout(tB); clearTimeout(tG); flocks = []; ghosts = []; go(); } }
-  function greet() { const lines = ['Happy Halloween from the Oracle: everyone is in costume tonight, and some words have turned into pumpkins', 'The moon is up and the costumes are on. Resting creatures may drift by as ghosts, do not mind them'];
+  function greet() { const lines = ['Happy Halloween from the Tiny Oracle: everyone is in costume tonight, and some words have turned into pumpkins', 'The moon is up and the costumes are on. Resting creatures may drift by as ghosts, do not mind them'];
     const say = () => { if (window.__oracleSay) window.__oracleSay(lines[(Math.random() * lines.length) | 0]); else setTimeout(say, 1500); }; setTimeout(say, 6000); }
   function firstNotice() { let seen = false; try { seen = localStorage.getItem(SEEN) === '1'; localStorage.setItem(SEEN, '1'); } catch (e) {} if (seen) return;
     const n = () => window.__notify ? window.__notify({ kind: 'system', html: '🎃 Happy Halloween: the world is in costume tonight <button data-act="settings-open">⚙ to turn it off</button>', ttl: 20000, key: 'halloween' }) : setTimeout(n, 1500); setTimeout(n, 5000); }

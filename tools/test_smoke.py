@@ -602,7 +602,7 @@ def t_camera(P, phone=False):
 
 
 PANELS = [("herdBtn", "creatures"), ("studioBtn", "studio"), ("reelsBtn", "reels"), ("drawerBtn", "drawer"), ("advBtn", "advisor"), ("djBtn", "music deck"),
-          ("almanacBtn", "almanac"), ("treesBtn", "trees"), ("settingsBtn", "settings"), ("ntfBtn", "notices"), ("rc-open", "IRC"), ("lab-toggle", "Operator"), ("labBtn", "data lab")]
+          ("almanacBtn", "almanac"), ("treesBtn", "trees"), ("settingsBtn", "settings"), ("ntfBtn", "notices"), ("rc-open", "IRC"), ("lab-toggle", "Oracle"), ("labBtn", "data lab")]
 VISIBLE = """() => [...document.querySelectorAll('body *')].filter(e => { if (!e.id || e.offsetParent === null && getComputedStyle(e).position !== 'fixed') return false; const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
   const w = Math.min(r.right, innerWidth) - Math.max(r.left, 0), h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);   // on screen, not just laid out (side panels slide in)
   return w > 120 && h > 80 && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && cs.display !== 'none'; }).map(e => e.id)"""
@@ -1048,14 +1048,14 @@ def t_oracle(P):
     """Tell the Oracle: the form sends a kind, scrubbed text and only the ticked context; the roadmap lists items and votes once; IRC opens the form"""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     pg.evaluate("() => { window.__idle.cfg.helper = location.origin; if (window.__first5 && window.__first5.skip) window.__first5.skip(); }")   # the test build has no helper: point it at the stubs
-    need(pg.evaluate("() => !!document.getElementById('oracleBtn')"), "no 🔮 button in the top bar")
+    need(pg.evaluate("() => !!document.getElementById('oracleBtn') && document.getElementById('oracleBtn').textContent === '🧪'"), "no 🧪 (tell the scientists) button in the top bar")
     pg.evaluate("() => document.getElementById('oracleBtn').click()"); pg.wait_for_timeout(300)
     need(pg.evaluate("() => document.getElementById('oracle').classList.contains('on')"), "the Oracle panel did not open")
     pg.evaluate("() => document.querySelector('#oracle [data-kind=bug]').click()")
     pg.fill("#oracle textarea", "the rain is too loud, write me at me@example.com")
     pg.evaluate("() => { const c = document.querySelector('#oracle [data-ctx=place]'); if (c) { c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); } }")
     pg.evaluate("() => document.querySelector('#oracle [data-a=send]').click()")
-    wait_for(pg, "() => /🔮/.test((document.querySelector('#oracle .msg') || {}).textContent || '')", 10, P=P)
+    wait_for(pg, "() => /🧪/.test((document.querySelector('#oracle .msg') || {}).textContent || '')", 10, P=P)
     sent = [json.loads(b) for k, b in P.fb if k == "oracle"]
     need(len(sent) == 1, f"{len(sent)} submissions sent")
     q = sent[0]
@@ -1069,9 +1069,9 @@ def t_oracle(P):
     votes = [k for k, _ in P.fb if k == "vote"]
     need(len(votes) == 1 and "▲ 4" in pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').textContent"), f"votes sent {len(votes)} (one expected), shown {pg.evaluate('() => document.querySelector(\'#oracle [data-vote=mods]\').textContent')}")
     pg.evaluate("() => window.__feedback.close()")
-    pg.evaluate("() => { document.getElementById('chat').value = 'tell the Oracle the bats are too small'; document.getElementById('send').click(); }"); pg.wait_for_timeout(300)
+    pg.evaluate("() => { document.getElementById('chat').value = 'tell the scientists the bats are too small'; document.getElementById('send').click(); }"); pg.wait_for_timeout(300)
     st = pg.evaluate("() => window.__feedback.state()")
-    need(st["open"] and st["tab"] == "tell" and st["draft"] == "the bats are too small", f"IRC 'tell the Oracle …' did not open the form: {st}")
+    need(st["open"] and st["tab"] == "tell" and st["draft"] == "the bats are too small", f"IRC 'tell the scientists …' did not open the form: {st}")
     need(len([k for k, _ in P.fb if k == "oracle"]) == 1, "the IRC line was sent without pressing send")
     P.clean()
     return f"sent {q['kind']} with ctx {sorted(q.get('ctx') or {})}, email blanked; 2 roadmap items, one vote; IRC opens the form"
@@ -1281,11 +1281,14 @@ def t_story(P):
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
     need("new universe" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "only eat words" in w["thread"], "the Tiny Operator's lines should be in the thread")
     son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
+    nm = pg.evaluate("() => ({ head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
+    need("Operator" in nm["head"] and "Oracle" in nm["toggle"], f"the rename: TO's window reads Operator, the panel's button reads Oracle: {nm}")
     pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
     line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
     need("we can see something" in line, f"the lights-on reaction line: {line!r}")
     wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
+    need("Oracle" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the panel should read 🔮 Oracle again")
     day = pg.inner_text("#genDay")
     need("EPOCH 1" in day and "first life" in day and "DAY" not in day, f"the Epoch 1 card: {day!r}")
     for _ in range(2):

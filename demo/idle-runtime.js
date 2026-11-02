@@ -10,8 +10,9 @@
 // and README.md spell the same address out, so change them together)
 window.IDLE_REPO = 'https://github.com/nicobrenner/id-le';
 // the two chats' names, in one place (the Operator's name is provisional: change it here): IRC is where the world and its
-// creatures talk (and you talk to them); the Operator is the AI you bring, which can change this world. The data lab is a third thing.
-window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Relay Chat', sub: 'the world and its creatures talking' }, op: { icon: '📟', short: 'Operator', sub: 'your AI changes this world' } };
+// creatures talk (and you talk to them); the 🔮 Oracle is the panel where you bring your own AI, which can change this world (even its code);
+// inside it the 📟 Operator (the Tiny Operator, TO) is the default: the Tiny Oracle running the world's tools. The data lab is a third thing.
+window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Relay Chat', sub: 'the world and its creatures talking' }, op: { icon: '📟', short: 'Operator', sub: 'the Tiny Operator (TO): the chat that runs the world' }, oracle: { icon: '🔮', short: 'Oracle', sub: 'bring your own AI: it can change this world, even its code' } };
 (() => {
   // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) leaves its
   // record 'alive: false'. The next load starts safer: level 1 = the Oracle on one thread and light quality, level 2 = no Oracle.
@@ -19,7 +20,7 @@ window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Rel
   // page is hidden, frozen or left, or has been running 6 s after the Oracle loaded (or 40 s), and a heartbeat says when the page
   // was last seen. A record that went quiet more than 10 min before this load, another tab of the game still running (it answers
   // on a BroadcastChannel), or an old-format record (no times) is not a crash. Crashes older than 30 min are forgotten, and level 2
-  // needs two within those 30 min. window.__guard.reset() turns the Oracle back on.
+  // needs two within those 30 min. window.__guard.reset() turns the Tiny Oracle back on.
   try { const G = 'idle.bootGuard', now = Date.now(), WIN = 30 * 60e3, QUIET = 10 * 60e3, id = Math.random().toString(36).slice(2);
     const prev = JSON.parse(localStorage.getItem(G) || 'null') || {};
     let crashes = (Array.isArray(prev.crashes) ? prev.crashes : []).filter(t => now - t < WIN);
@@ -80,7 +81,7 @@ window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Rel
 
   async function local(path, init) {   // static mode: answer a /lab or /worlds or /jeffy call here
     const method = ((init && init.method) || 'GET').toUpperCase(), body = init && init.body ? (() => { try { return JSON.parse(init.body); } catch (e) { return {}; } })() : {};
-    if (OWN_PATHS.test(path)) return CFG.helper ? realFetch(CFG.helper.replace(/\/$/, '') + path, init) : json({ ok: false, error: 'telling the Oracle needs the id-le.com helper: on a copy of your own, open an issue on GitHub instead' }, 503);
+    if (OWN_PATHS.test(path)) return CFG.helper ? realFetch(CFG.helper.replace(/\/$/, '') + path, init) : json({ ok: false, error: 'telling the scientists needs the id-le.com helper: on a copy of your own, open an issue on GitHub instead' }, 503);
     if (CFG.helper && HELPER_PATHS.some(p => path.startsWith(p))) {
       if (!helperOn()) return path.startsWith('/worlds/state') ? json({ me: { name: '', links: [], requests: [], inbox: [] }, peers: {}, offline: HELPER_OFF }) : json({ ok: false, error: HELPER_OFF });
       return realFetch(CFG.helper.replace(/\/$/, '') + path, init); }
