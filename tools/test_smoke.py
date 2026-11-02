@@ -1262,10 +1262,11 @@ def t_story(P):
     story = pg.evaluate("() => window.__epoch0.last.story")
     need(story, "the storyline should play the story version of Epoch 0")
     pg.keyboard.press("Escape")
-    # the landing (story v3): the dark first (the night, its shapes, your lines), no Operator, no chips; a click moves the lines on; Esc skips to the Operator
+    # the landing (story v4): the dark first (the real view, very dark, only a far black hole; your lines), no Operator, no chips, no creatures; a click moves the lines on; Esc skips to the Operator
     wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 10, P=P)
     v = pg.evaluate("() => ({ box: document.documentElement.classList.contains('gen-box'), con: !!document.querySelector('#genConsole [data-gsay]'), lab: !!(document.querySelector('#lab') && document.querySelector('#lab').classList.contains('open')), night: !!document.querySelector('#genNight'), handle: getComputedStyle(document.querySelector('#toHandle')).display, skip: !!document.querySelector('#genNightSkip') })")
     need(not v["box"] and not v["con"] and not v["lab"] and v["night"] and v["skip"] and v["handle"] == "none", f"the dark should come first, without the Operator: {v}")
+    need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark: the first ones come with 'bring life'")
     vw = pg.viewport_size; n0 = pg.evaluate("() => window.__genesis.landing().shown")
     for k in range(4): pg.mouse.click(vw["width"] * (0.3 + 0.1 * k), vw["height"] * 0.3); pg.wait_for_timeout(200)
     n1 = pg.evaluate("() => window.__genesis.landing().shown"); need(n1 > n0, f"clicks should move the lines on: {n0} → {n1}")
@@ -1279,7 +1280,7 @@ def t_story(P):
     w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.querySelector('#genConsole [data-gsay]').textContent, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
     need(w["mode"] == "story" and w["pre"] == "lights on" and "lights on" in w["say"], f"the waking up should end on 'lights on', pre-filled: {w}")
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
-    need("new universe" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "only eat words" in w["thread"], "the Tiny Operator's lines should be in the thread")
+    need("new universe" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"], "the Tiny Operator's lines should be in the thread")
     son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
     nm = pg.evaluate("() => ({ head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
     need("Operator" in nm["head"] and "Oracle" in nm["toggle"], f"the rename: TO's window reads Operator, the panel's button reads Oracle: {nm}")
@@ -1328,23 +1329,24 @@ def t_boot_intro(P):
       const at = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 31) if (d[i] + d[i + 1] + d[i + 2] > 150) n++; return n; };
       const lit = {}; for (const T of [1.2, 4.5, 7.6, 10.2, B.dur + 6]) lit[T] = at(T);
       const m = [E.metrics(1280, 720, false, true), E.metrics(390, 844, true, true), E.metrics(1280, 720, false, false), E.metrics(390, 844, true, false)];
-      const sc = E.makeContent({ seed: 4, story: true }); sc.boot = true; sc.arrive = true; const AR = B.arrive;
-      const cen = T => { E.frame(sc, T, cv); const s = AR.lastSay(); return s ? s.cy / s.H : -1; };   // where the line was drawn (the scenes behind it are lit now)
-      const mids = AR.lines.map(l => cen((l.typed + l.t1) / 2)), holds = AR.lines.map(l => +(l.t1 - l.t0).toFixed(2)), cab = AR.scenes.cab[1], thread = AR.thread.length, lester = AR.lines.filter(l => l.who === 'lester').length;
+      const sc = E.makeContent({ seed: 4, story: true }); sc.boot = true; sc.arrive = true; const AR = B.arrive, C = AR.chat;
+      const litA = T => { E.frame(sc, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 31) if (d[i] + d[i + 1] + d[i + 2] > 150) n++; return n; };
+      const order = AR.scenes.messages[0] < AR.scenes.chat[0] && AR.scenes.chat[0] < AR.scenes.terminal[0] && C.note < C.open && C.open < C.dm && C.dm < C.close && AR.thread[AR.thread.length - 1].at < C.open;
+      const lester = C.dm_lines.filter(l => l.who === 'lester').map(l => l.text), doc = C.dm_lines.filter(l => l.who === 'scientist').length, arrLit = [2, (C.open + C.dm) / 2, (C.dm + C.close) / 2].map(litA);
       return { dur: B.dur, total: E.total(ct), plain: E.total(E.makeContent({ seed: 4 })), lit, m, ev: B.events, want: [E.wantBoot({}), E.wantBoot({ boot: false }), E.wantBoot({ tone: 'boot' })],
-        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), mids, holds, thread, lester, lens: AR.lines.map(l => l.text.length), aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
+        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), order, thread: AR.thread.length, lester, doc, chans: C.channels, backlog: C.backlog.length, arrLit, aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
     need(10 <= r["dur"] <= 16, f"the boot should take 10-16 s: {r['dur']}"); need(abs(r["total"] - r["plain"] - r["dur"]) < 0.01, f"the run should follow the boot: {r}")
     need(all(v > 8 for v in r["lit"].values()), f"every stage of the boot should draw something: {r['lit']}")
     titles = r["m"][0]["titles"]
     need("TRAINING LOSS · project 24" in titles and "MODEL SAMPLE DIALOG OUTPUTS" in titles and len(titles) == 4, f"pane titles: {titles}")
     for m in r["m"]: need(m["subFz"] >= 1.4 * m["paneFz"], f"subtitles {m['subFz']}px vs the model's text {m['paneFz']}px (must be >= 1.4x)")
     need(r["want"] == [True, False, True], f"on localhost the boot plays unless play({{ boot: false }}): {r['want']}")
-    # arriving at the lab (story v2): before the boot in the story; six lines, each in the middle of the screen, held >= 2.5 s (longer for long lines)
+    # arriving at the lab (story v4): his computer: the messages thread, Lester's notification, labchat (channels, a backlog, the DM), then the terminal
     need(abs(r["stotal"] - r["splain"] - r["dur"] - r["arr"]) < 0.01, f"story: arrival + boot + run: {r['stotal']} vs {r['splain']} + {r['dur']} + {r['arr']}")
     need(r["warr"] == [True, False], f"the arrival plays in the story only (or ?intro=boot): {r['warr']}")
-    need(len(r["mids"]) == 6 and all(abs(y - 0.5) < 0.01 for y in r["mids"]), f"the hallway lines should sit in the middle: {r['mids']}")
-    need(r["thread"] == 6 and r["lester"] == 3 and 22 <= r["arr"] <= 36, f"the arrival: 6 messages, Lester answers 3 times, ~30 s: {r['thread']}, {r['lester']}, {r['arr']}")
-    need(all(h >= 2.0 for h in r["holds"]) and all(h >= n * 0.042 - 0.01 for h, n in zip(r["holds"], r["lens"])), f"each line on screen >= 2 s, ~42 ms a character for long ones: {r['holds']}")
+    need(r["order"] and r["thread"] == 6 and r["doc"] == 3 and r["lester"][1:] == ["anytime, doc. 23 was… something", "I'll keep a hand on the breaker this time", "good luck, doc"], f"messages, then labchat and the DM with Lester, then the terminal: {r}")
+    need({"training-runs", "experiments", "evals", "cluster-admin", "random"} <= set(r["chans"]) and r["backlog"] >= 3, f"labchat's channels and a backlog: {r['chans']}")
+    need(all(n > 8 for n in r["arrLit"]) and 22 <= r["arr"] <= 33, f"the desktop draws in every part, ~30 s: {r['arrLit']}, {r['arr']}")
     need(all(m["sciY"] == (720 if i % 2 == 0 else 844) / 2 for i, m in enumerate(r["m"])), "the scientist's subtitles should be in the middle of the screen")
     pg2 = P.open("/arena.html?intro=boot&fresh=1&test&nofirst5")
     wait_for(pg2, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.boot === '1' && window.__epoch0.time() > 2", 30, P=P)
@@ -1358,12 +1360,13 @@ def t_boot_intro(P):
     need(pg3.evaluate("() => window.__epoch0.wantBoot({})") is False, "?noboot should skip the boot")
     P.clean()
     d, p = r["m"][0], r["m"][1]
-    return f"arrival {r['arr']:.1f} s (lines held {min(r['holds'])}-{max(r['holds'])} s, centred at {min(r['mids']):.2f}-{max(r['mids']):.2f} of the height, {r['aev']} sounds); boot {r['dur']:.1f} s + run = {r['total']:.1f} s (story {r['stotal']:.1f} s); 4 labelled panes; subtitles {d['subFz']}px vs {d['paneFz']}px (phone {p['subFz']} vs {p['paneFz']}); ?intro=boot plays, Esc skips, ?noboot off; {r['ev']} sounds"
+    return f"arrival {r['arr']:.1f} s (messages → labchat → DM with Lester, 3 + 4 lines → terminal; {r['aev']} sounds); boot {r['dur']:.1f} s + run = {r['total']:.1f} s (story {r['stotal']:.1f} s); 4 labelled panes; subtitles {d['subFz']}px vs {d['paneFz']}px (phone {p['subFz']} vs {p['paneFz']}); ?intro=boot plays, Esc skips, ?noboot off; {r['ev']} sounds"
 
 
 def t_story_landing(P):
-    """The storyline's dark landing with no input: the night and its shapes, your 8 lines one by one in the middle, then the Operator arrives
-    (Id and le fold into its window) and pings the dark: the rings rim the shapes. Lights on lifts the night."""
+    """The storyline's dark landing with no input (v4): the real view, very dark, no creatures, a far black hole with letters swirling in; your
+    7 lines one by one in the middle, then the Operator arrives (Id and le fold into its window) and pings: the rings outline the hole's letters.
+    Lights on lifts the dark; still no creatures until life."""
     pg = P.open("/arena.html?story&test")
     wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.last)", 40, P=P)
     pg.keyboard.press("Escape")
@@ -1372,15 +1375,17 @@ def t_story_landing(P):
     say = pg.evaluate("() => { const s = window.__termBoot.arrive.lastSay(); return s && { y: s.cy / s.H, who: s.who }; }")
     need(say and abs(say["y"] - 0.5) < 0.01 and say["who"] == "you", f"your lines should be in the middle of the screen: {say}")
     lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 35, P=P)
-    need(lnd["why"] == "lines" and lnd["shown"] == 8 and 14 <= lnd["after"] <= 30, f"all 8 lines, then the Operator: {lnd}")
+    need(lnd["why"] == "lines" and lnd["shown"] == 7 and 12 <= lnd["after"] <= 28, f"all 7 lines, then the Operator: {lnd}")
+    need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark")
     son = wait_for(pg, "() => { const l = window.__genesis.landing(); return l.pings >= 2 && l.rimmed >= 1 && l; }", 15, P=P)
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
     pg.click("#genConsole")
     wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 40, P=P)
     pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit && !document.querySelector('#genNight')", 10, P=P)
+    need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "lights on brings no creatures: life comes next")
     P.clean()
-    return f"the dark for {lnd['after']:.1f} s (8 lines, centred), the Operator arrived, {son['pings']} pings rimmed {son['rimmed']} shapes; lights on lifted the night"
+    return f"the dark for {lnd['after']:.1f} s (7 lines, centred, no creatures), the Operator arrived, {son['pings']} pings outlined {son['rimmed']} letters; lights on lifted the dark"
 
 
 # never stuck (Nico hit it in ?story): close every guided widget, then a way out must be on screen and must work

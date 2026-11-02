@@ -57,8 +57,8 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const storyMode = () => !!(S && S.mode === 'story');
   // the storyline's waking up (Nico's lines, script section B), typed one by one in the Tiny Operator's voice
-  // (story v3, final: Nico "perfect! love it"; the first comes with the sonar's first ping)
-  const WAKE = ['…hey. hey! relax, they only eat words', 'Oh wow, looks like you took quite the tumble there… are you ok? We have a lot of work to do',
+  // (story v3, final: Nico "perfect! love it"; v4: the first line is about the black hole, Nico: "it only eats worlds"; it comes with the sonar's first ping)
+  const WAKE = ['…hey. hey! relax, it only eats worlds', 'Oh wow, looks like you took quite the tumble there… are you ok? We have a lot of work to do',
     "whatever you were running in that lab spilled over… it made a new universe, and you've been appointed to see it grow",
     'You have 10 epochs to grow it enough so that it can survive on its own… if it fails, this universe could wither, and you might need to start another one',
     'First things first: the lights', 'Say: lights on'];
@@ -339,57 +339,54 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function readyWorld() { try { if (window.__first5 && await window.__first5.boot(true)) return true; } catch (e) { console.warn('genesis: ready', e); }
     try { const sw = await (await fetch('starter_world.json', { cache: 'no-store' })).json(); window.__design.restore(sw); return true; } catch (e) { console.warn('genesis: starter world', e); return false; } }
 
-  // ---------- the landing (Nico, story v3): a moonless night. Black shapes against a sky only slightly lighter: creatures you can only tell
-  // apart when they move, slowly coming closer. You (the scientist, now inside the universe) talk to yourself in the middle of the screen;
-  // then the Operator arrives (Id and le, the halves that crawled off at the end of the intro, come back, meet and fold into its window) and
-  // pings a sonar: each ping is a faint ring that rims the shapes around with a thin outline for a moment. Lights on reveals everything.
+  // ---------- the landing (Nico, story v4): the real Id|le view, very dark and low contrast: the same top-down world, no creatures, nothing
+  // on it, only a faint black hole far off with stray letters swirling into it. You (the scientist, now inside the universe) talk to yourself
+  // in the middle of the screen; the hole grows clearer, its letters swirl faster, the view drifts toward it; then the Operator arrives
+  // (Id and le, the halves that crawled off at the end of the intro, come back, meet and fold into its window) and pings a sonar: each ping
+  // is a faint ring that, for a moment, outlines the swirling letters in thin light. Lights on reveals everything.
   // A click finishes the line (or goes to the next), holding pauses, Esc or "skip ›" goes straight to the Operator. ?nolanding skips it all.
-  const DARK = ['whaa…', 'oh my god, my girlfriend is going to be mad… where am I?', "I don't think I'll make it back in time for dinner…", 'ohhh man… this is a bit scary…',
-    "I can't seee anything… Lester!? are you there?…", 'what are those things moving over there?…', 'are they…. getting…. closer?!!', "aaaaaaaa! AAAAA!!! don't eat me pleasE!!!!"];
+  const DARK = ['whaa…', 'oh my god, my girlfriend is going to be mad… where am I?', "I don't think I'll make it back in time for dinner…",
+    'ohhh what?! is that a black hole!!! this is not good!!', 'what are those things moving over there?…', 'are they…. getting…. closer?!!', "aaaaaaaa! AAAAA!!! don't eat me pleasE!!!!"];
   const darkHold = s => Math.max(1.4, s.length * 0.04 + 0.3), DCPS = 55;
   let land = { phase: 'none', clicks: 0 }, nightCv = null;
   const clamp01 = x => Math.max(0, Math.min(1, x)), ease = u => u * u * (3 - 2 * u);
-  // the night: a canvas over the world (under the Operator's window), its shapes, the sonar
-  const nightState = { shapes: [], pings: [], t: 0, k: 0, rimmed: 0, fade: 0, calm: 0 };
+  // the dark: a canvas over the world (under the Operator's window): a dim veil, the hole and its letters, the sonar
+  const nightState = { letters: [], pings: [], t: 0, k: 0, rimmed: 0, calm: 0, pull: 0 };
+  const LETTERS = 'idlewordsthefloornothingbeginningoracle';
   function nightStart(RM) {
     if (nightCv) return; const cv = document.createElement('canvas'); cv.id = 'genNight'; cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:2147481995;pointer-events:none;transition:opacity 1.6s';
-    document.body.appendChild(cv); nightCv = cv; cls('gen-landing', 1); const st = nightState; st.shapes = []; st.pings = []; st.rimmed = 0; st.fade = 0; st.calm = 0;
-    for (let i = 0; i < 9; i++) { const r = (a, b) => { const x = Math.sin((i + 1) * 91.7 + a * 13.1) * 43758.5; return b * (x - Math.floor(x)); };
-      st.shapes.push({ x: 0.06 + 0.88 * (i + r(1, 0.6)) / 9, d: 0.35 + r(2, 0.5), sp: 0.35 + r(3, 0.9), ph: r(4, 6.28), legs: 6 + 2 * Math.floor(r(5, 2)), body: 0.8 + r(6, 0.6), rim: 0, dir: r(7, 1) > 0.5 ? 1 : -1, wait: r(8, 4) }); }
-    const t0 = performance.now(); let last = t0;
-    const loop = () => { if (!nightCv) return; const now_ = performance.now(), dt = Math.min(0.05, (now_ - last) / 1000); last = now_; if (!land.paused) st.t += dt; drawNight(cv, st, dt, RM); requestAnimationFrame(loop); }; loop(); }
+    document.body.appendChild(cv); nightCv = cv; cls('gen-landing', 1); const st = nightState; st.pings = []; st.rimmed = 0; st.calm = 0; st.pull = 0; st.letters = [];
+    for (let i = 0; i < 64; i++) { const h = (a) => { const x = Math.sin((i + 1) * 78.233 + a * 12.9898) * 43758.5453; return x - Math.floor(x); };
+      st.letters.push({ ch: LETTERS[i % LETTERS.length], a: h(1) * 6.283, r: 1.2 + h(2) * 2.6, sp: 0.4 + h(3) * 0.6, sz: 0.8 + h(4) * 0.6, rim: 0 }); }
+    let last = performance.now();
+    const loop = () => { if (!nightCv) return; const n = performance.now(), dt = Math.min(0.05, (n - last) / 1000); last = n; if (!land.paused) st.t += dt; drawNight(cv, st, land.paused ? 0 : dt, RM); requestAnimationFrame(loop); }; loop(); }
   function drawNight(cv, st, dt, RM) {
     const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2); if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
-    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); const hz = H * 0.8, small = Math.min(W, H);
-    const sky = g.createLinearGradient(0, 0, 0, hz); sky.addColorStop(0, '#05070c'); sky.addColorStop(1, '#151b29'); g.fillStyle = sky; g.fillRect(0, 0, W, hz); g.fillStyle = '#020305'; g.fillRect(0, hz, W, H - hz);
-    for (let i = 0; i < 28; i++) { const x = (Math.sin(i * 7.7) * 0.5 + 0.5) * W, y = (Math.sin(i * 3.1) * 0.5 + 0.5) * hz * 0.8; g.fillStyle = `rgba(180,190,220,${0.05 + 0.05 * Math.sin(st.t * 0.7 + i)})`; g.fillRect(x, y, 1, 1); }
-    // the sonar: rings from the Operator's window (or the middle), rimming what they pass
-    const lab = document.querySelector('#lab'), lr = lab && lab.classList.contains('open') ? lab.getBoundingClientRect() : null, ox = lr ? lr.left + lr.width / 2 : W / 2, oy = lr ? lr.top + lr.height / 2 : H / 2, maxR = Math.hypot(W, H) * 0.75;
-    for (const p of st.pings) { p.r += dt * maxR / 2.2; }
-    st.pings = st.pings.filter(p => p.r < maxR);
-    // the shapes: they shuffle, stop, look, and creep closer (closer = bigger and lower); when the Operator is there they settle
-    const approach = st.calm ? Math.max(0, st.k - st.calm * 0.3) : st.k;
-    for (const s of st.shapes) { const moving = RM ? false : Math.sin(st.t * s.sp * 0.7 + s.ph) > -0.2, step = moving ? s.sp : 0;
-      if (!RM) { s.x += s.dir * step * dt * 0.012; if (s.x < 0.03 || s.x > 0.97) s.dir *= -1; }
-      const near = clamp01(s.d * 0.4 + approach * (0.55 + s.d * 0.3)), sc = small * (0.05 + 0.13 * near) * s.body, x = s.x * W + (0.5 - s.x) * W * near * 0.25, y = hz - sc * 0.15 + near * H * 0.12;
-      s.sx = x; s.sy = y - sc * 0.55; s.sc = sc; s.mv = moving;
-      // a ring passing over a shape rims it for a moment
-      for (const p of st.pings) { const d = Math.hypot(x - ox, s.sy - oy); if (Math.abs(d - p.r) < sc * 0.8 && !p.hit.has(s)) { p.hit.add(s); s.rim = 1; st.rimmed++; } }
-      if (!RM) s.rim = Math.max(0, s.rim - dt / 1.3);
-      drawShape(g, s, x, y, sc, RM ? 0 : st.t * s.sp * 6 * (moving ? 1 : 0.1), '#000', 0);
-      if (s.rim > 0.02) drawShape(g, s, x, y, sc, RM ? 0 : st.t * s.sp * 6 * (moving ? 1 : 0.1), null, s.rim); }
-    for (const p of st.pings) { g.strokeStyle = `rgba(126,227,245,${0.28 * (1 - p.r / maxR)})`; g.lineWidth = 1.2; g.beginPath(); g.arc(ox, oy, p.r, 0, 7); g.stroke(); }
-    // two faint glints now and then: eyes
-    for (const s of st.shapes) if (!RM && Math.sin(st.t * 0.9 + s.ph * 3) > 0.93) { g.fillStyle = 'rgba(220,230,255,0.35)'; g.fillRect(s.sx - s.sc * 0.15, s.sy - s.sc * 0.1, 2, 2); g.fillRect(s.sx + s.sc * 0.1, s.sy - s.sc * 0.1, 2, 2); }
-    if (land.shake && !RM) { cv.style.transform = `translate(${(Math.random() - 0.5) * 6}px,${(Math.random() - 0.5) * 6}px)`; } else cv.style.transform = '';
-    // the line being said, in the middle (the same style as the arrival at the lab)
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    // the veil: the world under it, almost black, its faint grid still there
+    g.fillStyle = 'rgba(2,3,7,0.8)'; g.fillRect(0, 0, W, H);
+    // how much of the hole we see and how hard it pulls follow the lines: faint at first, clear at "is that a black hole", closer at "getting closer"
+    const k = st.k, seen = st.calm ? 1 : clamp01(0.25 + (k >= 4 / 7 ? 0.45 : 0) + (k >= 5 / 7 ? 0.2 : 0)), pullT = st.calm ? Math.max(0, st.pull - 0.4) : (k >= 6 / 7 ? 1 : k >= 5 / 7 ? 0.45 : 0);
+    st.pull += (pullT - st.pull) * Math.min(1, dt * 0.8); const pull = RM ? pullT : st.pull, small = Math.min(W, H);
+    const hx = W * (0.74 - 0.24 * pull), hy = H * (0.3 + 0.16 * pull), R = small * (0.035 + 0.045 * pull);
+    // the hole: a dark core, a faint violet ring of light bent around it
+    const ring = g.createRadialGradient(hx, hy, R * 0.8, hx, hy, R * 3.2); ring.addColorStop(0, 'rgba(0,0,0,1)'); ring.addColorStop(0.22, `rgba(130,100,190,${0.22 * seen})`); ring.addColorStop(0.45, `rgba(90,70,140,${0.08 * seen})`); ring.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = ring; g.beginPath(); g.arc(hx, hy, R * 3.2, 0, 7); g.fill(); g.fillStyle = '#000'; g.beginPath(); g.arc(hx, hy, R, 0, 7); g.fill();
+    // the sonar's rings, from the Operator's window (or the middle)
+    const lab = document.querySelector('#lab'), lr = lab && lab.classList.contains('open') ? lab.getBoundingClientRect() : null, ox = lr ? lr.left + lr.width / 2 : W / 2, oy = lr ? lr.top + lr.height / 2 : H / 2, maxR = Math.hypot(W, H) * 0.85;
+    for (const p of st.pings) p.r += dt * maxR / 2.2; st.pings = st.pings.filter(p => p.r < maxR);
+    // the letters: on a tilted disk around the hole, faster near it, spiralling in; when one falls in, another drifts in from further out
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (const l of st.letters) { if (!RM) { l.a += dt * l.sp * (1.6 / l.r) * (1 + 2.5 * pull); l.r -= dt * (0.05 + 0.25 * pull) * l.sp; if (l.r < 1.05) { l.r = 3.2 + l.sp * 0.8; l.a = Math.random() * 6.283; } }
+      const x = hx + Math.cos(l.a) * l.r * R, y = hy + Math.sin(l.a) * l.r * R * 0.5, fz = Math.max(8, R * 0.32 * l.sz * Math.min(1.3, l.r / 1.5)), a = (0.12 + 0.5 * seen) * clamp01((3.6 - l.r) / 1.2) * (k >= 5 / 7 || st.calm ? 1 : 0.55);
+      for (const p of st.pings) { if (Math.abs(Math.hypot(x - ox, y - oy) - p.r) < fz && !p.hit.has(l)) { p.hit.add(l); l.rim = 1; st.rimmed++; } } if (!RM) l.rim = Math.max(0, l.rim - dt / 1.3);
+      g.font = `${Math.round(fz)}px Georgia, serif`; g.fillStyle = `rgba(190,200,230,${a})`; g.fillText(l.ch, x, y);
+      if (l.rim > 0.02) { g.save(); g.strokeStyle = `rgba(126,227,245,${0.9 * l.rim})`; g.lineWidth = 1; g.shadowColor = '#7ee3f5'; g.shadowBlur = 6 * l.rim; g.strokeText(l.ch, x, y); g.restore(); } }
+    for (const p of st.pings) { g.strokeStyle = `rgba(126,227,245,${0.3 * (1 - p.r / maxR)})`; g.lineWidth = 1.2; g.beginPath(); g.arc(ox, oy, p.r, 0, 7); g.stroke(); }
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    if (land.shake && !RM) cv.style.transform = `translate(${(Math.random() - 0.5) * 6}px,${(Math.random() - 0.5) * 6}px)`; else cv.style.transform = '';
+    // the line being said, in the middle (the same style as the intro's subtitles)
     if (land.line) { const B = window.__termBoot, L = land.line, n = RM ? L.text.length : Math.floor((st.t - L.t0) * DCPS); if (B && B.say) B.say(g, W, H, L.text, n, 'you', B.arrive.sayFz(W, W < 600), 1); } }
-  function drawShape(g, s, x, y, sc, ph, fill, rim) {   // a creature-ish silhouette: a body and legs that step
-    g.save(); g.translate(x, y - sc * 0.55); const bw = sc * 0.55, bh = sc * 0.36;
-    if (rim) { g.strokeStyle = `rgba(126,227,245,${0.85 * rim})`; g.lineWidth = 1.2; g.shadowColor = '#7ee3f5'; g.shadowBlur = 6 * rim; } else { g.fillStyle = fill; g.strokeStyle = fill; g.lineWidth = Math.max(1.5, sc * 0.05); }
-    for (let i = 0; i < s.legs; i++) { const side = i % 2 ? 1 : -1, k = Math.floor(i / 2), n = s.legs / 2, ax = (k - (n - 1) / 2) * bw * 0.5, sw = Math.sin(ph + i * 1.7) * sc * 0.12;
-      g.beginPath(); g.moveTo(ax, 0); g.lineTo(ax + side * sc * 0.25 + sw, -sc * 0.18 * side * 0.2 + sc * 0.12); g.lineTo(ax + side * sc * 0.38 + sw * 1.3, sc * 0.55); g.stroke(); }
-    g.beginPath(); g.ellipse(0, 0, bw, bh, 0, 0, 7); if (rim) g.stroke(); else g.fill(); g.restore(); }
   function ping() { if (!nightCv) return; nightState.pings.push({ r: 0, hit: new Set() }); land.pings = (land.pings || 0) + 1;
     const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const t = c.currentTime, o = c.createOscillator(), v = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(1480, t); o.frequency.exponentialRampToValueAtTime(1320, t + 0.9);
       v.gain.setValueAtTime(0.0001, t); v.gain.linearRampToValueAtTime(0.05, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0001, t + 1.2); o.connect(v); v.connect(A.out()); o.start(t); o.stop(t + 1.3); } catch (e) {} }
