@@ -6,6 +6,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-02
 
+**Never stuck: the Tiny Operator as an always-present creature (idle-tohandle.js).** Nico, in ?story: closed every guided widget and was left in the void around a black hole with nothing bringing the menus back. Cause: the guided start hides the menus and the Operator's button (`gen-calm`) until the guide ends, so closing the Operator's window and the Day card left no control on screen.
+- When the Operator's window is closed, a small creature (an SVG body with blinking eyes and four waving legs) sits bottom-right, above the Operator's button when that is visible, in the corner otherwise, above every overlay (z-index over the lightbox backdrop). A watchdog (every 0.6 s) keeps it there whenever the window is closed. Tapping it opens the Operator and removes `gen-calm` (the menus and ⚙ come back).
+- Tests: new "never stuck" (guided start: close the Operator and every × → the creature is visible and is the element on top at its centre → tap → Operator open, menus back, the creature hides); "story" does the same after Day 1.
+
 **Story v2 (staging): arriving at the lab, the scientist in the middle, a chart you can read, and a landing in the void.** Nico on the boot: "the story is getting better and better!"; script: boot-script.md, v2.
 - **Arriving at the lab** (`__termBoot.arrive`, 47.0 s, before the boot in `?story` and `?intro=boot`; `?noarrive` leaves it out): black, sound only (car hum and rain on the roof, indicator ticks, engine off, door, five wet steps, keycard beep with `LAB 07 · ACCESS GRANTED`, a door hiss, room tone; 32 sound events, beds restart where they are if the sound is switched on mid-way) and the scientist's six lines verbatim, typed at 42 chars/s, held max(2.5 s, 0.8 + chars/22): 2.5–5.7 s. The storyline intro is now 96.3 s (arrival 47.0 + boot 12.4 + run 36.9); skip › / Esc skip all of it.
 - **The scientist in the middle:** lit-pixel centroid of the arrival lines at 0.47–0.49 of the height; in the panes the line sits at H/2 over a full-width dim band. Size ratio unchanged (25 vs 17 px desktop, 19 vs 13 phone).
