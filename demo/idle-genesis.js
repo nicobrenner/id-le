@@ -15,9 +15,9 @@
 // and 'gs' (the steps reached, with the seconds each took) from window.__genesis.stats() (idle-stats.js).
 // The storyline (?story, or "Storyline" in the chooser; Nico's script, storyline-script.md, sections B–E): the Epoch 0 intro in its
 // story version (the run that won't stop, the crash), then the Tiny Operator wakes the player up in a lightbox and introduces the job
-// ("you've been appointed to see it grow… 6 or 7 days"), "Say: lights on", and the lights reveal a primordial universe (data wind, a
-// distant storm, bit comets, odd stars, a small black hole pulling stray letters, a first dawn) that calms as the player builds. Day 1
-// is lights, words and first life; the days are a table (DAYS) so the others can be added from the script; Day 2 onwards is a stub.
+// ("you've been appointed to see it grow… You have 10 epochs"), "Say: lights on", and the lights reveal a primordial universe (data wind, a
+// distant storm, bit comets, odd stars, a small black hole pulling stray letters, a first dawn) that calms as the player builds. Epoch 0
+// ends with the lights; Epoch 1 is words and first life; the epochs are a table (DAYS) so the others can be added; Epoch 2 onwards is a stub.
 // A chooser (Storyline · From scratch (free) · A ready world) opens any ?genesis start and ⚙ → "new universe" (snapshot first, always).
 (() => {
   const Q = new URLSearchParams(location.search), $ = s => document.querySelector(s), now = () => Date.now();
@@ -63,18 +63,14 @@
     'You have 10 epochs to grow it enough so that it can survive on its own… if it fails, this universe could wither, and you might need to start another one',
     'First things first: the lights', 'Say: lights on'];
   const LIGHTS_ON = 'Nice!! we can see something now at least';
-  // the days (script section D): each a set of goals that teach one part of the game. Day 1 is built; the rest are listed, coming soon.
-  // goal keys of day 1 are genesis steps; the later days' keys are what the game will check (to be wired day by day)
+  // the epochs (Nico, story v3: "10 epochs, not 6–7 days"): Epoch 0 is the intro, the dark landing and lights on; Epoch 1 (what was Day 1)
+  // is words and first life; Epochs 2–9 are coming soon (their content is being written). Kept in S.day / S.days by number (saved state
+  // from the days still reads right: day n is epoch n) and still reported as genesis_day in the stats.
   const DAYS = [
-    { n: 1, title: 'lights, words, life', goals: [['light', 'lights on'], ['words', 'words for a floor'], ['creatures', 'first life']], teaches: 'the Operator, words, creatures',
-      front: { head: 'Day 1: a universe switches on', body: 'Lights came on in a brand-new universe today. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
-      line: 'day one done. it has a floor and somebody on it. tomorrow we feed them' },
-    { n: 2, title: 'feed them', goals: [['fed', 'keep everyone fed for a while'], ['mind', 'open a card and read a mind']], teaches: 'food, cards, the mind' },
-    { n: 3, title: 'weather and mood', goals: [['storm', 'survive a storm, nobody too scared'], ['music', 'turn on music']], teaches: 'the studio, weather, the advisor, music' },
-    { n: 4, title: 'grow', goals: [['eight', 'at least 8 creatures'], ['evolve', 'evolve one']], teaches: 'births, evolve, designs' },
-    { n: 5, title: 'work', goals: [['chart', "a Mathematician's chart"], ['debug', 'a Debugger'], ['hut', 'a built hut']], teaches: 'jobs, buildings, the chart ecology' },
-    { n: 6, title: 'memory', goals: [['reel', 'watch a reel'], ['dream', 'watch a dream'], ['keep', 'keep something in your drawer']], teaches: 'reels, dreams, the drawer' },
-    { n: 7, title: 'independence', goals: [['alone', '3 minutes on its own'], ['green', 'the advisor all green']], teaches: 'the advisor, letting go' }];
+    { n: 1, title: 'words, life', goals: [['words', 'words for a floor'], ['creatures', 'first life']], teaches: 'the Operator, words, creatures',
+      front: { head: 'Epoch 1: a floor, and somebody on it', body: 'Lights came on in a brand-new universe. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
+      line: 'epoch one done. it has a floor and somebody on it. next we feed them' },
+    ...[2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ n, title: 'coming soon', goals: [], teaches: '' }))];
   let S = load(), hold = [], busy = false;
   function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
@@ -170,7 +166,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   const did = k => !!(S && S.steps && S.steps[k]);
   const gDone = g => g === 'sky' ? (did('weather') || did('music')) : did(g);
   const guiding = () => !!(S && S.on && !S.free);
-  const guideOf = () => storyMode() ? DAYS[0].goals.map(x => x[0]) : GUIDE;
+  const guideOf = () => storyMode() ? ['light', ...DAYS[0].goals.map(x => x[0])] : GUIDE;   // lights on closes Epoch 0, then Epoch 1's goals
   const nextGuide = () => guideOf().find(g => !gDone(g)) || null;
   const sayOf = g => { const s = STEPS[g] && STEPS[g].say; return typeof s === 'function' ? s() : s || ''; };
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -201,7 +197,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
         `<div class="gc"><button class="glow${coarse() ? ' say' : ''}" data-gsay="1"${busy ? ' disabled' : ''}>${coarse() ? '▶ ' : ''}${esc(sayOf(g))}</button>` +
         (st.alt ? `<button class="quiet" data-galt="1"${busy ? ' disabled' : ''}>${esc(st.alt[0])}</button>` : '') + `</div>` +
         `<div class="gh">${coarse() ? 'tap ▶, or type it your own way below' : 'press enter, or say it your own way'}</div>` +
-        `<div class="gs">${storyMode() ? 'day 1 · ' : ''}step ${GD.indexOf(g) + 1} of ${GD.length} · <a data-gskip="1">skip the guide</a></div>`; }
+        `<div class="gs">${storyMode() ? (g === 'light' ? 'epoch 0 · ' : 'epoch 1 · ') : ''}step ${GD.indexOf(g) + 1} of ${GD.length} · <a data-gskip="1">skip the guide</a></div>`; }
     else body = `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>` +
       `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`;
     const said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
@@ -333,7 +329,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // the chooser: the storyline, the void with no guide, or a world that is already alive (the starter world)
   function chooser() { return new Promise(res => { const el = document.createElement('div'); el.id = 'genChoose'; el.setAttribute('role', 'dialog');
     el.innerHTML = `<h2>a new universe</h2><div class="sub">how do you want to begin?</div><div class="opts">
-<button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and seven days to raise a universe with the Tiny Operator<br><small>recommended</small></button>
+<button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and 10 epochs to raise a universe with the Tiny Operator<br><small>recommended</small></button>
 <button data-m="free"><b>✦ From scratch</b>the void and the Operator's console, every step available, no guide</button>
 <button data-m="ready"><b>🌍 A ready world</b>creatures already living, the guided first five minutes</button></div>`;
     document.body.appendChild(el); const end = m => { el.classList.add('out'); setTimeout(() => el.remove(), 600); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_choose', extra: { mode: m } } })); } catch (e) {} res(m); };
@@ -466,23 +462,23 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     if (lab) lab.removeEventListener('pointerdown', onTap);
     wakeBusy = false; try { WAKE.forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {}
     curLine = WAKE[WAKE.length - 1]; wakeShown = WAKE.slice(); renderConsole(); }
-  // after the lights: the window docks where the Operator usually is, and the day's goals appear
+  // after the lights: the window docks where the Operator usually is, and the epoch's goals appear
   function undock() { const bd = $('#genBackdrop'); if (bd) { bd.classList.add('out'); setTimeout(() => bd.remove(), 1300); } wakeShown = []; cls('gen-box', 0); renderConsole(); renderDay(); }
 
-  // ---------- the days: the goal card, and a front page when a day is done
+  // ---------- the epochs: the goal card, and a front page when an epoch is done
   function renderDay() { if (!storyMode()) return; const d = DAYS[(S.day || 1) - 1]; if (!d) return; let el = $('#genDay');
     if (document.documentElement.classList.contains('gen-box')) { if (el) el.remove(); return; }
     if (!el) { el = document.createElement('div'); el.id = 'genDay'; document.body.appendChild(el); }
     const ok = k => S.days && S.days[d.n] ? true : (d.n === 1 ? did(k) : false), soon = d.n > 1;
     el.classList.toggle('soon', soon);
-    el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">DAY ${d.n} · ${esc(d.title.toUpperCase())}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
-      `<div class="dn">${soon ? 'tomorrow: the next days are coming soon' : esc('teaches: ' + d.teaches)}</div>`;
+    el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">EPOCH ${d.n} · ${esc(d.title.toUpperCase())}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
+      `<div class="dn">${soon ? 'the next epochs are coming soon' : esc('teaches: ' + d.teaches)}</div>`;
     el.querySelector('.x').onclick = () => el.remove(); }
   function dayDone(n) { const d = DAYS[n - 1]; if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; save();
-    try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'day ' + n + ' done', {}); } catch (e) {}
+    try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'epoch ' + n + ' done', {}); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_day', extra: { day: n } } })); } catch (e) {}
     const el = document.createElement('div'); el.id = 'genFront';
-    el.innerHTML = `<div class="np"><div class="mh">THE ID|LE GAZETTE</div><div class="md">universe ${esc(S.n || 1)} · day ${n} · special edition</div><h3>${esc(d.front.head)}</h3><div>${esc(d.front.body)}</div><div class="to"><b>TO:</b> ${esc(d.line)}</div><button>on to day ${n + 1} ›</button></div>`;
+    el.innerHTML = `<div class="np"><div class="mh">THE ID|LE GAZETTE</div><div class="md">universe ${esc(S.n || 1)} · epoch ${n} · special edition</div><h3>${esc(d.front.head)}</h3><div>${esc(d.front.body)}</div><div class="to"><b>TO:</b> ${esc(d.line)}</div><button>on to epoch ${n + 1} ›</button></div>`;
     document.body.appendChild(el); el.querySelector('button').onclick = () => { el.remove(); say(d.line); renderDay(); endGuide(false); }; }
 
   // ---------- the primordial universe (script section C): a canvas behind the floor; wild when the lights come on, calmer as it fills
