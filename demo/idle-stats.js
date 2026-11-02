@@ -76,6 +76,7 @@
   const fav = (name, nameKey) => { if (!name) return; let c = null; try { c = (window.__arena && window.__arena.raw() || []).find(k => k.name === name); } catch (e) {} const S = starterNames();
     inc(E2.fav, 'name:' + (S.has(nameKey || name) ? (nameKey || name) : 'other')); if (!c) return; const g = c.g || {};
     const clean = v => /^[a-z_]{1,16}$/.test(v) ? v : 'other'; inc(E2.fav, 'job:' + clean(g.job || 'none')); inc(E2.fav, 'fam:' + (c.voiceKey === 'crawly' ? 'crawly' : 'tok')); inc(E2.fav, 'body:' + clean(g.body || 'none')); };
+  let byoTurn = 0;   // while your own AI's turn runs (op_msg → op_done)
   const OPA = new Set(['creature', 'disaster', 'evolve', 'look', 'rave_off', 'rave_on', 'rename', 'spawn', 'weather', 'ai_say', 'ai_weather', 'ai_spawn', 'ai_words', 'ai_disaster']);
   addEventListener('idle:ev', e => { const d = e.detail || {}, x = d.extra || {};
     switch (d.type) {
@@ -88,9 +89,10 @@
       case 'rename': if (x.by !== 'namer') fav(x.to, x.from); break;
       case 'collect_keep': fav(x.who); break;
       case 'tiny_operator': inc(E2.ct, 'op'); E2.did.add('op_msg'); if (x.acted && OPA.has(x.option)) inc(E2.opa, x.option); break;
-      case 'op_msg': case 'lab_note': inc(E2.ct, 'op'); E2.did.add('op_msg'); break;
+      case 'op_msg': case 'lab_note': inc(E2.ct, 'op'); E2.did.add('op_msg'); if (d.type === 'op_msg') byoTurn = Date.now() + 120000; break;
+      case 'op_done': byoTurn = 0; break;
       case 'pedia_open': case 'pedia_go': inc(E2.ct, 'pedia'); break;
-      default: if (OPA.has(d.type)) inc(E2.opa, d.type); } });
+      default: if (/^ai_/.test(d.type) && OPA.has(d.type) && Date.now() < byoTurn) inc(E2.opa, d.type); } });   // only your own AI's tool calls, during its turn: the world's own evolve/disaster/weather events and the Tiny Operator's tool logs are not Operator actions (TO's are counted from its turn above)
   // ---------- the Operator (11-01): how conversations go, never their text ----------
   // idle-ai.js tells this page what was typed (idle:optext, in-page only) and how each turn ended (tiny_operator / op_done); only counts
   // and a mood label computed here, by the data lab's in-browser classifier, go into the stats

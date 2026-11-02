@@ -48,7 +48,7 @@ def engage2(tot):
         ("Favorites by job", sorted(((k[4:], n) for k, n in fav.items() if k.startswith("job:")), key=lambda r: -r[1]), None),
         ("Favorites by family and body", sorted(((k.replace("fam:", "family ").replace("body:", "body "), n) for k, n in fav.items() if k[:4] in ("fam:", "body")), key=lambda r: -r[1]), None),
         ("First three features opened (path)", sorted(path.items(), key=lambda r: -r[1])[:12], None),
-        ("Operator actions that ran", sorted(opa.items(), key=lambda r: -r[1]), None),
+        ("Operator actions that ran (until Nov 2 the world's own evolve/disaster events and the Tiny Operator's tool logs were counted here too: those days' evolve and ai_* numbers are inflated)", sorted(opa.items(), key=lambda r: -r[1]), None),
         ("Where rage clicks happened", sorted(rage.items(), key=lambda r: -r[1]), None),
     ]
     return lines, [g for g in groups if g[1]]
