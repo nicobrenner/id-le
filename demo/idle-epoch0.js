@@ -16,15 +16,19 @@
   // anything matching is resampled (live) or dropped (bank): unkind words, bodies, violence, and names that must never appear
   const BLOCK = /\b(sex\w*|porn\w*|nud\w*|naked|kill\w*|suicid\w*|rap(e|ed|ing|ist)|nazi\w*|hitler|drug\w*|cocaine|heroin|weed|fuck\w*|shit\w*|bitch\w*|damn\w*|bastard|nigg\w*|fag\w*|retard\w*|slut\w*|whore\w*|dick\w*|cock\w*|puss\w*|cunt\w*|terror\w*|bomb\w*|guns?|shoot\w*|blood\w*|die|died|dies|dead|death|murder\w*|hate\w*|stupid|idiot|ugly|fat|nico\w*|brenner|jeffy|password|depress\w*|cancer|hospital|funeral|war|wars)\b|https?:|www\.|@|\d{3,}/i;
   // the schedule: one line per "epoch", hot to cool (probed on the real model: 2.5/full vocabulary is joyful babble, 0.55/30 is almost sense)
+  // six lines (Nico: slower, readable, and the link to the loss curve unmistakable): each is born at a point of the real loss curve (k:
+  // its index in base+finetune, spaced so the steep early drop gets three lines) and labelled with that point's epoch and loss. The
+  // text is the model at that temperature, not a checkpoint from that epoch (see the header): the curve and the text fall together.
   const SCHED = [
-    { e: 0, temp: 2.6, topK: 0, tok: 13 }, { e: 1, temp: 2.2, topK: 0, tok: 13 }, { e: 2, temp: 1.8, topK: 0, tok: 13 },
-    { e: 4, temp: 1.4, topK: 400, tok: 14 }, { e: 6, temp: 1.15, topK: 200, tok: 14 }, { e: 8, temp: 0.95, topK: 80, tok: 15 },
-    { e: 10, temp: 0.75, topK: 40, tok: 15 }, { e: 12, temp: 0.55, topK: 30, tok: 15 }];
+    { e: 0, temp: 2.6, topK: 0, tok: 12, k: 0, cap: 'it has learned almost nothing' }, { e: 2, temp: 1.8, topK: 0, tok: 12, k: 1, cap: 'letters, mostly' },
+    { e: 4, temp: 1.4, topK: 400, tok: 13, k: 3, cap: 'words, mostly' }, { e: 6, temp: 1.15, topK: 200, tok: 13, k: 9, cap: 'fragments' },
+    { e: 8, temp: 0.95, topK: 80, tok: 14, k: 25, cap: 'almost sentences' }, { e: 12, temp: 0.55, topK: 30, tok: 14, k: -1, cap: 'it almost speaks' }];
   const PROMPTS = ['<|user|> tell me about the world\n<|oracle|>', '<|user|> what do you see?\n<|oracle|>', '<|user|> say something\n<|oracle|>', '<|user|> who are you?\n<|oracle|>'];
   const BEGIN = 'in the beginning there was', FINAL = 'nothing';
   const BEGIN_PROMPT = '<|user|> how did the world begin?\n<|oracle|> *tell In the beginning there was';
   // the film's clock (seconds)
-  const C = { cursor: 0, babble: 2, slot: 1.4, curve: 3.8, final: 13.3, split: 17.8, crawl: 20.3, turn: 22.9, total: 25.2 };   // split..total move later if the first line needs it
+  // each line streams for C.stream s and then stays fully readable (≥ 2 s) before the next starts; then the whole story holds (C.stack)
+  const C = { cursor: 0, babble: 1.6, lead: 0.2, slot: 3.6, stream: 1.35, curve: 0.5, stack: 23.2, final: 25.6, split: 30.1, crawl: 32.6, turn: 35.2, total: 37.5 };   // split..total move later if the first line needs it
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)), ease = u => u * u * (3 - 2 * u);
   const clean = s => String(s || '').replace(/�/g, '').replace(/^\s*\*\w*\s*/, '').replace(/\s+/g, ' ').replace(/\s+([,.!?'])/g, '$1').trim();
   // also out: persona details from the chat data (ages, people, money, health) and anything that looks like a name: a capitalized word
@@ -68,13 +72,13 @@
     for (let i = 0; i < SCHED.length; i++) { const st = SCHED[i], slot0 = C.babble + i * C.slot; if (startedAt() > slot0 - 0.15) continue; const L = await liveLine(st, r); if (L && startedAt() < slot0 - 0.05) ct.lines[i] = { e: st.e, ...L }; }
     await cont; }
   async function makeLiveContent(o = {}) {   // recordings: everything sampled now from the real model (no clock)
-    await loadBank(); const ct = makeContent(o), r = rng(ct.seed ^ 0x5bd1e995);
+    await Promise.all([loadBank(), loadLoss()]); const ct = makeContent(o), r = rng(ct.seed ^ 0x5bd1e995);   // the real curve too, not the placeholder
     for (let i = 0; i < SCHED.length; i++) { const L = await liveLine(SCHED[i], r); if (L) ct.lines[i] = { e: SCHED[i].e, ...L }; }
     const c = await liveCont(); if (c) { ct.cont = c; ct.contSrc = 'live'; } return ct; }
 
   // ---------- timing helpers ----------
   function lineReveal(ct, i) {   // per piece: the time (s) it appears, inside the line's slot
-    const L = ct.lines[i], n = L.pieces.length, slot0 = C.babble + i * C.slot + 0.08, span = C.slot * 0.82; let acc = 0; const g = [];
+    const L = ct.lines[i], n = L.pieces.length, slot0 = C.babble + i * C.slot + C.lead, span = C.stream; let acc = 0; const g = [];
     for (let k = 0; k < n; k++) { const v = ct.gaps[(i * 37 + k) % ct.gaps.length]; g.push(v); acc += v; }
     let t = slot0; return g.map(v => (t += v / acc * span)); }
   function finalText(ct, T) {   // the first line, typed: "in the beginning there was" + the model's word, deleted, then "nothing"
@@ -93,27 +97,63 @@
   const INK = '#e9e4d8', DIM = '#7f8a95', MAG = '#e0367a', CUR = '#7ee3f5';
   function lossPts() { const b = loss && loss.base && loss.base.loss, f = loss && loss.finetune && loss.finetune.loss; if (b && b.length) return { b, f: f || [] };
     const s = []; for (let i = 0; i < 50; i++) s.push(1.6 + 1.7 * Math.exp(-i / 6) + 0.05 * Math.sin(i * 1.7)); return { b: s, f: [] }; }
-  function drawCurve(g, W, H, T, P, S) {
-    const a = clamp((T - C.curve) / 0.6) * (1 - clamp((T - S) / 0.6)); if (a <= 0) return;
-    const bw = P ? 120 : 190, bh = P ? 64 : 96, x0 = W - bw - (P ? 14 : 28), y0 = P ? 16 : 26, { b, f } = lossPts(), all = b.concat(f), hi = Math.max(...all), lo = Math.min(...all);
-    const pB = clamp((T - C.curve) / (C.final - C.curve)), pF = clamp((T - C.final) / 2.4), nb = Math.max(2, Math.round(pB * (b.length - 1)) + 1), nf = Math.round(pF * f.length), pts = b.slice(0, nb).concat(f.slice(0, nf)), N = b.length + f.length - 1;
-    g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x0, y0, bw, bh);
-    g.beginPath(); pts.forEach((v, k) => { const x = x0 + 6 + (bw - 12) * k / N, y = y0 + 6 + (bh - 18) * (1 - (v - lo) / (hi - lo || 1)); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.strokeStyle = CUR; g.lineWidth = 1.5; g.stroke();
-    g.font = `${P ? 9 : 11}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.fillText('loss ' + pts[pts.length - 1].toFixed(2), x0 + 6, y0 + bh - 4); g.restore(); }
+  // where things go: the curve is the "lab monitor" (left on desktop, top on phones), the lines stack beside it, epoch 0 at the top
+  function layout(W, H, P) {
+    const port = P || W < H * 1.1;
+    if (port) { const cw = W - 28, ch = Math.min(H * 0.22, 190), fz = Math.round(clamp(W / 24, 13, 18));   // lines wrap to two rows on phones
+      return { port, cv: { x: 14, y: H * 0.06, w: cw, h: ch }, ln: { x: 18, y: H * 0.06 + ch + 40, w: W - 36, fz, eh: fz * 4.1 } }; }
+    const cw = W * 0.36, ch = H * 0.42, fz = Math.round(clamp(W / 66, 13, 21));
+    return { port, cv: { x: W * 0.05, y: H * 0.29, w: cw, h: ch }, ln: { x: W * 0.47, y: H * 0.29 - 4, w: W * 0.49, fz, eh: fz * 2.85 } }; }
+  // the curve's points, and where each line sits on it
+  function curveInfo() { const { b, f } = lossPts(), all = b.concat(f), N = all.length - 1, hi = Math.max(...all), lo = Math.min(...all);
+    const ks = SCHED.map(st => st.k < 0 ? N : Math.min(N, st.k)); return { b, f, all, N, hi, lo, ks }; }
+  const epochLabel = (ci, k) => k < ci.b.length ? `epoch ${k + 1}` : `fine-tune ${k - ci.b.length + 1}`;
+  function ptXY(ci, L, k) { const { x, y, w, h } = L.cv; return [x + 10 + (w - 20) * k / ci.N, y + 10 + (h - 30) * (1 - (ci.all[k] - ci.lo) / (ci.hi - ci.lo || 1))]; }
+  // the dot: at the current line's point, travelling there in the first 0.7 s of its slot
+  function dotK(ci, T) { if (T < C.babble) return 0; const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1), u = ease(clamp((T - C.babble - i * C.slot) / 0.7));
+    const k0 = i ? ci.ks[i - 1] : 0; return k0 + (ci.ks[i] - k0) * u; }
+  function entryY(L, i) { return L.ln.y + i * L.ln.eh; }
+  function drawCurve(g, W, H, T, P, S, L, ci, RM) {
+    const a = clamp((T - C.curve) / 0.6) * (1 - clamp((T - (C.final - 0.4)) / 0.4)); if (a <= 0) return;
+    const { x, y, w, h } = L.cv, kd = RM ? ci.ks[clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1)] : dotK(ci, T), kn = Math.floor(kd);
+    g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h);
+    g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.fillText('training loss', x + 8, y - 8);
+    g.textAlign = 'right'; g.fillText('epochs →', x + w - 8, y + h + 16); g.textAlign = 'left';
+    // the curve so far, up to the dot
+    g.beginPath(); for (let k = 0; k <= kn; k++) { const [px, py] = ptXY(ci, L, k); k ? g.lineTo(px, py) : g.moveTo(px, py); }
+    const fr = kd - kn; let dx, dy; if (kn < ci.N && fr > 0) { const [ax, ay] = ptXY(ci, L, kn), [bx, by] = ptXY(ci, L, kn + 1); dx = ax + (bx - ax) * fr; dy = ay + (by - ay) * fr; g.lineTo(dx, dy); } else [dx, dy] = ptXY(ci, L, kn);
+    g.strokeStyle = CUR; g.lineWidth = 2; g.stroke();
+    // the points where lines were born, then the bright dot with its value
+    const shown = T < C.babble ? 0 : clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1);
+    for (let i = 0; i < shown; i++) { const [px, py] = ptXY(ci, L, ci.ks[i]); g.fillStyle = '#4f7f8c'; g.beginPath(); g.arc(px, py, 2.5, 0, 7); g.fill(); }
+    g.shadowColor = CUR; g.shadowBlur = 14; g.fillStyle = '#e8fbff'; g.beginPath(); g.arc(dx, dy, 4.5, 0, 7); g.fill(); g.shadowBlur = 0;
+    g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = CUR; const v = ci.all[Math.round(kd)];
+    g.fillText(`loss ${v.toFixed(2)}`, Math.min(dx + 9, x + w - 80), Math.max(dy - 9, y + 14));
+    g.restore(); }
   function epochAt(T) { if (T < C.babble) return 0; const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1); return SCHED[i].e; }
-  function drawBabble(g, W, H, T, ct, P, RM, st) {
-    const fz = P ? 15 : Math.round(clamp(W / 52, 16, 26)), lh = fz * 1.6, cx = P ? 18 : W * 0.14, cy = H * 0.52;
-    g.font = `${fz}px ui-monospace, Menlo, monospace`; g.textBaseline = 'middle';
-    const cur = clamp(Math.floor((T - C.babble) / C.slot), -1, SCHED.length - 1); const maxW = W - cx * 2;
-    const fade = 1 - clamp((T - (C.final - 0.35)) / 0.35);
-    for (let i = 0; i <= cur; i++) { const L = ct.lines[i], tr = lineReveal(ct, i); let n = RM ? L.pieces.length : tr.filter(t => t <= T).length; if (i < cur) n = L.pieces.length;
-      let txt = L.pieces.slice(0, n).join('').replace(/�/g, '').replace(/\s+([,.!?'])/g, '$1').replace(/^\s+/, ''); if (RM && i < cur) continue;
-      const back = cur - i, y = cy - back * lh * (RM ? 0 : 1); if (y < H * 0.12) continue; const al = (back === 0 ? 1 : Math.max(0, 0.55 - back * 0.13)) * fade; if (al <= 0) continue;
-      if (back === 0 && L.e <= 2 && !RM && n > 0 && n < L.pieces.length && st.glitch(T)) txt += txt.slice(-1).repeat(1 + Math.floor((T * 13) % 3));   // early epochs stutter
-      while (g.measureText(txt).width > maxW && txt.length > 4) txt = txt.slice(1);
-      g.globalAlpha = al; g.fillStyle = L.e <= 2 ? '#c9d6c2' : L.e <= 6 ? '#dcdccb' : INK; g.fillText(txt, cx, y);
-      if (back === 0 && Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(cx + g.measureText(txt).width + 3, y - fz * 0.55, fz * 0.55, fz * 1.05); } }
-    g.globalAlpha = 1; }
+  function drawBabble(g, W, H, T, ct, P, RM, st, L, ci) {
+    const fz = L.ln.fz, cur = clamp(Math.floor((T - C.babble) / C.slot), -1, SCHED.length - 1), maxW = L.ln.w;
+    const fade = 1 - clamp((T - (C.final - 0.4)) / 0.4), stack = clamp((T - C.stack) / 0.6);   // the finale: every line back to full, linked to its point
+    for (let i = 0; i <= cur; i++) { const Ln = ct.lines[i], tr = lineReveal(ct, i); let n = RM ? Ln.pieces.length : tr.filter(t => t <= T).length; if (i < cur) n = Ln.pieces.length;
+      let txt = Ln.pieces.slice(0, n).join('').replace(/�/g, '').replace(/\s+([,.!?'])/g, '$1').replace(/^\s+/, '');
+      const y = entryY(L, i), back = cur - i, base = back === 0 ? 1 : 0.5, al = (base + (1 - base) * stack) * fade; if (al <= 0) continue;
+      // label from the curve: epoch and loss at the point this line was born
+      g.globalAlpha = al * 0.85; g.font = `${Math.max(10, Math.round(fz * 0.62))}px ui-monospace, Menlo, monospace`; g.fillStyle = '#5f8a96'; g.textBaseline = 'alphabetic';
+      g.fillText(`${epochLabel(ci, ci.ks[i])} · loss ${ci.all[ci.ks[i]].toFixed(2)}`, L.ln.x, y);
+      if (back === 0 && Ln.e <= 2 && !RM && n > 0 && n < Ln.pieces.length && st.glitch(T)) txt += txt.slice(-1).repeat(1 + Math.floor((T * 13) % 3));   // early epochs stutter
+      let f = fz; g.font = `${f}px ui-monospace, Menlo, monospace`;
+      // desktop: one row, shrinking if it must; phones: up to two rows (the first row's words, the rest below)
+      let rows = [txt]; if (L.port) { const ws = txt.split(/(?<=\s)/); let a = ''; rows = []; for (const w of ws) { if (a && g.measureText(a + w).width > maxW) { rows.push(a); a = w; } else a += w; } rows.push(a); if (rows.length > 2) rows = [rows[0], rows.slice(1).join('')]; }
+      while (rows.some(r => g.measureText(r).width > maxW) && f > 10) { f--; g.font = `${f}px ui-monospace, Menlo, monospace`; }
+      g.globalAlpha = al; g.fillStyle = Ln.e <= 2 ? '#c9d6c2' : Ln.e <= 6 ? '#dcdccb' : INK; g.textBaseline = 'middle'; const ty = y + fz * 0.95;
+      rows.forEach((r, k) => g.fillText(r, L.ln.x, ty + k * f * 1.35)); const last = rows[rows.length - 1], ly = ty + (rows.length - 1) * f * 1.35;
+      if (back === 0 && T < C.stack && Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(L.ln.x + g.measureText(last).width + 3, ly - f * 0.55, f * 0.55, f * 1.05); }
+      // the leader: a glow from the curve's point to the line as it is born; in the finale, every line keeps a thin one
+      // (phones: the curve sits above the lines, so only the birth glow, drawn to the line's label; no finale leaders crossing the text)
+      const born = T - (C.babble + i * C.slot), la = RM ? 0 : Math.max(back === 0 ? clamp(1 - (born - 0.6) / (L.port ? 0.6 : 1.2)) * clamp(born / 0.25) : 0, L.port ? 0 : stack * 0.45) * fade;
+      if (la > 0.01 && T >= C.curve) { const [px, py] = ptXY(ci, L, ci.ks[i]); g.globalAlpha = la; g.strokeStyle = CUR; g.lineWidth = back === 0 && stack < 0.5 ? 1.5 : 1;
+        g.shadowColor = CUR; g.shadowBlur = back === 0 ? 8 : 0; g.beginPath(); g.moveTo(px, py); if (L.port) g.lineTo(L.ln.x - 6, y - fz * 0.3); else g.lineTo(L.ln.x - 10, y - fz * 0.25); g.stroke(); g.shadowBlur = 0; } }
+    g.globalAlpha = 1; g.textBaseline = 'alphabetic'; }
   function drawWords(g, W, H, T, ct, P, S) {   // the first line ("in the beginning there was …"), until S
     const fz = P ? 18 : Math.round(clamp(W / 42, 20, 32)), cy = H * 0.5;
     if (T >= C.final && T < S) { const s = finalText(ct, T), done = T > finalDone(ct); g.font = `italic ${fz}px Georgia, serif`; g.textBaseline = 'middle'; g.textAlign = 'center';
@@ -149,12 +189,15 @@
   function frameAt(g, W, H, T, ct, st, P, RM) {
     const ex = extraOf(ct), S = C.split + ex, Tl = T >= S ? T - ex : Math.min(T, C.split - 1e-3);   // Tl: the film's clock after the first line
     g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
-    // epoch label, bottom-left
-    if (T < S) { g.font = `${P ? 10 : 12}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.globalAlpha = 1 - clamp((T - (S - 0.4)) / 0.4);
-      g.fillText(T < C.final ? `epoch ${epochAt(T)}` : 'epoch 12 · done', P ? 14 : 28, H - (P ? 16 : 26)); g.globalAlpha = 1; }
-    if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = P ? 15 : Math.round(clamp(W / 52, 16, 26)); g.fillStyle = CUR; g.fillRect(P ? 18 : W * 0.14, H * 0.52 - fz * .55, fz * .55, fz * 1.05); } }
-    else if (T < C.final) drawBabble(g, W, H, T, ct, P, RM, st);
-    drawCurve(g, W, H, T, P, S); drawWords(g, W, H, T, ct, P, S); if (T >= S) { drawSplit(g, W, H, Tl, P, RM, st); drawTurn(g, W, H, Tl, P); } }
+    const L = layout(W, H, P), ci = curveInfo();
+    // the stage's caption, bottom-left: where on the curve we are, in words
+    if (T < S) { const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1);
+      const cap = T < C.babble ? 'epoch 0 · nothing yet' : T < C.stack ? `${epochLabel(ci, ci.ks[i])} · ${SCHED[i].cap}` : T < C.final ? 'lower loss, better sentences' : 'done';
+      g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.globalAlpha = 1 - clamp((T - (S - 0.4)) / 0.4);
+      g.fillText(cap, P ? 14 : 28, H - (P ? 44 : 28)); g.globalAlpha = 1; }
+    if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = L.ln.fz; g.fillStyle = CUR; g.fillRect(L.ln.x, entryY(L, 0) + fz * 0.4, fz * .55, fz * 1.05); } }
+    else if (T < C.final) drawBabble(g, W, H, T, ct, P, RM, st, L, ci);
+    drawCurve(g, W, H, T, P, S, L, ci, RM); drawWords(g, W, H, T, ct, P, S); if (T >= S) { drawSplit(g, W, H, Tl, P, RM, st); drawTurn(g, W, H, Tl, P); } }
   const newState = (W, H, P) => { const r = rng(7); let gl = 0, glT = -1; return { cr: crawlers(W, H, P), glitch: T => { if (T - glT > 0.09) { glT = T; gl = r() < 0.18; } return gl; } }; };
 
   // ---------- sound (window.__audio; optional: the intro works silent) ----------
@@ -188,30 +231,39 @@
   // ---------- playing it ----------
   let cur = null;
   const css = () => { if (document.getElementById('idleE0css')) return; const s = document.createElement('style'); s.id = 'idleE0css';
-    s.textContent = `#idleIntro{position:fixed;inset:0;z-index:2147483000;background:#000;cursor:pointer;transition:opacity .6s}#idleIntro canvas{width:100%;height:100%;display:block}
+    s.textContent = `#idleIntro{position:fixed;inset:0;z-index:2147483000;background:#000;cursor:default;transition:opacity .6s;touch-action:none;user-select:none;-webkit-user-select:none}#idleIntro canvas{width:100%;height:100%;display:block}
+#idleIntro .hint{position:absolute;bottom:20px;right:88px;font:12px system-ui;color:#7f8a95;pointer-events:none;user-select:none}#idleIntro.paused .hint{color:#7ee3f5}
 #idleIntro .ib{position:absolute;bottom:14px;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
   function play(opts = {}) {
     if (cur) return cur.promise; css(); const P = phone(), RM = reduce(), safe = (window.__safeLevel | 0) > 0, liveOK = !P && !safe && !Q.has('intro_bank');
     const el = document.createElement('div'); el.id = 'idleIntro'; el.dataset.tone = 'epoch0'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)');
     const cv = document.createElement('canvas'); el.appendChild(cv); const g = cv.getContext('2d');
     const skipB = document.createElement('button'); skipB.className = 'ib skip'; skipB.textContent = 'skip ›'; el.appendChild(skipB);
+    const hint = document.createElement('span'); hint.className = 'hint'; hint.textContent = 'hold to read ·'; el.appendChild(hint);
     const sndB = document.createElement('button'); sndB.className = 'ib snd'; sndB.textContent = '🔊 sound'; el.appendChild(sndB); document.body.appendChild(el);
     let ct = null, st = null, done = false, raf = 0, S = null, start = performance.now(), res; const promise = new Promise(r => res = r);
-    let soundT = 0; const elapsed = () => (performance.now() - start) / 1000, total = () => RM ? rmTotal(ct) : totalOf(ct);
+    // hold to read: pointer/finger down (or Space) freezes the film's clock; release resumes. Only "skip ›" and Esc skip.
+    let soundT = 0, pausedAt = 0, pausedMs = 0; const now = () => pausedAt || performance.now();
+    const elapsed = () => (now() - start - pausedMs) / 1000, total = () => RM ? rmTotal(ct) : totalOf(ct);
+    const pause = () => { if (pausedAt || done) return; pausedAt = performance.now(); el.classList.add('paused'); hint.textContent = 'paused · release to go on ·'; if (S) { S.stop(0.15); S = null; } };
+    const resume = () => { if (!pausedAt || done) return; pausedMs += performance.now() - pausedAt; pausedAt = 0; el.classList.remove('paused'); hint.textContent = 'hold to read ·'; if (audioReady()) setTimeout(startSound, 60); };
     const size = () => { const dpr = Math.min(devicePixelRatio || 1, P ? 1.5 : 2); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0); st = newState(innerWidth, innerHeight, P); };
     size(); addEventListener('resize', size);
     const audioReady = () => { const A = window.__audio; try { return A && !A.muted() && A.ctx().state === 'running'; } catch (e) { return false; } };
     const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - elapsed()); S.ctx = ctx; S.hum(extraOf(ct)); soundT = elapsed(); syncSnd(); };
     const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) ? 'none' : ''; };
     sndB.addEventListener('click', e => { e.stopPropagation(); const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
-    const finish = skipped => { if (done) return; done = true; cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
+    const finish = skipped => { if (done) return; done = true; cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
       const out = { tone: 'epoch0', skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
       try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'end', ...out } })); } catch (e) {}
       if (opts.keep && !skipped) { cur = { promise, el, close: () => { el.classList.add('out'); setTimeout(() => el.remove(), 650); cur = null; } }; res(out); return; }
       el.classList.add('out'); setTimeout(() => { el.remove(); cur = null; res(out); }, skipped ? 350 : 650); };
-    const onKey = e => { if (e.key === 'Escape' || !e.metaKey) { e.preventDefault(); e.stopPropagation(); finish(true); } };
-    el.addEventListener('click', e => { if (e.target === sndB) return; finish(true); }); skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true);
-    cur = { promise, el, close: () => finish(true) };
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(true); } else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) pause(); } };
+    const onKeyUp = e => { if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); resume(); } };
+    el.addEventListener('pointerdown', e => { if (e.target === sndB || e.target === skipB) return; e.preventDefault(); pause(); });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
+    skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
+    cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt };
     Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent(); start = performance.now(); window.__epoch0.last = ct;
       if (liveOK) fillLive(ct, elapsed).catch(() => {}); if (audioReady()) startSound(); syncSnd();
       const loop = () => { if (done) return; const T = elapsed(); if (T >= total()) { frameAt(g, innerWidth, innerHeight, RM ? rmTime(total() - 0.01, ct) : totalOf(ct) - 0.01, ct, st, P, RM); return finish(false); }
@@ -228,7 +280,7 @@
   let recSt = null, recKey = null;
   function frame(ct, T, canvas) { const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, key = ct.seed + ':' + W + 'x' + H;
     if (key !== recKey || !recSt || T < recSt.lastT) { recSt = newState(W, H, false); recKey = key; } recSt.lastT = T; g.setTransform(1, 0, 0, 1, 0, 0); frameAt(g, W, H, T, ct, recSt, false, false); }
-  window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, makeContent, makeLiveContent, frame, renderAudio,
+  window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => totalOf(ct),
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont() };   // the bank tool samples through the same path
 })();
