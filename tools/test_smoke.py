@@ -820,9 +820,20 @@ def t_intro_epoch0(P):
     wait_for(pg, "() => document.getElementById('idleIntro') && document.getElementById('idleIntro').dataset.tone === 'epoch0'", 5); pg.wait_for_timeout(4500)
     lit = pg.evaluate("""() => { const c = document.querySelector('#idleIntro canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 53) if (d[i] + d[i + 1] + d[i + 2] > 120) n++; return n; }""")
     need(lit > 20, f"no babble drawn after 4.5 s ({lit} lit samples)")
-    t0 = time.time(); r = wait_for(pg, "() => window.__t_r", 40); dt = time.time() - t0 + 4.5
+    t0 = time.time(); r = wait_for(pg, "() => window.__t_r", 60); dt = time.time() - t0 + 4.5
     need(r.get("tone") == "epoch0" and r.get("skipped") is False, f"the intro ended with {r}")
-    P.clean("intro epoch0"); return f"default tone epoch0; blocklist ok; bank {chk['n']} lines clean; seeds differ; played to the end in {dt:.1f}s ({r.get('live')} live lines, ending: {r.get('cont')})"
+    # readable: every line stays fully on screen ≥ 2 s after it has streamed (Nico: "going a bit too fast for me to read")
+    clk = pg.evaluate("() => { const C = window.__epoch0.clock; return { hold: C.slot - C.stream - C.lead, lines: window.__epoch0.schedule.length }; }")
+    need(clk["hold"] >= 2.0, f"a line is fully readable for only {clk['hold']:.2f} s"); need(clk["lines"] == 6, f"{clk['lines']} lines, expected 6")
+    # hold to read: pointer down freezes the clock, release resumes; a click doesn't skip; Esc skips
+    pg.evaluate("() => { window.__t_r = null; window.__intro.play().then(r => window.__t_r = r); }")
+    wait_for(pg, "() => window.__epoch0.time() > 3", 15); vw = pg.viewport_size; pg.mouse.move(vw["width"] / 2, vw["height"] / 2); pg.mouse.down()
+    pg.wait_for_timeout(300); a1 = pg.evaluate("() => window.__epoch0.time()"); pg.wait_for_timeout(1500); a2 = pg.evaluate("() => window.__epoch0.time()")
+    paused = pg.evaluate("() => window.__epoch0.paused()"); pg.mouse.up(); pg.wait_for_timeout(1000); a3 = pg.evaluate("() => window.__epoch0.time()")
+    need(paused and abs(a2 - a1) < 0.05, f"holding didn't pause the film ({a1:.2f} → {a2:.2f}, paused={paused})"); need(a3 - a2 > 0.6, f"releasing didn't resume ({a2:.2f} → {a3:.2f})")
+    need(pg.evaluate("() => window.__epoch0.playing()") and not pg.evaluate("() => window.__t_r"), "a click (press and release) skipped the intro")
+    pg.keyboard.press("Escape"); r2 = wait_for(pg, "() => window.__t_r", 5); need(r2.get("skipped") is True, f"Esc didn't skip: {r2}")
+    P.clean("intro epoch0"); return f"default tone epoch0; blocklist ok; bank {chk['n']} lines clean; seeds differ; played to the end in {dt:.1f}s ({r.get('live')} live lines, ending: {r.get('cont')}); each line held {clk['hold']:.1f}s; hold pauses, click doesn't skip, Esc skips"
 
 
 def t_halloween_light(P):
