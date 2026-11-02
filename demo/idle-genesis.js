@@ -327,7 +327,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     if (mode === 'ready') { dropFlag(); return readyWorld(); }
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag();
     if (mode === 'free') cls('gen-calm', 0);
-    if (mode === 'story') { cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await wake(); return true; }
+    if (mode === 'story') { cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); return true; }
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
   // the chooser: the storyline, the void with no guide, or a world that is already alive (the starter world)
   function chooser() { return new Promise(res => { const el = document.createElement('div'); el.id = 'genChoose'; el.setAttribute('role', 'dialog');
@@ -341,6 +341,54 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // a ready world: the starter world (the guided first five minutes start with it); a browser that has played gets it restored directly
   async function readyWorld() { try { if (window.__first5 && await window.__first5.boot(true)) return true; } catch (e) { console.warn('genesis: ready', e); }
     try { const sw = await (await fetch('starter_world.json', { cache: 'no-store' })).json(); window.__design.restore(sw); return true; } catch (e) { console.warn('genesis: starter world', e); return false; } }
+
+  // ---------- the landing (Nico, story v2): after the cut, only the void for a few seconds (clicks answer faintly); then the Operator
+  // arrives: Id and le, the halves that crawled off at the end of the intro, come back from the edges, meet in the middle, crackle, and
+  // fold into the Operator's window. It comes ~6 s after landing, or after 3 clicks, whichever is first (?nolanding: straight to it).
+  let land = { phase: 'none', clicks: 0 };
+  const clamp01 = x => Math.max(0, Math.min(1, x)), ease = u => u * u * (3 - 2 * u);
+  async function landing() { if (Q.has('nolanding')) { land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
+    // the void starts when the game's loading cover has gone (skipping the intro right away can land before it)
+    for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
+    return new Promise(res => {
+    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'void', clicks: 0, t0: now() }; let went = false, timer = 0;
+    const onDown = e => { if (e.target && e.target.closest && e.target.closest('button,input,textarea,select,a,#lab,#idleIntro')) return; land.clicks++; ripple(e.clientX, e.clientY, RM); if (land.clicks >= 3) go(); };
+    const go = async () => { if (went) return; went = true; clearTimeout(timer); document.removeEventListener('pointerdown', onDown, true);
+      land.phase = 'arriving'; land.why = land.clicks >= 3 ? 'clicks' : 'time'; land.after = (now() - land.t0) / 1000;
+      try { await arrival(RM); } catch (e) { console.warn('genesis: arrival', e); } land.phase = 'done'; res(); };
+    document.addEventListener('pointerdown', onDown, true); timer = setTimeout(go, 6000); }); }
+  function ripple(x, y, RM) {   // a click in the void: a faint ring, and a faint note if the sound is on
+    const d = document.createElement('div'); d.className = 'genRipple'; d.style.cssText = `position:fixed;left:${x - 8}px;top:${y - 8}px;width:16px;height:16px;border-radius:50%;border:1px solid #7ee3f580;pointer-events:none;z-index:2147481980;transition:transform .9s ease-out,opacity .9s ease-out`;
+    document.body.appendChild(d); requestAnimationFrame(() => { d.style.transform = `scale(${RM ? 2 : 7})`; d.style.opacity = '0'; }); setTimeout(() => d.remove(), 1000);
+    const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const o = c.createOscillator(), v = c.createGain(), t = c.currentTime; o.type = 'sine'; o.frequency.setValueAtTime(520 + Math.random() * 120, t); o.frequency.exponentialRampToValueAtTime(330, t + 0.25);
+      v.gain.setValueAtTime(0.0001, t); v.gain.linearRampToValueAtTime(0.025, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0001, t + 0.3); o.connect(v); v.connect(A.out()); o.start(t); o.stop(t + 0.35); } catch (e) {} }
+  function crackle() { const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const t = c.currentTime, n = Math.floor(c.sampleRate * 0.5), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() < 0.06 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.08) * (1 - i / n);   // sparse pops over a hiss
+      const s = c.createBufferSource(), v = c.createGain(); s.buffer = b; v.gain.value = 0.35; s.connect(v); v.connect(A.out()); s.start(t);
+      const o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(90, t + 0.3); o.frequency.exponentialRampToValueAtTime(640, t + 0.75); g.gain.setValueAtTime(0.0001, t + 0.3); g.gain.linearRampToValueAtTime(0.06, t + 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.85); o.connect(g); g.connect(A.out()); o.start(t + 0.3); o.stop(t + 0.9); } catch (e) {} }
+  function arrival(RM) { return new Promise(res => {
+    const cv = document.createElement('canvas'); cv.id = 'genArrive'; cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:2147482001;pointer-events:none;transition:opacity .5s';
+    document.body.appendChild(cv); const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const K = window.__critDraw, big = W < 600 ? 64 : Math.max(72, Math.min(150, W / 9)), cy = H / 2, base = cy + big * .32, gap0 = big * .32;
+    const mk = (hue, foot, dir) => ({ g: { legs: 8, l1: big * .26, l2: big * .32, bodyL: big * .55, bodyW: big * .42, step: big * .2, hue, footHue: foot, fidget: .8, speed: 1 }, size: 1, x: 0, y: 0, vx: 0, vy: 0, heading: dir > 0 ? 0 : Math.PI, state: 'idle', nextFidget: 0, dir, legs: null });
+    const ca = mk(262, 330, 1), cb = mk(42, 200, -1); g.font = `${big}px Georgia, 'Times New Roman', serif`; const wId = g.measureText('Id').width, wle = g.measureText('le').width;
+    const WALK = RM ? 0 : 2.8, MEET = WALK + 0.4, CRACK = MEET + 0.45, FOLD = CRACK + 0.6, wr = Math.min(560, W * 0.92), hr = Math.min(340, H * 0.6), T0 = performance.now(); let cracked = false, done = false;
+    const frame = () => { const t = (performance.now() - T0) / 1000; g.clearRect(0, 0, W, H);
+      if (t < CRACK) { const u = WALK ? ease(clamp01(t / WALK)) : 1, gap = gap0 * (1 - clamp01((t - WALK) / 0.3));
+        const a0 = -wId * 0.6, b0 = W - wle * 0.4, xA = t < WALK ? a0 + (W / 2 - gap0 / 2 - wId - a0) * u : W / 2 - gap / 2 - wId, xB = t < WALK ? b0 + (W / 2 + gap0 / 2 - b0) * u : W / 2 + gap / 2;   // from the edges, at a pace the legs can keep up with
+        const k = clamp01((t - MEET) / (CRACK - MEET)), legA = RM ? 0 : 1 - clamp01((t - WALK) / 0.35);
+        g.save(); if (k > 0) { g.translate(W / 2, cy); g.scale(1 + k * 0.6, Math.max(0.03, 1 - k)); g.translate(-W / 2, -cy); }
+        if (K && K.legs && legA > 0.02) for (const [c, x, w] of [[ca, xA, wId], [cb, xB, wle]]) { c.x = x + w / 2; c.y = cy; c.vx = t < WALK ? c.dir * 0.9 : 0; c.vy = 0; c.size = 0.3 + 0.7 * legA; try { K.sizeUp(c); if (!c.legs) K.buildLegs(c); K.stepLegs(c, t * 1000); g.globalAlpha = legA; K.legs(g, c); } catch (e) {} }
+        g.globalAlpha = 1; g.fillStyle = '#e9e4d8'; g.font = `${big}px Georgia, 'Times New Roman', serif`; g.textBaseline = 'alphabetic'; const jit = k > 0 ? (Math.random() - 0.5) * 14 * k : 0;
+        g.fillText('Id', xA + jit, base); g.fillText('le', xB - jit, base);
+        if (t > WALK + 0.25) { g.fillStyle = '#e0367a'; g.shadowColor = '#e0367a'; g.shadowBlur = 16; g.globalAlpha = clamp01((t - WALK - 0.25) / 0.15); g.fillRect(W / 2 - big * .035, base - big * .85, big * .07, big * .98); }
+        g.restore(); if (!cracked && t >= MEET) { cracked = true; crackle(); } }
+      else { const k = ease(clamp01((t - CRACK) / (FOLD - CRACK))), w = (wId + wle) * 1.6 + (wr - (wId + wle) * 1.6) * k, h = 2 + (hr - 2) * k;   // the line opens into the window
+        g.save(); g.fillStyle = `rgba(11,15,24,${0.85 * k})`; g.fillRect(W / 2 - w / 2, cy - h / 2, w, h); g.strokeStyle = '#6b7cff'; g.lineWidth = 2; g.shadowColor = '#7ee3f5'; g.shadowBlur = 24 * (1 - k * 0.5); g.strokeRect(W / 2 - w / 2, cy - h / 2, w, h); g.restore();
+        if (t >= FOLD - 0.1 && !done) { done = true; res(); setTimeout(() => { cv.style.opacity = '0'; setTimeout(() => cv.remove(), 600); }, 150); }
+        if (t > FOLD + 0.2) return; }
+      requestAnimationFrame(frame); };
+    frame(); }); }
 
   // ---------- the storyline's waking up: the Operator as a window in the middle (a lightbox), the Tiny Operator's lines typed one by one
   async function wake() { const lab = $('#lab'); let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
@@ -428,6 +476,6 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // ?genesis on a browser that already has a world: a new universe (the world is kept as a snapshot first, its creatures rest)
   if (Q.has('genesis') || Q.has('story')) { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh && window.__restored && !window.__genesisVoid) { clearInterval(iv); newUniverse(); } else if (window.__genesisVoid || ++k > 120) clearInterval(iv); }, 500); }
 
-  window.__genesis = { ab: AB, wants, variant, boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { landing: () => ({ ...land }), ab: AB, wants, variant, boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
