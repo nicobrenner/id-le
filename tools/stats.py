@@ -14,6 +14,7 @@ API = "https://api.cloudflare.com/client/v4"
 NS_TITLE = "id-le-stats"
 STEPS = ["card", "name", "feed", "dream", "gazette", "weather", "reel", "keep"]
 DLSTEPS = ["what", "travel", "irc", "kinds", "team", "review", "stats", "where", "finished", "ended"]   # the data lab walkthrough (demo/idle-dlwalk.js)
+GSTEPS = ["light", "words", "creatures", "weather", "music", "hut"]   # the genesis steps (demo/idle-genesis.js); "guided" / "skipped" = how its guide ended
 DWELL = ["<1", "1-5", "5-20", "20+"]
 EG = {"cr": ["0-12", "13-30", "31-60", "61-150", "151+"], "born": ["0", "1-5", "6-20", "21+"], "charts": ["0", "1-5", "6-20", "21+"],
       "built": ["0", "1-5", "6-20", "21+"], "fed": ["0", "1-5", "6-20", "21+"], "reels": ["0", "1-5", "6-20", "21+"], "errs": ["0", "1", "2-5", "6+"]}   # engagement buckets (demo/idle-stats.js, helper/worker.js)
@@ -272,6 +273,10 @@ def main():
     feats = sorted(tot.get("feat", {}).items(), key=lambda kv: -kv[1])
     print("\nopened (visits that opened it): " + (", ".join(f"{k} {v}" for k, v in feats[:20]) or "-"))
     errs = sorted(tot.get("err", {}).items(), key=lambda kv: -kv[1])
+    gs, gss = {k: n for k, n in tot.get("gs", {}).items() if n and n > 0}, tot.get("gss", {})
+    if gs:
+        print("genesis: steps reached (average seconds since the step before): " + ", ".join(f"{k} {gs[k]} ({round(gss.get(k, 0) / gs[k])} s)" for k in GSTEPS if gs.get(k))
+              + f" · guide finished {gs.get('guided', 0)}, skipped {gs.get('skipped', 0)}")
     for k, title in (("ref", "came from"), ("utm", "campaign tags"), ("dw", "time on screen (minutes)"), ("fl", "guided start stopped at"), ("dl", "data lab walkthrough steps reached")):
         v = {x: n for x, n in tot.get(k, {}).items() if n and n > 0}
         if v:
@@ -419,6 +424,8 @@ def dashboard(days, since, traffic, note):
     funnel = [(s, (m.get(s) or {}).get("n", 0)) for s in STEPS]
     f5, fl, dw, ref, utm = nz(tot.get("f5")), nz(tot.get("fl")), nz(tot.get("dw")), nz(tot.get("ref")), nz(tot.get("utm"))
     dl = nz(tot.get("dl"))
+    gs, gss = nz(tot.get("gs")), tot.get("gss", {})
+    gen_rows = [(f"{k} · {round(gss.get(k, 0) / gs[k])} s avg" if gs.get(k) else k, gs.get(k, 0)) for k in GSTEPS]
     feats = sorted(((k, n) for k, n in nz(tot.get("feat")).items() if k not in TEST_FEATS), key=lambda kv: -kv[1])[:20]
     dev, safe, fps = nz(tot.get("dev")), nz(tot.get("safe")), nz(tot.get("fps"))
     if traffic:
@@ -515,6 +522,7 @@ ul{{padding-left:18px;margin:0}}code{{font-size:12px;word-break:break-word}}
 <section><h2>Guided start: who reached each moment (of {new_visits} new browsers)</h2>{bars(funnel, total=new_visits or None)}<p class="muted">finished {f5.get("finished", 0)} · skipped {f5.get("skipped", 0)}</p></section>
 {gv_html}<section><h2>Guided start: where page loads stopped</h2>{bars([(k, fl.get(k, 0)) for k in ["none"] + STEPS + ["finished", "skipped"]], total=sum(fl.values()) or None, empty=later)}</section>
 <section><h2>Came from</h2>{bars(sorted(ref.items(), key=lambda kv: -kv[1])[:15], total=sum(ref.values()) or None, empty=later)}{("<h2 style='margin-top:12px'>Campaign tags</h2>" + bars(sorted(utm.items(), key=lambda kv: -kv[1])[:10])) if utm else ""}</section>
+<section><h2>Genesis: browsers that reached each step (average seconds since the step before)</h2>{bars(gen_rows, total=(gs.get("light") or max(gs.values(), default=0)) or None, empty=later)}<p class="muted">guide finished {gs.get("guided", 0)} · skipped {gs.get("skipped", 0)}</p></section>
 <section><h2>Data lab walkthrough: browsers that reached each step</h2>{bars([(k, dl.get(k, 0)) for k in DLSTEPS], total=dl.get("what") or None, empty=later)}</section>
 <section><h2>Time on screen per page load (minutes)</h2>{bars([(k, dw.get(k, 0)) for k in DWELL], total=sum(dw.values()) or None, empty=later)}</section>
 <section><h2>Opened (visits that opened it)</h2>{bars(feats)}</section>

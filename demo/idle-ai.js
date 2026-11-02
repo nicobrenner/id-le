@@ -42,6 +42,8 @@
   const calls = [], spawns = [];
   const recent = (a, ms) => { const t = Date.now(); while (a.length && t - a[0] > ms) a.shift(); return a.length; };
 
+  // what was typed, for idle-stats.js to count (retries, caps, a mood label worked out in this page); the text itself stays in the page
+  const optext = (text, brain) => { try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text, brain } })); } catch (e) {} };
   let toolN = 0;   // tool calls so far (the stats only learn whether a turn used one)
   async function runTool(name, input) {
     toolN++;
@@ -253,6 +255,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   const creatureNamed = (span, text) => { const cs = ((window.__arena && window.__arena.raw()) || []).filter(c => c.name); const s0 = String(span || '').toLowerCase().trim();
     return (s0 && cs.find(c => c.name.toLowerCase() === s0)) || (s0 && cs.find(c => c.name.toLowerCase().startsWith(s0) || s0.startsWith(c.name.toLowerCase()))) || cs.find(c => String(text).toLowerCase().includes(c.name.toLowerCase())) || null; };
   async function tinyTurn(t) {
+    optext(t, 'tiny');
     const O = window.__oracle; if (!O || !O.ready) { add('page', 'the Tiny Oracle is still waking up; try again in a moment', 'err'); return; }
     const heads = await loadH3(); const r = await O.classify(t, heads); const p = r.probs[r.option] || 0, tip = `${r.option} · ${Math.round(p * 100)}%`;
     let seed = '', acted = null, lastRes = null;
@@ -297,10 +300,10 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
 
   async function sendAI() {
     const t = text.value.trim(); if (!t || busy) return;
-    try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text: t, brain: cfg.brain } })); } catch (e) {}   // stays in this page: never sent
     if (!ready()) { set.classList.add('on'); renderSet(); add('page', 'connect your AI first (⚙): ' + { anthropic: 'an API key and a model', openai: 'a base URL, a key and a model', local: 'a server URL and a model' }[cfg.brain], 'err'); return; }
     if (cfg.brain === 'tiny') { text.value = ''; add('you', t); busy = true; try { await tinyTurn(t); } catch (e) { add('page', String(e.message || e), 'err'); } finally { busy = false; } return; }
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_msg', extra: { brain: cfg.brain } } })); } catch (e) {}
+    optext(t, cfg.brain);
     text.value = ''; add('you', t); busy = true; const spin = document.createElement('div'); spin.className = 'ai-busy'; spin.textContent = 'thinking…'; thread.appendChild(spin);
     const mark = convo.length; convo.push({ role: 'user', content: worldLine() + '\n' + t });
     const tools0 = toolN; let turnErr = null;
@@ -311,5 +314,5 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   // take over the lab's send button and Cmd+Enter while an AI brain is chosen; the relay keeps the arena's own path
   sendBtn.addEventListener('click', e => { if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
   text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
-  window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: t => tinyTurn(t), heads: loadH3 };
+  window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: t => tinyTurn(t), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
 })();
