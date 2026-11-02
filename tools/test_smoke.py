@@ -1031,6 +1031,35 @@ def t_rclick(P):
     return f"menu offered {verbs}; sent '{v}'; the tour's right-click step ticked off"
 
 
+def t_clicks(P):
+    # every click on the world answers (idle-clicks.js): empty floor ripples, a word says what it is, a creature speaks, a thing wobbles
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    wait_for(pg, "() => window.__arena.raw().length >= 8 && !!window.__clickKit && !!window.__clicks", 30, P=P)
+    pg.evaluate("() => document.querySelectorAll('#ntf, .np').forEach(e => e.remove())")
+    floor = pg.evaluate("""() => { const k = window.__clickKit, a = document.getElementById('arena').getBoundingClientRect();
+      for (let i = 0; i < 600; i++) { const x = a.left + 80 + Math.random() * (a.width - 500), y = a.top + 140 + Math.random() * (a.height - 240);
+        if (k.critAt(x, y) || k.wordAt(x, y)) continue; const el = document.elementFromPoint(x, y); if (el && (el.id === 'arena' || el.id === 'floor' || el.tagName === 'CANVAS')) return { x, y }; } return null; }""")
+    need(floor, "no empty floor found to click")
+    pg.mouse.click(floor["x"], floor["y"]); pg.wait_for_timeout(120)
+    rip = pg.evaluate("() => document.querySelectorAll('.ck-ripple').length")
+    need(rip >= 1, "a click on empty floor left no ripple")
+    r = pg.evaluate("""() => { const k = window.__clickKit, a = document.getElementById('arena').getBoundingClientRect(), out = {};
+      for (let i = 0; i < 4000 && !out.word; i++) { const x = a.left + 60 + Math.random() * (a.width - 120), y = a.top + 100 + Math.random() * (a.height - 160); const w = k.wordAt(x, y), top = document.elementFromPoint(x, y); if (w && !k.critAt(x, y) && !(top && top.closest && top.closest('.thing, .design'))) { window.__clicks.answer(x, y); out.word = w.text; out.wtip = [...document.querySelectorAll('.ck-tip')].map(e => e.textContent).join(' | '); } }
+      const c = window.__arena.raw().find(c => { if (c._off || c.state === 'sleep' || !c.bub) return false; const s = k.screenOf(c.x, c.y); return s.x > a.left + 40 && s.x < a.right - 40 && s.y > a.top + 80 && s.y < a.bottom - 40; });
+      if (c) { c.bub.classList.remove('on'); c._ckT = 0; const s = k.screenOf(c.x, c.y); window.__clicks.answer(s.x, s.y); out.crit = c.name; out.said = c.bub.classList.contains('on') ? c.bub.textContent : null; }
+      for (const th of document.querySelectorAll('#arena .thing, #arena .design')) { const b = th.getBoundingClientRect(); if (b.width < 10 || b.left < a.left || b.right > a.right || b.top < a.top || b.bottom > a.bottom) continue;
+        let pt = null; for (let i = 0; i < 40 && !pt; i++) { const x = b.left + 4 + Math.random() * (b.width - 8), y = b.top + 4 + Math.random() * (b.height - 8); if (!k.critAt(x, y) && !k.wordAt(x, y) && th.contains(document.elementFromPoint(x, y))) pt = { x, y }; }
+        if (!pt) continue; window.__clicks.answer(pt.x, pt.y); out.wob = th.classList.contains('ck-wobble'); break; }
+      return out; }""")
+    need(r.get("word") and r["word"] in (r.get("wtip") or ""), f"a word click showed no label: {r}")
+    need(r.get("said"), f"a creature click got no line: {r}")
+    need(r.get("wob") is not False, f"a thing click didn't wobble: {r}")
+    hint = pg.evaluate("() => window.__clicks.hint()")
+    need(hint, "the first-visit hint ring did not show")
+    P.clean()
+    return f"floor ripple, word '{r['word']}' labelled, {r['crit']} said '{r['said']}', thing wobble {r.get('wob')}, hint ring ok"
+
+
 def t_replay(P):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     r = pg.evaluate("""async () => { const C = await (await fetch('pedia_clips.json')).json(), cl = C.clips.storm; const cv = document.createElement('canvas'); cv.width = 320; cv.height = 200;
@@ -1351,7 +1380,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["genesis", "genesis phone", "story", "story intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["clicks", "genesis", "genesis phone", "story", "story intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1390,6 +1419,7 @@ def main():
                 run("oracle", t_oracle)
                 run("quick commands", t_quick)
                 run("right-click", t_rclick)
+                run("clicks", t_clicks)
                 run("replay", t_replay)
                 run("operator", t_operator)
                 run("tiny genesis", t_tiny_genesis)
