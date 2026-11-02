@@ -966,6 +966,8 @@ def t_genesis(P):
     v0 = pg.evaluate(st)
     need(v0["c"] == 0 and v0["w"] == 0 and v0["v"], f"genesis should start empty and dark: {v0}")
     need(v0["ab"] == "off", f"the A/B switch must ship off: {v0['ab']}")
+    e0 = pg.evaluate("() => ({ pills: [...document.querySelectorAll('#ntf .np')].filter(e => e.offsetParent !== null).length, open: document.querySelector('#lab').classList.contains('open'), focus: (document.activeElement || {}).id, flag: /[?&]genesis\\b/.test(location.search) })")
+    need(e0["pills"] == 0 and e0["open"] and e0["focus"] == "lab-text" and not e0["flag"], f"the void must be empty with the Operator open and focused, and the flag dropped: {e0}")
     chip = "k => { const b = [...document.querySelectorAll('#genConsole [data-gen]')].find(b => b.dataset.gen.split(':')[0] === k); if (!b) return false; b.click(); return true; }"
     for k, ok in (("words", "() => window.__genHooks.words().length > 10"), ("creatures", "() => window.__arena.raw().filter(c => !c.lab).length >= 2"), ("light", "() => !document.documentElement.classList.contains('gen-void')")):
         need(pg.evaluate(chip, k), f"no '{k}' chip in the console")

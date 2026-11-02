@@ -39,7 +39,8 @@
   const css = document.createElement('style');
   css.textContent = `html.gen-void #arena,html.gen-void #floor{background-color:#05060b!important;transition:background-color 2.5s}
 html.gen-void #floor{background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px)!important;background-size:64px 64px!important}
-html.gen-void #daylight,html.gen-void #weather,html.gen-void #buildCv{opacity:0!important}
+html.gen-void #daylight,html.gen-void #weather,html.gen-void #buildCv,html.gen-void #lakeCv{opacity:0!important}
+html.gen-void :is(#ntf,#notice,#distoast,#whisper,#cline,#studio,#herd,#team,#conn,#advpanel,#dj,#reelpanel,#drawer,#trees,#almanac,#ntfpanel,#roomchat,#capPill,#hwChip,#soundHint){display:none!important}
 #genConsole{margin:8px 10px 4px;padding:10px 12px;border:1px solid #6b7cff66;border-radius:12px;background:linear-gradient(180deg,#0d1030,#0a0b16);color:#cfd6ff;font:12px ui-monospace,Menlo,monospace}
 #genConsole .gt{font-weight:700;letter-spacing:.06em;font-size:11px;opacity:.75;margin-bottom:6px}
 #genConsole .gl{font:14px/1.4 Georgia,serif;color:#fff;margin:2px 0 8px}#genConsole .gl b{color:#9fb0ff;font:600 11px ui-monospace,Menlo,monospace;margin-right:6px}
@@ -68,7 +69,7 @@ html.gen-void #daylight,html.gen-void #weather,html.gen-void #buildCv{opacity:0!
 
   // ---------- the intro (idle-intro.js) or a short fallback line
   async function intro() { if (Q.get('intro') === '0') return; const saveData = navigator.connection && navigator.connection.saveData;
-    if (window.__intro && window.__intro.play && !saveData) { try { await window.__intro.play({ tone: Q.get('intro') === 'epic' ? 'epic' : 'eerie' }); return; } catch (e) { console.warn('genesis: intro', e); } }
+    if (window.__intro && window.__intro.play && !saveData) { try { await window.__intro.play({ tone: Q.get('intro') || 'storm' }); return; } catch (e) { console.warn('genesis: intro', e); } }
     await new Promise(res => { const el = document.createElement('div'); el.id = 'genIntro'; el.textContent = 'in the beginning there was nothing'; document.body.appendChild(el);
       const end = () => { el.classList.add('out'); setTimeout(() => { el.remove(); res(); }, 1200); }; el.addEventListener('click', end, { once: true });
       setTimeout(end, matchMedia('(prefers-reduced-motion: reduce)').matches ? 1500 : 2600); }); }
@@ -76,7 +77,8 @@ html.gen-void #daylight,html.gen-void #weather,html.gen-void #buildCv{opacity:0!
   // ---------- the scientist's console: the Operator panel with the Tiny Operator's line and the next steps as chips
   function openConsole() { const lab = $('#lab'); if (!lab) return; if (!lab.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); }
     let c = $('#genConsole'); if (!c) { c = document.createElement('div'); c.id = 'genConsole'; const head = $('#lab-head'); if (head && head.nextSibling) lab.insertBefore(c, head.nextSibling); else lab.prepend(c); }
-    renderConsole(pick(LINES.start)); }
+    renderConsole(pick(LINES.start));
+    if (!matchMedia('(pointer: coarse)').matches) setTimeout(() => { const t = $('#lab-text'); if (t) t.focus(); }, 350); }
   function chipsFor() { const st = (S && S.steps) || {}, out = [];
     if (!st.words) out.push(['words', 'let there be words'], ['words:' + topic, 'grow it from Wikipedia: ' + topic]);
     else { if (!st.creatures) out.push(['creatures', 'bring the first creatures']); if (!st.light) out.push(['light', 'let there be light']);
@@ -147,14 +149,15 @@ html.gen-void #daylight,html.gen-void #weather,html.gen-void #buildCv{opacity:0!
     weather: async k => answer(await step('weather', () => _weather(k))), hut: async () => answer(await step('hut', _hut)), music: async () => answer(await step('music', _music)) };
 
   // ---------- boot (a first visit with ?genesis, or the genesis side of the A/B), and a new universe for anyone
-  async function boot() { if (!H()) return false; S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1 }; save(); toVoid(); await intro(); openConsole(); try { H().log('genesis', { step: 'start' }); } catch (e) {} return true; }
+  async function boot() { if (!H()) return false; S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1 }; save(); toVoid(); dropFlag(); await intro(); openConsole(); try { H().log('genesis', { step: 'start' }); } catch (e) {} return true; }
+  function dropFlag() { try { const u = new URL(location.href); if (!u.searchParams.has('genesis')) return; u.searchParams.delete('genesis'); u.searchParams.delete('intro'); history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash); } catch (e) {} }
   async function newUniverse() { const h = H(); if (!h) return false;
     if (window.__placeKind && window.__placeKind !== 'home' && window.__places) { try { await window.__places.go('home'); } catch (e) {} }
     h.snapshot('before a new universe ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));   // the old world is kept, always
     h.restAll();   // everyone but the two originals rests (names, memories and friends kept; wake them from the creatures sidebar)
     return boot(); }
-  // ?genesis on a browser that already has a world: offer a new universe instead of replacing anything
-  addEventListener('load', () => setTimeout(() => { if (Q.has('genesis') && window.__restored && !(S && S.on && !S.alive && window.__genesisVoid)) try { window.__notify && window.__notify({ kind: 'trail', icon: '🌌', html: 'start a new universe? your world is kept as a snapshot first', ttl: 0, actions: [{ label: '🌌 new universe', run: () => newUniverse() }, { label: 'not now', run: () => {} }] }); } catch (e) {} }, 6000));
+  // ?genesis on a browser that already has a world: a new universe (the world is kept as a snapshot first, its creatures rest)
+  if (Q.has('genesis')) { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh && window.__restored && !window.__genesisVoid) { clearInterval(iv); newUniverse(); } else if (window.__genesisVoid || ++k > 120) clearInterval(iv); }, 500); }
 
   window.__genesis = { ab: AB, wants, variant, boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)), steps: ORDER.slice(), void: () => !!window.__genesisVoid, topic: () => topic };
 })();
