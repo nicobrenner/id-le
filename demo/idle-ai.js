@@ -19,6 +19,7 @@
   const S = (props, req) => ({ type: 'object', properties: props, required: req || [] });
   const str = d => ({ type: 'string', description: d }), num = d => ({ type: 'number', description: d });
   const TOOLS = [
+    { name: 'genesis', description: 'Build the world step by step in a new universe (it starts empty): words (from text, a Wikipedia topic, or nothing for the default), the first creatures, light, weather, a hut, music. Each step happens once.', input_schema: S({ step: { type: 'string', enum: ['words', 'creatures', 'light', 'weather', 'hut', 'music'] }, arg: str('for words: a text, a topic (a Wikipedia article) or empty; for creatures: crawly or tok; for weather: a weather kind') }, ['step']) },
     { name: 'look', description: 'A compact view of the world: place, weather, counts, families, the creatures and words near a point (a creature name or the camera), designs and charts, live disasters, recent events.', input_schema: S({ near: str('a creature name; omit for where the player is looking'), radius: num('word radius in px, default 600') }) },
     { name: 'creature', description: "One creature's card as data: family, job, state, feelings, drives, diet, meals, genes, friends, the last diary lines.", input_schema: S({ name: str('creature name') }, ['name']) },
     { name: 'say_as', description: 'Make a creature say a short line (a speech bubble and a line in its mind). Keep it in character, under 140 characters.', input_schema: S({ name: str('creature name'), text: str('the line') }, ['name', 'text']) },
@@ -35,7 +36,7 @@
     { name: 'note', description: 'Pin a short note in IRC (the world chat) for the player.', input_schema: S({ text: str('the note') }, ['text']) },
   ];
   const CONFIRM = new Set(['take_apart', 'rest']);
-  const ICON = { look: '👀', creature: '🪪', say_as: '💬', weather: '☁', spawn: '✦', rename: '✎', evolve: '🧬', place_words: '🔤', disaster: '🌋', hangry: '😤', open_card: '🔎', take_apart: '✂', rest: '💤', note: '📌' };
+  const ICON = { genesis: '🌌', look: '👀', creature: '🪪', say_as: '💬', weather: '☁', spawn: '✦', rename: '✎', evolve: '🧬', place_words: '🔤', disaster: '🌋', hangry: '😤', open_card: '🔎', take_apart: '✂', rest: '💤', note: '📌' };
 
   // ---------- limits: tool calls per minute, spawns per hour ----------
   const calls = [], spawns = [];
@@ -47,6 +48,9 @@
     calls.push(Date.now()); input = input || {};
     const no = what => ({ error: `${what}: no creature called "${input.name || ''}"` });
     switch (name) {
+      case 'genesis': { const G = window.__genesis; if (!G) return { error: 'no genesis here' }; const A = G.actions, k = input.step, a = input.arg;
+        const f = { words: () => A.letThereBeWords(a), creatures: () => A.firstCreatures(a), light: () => A.light(), weather: () => A.weather(a), hut: () => A.hut(), music: () => A.music() }[k]; if (!f) return { error: 'unknown step' };
+        const r = await f(); return r && r.ok ? { ...r, state: G.state() } : (r || { error: 'that step did not work' }); }
       case 'look': return w.summary({ near: input.near, radius: input.radius });
       case 'creature': return w.card(input.name) || no('creature');
       case 'say_as': return w.sayAs(input.name, input.text) ? { ok: true } : no('say_as');
@@ -65,7 +69,7 @@
     return { error: 'unknown tool ' + name };
   }
   const chipText = (name, input) => {
-    const i = input || {}, a = { look: () => 'looks around' + (i.near ? ' near ' + i.near : ''), creature: () => 'reads ' + i.name + "'s card", say_as: () => i.name + ': “' + i.text + '”', weather: () => 'weather → ' + i.kind + (i.strength ? ' ' + i.strength : ''),
+    const i = input || {}, a = { genesis: () => 'genesis: ' + i.step + (i.arg ? ' (' + i.arg + ')' : ''), look: () => 'looks around' + (i.near ? ' near ' + i.near : ''), creature: () => 'reads ' + i.name + "'s card", say_as: () => i.name + ': “' + i.text + '”', weather: () => 'weather → ' + i.kind + (i.strength ? ' ' + i.strength : ''),
       spawn: () => 'releases a ' + i.kind, rename: () => i.name + ' → ' + i.new_name, evolve: () => 'evolves ' + i.name + (i.how === 'big' ? ' (big)' : ''), place_words: () => 'drops ' + (i.words || []).join(', '), disaster: () => i.type + (i.near ? ' near ' + i.near : ''),
       hangry: () => (i.name === 'all' ? 'feeding frenzy' : i.name + ' goes hangry'), open_card: () => 'opens ' + i.name + "'s card", take_apart: () => 'take apart the design ' + (i.near ? 'near ' + i.near : 'nearby'), rest: () => 'put ' + i.name + ' to rest', note: () => 'note: ' + i.text }[name];
     return (ICON[name] || '⚙') + ' ' + (a ? a() : name);

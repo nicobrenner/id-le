@@ -74,6 +74,23 @@ def call(path, tok, raw=False, body=None):
     return body if raw else json.loads(body)
 
 
+def gv_split(gv):
+    """The genesis A/B block (helper/worker.js 'gv'): {'genesis|visit': n, 'genesis|dw:<1': n, 'starter|feat:card': n, ...} → per variant."""
+    out = {}
+    for k, n in (gv or {}).items():
+        if not n or "|" not in k:
+            continue
+        v, rest = k.split("|", 1)
+        o = out.setdefault(v, {"visits": 0, "dw": {}, "feat": {}})
+        if rest == "visit":
+            o["visits"] += n
+        elif rest.startswith("dw:"):
+            o["dw"][rest[3:]] = o["dw"].get(rest[3:], 0) + n
+        elif rest.startswith("feat:"):
+            o["feat"][rest[5:]] = o["feat"].get(rest[5:], 0) + n
+    return out
+
+
 def add(a, b):
     for k, v in b.items():
         if isinstance(v, dict):
@@ -224,6 +241,13 @@ def main():
         if v:
             items = [(x, v.get(x, 0)) for x in DWELL] if k == "dw" else sorted(v.items(), key=lambda kv: -kv[1])
             print(f"\n{title}: " + ", ".join(f"{x} {n}" for x, n in items))
+    gvs = gv_split(tot.get("gv"))
+    if gvs:
+        print("\ngenesis A/B (idle-genesis.js, only while the switch is on):")
+        for v, o in sorted(gvs.items()):
+            dw = ", ".join(f"{x} {o['dw'].get(x, 0)}" for x in DWELL if o["dw"].get(x, 0) > 0) or "-"
+            ft = ", ".join(f"{k} {n}" for k, n in sorted(o["feat"].items(), key=lambda kv: -kv[1])[:8]) or "-"
+            print(f"  {v:<8} {o['visits']:>4} visits · time on screen: {dw} · opened: {ft}")
     if any(days[d].get("secs") for d in days):
         print("\nminutes on screen (game): " + ", ".join(f"{d} {days[d].get('secs', 0) / 60:.0f} min total, {days[d].get('secs', 0) / 60 / max(1, days[d].get('visits', 0)):.1f} per visit" for d in sorted(days) if days[d].get("secs")))
     eg = tot.get("eg", {})
@@ -320,6 +344,10 @@ def dashboard(days, since, traffic, note):
                        f'<span class="val">{n}{pct}</span></div>')
         return "".join(out)
 
+    _gv = gv_split(tot.get("gv"))
+    gv_html = ("<section><h2>Genesis A/B: time on screen by variant</h2>" + "".join(
+        f'<p class="muted">{e(v)}: {o["visits"]} visits</p>' + bars([(x, o["dw"].get(x, 0)) for x in DWELL], total=sum(o["dw"].values()) or None)
+        for v, o in sorted(_gv.items())) + "</section>") if _gv else ""
     # visits per day: new and returning stacked (two series: legend, hover titles, table view)
     W, H, pad = 640, 180, 28
     mx = max([days[d].get("visits", 0) for d in order] + [1])
@@ -439,7 +467,7 @@ ul{{padding-left:18px;margin:0}}code{{font-size:12px;word-break:break-word}}
 <section class="wide"><h2>Visits per day</h2><div class="legend"><span><i class="sw" style="background:var(--s1)"></i>new</span><span><i class="sw" style="background:var(--s2)"></i>returning</span></div>{visits_svg}
 <details><summary>table</summary><table><thead><tr><th>day</th><th>visits</th><th>new</th><th>returning</th><th>phone</th><th>iOS</th></tr></thead><tbody>{vrows}</tbody></table></details></section>
 <section><h2>Guided start: who reached each moment (of {new_visits} new browsers)</h2>{bars(funnel, total=new_visits or None)}<p class="muted">finished {f5.get("finished", 0)} · skipped {f5.get("skipped", 0)}</p></section>
-<section><h2>Guided start: where page loads stopped</h2>{bars([(k, fl.get(k, 0)) for k in ["none"] + STEPS + ["finished", "skipped"]], total=sum(fl.values()) or None, empty=later)}</section>
+{gv_html}<section><h2>Guided start: where page loads stopped</h2>{bars([(k, fl.get(k, 0)) for k in ["none"] + STEPS + ["finished", "skipped"]], total=sum(fl.values()) or None, empty=later)}</section>
 <section><h2>Came from</h2>{bars(sorted(ref.items(), key=lambda kv: -kv[1])[:15], total=sum(ref.values()) or None, empty=later)}{("<h2 style='margin-top:12px'>Campaign tags</h2>" + bars(sorted(utm.items(), key=lambda kv: -kv[1])[:10])) if utm else ""}</section>
 <section><h2>Data lab walkthrough: browsers that reached each step</h2>{bars([(k, dl.get(k, 0)) for k in DLSTEPS], total=dl.get("what") or None, empty=later)}</section>
 <section><h2>Time on screen per page load (minutes)</h2>{bars([(k, dw.get(k, 0)) for k in DWELL], total=sum(dw.values()) or None, empty=later)}</section>

@@ -124,7 +124,7 @@
     for (let q = 0; q < 3; q++) { const p = openSpot(S, 90, 80); if (!p) continue; qs.push(p); const n = 6 + Math.floor(Math.random() * 3); for (let i = 0; i < n; i++) { const a = i / n * 6.28 + Math.random() * 0.5, rr = 16 + Math.random() * 46; const k = pick(K.small); mkObj(S, k, p.x + Math.cos(a) * rr * 1.3, p.y + Math.sin(a) * rr, k === 'brick' ? { word: pick(['bit', 'byte', 'node', 'loop', 'stack', 'cache', 'heap', 'null']) } : null); } }
     for (let i = 0; i < 5; i++) { const p = openSpot(S, 70, 50); if (p) mkObj(S, pick(K.big), p.x, p.y); }
     S.seeded = now(); S.quarries = qs; save(); try { window.__almanac && window.__almanac.ev('build', 'crates, bricks and boulders turned up: something to build with', {}); } catch (e) {} return qs; }
-  function maybeStart() { const S = cur(); if (!S || !H().restoredOrFresh() || !H().words().length) return; if (!S.seeded) seed(S);
+  function maybeStart() { const S = cur(); if (!S || !H().restoredOrFresh() || !H().words().length || window.__genesisVoid) return; if (!S.seeded) seed(S);
     if (!S.arch && !H().creatures().some(c => !c.lab && H().jobOf(c) === 'architect')) { S.arch = now(); save(); try { const c = H().spawn('architect'); const q = (S.quarries || [])[0]; if (c && q) { c.x = c.tx = q.x + 70; c.y = c.ty = q.y + 40; c.home = { x: q.x + 70, y: q.y + 40 }; } } catch (e) {} } }
   setTimeout(() => { maybeStart(); setInterval(maybeStart, 5000); }, 6000);
 
