@@ -495,6 +495,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     // the word under the pointer becomes an element again, so hovering, dragging and clicking it work exactly as before
     function wordAt(cx, cy) { const p = toWorld(cx, cy); for (let i = words.length - 1; i >= 0; i--) { const w = words[i]; if (w.carriedBy || !w._W) continue; const dx = near(w.x, p.x, SPACE.W) - p.x, dy = near(w.y, p.y, SPACE.H) - p.y; if (dx > 160 || dx < -160 || dy > 40 || dy < -40) continue;
         const r = -(w.rot || 0) * Math.PI / 180, lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r); if (Math.abs(lx) <= w._W / 2 + 1 && Math.abs(ly) <= w._H / 2 + 1) return w; } return null; }
+    window.__wordAt = wordAt;   // idle-clicks.js: which drawn word is under a click
     const floorish = t => t === arenaEl || t === floor || (t && t.classList && t.classList.contains('word'));
     function setHover(w) { if (w === hoverW) return; const o = hoverW; hoverW = w; if (w) vis(w, true); if (o && !needsDom(o, performance.now())) vis(o, false); }
     let hq = null;
@@ -646,6 +647,10 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
         c._boff = 0; const bx = (c.x + ox).toFixed(1), by = (c.y + oy - c.g.bodyW - 18).toFixed(1); if (bx !== c._bx) { c._bx = bx; c.bub.style.left = bx + 'px'; } if (by !== c._by) { c._by = by; c.bub.style.top = by + 'px'; } }
       else if (c.bub.isConnected) { if (!c._boff) c._boff = t; if (!onScreen || t - c._boff > 300) { c.bub.remove(); c._boff = 0; } } }   // kept 300 ms after it ends, for the fade out
     return { frame, at, hover: () => hover }; })();
+  // idle-clicks.js answers every click on the world: it needs the same hit tests and projections the arena uses
+  window.__clickKit = { critAt: (x, y) => HitC.at(x, y), wordAt: (x, y) => window.__wordAt ? window.__wordAt(x, y) : null, toWorld,
+    screenOf: (x, y) => { const { w, h, r } = viewSize(); return { x: r.left + w / 2 + (x - cam.x) * cam.z, y: r.top + h / 2 + (y - cam.y) * cam.z }; },
+    eats: (c, w) => { try { return edibleOn(c, w); } catch (e) { return false; } }, diet: c => { try { return DIETS[dietOf(c)].what; } catch (e) { return ''; } } };
   window.__hitc = HitC;
   function animate(t) {
     const away = window.__traveling; let svg = (away ? '' : featuresSVG(t) + portalsSVG(t)) + DataLab.svg(t) + specialsSVG(); if (!away) featureEffects(t);   // world features and portals belong to home
@@ -3843,4 +3848,4 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   })();
 })();
 </script>
-<script src="idle-ai.js"></script><script src="idle-jeffy.js"></script><script src="idle-dlwalk.js"></script><script src="idle-music.js"></script><script src="idle-rave.js"></script><script src="idle-advisor.js"></script><script src="idle-almanac.js"></script><script src="idle-lake.js"></script><script src="idle-build.js"></script><script src="idle-collect.js"></script><script src="idle-trees.js"></script><script src="idle-babies.js"></script><script src="idle-looks.js"></script><script src="idle-halloween.js"></script><script src="idle-treat.js"></script><script src="idle-mobile.js"></script><script src="idle-genesis.js"></script><script src="idle-first5.js"></script><script src="idle-settings.js"></script><script src="idle-ref.js"></script><script src="idle-stats.js"></script></body></html>
+<script src="idle-ai.js"></script><script src="idle-jeffy.js"></script><script src="idle-dlwalk.js"></script><script src="idle-music.js"></script><script src="idle-rave.js"></script><script src="idle-advisor.js"></script><script src="idle-almanac.js"></script><script src="idle-lake.js"></script><script src="idle-build.js"></script><script src="idle-collect.js"></script><script src="idle-trees.js"></script><script src="idle-babies.js"></script><script src="idle-looks.js"></script><script src="idle-clicks.js"></script><script src="idle-halloween.js"></script><script src="idle-treat.js"></script><script src="idle-mobile.js"></script><script src="idle-genesis.js"></script><script src="idle-first5.js"></script><script src="idle-settings.js"></script><script src="idle-ref.js"></script><script src="idle-stats.js"></script></body></html>
