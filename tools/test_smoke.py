@@ -126,6 +126,19 @@ out.rate_61st = last;
   finally { globalThis.fetch = real; } }
 { const xs = [...env.STATS.m.values()].map(v => JSON.parse(v).x).filter(Boolean); const sum = k => xs.reduce((a, x) => { for (const [n, v] of Object.entries(x[k] || {})) a[n] = (a[n] || 0) + v; return a; }, {});
   out.x = Object.fromEntries(['did', 'ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'path', 'op'].map(k => [k, sum(k)])); }
+// Tell the Oracle (11-01): a private queue, emails/links/numbers blanked, 5 a day per visitor; roadmap votes once per item per day per visitor
+{ const r1 = await (await post('/lab/oracle', { kind: 'idea', text: 'mail me at jo@ex.com or +1 (555) 123-4567, see https://x.io/a and evil.com', ctx: { page: '/', place: 'home', build: 'ab12cd', device: 'phone', err: 'x is null', secret: 'world words' } }, '5.5.5.5')).json();
+  const fbk = [...env.STATS.m.keys()].filter(k => k.startsWith('fb:')); const rec = JSON.parse(env.STATS.m.get(fbk[0]));
+  out.fb = { ok: r1.ok, n: fbk.length, text: rec.text, ctx: rec.ctx, status: rec.status };
+  out.fb_badkind = (await post('/lab/oracle', { kind: 'spam', text: 'hello' }, '5.5.5.5')).status;
+  let last = 0; for (let i = 0; i < 5; i++) last = (await post('/lab/oracle', { kind: 'bug', text: 'again ' + i }, '5.5.5.5')).status; out.fb_6th = last;
+  out.fb_other_ip = (await post('/lab/oracle', { kind: 'loved', text: 'lovely' }, '6.6.6.6')).status;
+  out.fb_get = (await go('/lab/oracle')).status;
+  env.STATS.m.set('roadmap:public', JSON.stringify({ items: [{ id: 'mods', title: 'Mods' }, { id: 'bodies', title: 'New bodies' }] }));
+  const v1 = await (await post('/lab/vote', { id: 'mods' }, '7.7.7.7')).json(), v2 = await (await post('/lab/vote', { id: 'mods' }, '7.7.7.7')).json();
+  const v3 = await (await post('/lab/vote', { id: 'mods' }, '8.8.8.8')).json(); out.vote_unknown = (await post('/lab/vote', { id: 'nope' }, '7.7.7.7')).status;
+  const road = await (await go('/lab/roadmap')).json(); out.votes = { v1: v1.votes, v2: v2.already === true, v3: v3.votes, road_items: road.items.length, road_votes: road.votes.mods };
+  out.fb_ip_stored = [...env.STATS.m.entries()].some(([k, v]) => (k + v).includes('5.5.5.5') || (k + v).includes('7.7.7.7')); }
 console.log(JSON.stringify(out));
 """
 
@@ -194,6 +207,14 @@ def worker_unit():
     need(o["world_poll_writes"] == 0, f"5 polls of an unregistered world wrote {o['world_poll_writes']} times to KV (expected 0: polls never create worlds; KV writes are scarce)")
     need("me" in o["world_state"], "world state has no 'me'")
     need(o["rate_61st"] == 429, f"61st request in a minute: {o['rate_61st']}")
+    fb = o["fb"]
+    need(fb["ok"] and fb["status"] == "new" and fb["n"] == 1, f"Tell the Oracle: {fb}")
+    need(not any(x in fb["text"] for x in ("@", "555", "x.io", "evil.com")) and "[email]" in fb["text"] and "[link]" in fb["text"] and "[number]" in fb["text"], f"emails/links/numbers not blanked: {fb['text']!r}")
+    need(set(fb["ctx"]) <= {"page", "place", "build", "device", "err"} and fb["ctx"].get("device") == "phone", f"context outside the allowlist: {fb['ctx']}")
+    need(o["fb_badkind"] == 400 and o["fb_6th"] == 429 and o["fb_other_ip"] == 200 and o["fb_get"] == 405, f"kind {o['fb_badkind']}, 6th of a day {o['fb_6th']}, another visitor {o['fb_other_ip']}, GET {o['fb_get']}")
+    v = o["votes"]
+    need(v == {"v1": 1, "v2": True, "v3": 2, "road_items": 2, "road_votes": 2} and o["vote_unknown"] == 404, f"votes: {v}, unknown item {o['vote_unknown']}")
+    need(o["fb_ip_stored"] is False, "an address was stored with feedback or a vote")
     cr = o["credits"]; c = cr["credits"] or []
     need(len(cr["images"]) == 3 and len(c) == 3, f"credits must run parallel to images: {cr}")
     need(c[0] and c[0]["author"] == "Jo Doe" and c[0]["license"] == "CC BY-SA 4.0" and c[0]["page"].startswith("https://commons.wikimedia.org/wiki/File:Barn_owl"), f"Commons credit: {c[0]}")
@@ -354,6 +375,7 @@ class Page:
         self.ctx, self.base, self.errors, self.console, self.outside = ctx, base, [], [], []
         self.warns, self.notes, self.before_reload = [], [], []
         self.stats = stats_sink if stats_sink is not None else []
+        self.fb = []
         ctx.route("**/*", self._route)
 
     def _route(self, route):
@@ -367,6 +389,9 @@ class Page:
             if path.startswith("/worlds/state"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"me": {"name": "", "links": [], "requests": [], "inbox": []}, "peers": {}}))
             if path == "/lab/fetch": return route.fulfill(status=200, content_type="application/json", body=json.dumps(WIKI_PAGE))
             if path == "/lab/img": return route.fulfill(status=200, content_type="image/png", body=base64.b64decode(PNG))
+            if path == "/lab/oracle": self.fb.append(("oracle", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"id":"t1"}')
+            if path == "/lab/vote": self.fb.append(("vote", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"votes":4}')
+            if path == "/lab/roadmap": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"items": [{"id": "mods", "title": "Mods", "line": "share rules and looks", "status": "planned"}, {"id": "bodies", "title": "New bodies", "line": "", "status": "later"}], "votes": {"mods": 3}, "url": "https://github.com/nicobrenner/id-le/issues/20"}))
             if path.startswith("/lab/") or path.startswith("/worlds/"): return route.fulfill(status=200, content_type="application/json", body='{"ok":false,"error":"test stub"}')
             return route.continue_()
         if u.startswith("data:") or u.startswith("blob:"): return route.continue_()
@@ -927,6 +952,39 @@ def t_irc_inbox(P):
     return f"queued then landed in bin '{m.get('bin')}' after {len(m['trail'])} stage(s); IRC: “{line[:90]}…”; listen toggle ok"
 
 
+def t_oracle(P):
+    """Tell the Oracle: the form sends a kind, scrubbed text and only the ticked context; the roadmap lists items and votes once; IRC opens the form"""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => { window.__idle.cfg.helper = location.origin; if (window.__first5 && window.__first5.skip) window.__first5.skip(); }")   # the test build has no helper: point it at the stubs
+    need(pg.evaluate("() => !!document.getElementById('oracleBtn')"), "no 🔮 button in the top bar")
+    pg.evaluate("() => document.getElementById('oracleBtn').click()"); pg.wait_for_timeout(300)
+    need(pg.evaluate("() => document.getElementById('oracle').classList.contains('on')"), "the Oracle panel did not open")
+    pg.evaluate("() => document.querySelector('#oracle [data-kind=bug]').click()")
+    pg.fill("#oracle textarea", "the rain is too loud, write me at me@example.com")
+    pg.evaluate("() => { const c = document.querySelector('#oracle [data-ctx=place]'); if (c) { c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); } }")
+    pg.evaluate("() => document.querySelector('#oracle [data-a=send]').click()")
+    wait_for(pg, "() => /🔮/.test((document.querySelector('#oracle .msg') || {}).textContent || '')", 10, P=P)
+    sent = [json.loads(b) for k, b in P.fb if k == "oracle"]
+    need(len(sent) == 1, f"{len(sent)} submissions sent")
+    q = sent[0]
+    need(q["kind"] == "bug" and "me@example.com" not in q["text"] and "[email]" in q["text"], f"submission: {q}")
+    need(set(q.get("ctx") or {}) <= {"page", "build", "device", "err"} and "place" not in q.get("ctx", {}), f"an unticked context field was sent: {q.get('ctx')}")
+    pg.evaluate("() => document.querySelector('#oracle [data-tab=road]').click()")
+    wait_for(pg, "() => document.querySelectorAll('#oracle .it').length === 2", 10, P=P)
+    need("▲ 3" in pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').textContent"), "vote count not shown")
+    pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').click()"); pg.wait_for_timeout(500)
+    pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').click()"); pg.wait_for_timeout(300)
+    votes = [k for k, _ in P.fb if k == "vote"]
+    need(len(votes) == 1 and "▲ 4" in pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').textContent"), f"votes sent {len(votes)} (one expected), shown {pg.evaluate('() => document.querySelector(\'#oracle [data-vote=mods]\').textContent')}")
+    pg.evaluate("() => window.__feedback.close()")
+    pg.evaluate("() => { document.getElementById('chat').value = 'tell the Oracle the bats are too small'; document.getElementById('send').click(); }"); pg.wait_for_timeout(300)
+    st = pg.evaluate("() => window.__feedback.state()")
+    need(st["open"] and st["tab"] == "tell" and st["draft"] == "the bats are too small", f"IRC 'tell the Oracle …' did not open the form: {st}")
+    need(len([k for k, _ in P.fb if k == "oracle"]) == 1, "the IRC line was sent without pressing send")
+    P.clean()
+    return f"sent {q['kind']} with ctx {sorted(q.get('ctx') or {})}, email blanked; 2 roadmap items, one vote; IRC opens the form"
+
+
 def t_quick(P):
     # ⚡ quick commands: slots show the real target and can be changed, × hides (⋯ restores), ✎ edits, hover lights up the target
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
@@ -1260,7 +1318,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["clicks", "genesis", "genesis phone", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["clicks", "genesis", "genesis phone", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1296,6 +1354,7 @@ def main():
                 run("mood migrate", t_mood_migrate)
                 run("lab card", t_lab_card)
                 run("irc inbox", t_irc_inbox)
+                run("oracle", t_oracle)
                 run("quick commands", t_quick)
                 run("right-click", t_rclick)
                 run("clicks", t_clicks)

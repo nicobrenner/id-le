@@ -372,6 +372,66 @@ async function jeffy(req, path, ip, ctx) {
   const r = await jeffyPredict(String(q.task).slice(0, 80), q.text); return json(r, r.error ? 503 : 200);
 }
 
+// ---------- Tell the Oracle and the roadmap (11-01) ----------
+// What a player tells the Oracle goes to a private review queue (fb:<time>:<rand> in STATS, kept 180 days): read by the maker with
+// tools/feedback.py, never published by itself and never sent to GitHub. Emails, links and phone numbers are blanked here too, not only
+// in the page. The public roadmap (roadmap:public) is written by the maker with the same tool; anyone may vote, once per item per day
+// per visitor (an address hash with the daily salt, as for page views: kept two days, nothing that identifies a person).
+const FB_KINDS = ['idea', 'bug', 'loved', 'off'], FB_DAY_MAX = 5, VOTE_DAY_MAX = 40, FB_TTL = 180 * 86400;
+const fbMem = { road: null, roadT: 0, votes: null, n: new Map(), kv: new Map() };
+const fbKV = env => env.STATS || { get: async k => fbMem.kv.get(k) ?? null, put: async (k, v) => { fbMem.kv.set(k, v); }, delete: async k => { fbMem.kv.delete(k); } };
+function scrub(t, max) {
+  return String(t || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[email]')
+    .replace(/\b(?:https?:\/\/|www\.)\S+/gi, '[link]').replace(/\b[a-z0-9-]+\.(?:com|net|org|io|dev|app|me|co|info)(?:\/\S*)?/gi, '[link]')
+    .replace(/\+?\d[\d\s().-]{6,}\d/g, '[number]').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+const fbCtx = c => { c = c && typeof c === 'object' ? c : {}; const o = {};
+  if (typeof c.page === 'string' && /^\/[a-z0-9/._-]{0,39}$/i.test(c.page)) o.page = c.page;
+  if (typeof c.place === 'string' && /^[a-z]{1,12}$/.test(c.place)) o.place = c.place;
+  if (typeof c.build === 'string' && /^[a-f0-9]{4,12}$/.test(c.build)) o.build = c.build;
+  if (['phone', 'tablet', 'desktop'].includes(c.device)) o.device = c.device;
+  if (typeof c.err === 'string' && c.err) o.err = scrub(c.err, 160);
+  return o; };
+async function fbHash(env, ip, what) { const day = new Date().toISOString().slice(0, 10);
+  const b = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode((await saltFor(day, env)) + '|' + what + '|' + ip)));
+  return [day, Array.from(b.slice(0, 8), x => x.toString(16).padStart(2, '0')).join('')]; }
+async function roadmap(env) {   // the public list and its vote counts, kept a minute in this isolate (reads are cheap, but not free)
+  if (fbMem.road && Date.now() - fbMem.roadT < 60e3) return fbMem.road;
+  const kv = fbKV(env); let items = [], votes = {};
+  try { const r = JSON.parse(await kv.get('roadmap:public') || 'null'); if (r && Array.isArray(r.items)) items = r.items; } catch (e) {}
+  try { votes = JSON.parse(await kv.get('roadmap:votes') || '{}') || {}; } catch (e) {}
+  fbMem.road = { items, votes, url: 'https://github.com/nicobrenner/id-le/issues/20' }; fbMem.roadT = Date.now(); return fbMem.road; }
+async function feedback(req, env, path, ip) {
+  const kv = fbKV(env);
+  if (path === '/lab/roadmap') return json(await roadmap(env));
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+  const txt = await req.text(); if (txt.length > 4000) return json({ error: 'too big' }, 413);
+  let q; try { q = JSON.parse(txt); } catch (e) { return json({ error: 'not JSON' }, 400); }
+  if (path === '/lab/oracle') {
+    const kind = FB_KINDS.includes(q.kind) ? q.kind : null, text = scrub(q.text, 600);
+    if (!kind || text.length < 2) return json({ error: 'a kind and a few words, please' }, 400);
+    const [day, h] = await fbHash(env, ip, 'fb'), rk = 'fbrl:' + day + ':' + h;
+    const seen = Math.max(fbMem.n.get(rk) || 0, +(await kv.get(rk)) || 0); if (seen >= FB_DAY_MAX) return json({ error: 'the Oracle has heard a lot from you today: come back tomorrow' }, 429);
+    fbMem.n.set(rk, seen + 1); await kv.put(rk, String(seen + 1), { expirationTtl: 2 * 86400 });
+    const id = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + '-' + crypto.randomUUID().slice(0, 6);
+    await kv.put('fb:' + id, JSON.stringify({ t: Date.now(), kind, text, ctx: fbCtx(q.ctx), status: 'new' }), { expirationTtl: FB_TTL });
+    return json({ ok: true, id });
+  }
+  if (path === '/lab/vote') {
+    const id = String(q.id || ''); if (!/^[a-z0-9-]{1,40}$/.test(id)) return json({ error: 'which item?' }, 400);
+    const road = await roadmap(env); if (!road.items.some(x => x.id === id)) return json({ error: 'no such item' }, 404);
+    const [day, h] = await fbHash(env, ip, 'vote'), vk = 'vote:' + day + ':' + h + ':' + id, ck = 'vrl:' + day + ':' + h;
+    if (fbMem.n.get(vk) || await kv.get(vk)) return json({ ok: true, already: true, votes: road.votes[id] || 0 });
+    const n = fbMem.n.get(ck) || 0; if (n >= VOTE_DAY_MAX) return json({ error: 'that is a lot of votes for one day' }, 429);
+    fbMem.n.set(ck, n + 1); fbMem.n.set(vk, 1); if (fbMem.n.size > 20000) fbMem.n.clear();
+    await kv.put(vk, '1', { expirationTtl: 2 * 86400 });
+    let votes = {}; try { votes = JSON.parse(await kv.get('roadmap:votes') || '{}') || {}; } catch (e) {}
+    votes[id] = (votes[id] || 0) + 1; await kv.put('roadmap:votes', JSON.stringify(votes));
+    road.votes = votes; return json({ ok: true, votes: votes[id] });
+  }
+  return json({ error: 'unknown path' }, 404);
+}
+
 export default {
   pages: PV_PAGES,
   // the Pages wrapper (tools/build_static.py) calls this for every HTML page it serves, once the response is ready
@@ -386,6 +446,7 @@ export default {
     const bg = path === '/lab/stats' || path === '/lab/p' || path === '/worlds/state' || path === '/lab/notices';
     const k = ip + '|' + min + (bg ? '|bg' : ''), n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (bg ? 240 : (+env.RATE_PER_MIN || 60))) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
+    if (path === '/lab/oracle' || path === '/lab/roadmap' || path === '/lab/vote') return cors(env, req, await feedback(req, env, path, ip));
     if (path === '/lab/stats' || path === '/lab/p') return stats(req, env, ctx);   // /lab/p: the same reports under a plain name   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {

@@ -23,7 +23,7 @@
   document.head.appendChild(css);
 
   // what counts as "the world": the arena itself, its floor, its canvases, words, things and creature hit areas, never a panel or a button
-  const UI = 'button,input,textarea,select,a,label,summary,#topbar,#placesBar,#whisper,#studio,#herd,#lab,#roomchat,#dj,#advpanel,#reelpanel,#objmenu,#team,#conn,#minimap,#ntf,#ntfpanel,#settings,#insp,#notice,#capPill,#hwChip,.zoomctl,#zoomCtl,#mSheet,#drawer,#trees,#almanac,#evo,#reel,.ck-tip';
+  const UI = 'button,input,textarea,select,a,label,summary,#topbar,#placesBar,#whisper,#studio,#herd,#lab,#roomchat,#dj,#advpanel,#reelpanel,#objmenu,#team,#conn,#minimap,#ntf,#ntfpanel,#settings,#insp,#notice,#capPill,#hwChip,.zoomctl,#zoomCtl,#mSheet,#drawer,#trees,#almanac,#evo,#reel,#oracle,.ck-tip';
   const inWorld = t => { const a = arena(); if (!a || !t || !a.contains(t)) return false; return !(t.closest && t.closest(UI)); };
 
   let down = null, lastClick = 0, hintShown = false;
