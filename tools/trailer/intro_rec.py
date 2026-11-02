@@ -25,7 +25,7 @@ def browser_lock():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tone", choices=["eerie", "epic", "both"], default="both")
+    ap.add_argument("--tone", choices=["storm", "eerie", "epic", "both", "all"], default="all")
     ap.add_argument("--out", default=os.path.expanduser("~/Desktop/idle-trailers"))
     ap.add_argument("--size", default="1280x720"); ap.add_argument("--fps", type=int, default=30)
     a = ap.parse_args(); W, H = map(int, a.size.split("x")); os.makedirs(a.out, exist_ok=True)
@@ -34,7 +34,7 @@ def main():
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
     threading.Thread(target=srv.serve_forever, daemon=True).start(); base = f"http://127.0.0.1:{srv.server_address[1]}/index.html?intro=0"
     from playwright.sync_api import sync_playwright
-    tones = ["eerie", "epic"] if a.tone == "both" else [a.tone]
+    tones = ["storm", "eerie", "epic"] if a.tone == "all" else ["eerie", "epic"] if a.tone == "both" else [a.tone]
     with browser_lock(), sync_playwright() as p:
         b = p.chromium.launch()
         try:

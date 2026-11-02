@@ -69,7 +69,7 @@ html.gen-void :is(#ntf,#notice,#distoast,#whisper,#cline,#studio,#herd,#team,#co
 
   // ---------- the intro (idle-intro.js) or a short fallback line
   async function intro() { if (Q.get('intro') === '0') return; const saveData = navigator.connection && navigator.connection.saveData;
-    if (window.__intro && window.__intro.play && !saveData) { try { await window.__intro.play({ tone: Q.get('intro') || 'storm' }); return; } catch (e) { console.warn('genesis: intro', e); } }
+    if (window.__intro && window.__intro.play && !saveData) { try { await window.__intro.play(Q.get('intro') ? { tone: Q.get('intro') } : {}); return;   /* the storm unless ?intro=eerie|epic */ } catch (e) { console.warn('genesis: intro', e); } }
     await new Promise(res => { const el = document.createElement('div'); el.id = 'genIntro'; el.textContent = 'in the beginning there was nothing'; document.body.appendChild(el);
       const end = () => { el.classList.add('out'); setTimeout(() => { el.remove(); res(); }, 1200); }; el.addEventListener('click', end, { once: true });
       setTimeout(end, matchMedia('(prefers-reduced-motion: reduce)').matches ? 1500 : 2600); }); }

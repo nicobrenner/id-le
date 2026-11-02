@@ -779,18 +779,20 @@ def t_mood_migrate(P):
 
 
 def t_intro(P):
-    """the genesis intro (idle-intro.js): ?intro=eerie plays on load, draws, skip ends it and resolves; Esc skips the epic one"""
-    pg = P.open("/arena.html?intro=eerie&fresh=1&test")
+    """the genesis intro (idle-intro.js): ?intro=storm plays on load, draws, skip ends it and resolves; Esc skips the epic one"""
+    pg = P.open("/arena.html?intro=storm&fresh=1&test")
     pg.evaluate("() => { window.__t_intro = []; document.addEventListener('idle:intro', e => window.__t_intro.push(e.detail)); }")
     wait_for(pg, "() => !!document.getElementById('idleIntro')", 60, P=P); pg.wait_for_timeout(2500)
     lit = pg.evaluate("""() => { const c = document.querySelector('#idleIntro canvas'), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 97) if (d[i] + d[i + 1] + d[i + 2] > 30) n++; return n; }""")
     need(lit > 50, f"the intro canvas stayed dark ({lit} lit samples)")
+    tone = pg.evaluate("() => document.getElementById('idleIntro').dataset.tone"); need(tone == "storm", f"?intro=storm played {tone}")
+    durs = pg.evaluate("() => ['storm', 'eerie', 'epic'].map(t => window.__intro.scenes(t).reduce((a, b) => a + b, 0))"); need(25 <= durs[0] <= 35, f"storm runs {durs[0]:.1f}s (expected 25-35)")
     pg.click("#idleIntro .skip"); wait_for(pg, "() => !document.getElementById('idleIntro')", 5)
     ev = pg.evaluate("() => window.__t_intro"); need(any(e.get("phase") == "end" and e.get("skipped") for e in ev), f"no 'end, skipped' event: {ev}")
     pr = pg.evaluate("() => { window.__t_p = window.__intro.play({ tone: 'epic' }).then(r => window.__t_r = r); return true; }")
     wait_for(pg, "() => !!document.getElementById('idleIntro')", 5); pg.wait_for_timeout(800); pg.keyboard.press("Escape")
     wait_for(pg, "() => window.__t_r && window.__t_r.skipped && window.__t_r.tone === 'epic'", 5)
-    P.clean("intro"); return f"eerie drew ({lit} lit samples), skip resolved; epic skipped with Esc"
+    P.clean("intro"); return f"storm drew ({lit} lit samples, {durs[0]:.1f}s; eerie {durs[1]:.1f}s, epic {durs[2]:.1f}s), skip resolved; epic skipped with Esc"
 
 
 def t_intro_reduced(P):
