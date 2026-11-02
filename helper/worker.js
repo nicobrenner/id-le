@@ -141,10 +141,17 @@ const X = { did: ['w_reel', 'w_reel_end', 'w_dream', 'w_mind', 'irc_msg', 'inbox
   rage: ['advBtn', 'djBtn', 'reelsBtn', 'drawerBtn', 'treesBtn', 'almanacBtn', 'studioBtn', 'herdBtn', 'ntfBtn', 'pediaBtn', 'labBtn', 'connBtn', 'snapBtn', 'evolveWorldBtn', 'lab-toggle', 'rc-open',
     'settingsBtn', 'soundBtn', 'mMore', 'collBtn', 'addBtn', 'whisper', 'studio', 'team', 'dj', 'advpanel', 'almanac', 'drawer', 'trees', 'reelpanel', 'reel', 'lab', 'roomchat', 'settings', 'conn', 'herd',
     'insp', 'quick', 'minimap', 'topbar', 'placesBar', 'ntf', 'mSheet', 'zoomCtl', 'world', 'other'] };
+// the Operator (11-01): outcomes, the guessed action and a confidence bucket, retries, giving up, caps and ?!/!!, a mood label computed in
+// the player's browser, genesis tries/nudges/steps; never any text. Every key is built from these fixed lists.
+X.op = [].concat(['acted', 'unsure', 'nudged', 'chat', 'error'].map(k => 'out:' + k), ['tool', 'none', 'error'].map(k => 'byo:' + k), ['lo', 'mid', 'hi'].map(k => 'cf:' + k),
+  ['rephrase', 'abandon', 'caps', 'punct'].map(k => 'fr:' + k), ['negative', 'neutral', 'positive'].flatMap(k => ['mood:' + k, 'mm:' + k]),
+  ['bring', 'chop', 'come', 'fetch', 'greet', 'hand', 'hide', 'sleep', 'none', 'creature', 'disaster', 'evolve', 'look', 'rave_off', 'rave_on', 'rename', 'spawn', 'weather', 'words', 'first_creatures', 'light', 'music'].map(k => 'opt:' + k),
+  ['words', 'creatures', 'light', 'weather', 'hut', 'music'].flatMap(k => ['gt:' + k, 'gn:' + k, 'gd:' + k]));
+X.did.push('op_miss', 'op_rephrase', 'op_abandon');
 const FAV = /^(job|fam|body):[a-z_]{1,16}$|^name:[A-Za-z][A-Za-z|' -]{0,19}$/, PATHSEGS = ['advisor', 'music', 'reels', 'drawer', 'trees', 'almanac', 'studio', 'creatures', 'notices', 'pedia', 'datalab',
   'connect', 'snapshot', 'evolve', 'chat', 'roomchat', 'settings', 'sound', 'more', 'collection', 'add', 'card'];
 const okPath = v => typeof v === 'string' && v.length <= 80 && v.split('>').length <= 3 && v.split('>').every(x => PATHSEGS.includes(x)) && new Set(v.split('>')).size === v.split('>').length;
-const X_CAP = { fav: 60, rage: 50, path: 30 }, EMPTY_X = () => ({ did: {}, ws: {}, pt: {}, ct: {}, opa: {}, fav: {}, rage: {}, path: {} });   // the pedia's own section ids (headings it scrolled into view)
+const X_CAP = { fav: 60, rage: 50, path: 30 }, EMPTY_X = () => ({ did: {}, ws: {}, pt: {}, ct: {}, opa: {}, fav: {}, rage: {}, path: {}, op: {} });   // the pedia's own section ids (headings it scrolled into view)
 const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and shard; the rest are counted as 'other'
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
@@ -187,7 +194,7 @@ function addStats(p) {
   const x = p.x, D = d.x = d.x || EMPTY_X();
   if (x && typeof x === 'object') {
     if (Array.isArray(x.did)) for (const f of new Set(x.did.slice(0, 40))) if (X.did.includes(f)) bump(D.did, f);
-    for (const [k, max] of [['ws', 6 * 3600], ['pt', 6 * 3600], ['ct', 500], ['opa', 500], ['rage', 500]]) { const o = x[k]; if (!o || typeof o !== 'object') continue;
+    for (const [k, max] of [['ws', 6 * 3600], ['pt', 6 * 3600], ['ct', 500], ['opa', 500], ['rage', 500], ['op', 500]]) { const o = x[k]; if (!o || typeof o !== 'object') continue;
       for (const [a, n] of Object.entries(o).slice(0, 60)) if (X[k].includes(a) && Number.isInteger(n) && n > 0 && n <= max) (k === 'rage' ? capped(D.rage, a, n, X_CAP.rage) : bump(D[k], a, n)); }
     if (x.fav && typeof x.fav === 'object') for (const [a, n] of Object.entries(x.fav).slice(0, 60)) if (FAV.test(a) && Number.isInteger(n) && n > 0 && n <= 500) capped(D.fav, a, n, X_CAP.fav); }
   if (okPath(p.path) && (p.path0 === undefined || okPath(p.path0) && p.path0 !== p.path)) { capped(D.path, p.path, 1, X_CAP.path); if (p.path0 !== undefined) bump(D.path, p.path0, -1); }

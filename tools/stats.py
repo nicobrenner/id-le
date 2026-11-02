@@ -53,6 +53,42 @@ def engage2(tot):
     ]
     return lines, [g for g in groups if g[1]]
 
+GSTEP_NAMES = {"words": "words", "creatures": "first creatures", "light": "light", "weather": "weather", "hut": "a hut", "music": "music"}
+
+
+def operator(tot):
+    """How conversations with the Operator go (11-01): sentences + [(heading, rows, None)]. Counts only: the text never leaves the page."""
+    op = {k: v for k, v in ((tot.get("x") or {}).get("op") or {}).items() if v and v > 0}
+    did = (tot.get("x") or {}).get("did") or {}
+    if not op:
+        return [], []
+    g = lambda k: op.get(k, 0)
+    to = sum(g("out:" + k) for k in ("acted", "unsure", "chat", "error"))
+    pc = lambda n, d: f"{100 * n / d:.0f}%" if d else "-"
+    lines = []
+    if to:
+        lines.append(f"the Tiny Operator acted on {pc(g('out:acted'), to)} of {to} messages; unsure {pc(g('out:unsure'), to)}, only chatted {pc(g('out:chat'), to)}, failed {pc(g('out:error'), to)}; {g('out:nudged')} genesis nudges")
+    byo = sum(g("byo:" + k) for k in ("tool", "none", "error"))
+    if byo:
+        lines.append(f"your own AI: {pc(g('byo:tool'), byo)} of {byo} turns used a tool, {pc(g('byo:error'), byo)} failed")
+    msgs = to + byo
+    lines.append(f"frustration: {g('fr:rephrase')} retry streaks (2+ messages in 20 s, nothing done), {g('fr:abandon')} gave up after a miss, {g('fr:caps')} in ALL CAPS, {g('fr:punct')} with ?! or !!; "
+                 f"{did.get('op_miss', 0)} visits had at least one miss")
+    mood = [(k, g("mood:" + k)) for k in ("negative", "neutral", "positive")]
+    if sum(n for _, n in mood):
+        m = sum(n for _, n in mood); mm = sum(g("mm:" + k) for k in ("negative", "neutral", "positive"))
+        lines.append(f"mood of Operator messages (worked out in the browser): negative {pc(g('mood:negative'), m)}, neutral {pc(g('mood:neutral'), m)}, positive {pc(g('mood:positive'), m)}"
+                     + (f"; right after a miss: negative {pc(g('mm:negative'), mm)} of {mm}" if mm else ""))
+    steps = [(GSTEP_NAMES[k], g("gd:" + k), g("gt:" + k), g("gn:" + k)) for k in GSTEP_NAMES if g("gd:" + k) or g("gn:" + k)]
+    for name, d_, t_, n_ in steps:
+        lines.append(f"genesis step '{name}': done {d_} times, {t_ / d_:.1f} tries on average, {n_} nudges" if d_ else f"genesis step '{name}': {n_} nudges, not done yet")
+    groups = [
+        ("What the Tiny Operator guessed", sorted(((k[4:], n) for k, n in op.items() if k.startswith("opt:")), key=lambda r: -r[1]), None),
+        ("How sure it was", [(lab, g("cf:" + k)) for k, lab in (("lo", "under 50%"), ("mid", "50-90%"), ("hi", "90% or more"))], None),
+        ("Mood of Operator messages", mood, None),
+    ]
+    return lines, [gr for gr in groups if any(n for _, n in gr[1])]
+
 TEST_FEATS = {"smoketest", "beacontest"}   # feature keys only our own checks send: a day with them includes our tests
 
 
@@ -267,6 +303,13 @@ def main():
             print("  " + ln)
         for title, rows, _ in groups:
             print(f"  {title}: " + ", ".join(f"{k} {n}" for k, n in rows))
+    olines, ogroups = operator(tot)
+    if olines:
+        print("\nthe Operator (counted from 11-01 on; never the text):")
+        for ln in olines:
+            print("  " + ln)
+        for title, rows, _ in ogroups:
+            print(f"  {title}: " + ", ".join(f"{k} {n}" for k, n in rows))
     pd = tot.get("pd", {})
     if pd.get("visits"):
         print(f"\npedia: {pd['visits']} visits ({pd.get('back', 0)} returning), clips played {pd.get('clips', 0)}")
@@ -418,6 +461,9 @@ def dashboard(days, since, traffic, note):
         scale = f'<p class="muted">For scale (Cloudflare, same days): {tl} page loads by real browsers, {ts} game starts; the game counted {tot.get("visits", 0)} visits.</p>'
     eng2 = (scale + "<ul>" + "".join(f"<li>{e(t)}</li>" for t in lines2) + "</ul>" + '<div class="grid g2">' +
             "".join(f'<section><h2>{e(title)}</h2>{bars(rows)}</section>' for title, rows, _ in groups2) + "</div>") if lines2 else f'<p class="muted">{e(later)}</p>' + scale
+    olines, ogroups = operator(tot)
+    opsec = ("<ul>" + "".join(f"<li>{e(t)}</li>" for t in olines) + "</ul>" + '<div class="grid g2">' +
+             "".join(f'<section><h2>{e(title)}</h2>{bars(rows)}</section>' for title, rows, _ in ogroups) + "</div>") if olines else f'<p class="muted">{e(later)}</p>'
     pd = tot.get("pd") or {}
     pdref, pdw, pdsec = nz(pd.get("ref")), nz(pd.get("dw")), nz(pd.get("sec"))
     pedia = (f'<div class="tiles">{tile(pd.get("visits", 0), "pedia visits")}{tile(pd.get("back", 0), "returning")}{tile(nz(pd.get("dev")).get("phone", 0), "on phones")}{tile(pd.get("clips", 0), "clips played")}</div>'
@@ -485,6 +531,7 @@ ul{{padding-left:18px;margin:0}}code{{font-size:12px;word-break:break-word}}
 <section><h2>Frame rate (fps)</h2>{bars([(k, fps.get(k, 0)) for k in ["<20", "20-40", "40-55", "55+"]])}</section>
 <section class="wide"><h2>Engagement (game)</h2>{eng}</section>
 <section class="wide"><h2>What people do (engagement v2)</h2>{eng2}</section>
+<section class="wide"><h2>The Operator: how conversations go (never the text)</h2>{opsec}</section>
 <section class="wide"><h2>The Id|le-pedia</h2>{pedia}</section>
 <section><h2>Errors</h2><ul>{err_html}</ul></section>
 <!-- errors: "@file:line:col bXXXXXXXX" = where it happened and the game version (build); older ones say "?" for the site root -->

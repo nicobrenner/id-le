@@ -176,15 +176,15 @@ html.gen-void #ai-thread>.ai-row.page{display:none}
     const t = input(); if (t) { t.value = ''; delete t.dataset.genPre; } await fn(); }
   async function submit(text) { const g = nextGuide(); if (!g || busy) return; const t = input(); const said = String(text || '').trim() || sayOf(g);
     if (t) { t.value = ''; delete t.dataset.genPre; }
-    if (norm(said) === norm(sayOf(g))) { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('you', said, 'you'); } catch (e) {} await STEPS[g].run(); return; }
+    if (norm(said) === norm(sayOf(g))) { try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text: said, brain: 'guide' } })); } catch (e) {} try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('you', said, 'you'); } catch (e) {} await STEPS[g].run(); return; }
     const before = ORDER.filter(did).length, b = brain(), O = window.__oracle;
     if (b === 'relay' || (b === 'tiny' && !(O && O.ready))) {
       // the local coding-agent line can't build a step, and a sleeping Tiny Oracle can't understand yet: treat it as the suggestion
-      try { window.__idleAI.add('you', said, 'you'); } catch (e) {} await STEPS[g].run(); return; }
+      try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text: said, brain: 'guide' } })); } catch (e) {} try { window.__idleAI.add('you', said, 'you'); } catch (e) {} await STEPS[g].run(); return; }
     if (b === 'tiny') try { window.__idleAI.add('you', said, 'you'); } catch (e) {}
     quiet = true; try { if (b === 'tiny') await window.__idleAI.tiny(said); else await window.__idleAI.send(said); } catch (e) { console.warn('genesis: operator', e); } finally { quiet = false; }
     if (ORDER.filter(did).length > before) return;   // the Operator built something (maybe another step than the suggestion: the guide follows)
-    S.nudge = S.nudge || {}; if (!S.nudge[g]) { S.nudge[g] = 1; save(); say('try: ' + sayOf(g)); return; }
+    S.nudge = S.nudge || {}; if (!S.nudge[g]) { S.nudge[g] = 1; save(); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_nudge', extra: { step: g } } })); } catch (e) {} say('try: ' + sayOf(g)); return; }
     await STEPS[g].run(); }
   function onKey(e) { if (e.key !== 'Enter' || e.shiftKey || e.isComposing || !e.target || e.target.id !== 'lab-text' || !guiding() || !nextGuide()) return;
     e.preventDefault(); e.stopImmediatePropagation(); submit(e.target.value); }

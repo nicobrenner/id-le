@@ -25,6 +25,11 @@
 //   path          (v2) the first three features opened, in order (e.g. card>studio>reels)
 //   frustration   (v2) rage clicks (3 fast clicks in one spot) and where (a known panel or button, else 'world'/'other'), leaving within
 //                 30 s of the first click, leaving without any click, how many errors a page load saw (a bucket)
+//   operator      (11-01) how conversations with the Operator go, never their text: each message's outcome (the Tiny Operator acted,
+//                 was unsure, needed a nudge, only chatted, or failed; your own AI used a tool or not), the action it guessed and how sure
+//                 it was (a bucket), retries (2+ messages within 20 s with nothing done), giving up after a miss, ALL CAPS and ?!/!! (counts),
+//                 a mood label (negative / neutral / positive) worked out IN THIS BROWSER by the data lab's mood classifier, and for the
+//                 genesis how many tries and nudges each step took. The text itself never leaves the page.
 // Not sent: anything from the world (names, words, pictures), chats, AI keys, cookies, an ID that follows you.
 // The server (helper/worker.js) only adds these to daily totals; it keeps no single visit and no address.
 (() => {
@@ -60,7 +65,7 @@
     o.charts = NB(ENG.charts); o.fed = NB(ENG.fed); o.reels = NB(E2.reels); o.errs = errN <= 0 ? '0' : errN === 1 ? '1' : errN <= 5 ? '2-5' : '6+'; return o; };
   // ---------- engagement v2 (11-01): watching, time per panel, favorites, messages, path, frustration ----------
   // deltas since the last report (taken out of these maps only once a report is really sent); flags and the path once per page load
-  const E2 = { ws: {}, pt: {}, ct: {}, opa: {}, fav: {}, rage: {}, did: new Set(), path: [], reels: 0 }, E2sent = { did: new Set(), path: '' };
+  const E2 = { ws: {}, pt: {}, ct: {}, opa: {}, fav: {}, rage: {}, op: {}, did: new Set(), path: [], reels: 0 }, E2sent = { did: new Set(), path: '' };
   const inc = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
   const PANELS = { music: '#dj.on', studio: '#studio.on', lab: '#team.on', advisor: '#advpanel.on', almanac: '#almanac.on', drawer: '#drawer.on', trees: '#trees.on', reels: '#reelpanel.on', operator: '#lab.open', creatures: '#herd.on' };
   const PATHSEG = new Set(Object.values(FEAT).concat(['card']));
@@ -86,6 +91,39 @@
       case 'op_msg': case 'lab_note': inc(E2.ct, 'op'); E2.did.add('op_msg'); break;
       case 'pedia_open': case 'pedia_go': inc(E2.ct, 'pedia'); break;
       default: if (OPA.has(d.type)) inc(E2.opa, d.type); } });
+  // ---------- the Operator (11-01): how conversations go, never their text ----------
+  // idle-ai.js tells this page what was typed (idle:optext, in-page only) and how each turn ended (tiny_operator / op_done); only counts
+  // and a mood label computed here, by the data lab's in-browser classifier, go into the stats
+  const OPT = new Set(['bring', 'chop', 'come', 'fetch', 'greet', 'hand', 'hide', 'sleep', 'none', 'creature', 'disaster', 'evolve', 'look', 'rave_off', 'rave_on', 'rename', 'spawn', 'weather', 'words', 'first_creatures', 'light', 'music']);
+  const GSTEPS = new Set(['words', 'creatures', 'light', 'weather', 'hut', 'music']);
+  const OPS = { lastMsg: 0, actedSince: true, missAt: 0, streak: 0, pending: 0, moodBusy: false };
+  const moodOf = async t => { const J = window.__jeffy;   // the support-style mood head, only ever run in this browser (never the server fallback)
+    if (!J || !J.has || !J.has('support_mood') || (J.off && J.off())) return null;
+    if (J.state() !== 'ready') { if (phone() || (navigator.connection && navigator.connection.saveData)) return null; try { await J.load(); } catch (e) { return null; } }
+    if (J.state() !== 'ready') return null;
+    try { const r = await J.predict('support_mood', t); const l = r && r.label; return ['negative', 'neutral', 'positive'].includes(l) ? l : null; } catch (e) { return null; } };
+  const genesisOn = () => { try { const G = window.__genesis, st = G && G.state && G.state(); return !!(st && st.on && !st.alive); } catch (e) { return false; } };
+  const nextStep = () => { try { const G = window.__genesis, st = G.state(), steps = (G.steps || []).filter(k => GSTEPS.has(k)); return steps.find(k => !(st.steps || {})[k]) || null; } catch (e) { return null; } };
+  addEventListener('idle:optext', e => { const t = String((e.detail || {}).text || ''); if (!t) return; const now = Date.now();
+    // a retry streak: a second message within 20 s with nothing done in between (counted once per streak)
+    if (now - OPS.lastMsg < 20000 && !OPS.actedSince) { if (++OPS.streak === 1) { inc(E2.op, 'fr:rephrase'); E2.did.add('op_rephrase'); } } else OPS.streak = 0;
+    OPS.lastMsg = now; OPS.actedSince = false;
+    const letters = t.replace(/[^A-Za-z]/g, ''); if (letters.length >= 4 && letters === letters.toUpperCase()) inc(E2.op, 'fr:caps');
+    if (/\?!|!\?|!!/.test(t)) inc(E2.op, 'fr:punct');
+    if (genesisOn()) OPS.pending++;
+    const afterMiss = OPS.missAt && now - OPS.missAt < 60000;
+    if (!OPS.moodBusy) { OPS.moodBusy = true; moodOf(t).then(m => { if (m) { inc(E2.op, 'mood:' + m); if (afterMiss) inc(E2.op, 'mm:' + m); } }).finally(() => { OPS.moodBusy = false; }); } });
+  const miss = () => { OPS.missAt = Date.now(); E2.did.add('op_miss'); };
+  addEventListener('idle:ev', e => { const d = e.detail || {}, x = d.extra || {};
+    if (d.type === 'tiny_operator') { const out = ['acted', 'unsure', 'chat', 'error'].includes(x.out) ? x.out : (x.acted ? 'acted' : 'chat'); inc(E2.op, 'out:' + out);
+      if (OPT.has(x.option)) inc(E2.op, 'opt:' + x.option); const p = +x.p; if (p >= 0) inc(E2.op, 'cf:' + (p < 0.5 ? 'lo' : p < 0.9 ? 'mid' : 'hi'));
+      if (out === 'acted') { OPS.actedSince = true; OPS.missAt = 0; } else if (out !== 'chat') miss(); }
+    else if (d.type === 'op_done') { inc(E2.op, 'byo:' + (x.error ? 'error' : x.tools ? 'tool' : 'none')); if (x.tools) { OPS.actedSince = true; OPS.missAt = 0; } else if (x.error) miss(); }
+    else if (d.type === 'genesis_nudge' || d.type === 'op_nudge') { inc(E2.op, 'out:nudged'); const st = x.step === 'sky' ? 'weather' : GSTEPS.has(x.step) ? x.step : nextStep(); if (st) inc(E2.op, 'gn:' + st); miss(); }
+    else if (d.type === 'genesis' && GSTEPS.has(x.step)) { inc(E2.op, 'gd:' + x.step); inc(E2.op, 'gt:' + x.step, Math.max(1, OPS.pending)); OPS.pending = 0; OPS.actedSince = true; OPS.missAt = 0; } });
+  // giving up: a miss, then the Operator panel closed and no message for 2 minutes (counted once per page load)
+  setInterval(() => { if (!OPS.missAt || Date.now() - OPS.missAt < 120000 || Date.now() - OPS.lastMsg < 120000) return; const open = document.querySelector('#lab.open');
+    if (!open) { if (!E2.did.has('op_abandon')) inc(E2.op, 'fr:abandon'); E2.did.add('op_abandon'); OPS.missAt = 0; } }, 5000);
   // once a second while the page is visible: which panels are open, whether a reel, a dream or a mind is being watched, a new card
   let lastCard = null;
   setInterval(() => { if (document.hidden || !live()) return; const q = sel => document.querySelector(sel);
@@ -103,7 +141,7 @@
     if (taps.filter(c => Math.hypot(c[1] - e.clientX, c[2] - e.clientY) <= 24).length >= 3 && t - rageAt > 1000) { rageAt = t; taps.length = 0; inc(E2.rage, rageWhere(e.target)); E2.did.add('rage'); } }, true);
   addEventListener('keydown', () => { if (!firstAct) firstAct = performance.now(); }, true);
   const leaveFlags = () => { const t = performance.now(); if (t < 5000) return; if (!firstAct) E2.did.add('no_interact'); else if (t - firstAct < 30000) E2.did.add('quick_exit'); };
-  const e2part = () => { const x = {}; for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage']) if (Object.keys(E2[k]).length) x[k] = { ...E2[k] };
+  const e2part = () => { const x = {}; for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'op']) if (Object.keys(E2[k]).length) x[k] = { ...E2[k] };
     const did = [...E2.did].filter(f => !E2sent.did.has(f)); if (did.length) x.did = did; return x; };
   let secSent = 0;   // visible seconds already added to the day's total
   let sent = { visit: false, feats: [], errs: [], fps: false, m: [], f5: '', dw: null, fl: null, eng: {} }; let ahaSent = {};
@@ -155,7 +193,7 @@
     if (!ok) return;
     if (p.visit) sent.visit = true; if (p.fps) sent.fps = true; if (p.feat) sent.feats.push(...p.feat); if (p.err) sent.errs.push(...p.err);
     if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dl) p.dl.forEach(k => { ahaSent['dl:' + k] = 1; }); if (p.gs) Object.keys(p.gs).forEach(k => { ahaSent['gs:' + k] = 1; }); if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; if (p.eg) Object.assign(sent.eng, p.eg); if (p.sec) secSent += p.sec;
-    if (p.path) E2sent.path = p.path; if (p.x) { for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage']) for (const [a, n] of Object.entries(p.x[k] || {})) { E2[k][a] -= n; if (E2[k][a] <= 0) delete E2[k][a]; } (p.x.did || []).forEach(f => E2sent.did.add(f)); }
+    if (p.path) E2sent.path = p.path; if (p.x) { for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'op']) for (const [a, n] of Object.entries(p.x[k] || {})) { E2[k][a] -= n; if (E2[k][a] <= 0) delete E2[k][a]; } (p.x.did || []).forEach(f => E2sent.did.add(f)); }
     try { localStorage.setItem(SENT, JSON.stringify(ahaSent)); } catch (e) {}
   }
   // batches: a first one soon after the page opens (the visit itself, so leaving early still counts), then when the page is hidden

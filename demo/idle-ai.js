@@ -42,7 +42,11 @@
   const calls = [], spawns = [];
   const recent = (a, ms) => { const t = Date.now(); while (a.length && t - a[0] > ms) a.shift(); return a.length; };
 
+  // what was typed, for idle-stats.js to count (retries, caps, a mood label worked out in this page); the text itself stays in the page
+  const optext = (text, brain) => { try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text, brain } })); } catch (e) {} };
+  let toolN = 0;   // tool calls so far (the stats only learn whether a turn used one)
   async function runTool(name, input) {
+    toolN++;
     const w = W(); if (!w) return { error: 'the world is not ready yet' };
     if (recent(calls, 60000) >= cfg.perMin) return { error: `rate limit: at most ${cfg.perMin} actions a minute; wait a little` };
     calls.push(Date.now()); input = input || {};
@@ -251,9 +255,10 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   const creatureNamed = (span, text) => { const cs = ((window.__arena && window.__arena.raw()) || []).filter(c => c.name); const s0 = String(span || '').toLowerCase().trim();
     return (s0 && cs.find(c => c.name.toLowerCase() === s0)) || (s0 && cs.find(c => c.name.toLowerCase().startsWith(s0) || s0.startsWith(c.name.toLowerCase()))) || cs.find(c => String(text).toLowerCase().includes(c.name.toLowerCase())) || null; };
   async function tinyTurn(t) {
+    optext(t, 'tiny');
     const O = window.__oracle; if (!O || !O.ready) { add('page', 'the Tiny Oracle is still waking up; try again in a moment', 'err'); return; }
     const heads = await loadH3(); const r = await O.classify(t, heads); const p = r.probs[r.option] || 0, tip = `${r.option} · ${Math.round(p * 100)}%`;
-    let seed = '', acted = null;
+    let seed = '', acted = null, lastRes = null;
     if (WORLD_OPTS.has(r.option) && p >= (SURE[r.option] ?? SURE0)) {
       const who = creatureNamed(r.target, t), call = (() => { switch (r.option) {
         case 'weather': { const k = kindOf(r.arg); return k && ['weather', { kind: k }]; }
@@ -272,7 +277,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
           const el = chip({ words: '🔤 let there be words' + (res.topic ? ': ' + res.topic : ''), first_creatures: '🐣 the first creatures' + (res.fam ? ' (' + res.fam + ')' : ''), light: '☀ let there be light', music: '🎵 music' }[name]); el.title = tip; if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; } }
         else if (name === 'rave_on' || name === 'rave_off') { const M = window.__music; const el = chip((name === 'rave_on' ? '🕺 rave on' : '🔇 rave off')); el.title = tip; if (M) { if (name === 'rave_on') { M.setSource('deck'); M.setRave(true); } else M.setRave(false); res = { ok: true }; } else { res = { error: 'no music deck here' }; el.classList.add('err'); } }
         else { const el = chip(chipText(name, input)); el.title = tip; try { res = await runTool(name, input); } catch (e) { res = { error: String(e.message || e) }; } if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; } }
-        acted = name;
+        acted = name; lastRes = res;
         // the Oracle's line starts from what just happened (like its comments on the world), then the model goes on in its own voice
         const ok = res && !res.error, I = input || {};
         seed = !ok ? (name === 'disaster' ? 'Disasters are switched off, and honestly, good' : 'That did not work') : ({
@@ -288,7 +293,8 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     } else if (r.option === 'creature') { const el = chip('💬 to the creatures (IRC): ' + t); el.title = tip; try { await O.chat(t); acted = 'creature'; seed = 'I passed that on to the creatures'; } catch (e) {} }
     let said = await O.reply(t, seed); if (!said || said.length < 3) said = await O.reply(t, seed);   // one retry: the tiny model sometimes stops at once
     if (said) add('TO', said, 'ai');
-    try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'tiny_operator', extra: { option: r.option, p: +p.toFixed(2), acted } } })); } catch (e) {}
+    const out = acted ? (lastRes && lastRes.error ? 'error' : 'acted') : WORLD_OPTS.has(r.option) ? 'unsure' : 'chat';
+    try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'tiny_operator', extra: { option: r.option, p: +p.toFixed(2), acted, out } } })); } catch (e) {}
     return { option: r.option, p, arg: r.arg, target: r.target, acted, said };
   }
 
@@ -297,11 +303,13 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     if (!ready()) { set.classList.add('on'); renderSet(); add('page', 'connect your AI first (⚙): ' + { anthropic: 'an API key and a model', openai: 'a base URL, a key and a model', local: 'a server URL and a model' }[cfg.brain], 'err'); return; }
     if (cfg.brain === 'tiny') { text.value = ''; add('you', t); busy = true; try { await tinyTurn(t); } catch (e) { add('page', String(e.message || e), 'err'); } finally { busy = false; } return; }
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_msg', extra: { brain: cfg.brain } } })); } catch (e) {}
+    optext(t, cfg.brain);
     text.value = ''; add('you', t); busy = true; const spin = document.createElement('div'); spin.className = 'ai-busy'; spin.textContent = 'thinking…'; thread.appendChild(spin);
     const mark = convo.length; convo.push({ role: 'user', content: worldLine() + '\n' + t });
+    const tools0 = toolN; let turnErr = null;
     try { for (let i = 0; i < cfg.rounds; i++) { const more = cfg.brain === 'anthropic' ? await anthropicTurn() : await openaiTurn(cfg.brain); thread.appendChild(spin); if (!more) break; if (i === cfg.rounds - 1) add('page', 'stopped after ' + cfg.rounds + ' rounds of actions'); } }
-    catch (e) { add('page', String(e.message || e), 'err'); convo.length = mark; }   // a failed turn leaves no half-finished tool exchange behind
-    finally { busy = false; spin.remove(); }
+    catch (e) { turnErr = e; add('page', String(e.message || e), 'err'); convo.length = mark; }   // a failed turn leaves no half-finished tool exchange behind
+    finally { busy = false; spin.remove(); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_done', extra: { brain: cfg.brain, tools: toolN > tools0, error: !!turnErr } } })); } catch (e) {} }
   }
   // take over the lab's send button and Cmd+Enter while an AI brain is chosen; the relay keeps the arena's own path
   sendBtn.addEventListener('click', e => { if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);

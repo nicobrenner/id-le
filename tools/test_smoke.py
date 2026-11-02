@@ -83,6 +83,8 @@ await post('/lab/stats', { v: 1, x: { did: ['w_reel', 'w_dream', 'rage', 'p_musi
 await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
 await post('/lab/stats', { v: 1, path: 'card>card', x: { ct: { op: 9999 } } });
 await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
+// the Operator (11-01): only fixed keys, small positive integers; text-like keys and junk dropped; op flags once
+await post('/lab/stats', { v: 1, x: { op: { 'out:acted': 3, 'out:unsure': 1, 'opt:light': 2, 'cf:hi': 3, 'fr:rephrase': 1, 'mood:negative': 1, 'mm:negative': 1, 'gd:light': 1, 'gt:light': 2, 'gn:light': 1, 'text:make it rain': 1, 'opt:rm -rf': 1, 'out:acted ': 1, 'fr:caps': -2, 'cf:lo': 1.5 }, did: ['op_miss', 'op_rephrase', 'op_secret'] } });
 // many distinct favorites from many page loads: capped, the rest counted as 'other'
 for (let i = 0; i < 70; i++) await post('/lab/stats', { v: 1, x: { fav: { ['name:Zz' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26))]: 1 } } });
 out.bad_format = (await post('/lab/stats', { v: 2 })).status;
@@ -123,7 +125,7 @@ out.rate_61st = last;
     out.credits = { images: a.images, credits: a.credits, api_first: api1, api_second: api - api1, again: JSON.stringify(b.credits) === JSON.stringify(a.credits) }; }
   finally { globalThis.fetch = real; } }
 { const xs = [...env.STATS.m.values()].map(v => JSON.parse(v).x).filter(Boolean); const sum = k => xs.reduce((a, x) => { for (const [n, v] of Object.entries(x[k] || {})) a[n] = (a[n] || 0) + v; return a; }, {});
-  out.x = Object.fromEntries(['did', 'ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'path'].map(k => [k, sum(k)])); }
+  out.x = Object.fromEntries(['did', 'ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'path', 'op'].map(k => [k, sum(k)])); }
 console.log(JSON.stringify(out));
 """
 
@@ -209,7 +211,7 @@ def worker_unit():
     need(pd["clips"] == 3 and pd["ref"] == {"news.ycombinator.com": 1}, f"pedia clips {pd['clips']}, ref {pd['ref']}")
     need("x is null @pedia-draw.js:3:9" in o["err_all"], "a pedia error was not kept")
     x = {k: {a: n for a, n in v.items() if n} for k, v in o["x"].items()}
-    need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
+    need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1, "op_miss": 1, "op_rephrase": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
     need(x["ws"] == {"reel": 40, "dream": 12, "mind": 7}, f"v2 watch seconds {x['ws']} (negative, fractional, absurd and unknown dropped)")
     need(x["pt"] == {"music": 30, "studio": 10}, f"v2 panel seconds {x['pt']}")
     need(x["ct"] == {"reelplay": 2, "reelend": 1, "irc": 3, "inbox": 1, "op": 2, "pedia": 1}, f"v2 counts {x['ct']} (an absurd count must be dropped)")
@@ -220,6 +222,8 @@ def worker_unit():
     need(len(fav) <= 61 and fav.get("other", 0) >= 1, f"favorites must be capped (60 names + 'other'): {len(fav)} kept, other {fav.get('other')}")
     need(x["rage"] == {"studioBtn": 1, "world": 2}, f"v2 rage clicks {x['rage']}")
     need(x["path"] == {"card>studio>reels": 1}, f"v2 path {x['path']} (once per page load in its last value; repeats and 4-step paths dropped)")
+    need(x.get("op") == {"out:acted": 3, "out:unsure": 1, "opt:light": 2, "cf:hi": 3, "fr:rephrase": 1, "mood:negative": 1, "mm:negative": 1, "gd:light": 1, "gt:light": 2, "gn:light": 1},
+         f"Operator signals {x.get('op')} (only fixed keys and small positive integers)")
     egx = {k: v for k, v in o["eg"].items() if v and (k.startswith("reels") or k.startswith("errs"))}
     need(egx == {"reels:1-5": 1, "errs:1": 1}, f"v2 buckets {egx}")
     return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits"
@@ -621,7 +625,7 @@ def t_tiny_genesis(P):
 
 
 ALLOWED_STATS = {"gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0"}
-ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage"}   # engagement v2 (idle-stats.js, helper/worker.js)
+ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
 
@@ -680,6 +684,34 @@ def t_stats_v2(P):
     need(all(n in starter or n == "other" for n in names), f"a name outside the starter world was sent: {names}")
     P.clean()
     return f"card {name}: pt {x.get('pt')}, ws {x.get('ws')}, path {path}, rage {x.get('rage')}, {len(x.get('fav', {}))} favorite keys"
+
+
+def t_op_stats(P):
+    """the Operator signals: outcomes, retries, caps/?!, a mood label from the (stubbed) in-browser classifier, genesis tries and nudges; the typed text never leaves"""
+    pg = P.open("/arena.html?statstest&test"); booted(pg)
+    secret = "PURPLE ZEBRA 4471 WHY?!"
+    pg.evaluate("""s => { let called = 0; window.__jeffy = { has: () => true, off: () => false, state: () => 'ready', load: async () => {}, predict: async (h, t) => { called++; window.__moodCalls = called; return { label: 'negative' }; } };
+      const ev = (type, extra) => dispatchEvent(new CustomEvent('idle:ev', { detail: { type, extra } })), txt = t => dispatchEvent(new CustomEvent('idle:optext', { detail: { text: t, brain: 'tiny' } }));
+      txt(s); ev('tiny_operator', { option: 'light', p: 0.62, acted: null, out: 'unsure' });
+      txt('let there be light please'); ev('genesis_nudge', { step: 'light' });
+      txt('let there be light'); ev('tiny_operator', { option: 'light', p: 0.97, acted: 'light', out: 'acted' }); ev('genesis', { step: 'light' });
+      ev('op_done', { brain: 'anthropic', tools: true, error: false }); }""", secret)
+    pg.wait_for_timeout(800)
+    pg.evaluate("() => window.__stats._send('3m')"); pg.wait_for_timeout(500)
+    need(P.stats, "nothing was sent with ?statstest")
+    raw = "\n".join(b if isinstance(b, str) else b.decode() for b in P.stats)
+    for frag in ("PURPLE", "ZEBRA", "4471", "let there be", "please"):
+        need(frag.lower() not in raw.lower(), f"typed text left the page: {frag!r} in a stats report")
+    op = {}
+    for q in [json.loads(b) for b in P.stats]:
+        for k2, n in ((q.get("x") or {}).get("op") or {}).items(): op[k2] = op.get(k2, 0) + n
+    need(op.get("out:unsure") == 1 and op.get("out:acted") == 1 and op.get("out:nudged") == 1 and op.get("byo:tool") == 1, f"outcomes {op}")
+    need(op.get("opt:light") == 2 and op.get("cf:mid") == 1 and op.get("cf:hi") == 1, f"guess and confidence {op}")
+    need(op.get("fr:rephrase") == 1 and op.get("fr:caps") == 1 and op.get("fr:punct") == 1, f"frustration signals {op}")
+    need(op.get("gn:light") == 1 and op.get("gd:light") == 1 and op.get("gt:light", 0) >= 1, f"genesis tries/nudges {op}")
+    need(op.get("mood:negative", 0) >= 1 and pg.evaluate("() => window.__moodCalls || 0") >= 1, f"mood label (computed in the page) {op}")
+    P.clean()
+    return f"{len(op)} keys: " + ", ".join(f"{k} {v}" for k, v in sorted(op.items())) + "; no typed text in any report"
 
 
 def t_pedia_stats(P):
@@ -1199,7 +1231,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["genesis", "genesis phone", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["genesis", "genesis phone", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1227,6 +1259,7 @@ def main():
                 run("haunted music", t_haunted)
                 run("stats", t_stats)
                 run("stats v2", t_stats_v2)
+                run("op stats", t_op_stats)
                 run("pedia stats", t_pedia_stats)
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
