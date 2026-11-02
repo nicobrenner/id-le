@@ -10,6 +10,10 @@
 //   - the last line: the model is asked to finish "In the beginning there was"; it usually says something else ("a lot of time"),
 //     which is shown, deleted, and replaced by "nothing". The game writes the word the model wouldn't.
 //   - nothing from training data is ever shown, only what the model writes now; a small blocklist resamples anything unfit.
+// The boot (idle-boot.js, Nico Nov 2): on staging and local copies (or with ?boot / ?intro=boot / play({ boot: true }); ?noboot skips it)
+// a terminal boots first, the operator types "run project 24", and the whole run plays inside its panes (term layout below).
+// Subtitles (Nico: "the subtitles are small… people miss it"): the scientist's lines, and outside the story the captions, are big,
+// centred on a dark band, at least 1.4× the size of the model's text.
 // API (used by idle-intro.js for tone 'epoch0'): window.__epoch0.play(opts) → Promise<{ tone:'epoch0', skipped }>, close(), playing();
 // recordings and tests: makeContent({ live }), frame(content, T, canvas) (call in increasing T), renderAudio(content) → base64 WAV.
 (() => {
@@ -38,7 +42,7 @@
     [1.9, "…ok. it's babbling. that's normal."], [9.2, 'oh wow, these losses are exceptional…'], [12.8, 'wait… it keeps learning!!'],
     [16.4, "and it's only a… a few megabytes?!"], [20.0, "look at those losses, after all these epochs, and… it doesn't stop…"],
     [23.6, "can we stop it?! OMG, it won't stop!!!"], [27.3, "…run!!!! it's tooooo llaaaaaaaa………"]];
-  let story = false;   // set per frame from the content (frameAt)
+  let story = false, term = false;   // set per frame from the content (frameAt): the story version; inside the boot's panes
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)), ease = u => u * u * (3 - 2 * u);
   const clean = s => String(s || '').replace(/�/g, '').replace(/^\s*\*\w*\s*/, '').replace(/\s+/g, ' ').replace(/\s+([,.!?'])/g, '$1').trim();
   // also out: persona details from the chat data (ages, people, money, health) and anything that looks like a name: a capitalized word
@@ -110,11 +114,18 @@
     const s = []; for (let i = 0; i < 50; i++) s.push(1.6 + 1.7 * Math.exp(-i / 6) + 0.05 * Math.sin(i * 1.7)); return { b: s, f: [] }; }
   // where things go: the curve is the "lab monitor" (left on desktop, top on phones), the lines stack beside it, epoch 0 at the top
   function layout(W, H, P) {
+    if (term && window.__termBoot) return termLayout(W, H, P);
     const port = P || W < H * 1.1;
-    if (port) { const cw = W - 28, ch = Math.min(H * 0.22, 190), fz = Math.round(clamp(W / 24, 13, 18));   // lines wrap to two rows on phones
+    if (port) { const cw = W - 28, ch = Math.min(H * 0.22, 190), fz = Math.round(clamp(W / 26, 13, 16));   // lines wrap to two rows on phones
       return { port, cv: { x: 14, y: H * 0.06, w: cw, h: ch }, ln: { x: 18, y: H * 0.06 + ch + 40, w: W - 36, fz, eh: fz * 4.1 } }; }
     const cw = W * 0.36, ch = H * 0.42, fz = Math.round(clamp(W / 66, 13, 21));
     return { port, cv: { x: W * 0.05, y: H * 0.29, w: cw, h: ch }, ln: { x: W * 0.47, y: H * 0.29 - 4, w: W * 0.49, fz, eh: fz * 2.85 } }; }
+  // inside the boot's panes: the curve fills TRAINING LOSS, the lines stack in MODEL SAMPLE DIALOG OUTPUTS (smaller text, so the subtitles win)
+  function termLayout(W, H, P) {
+    const p = window.__termBoot.panes(W, H, P), port = p.port, l = p.loss, s = p.samples, top = p.titleH + 10;
+    const fz = Math.max(11, Math.min(port ? 13 : Math.round(clamp(W / 75, 12, 17)), Math.floor((s.h - top - 16) / (port ? 24.6 : 17.1))));
+    return { port, term: true, panes: p, cv: { x: l.x + 14, y: l.y + top + 14, w: l.w - 28, h: l.h - top - 14 - (port ? 30 : 40) },
+      ln: { x: s.x + (port ? 18 : 30), y: s.y + top + fz * 0.6, w: s.w - (port ? 32 : 50), fz, eh: port ? fz * 4.1 : fz * 2.85 } }; }
   // the curve's points, and where each line sits on it
   function curveInfo() { const { b, f } = lossPts(), all = b.concat(f), N = all.length - 1, hi = Math.max(...all), lo = Math.min(...all);
     const ks = SCHED.map(st => st.k < 0 ? N : Math.min(N, st.k)); return { b, f, all, N, hi, lo, ks }; }
@@ -128,7 +139,7 @@
     const a = clamp((T - C.curve) / 0.6) * (story ? 1 - clamp((T - CS.flash) / 0.1) : 1 - clamp((T - (C.final - 0.4)) / 0.4)); if (a <= 0) return;
     const { x, y, w, h } = L.cv, kd = RM ? ci.ks[clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1)] : dotK(ci, T), kn = Math.floor(kd);
     g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h);
-    g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.fillText('training loss', x + 8, y - 8);
+    g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; if (!L.term) g.fillText('training loss', x + 8, y - 8);   // in the panes, the pane's title says it
     g.textAlign = 'right'; g.fillText('epochs →', x + w - 8, y + h + 16); g.textAlign = 'left';
     // the curve so far, up to the dot
     g.beginPath(); for (let k = 0; k <= kn; k++) { const [px, py] = ptXY(ci, L, k); k ? g.lineTo(px, py) : g.moveTo(px, py); }
@@ -208,43 +219,69 @@
       if (al <= 0 || n <= 0) continue; g.globalAlpha = al; g.font = `${Math.round(fz * (0.8 + x.w * 0.6))}px ui-monospace, Menlo, monospace`; g.fillStyle = x.w > 0.6 ? MAG : INK;
       g.fillText(x.text.slice(0, n), L.ln.x - 40 + x.x * Math.max(60, L.ln.w * 0.5) - 60 * x.w, L.ln.y + x.y * (H - L.ln.y - 120)); }
     g.globalAlpha = 1; }
-  function drawSub(g, W, H, T, P, RM) {   // the scientist's subtitle: typed, sans-serif, warm, bottom centre
-    let cur = null; for (const s of SUBS) if (T >= s[0]) cur = s; if (!cur || T >= CS.tear) return; const last = cur === SUBS[SUBS.length - 1];
-    const n = Math.floor((T - cur[0]) * (last ? 22 : 34)); let txt = cur[1].slice(0, Math.max(0, n)); if (!txt) return;
-    const fz = P ? 15 : Math.round(clamp(W / 52, 17, 26)); g.save(); g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    const y = H - (P ? 96 : 74), panic = T >= SUBS[5][0];
-    if (last && !RM) { const sm = clamp((T - cur[0]) / (CS.tear - cur[0])); g.translate(W / 2, y); g.scale(1 + sm * 1.6, 1 - sm * 0.35);   // the words stretch and smear as it gets away
-      for (let k = 4; k >= 1; k--) { g.globalAlpha = 0.12 * k * (1 - sm * 0.5); g.fillStyle = '#ffd9a0'; g.fillText(txt, -k * sm * 18, 0); } g.globalAlpha = 1; g.fillStyle = '#ffe9c9'; g.fillText(txt, 0, 0); }
-    else { const sh = panic && !RM ? (Math.random() - 0.5) * 3 : 0; g.fillStyle = '#00000099'; const w = g.measureText(txt).width; g.fillRect(W / 2 - w / 2 - 10, y - fz * 0.75, w + 20, fz * 1.5); g.fillStyle = panic ? '#ffd0c4' : '#ffe2b8'; g.fillText(txt, W / 2 + sh, y + sh); }
+  // the subtitle: the scientist's line in the story; otherwise the caption (where the run is, in words). Big, centred, on a dark band,
+  // at least 1.4× the model's text (Nico: "the subtitles are small, smaller than the text on the screen… people miss it")
+  function subNow(T) {
+    if (story) { let cur = null; for (const s of SUBS) if (T >= s[0]) cur = s; if (!cur || T >= CS.tear) return null;
+      return { t0: cur[0], text: cur[1], last: cur === SUBS[SUBS.length - 1], panic: T >= SUBS[5][0], who: 'scientist' }; }
+    if (T >= C.final - 0.4) return null; if (T < C.babble) return T < 0.3 ? null : { t0: 0.3, text: 'nothing yet' };
+    if (T >= C.stack) return { t0: C.stack, text: 'lower loss, better sentences' };
+    const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1); return { t0: C.babble + i * C.slot + 0.15, text: SCHED[i].cap }; }
+  const subFz = (L, P) => Math.round(Math.max(P ? 18 : 22, L.ln.fz * 1.45));
+  function subRows(g, text, maxW) { const ws = text.split(/(?<= )/); const rows = []; let a = ''; for (const w of ws) { if (a && g.measureText(a + w).width > maxW) { rows.push(a); a = w; } else a += w; } rows.push(a); return rows; }
+  function drawSub(g, W, H, T, P, RM, L) {
+    const s = subNow(T); if (!s) return; const n = RM ? s.text.length : Math.floor((T - s.t0) * (s.last ? 22 : 34)); if (n <= 0) return;
+    const fz = subFz(L, P), lh = fz * 1.28; g.save(); g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    // wrap the whole line first (rows don't jump while it types), then show the typed part
+    const rows = subRows(g, s.text, Math.min(W * 0.88, 980)); let left = n; const shown = rows.map(r => { const t = r.slice(0, Math.max(0, left)); left -= r.length; return t; }).filter(t => t);
+    const cy = L.term ? L.panes.band.y + L.panes.band.h / 2 + (s.who ? fz * 0.18 : 0) : H - (P ? 104 : 80) - (rows.length - 1) * lh / 2, y0 = cy - (rows.length - 1) * lh / 2;
+    if (s.last && !RM) { const sm = clamp((T - s.t0) / (CS.tear - s.t0)); const txt = shown.join(''); g.translate(W / 2, cy); g.scale(1 + sm * 1.6, 1 - sm * 0.35);   // the words stretch and smear as it gets away
+      for (let k = 4; k >= 1; k--) { g.globalAlpha = 0.12 * k * (1 - sm * 0.5); g.fillStyle = '#ffd9a0'; g.fillText(txt, -k * sm * 18, 0); } g.globalAlpha = 1; g.fillStyle = '#ffe9c9'; g.fillText(txt, 0, 0); g.restore(); return; }
+    const bw = Math.min(W - 16, Math.max(...rows.map(r => g.measureText(r).width)) + fz * 1.6), bh = rows.length * lh + fz * 0.7, sh = s.panic && !RM ? (Math.random() - 0.5) * 3 : 0, by = y0 - lh / 2 - fz * 0.35;
+    g.fillStyle = '#000000c4'; g.fillRect(W / 2 - bw / 2, by, bw, bh); g.fillStyle = s.panic ? '#ff8a7a' : '#ffcf8a'; g.fillRect(W / 2 - bw / 2, by, 3, bh);
+    if (s.who) { g.font = `600 ${Math.round(fz * 0.48)}px ui-monospace, Menlo, monospace`; g.textAlign = 'left'; g.fillStyle = '#c9a26b'; g.fillText(s.who.toUpperCase(), W / 2 - bw / 2 + 8, by - fz * 0.42);
+      g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; }
+    g.fillStyle = s.panic ? '#ffd0c4' : s.who ? '#ffe2b8' : '#eef6f8'; g.textAlign = 'left';
+    shown.forEach((t, k) => { const w = g.measureText(rows[k]).width; g.fillText(t, W / 2 - w / 2 + sh, y0 + k * lh + sh); });
     g.restore(); }
+  // inside the boot's panes: the frame around the run (titles, the training log, the GPUs, the status bar), drawn first each frame
+  function termChrome(g, W, H, T, P, RM, L, ci, a, cap) {
+    const over = story ? clamp((T - CS.over) / (CS.flash - CS.over)) : 0, lossAt = t => ci.all[Math.min(ci.N, Math.round(dotK(ci, Math.max(0, t))))] + 0.02 * Math.sin(t * 17);
+    window.__termBoot.chrome(g, W, H, T, P, RM, { a, prog: clamp(T / C.stack), over, overT: story ? Math.max(0, T - CS.over) : 0, overStart: CS.over, lossAt, cap }); }
   function frameStory(g, W, H, T, ct, st, P, RM) {
     if (T >= CS.flash + 0.45) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); if (T >= CS.split) drawSplit(g, W, H, T - (CS.split - C.split), P, RM, st); return; }
     const L = layout(W, H, P), ci = curveInfo(); g.save();
     if (!RM && T > CS.panic) { const k = clamp((T - CS.panic) / (CS.tear - CS.panic)); g.translate((Math.random() - 0.5) * 9 * k, (Math.random() - 0.5) * 9 * k); }   // the room shakes
     g.fillStyle = '#000'; g.fillRect(-20, -20, W + 40, H + 40);
-    if (T < CS.over) { const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1); const cap = T < C.babble ? 'epoch 0 · nothing yet' : `${epochLabel(ci, ci.ks[i])} · ${SCHED[i].cap}`;
-      g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.fillText(cap, P ? 14 : 28, H - (P ? 44 : 28)); }
-    else { g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = MAG; g.textBaseline = 'alphabetic'; g.fillText(`epoch ${Math.floor(300 + (T - CS.over) * 900)} · it does not stop`, P ? 14 : 28, H - (P ? 44 : 28)); }
+    const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1);
+    const cap = T < CS.over ? { text: T < C.babble ? 'epoch 0 · nothing yet' : `${epochLabel(ci, ci.ks[i])} · ${SCHED[i].cap}`, col: DIM } : { text: `epoch ${Math.floor(300 + (T - CS.over) * 900)} · it does not stop`, col: MAG };
+    if (L.term) termChrome(g, W, H, T, P, RM, L, ci, 1, cap);
+    else { g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = cap.col; g.textBaseline = 'alphabetic'; g.fillText(cap.text, P ? 14 : 28, H - (P ? 44 : 28)); }
     if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = L.ln.fz; g.fillStyle = CUR; g.fillRect(L.ln.x, entryY(L, 0) + fz * 0.4, fz * .55, fz * 1.05); } }
     else drawBabble(g, W, H, Math.min(T, CS.flash), ct, P, RM, st, L, ci);
     if (T >= CS.over) drawOverrun(g, W, H, T, ct, P, RM, L);
-    drawCurve(g, W, H, T, P, 0, L, ci, RM); drawSub(g, W, H, T, P, RM); g.restore();
+    drawCurve(g, W, H, T, P, 0, L, ci, RM); if (L.term) window.__termBoot.overlay(g, W, H, 0.6); drawSub(g, W, H, T, P, RM, L); g.restore();
     if (!RM && T >= CS.tear && T < CS.flash) { const k = (T - CS.tear) / (CS.flash - CS.tear);   // the tear: bands of the screen slide apart
       for (let y = 0; y < H; y += 18 + (y * 7) % 23) { const off = (((y * 37) % 11) - 5) * 14 * k; try { g.drawImage(g.canvas, 0, y * (g.canvas.height / H), g.canvas.width, 14 * (g.canvas.height / H), off, y, W, 14); } catch (e) {} } }
     if (T >= CS.flash) { g.globalAlpha = RM ? clamp((T - CS.flash) / 0.45) : 1 - clamp((T - CS.flash - 0.08) / 0.37); g.fillStyle = RM ? '#000' : '#fff'; g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
   function frameAt(g, W, H, T, ct, st, P, RM) {
-    story = !!ct.story; if (story) return frameStory(g, W, H, T, ct, st, P, RM);
+    story = !!ct.story; term = !!ct.boot && !!window.__termBoot; if (story) return frameStory(g, W, H, T, ct, st, P, RM);
     const ex = extraOf(ct), S = C.split + ex, Tl = T >= S ? T - ex : Math.min(T, C.split - 1e-3);   // Tl: the film's clock after the first line
     g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
-    const L = layout(W, H, P), ci = curveInfo();
-    // the stage's caption, bottom-left: where on the curve we are, in words
-    if (T < S) { const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1);
-      const cap = T < C.babble ? 'epoch 0 · nothing yet' : T < C.stack ? `${epochLabel(ci, ci.ks[i])} · ${SCHED[i].cap}` : T < C.final ? 'lower loss, better sentences' : 'done';
-      g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.globalAlpha = 1 - clamp((T - (S - 0.4)) / 0.4);
-      g.fillText(cap, P ? 14 : 28, H - (P ? 44 : 28)); g.globalAlpha = 1; }
+    const L = layout(W, H, P), ci = curveInfo(), fade = 1 - clamp((T - (C.final - 0.4)) / 0.4);
+    // where on the curve we are, small (the words for it are the subtitle)
+    const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1);
+    const cap = { text: T < C.babble ? 'epoch 0' : T < C.stack ? `${epochLabel(ci, ci.ks[i])} · loss ${ci.all[ci.ks[i]].toFixed(2)}` : T < C.final ? 'the whole run' : 'done', col: DIM };
+    if (L.term) { if (fade > 0) termChrome(g, W, H, T, P, RM, L, ci, fade, cap); }
+    else if (T < S) { g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.globalAlpha = 1 - clamp((T - (S - 0.4)) / 0.4);
+      g.fillText(cap.text, P ? 14 : 28, H - (P ? 44 : 28)); g.globalAlpha = 1; }
     if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = L.ln.fz; g.fillStyle = CUR; g.fillRect(L.ln.x, entryY(L, 0) + fz * 0.4, fz * .55, fz * 1.05); } }
     else if (T < C.final) drawBabble(g, W, H, T, ct, P, RM, st, L, ci);
-    drawCurve(g, W, H, T, P, S, L, ci, RM); drawWords(g, W, H, T, ct, P, S); if (T >= S) { drawSplit(g, W, H, Tl, P, RM, st); drawTurn(g, W, H, Tl, P); } }
+    drawCurve(g, W, H, T, P, S, L, ci, RM); if (L.term && fade > 0) window.__termBoot.overlay(g, W, H, 0.6 * fade); drawSub(g, W, H, T, P, RM, L);
+    drawWords(g, W, H, T, ct, P, S); if (T >= S) { drawSplit(g, W, H, Tl, P, RM, st); drawTurn(g, W, H, Tl, P); } }
+  // the whole intro: the boot (if any), then the run; A: seconds since the start
+  const bootOf = ct => ct && ct.boot && window.__termBoot ? window.__termBoot.dur : 0;
+  function frameAll(g, W, H, A, ct, st, P, RM) { const B = bootOf(ct); if (A < B) { term = true; return window.__termBoot.draw(g, W, H, A, P, RM); } frameAt(g, W, H, A - B, ct, st, P, RM); }
   const newState = (W, H, P) => { const r = rng(7); let gl = 0, glT = -1; return { cr: crawlers(W, H, P), glitch: T => { if (T - glT > 0.09) { glT = T; gl = r() < 0.18; } return gl; } }; };
 
   // ---------- sound (window.__audio; optional: the intro works silent) ----------
@@ -279,7 +316,7 @@
       const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); if (cross(d + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); return; }
     for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
     if (cross(C.final + 0.2)) S.note(now); if (cross(ex + C.split + 0.95)) S.cut(now); if (cross(ex + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); }
-  async function renderAudio(ct) { const sr = 44100, oc = new OfflineAudioContext(2, Math.ceil(sr * (totalOf(ct) + 1)), sr), S = synth(oc, oc.destination, 0); scheduleAll(S, ct, 0);
+  async function renderAudio(ct) { const B = bootOf(ct), sr = 44100, oc = new OfflineAudioContext(2, Math.ceil(sr * (B + totalOf(ct) + 1)), sr), S = synth(oc, oc.destination, B); if (B) window.__termBoot.fireAll(oc, S.out, 0); scheduleAll(S, ct, B);
     const buf = await oc.startRendering(), n = buf.length, L = buf.getChannelData(0), R = buf.getChannelData(1), dv = new DataView(new ArrayBuffer(44 + n * 4)); const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
     w(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 4, true);
     for (let i = 0; i < n; i++) { dv.setInt16(44 + i * 4, clamp(L[i], -1, 1) * 32767, true); dv.setInt16(46 + i * 4, clamp(R[i], -1, 1) * 32767, true); }
@@ -292,8 +329,8 @@
 #idleIntro .hint{position:absolute;bottom:20px;right:88px;font:12px system-ui;color:#7f8a95;pointer-events:none;user-select:none}#idleIntro.paused .hint{color:#7ee3f5}
 #idleIntro .ib{position:absolute;bottom:14px;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
   function play(opts = {}) {
-    if (cur) return cur.promise; css(); const P = phone(), RM = reduce(), safe = (window.__safeLevel | 0) > 0, liveOK = !P && !safe && !Q.has('intro_bank');
-    const el = document.createElement('div'); el.id = 'idleIntro'; el.dataset.tone = 'epoch0'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)');
+    if (cur) return cur.promise; css(); const P = phone(), RM = reduce(), safe = (window.__safeLevel | 0) > 0, liveOK = !P && !safe && !Q.has('intro_bank'), boot = wantBoot(opts);
+    const el = document.createElement('div'); el.id = 'idleIntro'; el.dataset.tone = 'epoch0'; el.dataset.boot = boot ? '1' : '0'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)');
     const cv = document.createElement('canvas'); el.appendChild(cv); const g = cv.getContext('2d');
     const skipB = document.createElement('button'); skipB.className = 'ib skip'; skipB.textContent = 'skip ›'; el.appendChild(skipB);
     const hint = document.createElement('span'); hint.className = 'hint'; hint.textContent = 'hold to read ·'; el.appendChild(hint);
@@ -301,17 +338,18 @@
     let ct = null, st = null, done = false, raf = 0, S = null, start = performance.now(), res; const promise = new Promise(r => res = r);
     // hold to read: pointer/finger down (or Space) freezes the film's clock; release resumes. Only "skip ›" and Esc skip.
     let soundT = 0, pausedAt = 0, pausedMs = 0; const now = () => pausedAt || performance.now();
-    const elapsed = () => (now() - start - pausedMs) / 1000, total = () => RM ? rmTotal(ct) : totalOf(ct);
+    const elapsed = () => (now() - start - pausedMs) / 1000, B = () => bootOf(ct), total = () => B() + (RM ? rmTotal(ct) : totalOf(ct));
+    const filmT = A => { const b = B(); return A < b ? A : b + (RM ? rmTime(A - b, ct) : A - b); };   // what to draw at A (reduced motion re-times the run, not the boot)
     const pause = () => { if (pausedAt || done) return; pausedAt = performance.now(); el.classList.add('paused'); hint.textContent = 'paused · release to go on ·'; if (S) { S.stop(0.15); S = null; } };
     const resume = () => { if (!pausedAt || done) return; pausedMs += performance.now() - pausedAt; pausedAt = 0; el.classList.remove('paused'); hint.textContent = 'hold to read ·'; if (audioReady()) setTimeout(startSound, 60); };
     const size = () => { const dpr = Math.min(devicePixelRatio || 1, P ? 1.5 : 2); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0); st = newState(innerWidth, innerHeight, P); };
     size(); addEventListener('resize', size);
     const audioReady = () => { const A = window.__audio; try { return A && !A.muted() && A.ctx().state === 'running'; } catch (e) { return false; } };
-    const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - elapsed()); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); syncSnd(); };
+    const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - (elapsed() - B())); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); syncSnd(); };
     const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) ? 'none' : ''; };
     sndB.addEventListener('click', e => { e.stopPropagation(); const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
     const finish = skipped => { if (done) return; done = true; cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
-      const out = { tone: 'epoch0', story: !!(ct && ct.story), skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
+      const out = { tone: 'epoch0', story: !!(ct && ct.story), boot, skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
       try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'end', ...out } })); } catch (e) {}
       if (opts.keep && !skipped) { cur = { promise, el, close: () => { el.classList.add('out'); setTimeout(() => el.remove(), 650); cur = null; } }; res(out); return; }
       el.classList.add('out'); setTimeout(() => { el.remove(); cur = null; res(out); }, skipped ? 350 : 650); };
@@ -321,23 +359,28 @@
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
     skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
     cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt };
-    Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent({ story: !!(opts.story || Q.has('story')) }); start = performance.now(); window.__epoch0.last = ct;
-      if (liveOK) fillLive(ct, elapsed).catch(() => {}); if (audioReady()) startSound(); syncSnd();
-      const loop = () => { if (done) return; const T = elapsed(); if (T >= total()) { frameAt(g, innerWidth, innerHeight, RM ? rmTime(total() - 0.01, ct) : totalOf(ct) - 0.01, ct, st, P, RM); return finish(false); }
-        frameAt(g, innerWidth, innerHeight, RM ? rmTime(T, ct) : T, ct, st, P, RM);
-        if (S && !RM) { try { liveSound(S, ct, soundT, T, S.ctx.currentTime); } catch (e) {} soundT = T; }
+    Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent({ story: !!(opts.story || Q.has('story')) }); ct.boot = boot; start = performance.now(); window.__epoch0.last = ct;
+      if (liveOK) fillLive(ct, () => elapsed() - B()).catch(() => {}); if (audioReady()) startSound(); syncSnd();
+      const loop = () => { if (done) return; const T = elapsed(); if (T >= total()) { frameAll(g, innerWidth, innerHeight, filmT(total() - 0.01), ct, st, P, RM); return finish(false); }
+        frameAll(g, innerWidth, innerHeight, filmT(T), ct, st, P, RM);
+        if (S && !RM) { const b = B(); try { if (b && soundT < b) window.__termBoot.fire(S.ctx, S.out, soundT, T, S.ctx.currentTime); liveSound(S, ct, soundT - b, T - b, S.ctx.currentTime); } catch (e) {} soundT = T; }
         raf = requestAnimationFrame(loop); }; loop(); });
-    try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'start', tone: 'epoch0', reduced: RM } })); } catch (e) {}
+    try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'start', tone: 'epoch0', boot, reduced: RM } })); } catch (e) {}
     return promise; }
+  // the boot plays on staging and local copies (where Nico tries things), or when asked for; never on id-le.com unless asked; ?noboot skips it
+  const bootHost = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  function wantBoot(o = {}) { if (!window.__termBoot || Q.has('noboot') || o.boot === false) return false; return o.boot === true || o.tone === 'boot' || Q.has('boot') || Q.get('intro') === 'boot' || bootHost(); }
   // reduced motion: whole lines one epoch at a time (no scroll, no stutter), the cut as a single frame, the halves still, then "your turn"
   function rmTime(T, ct) { if (ct.story) return T; const S = C.split + extraOf(ct); return T < S ? T : T < S + 1.8 ? S + (C.crawl - 0.1 - C.split) : S + (C.turn + 1.2 - C.split) + (T - S - 1.8); }
   const rmTotal = ct => ct.story ? totalOf(ct) : C.split + extraOf(ct) + 3.4;
 
   // ---------- recordings / tests: draw any moment (call in increasing T for one content) ----------
   let recSt = null, recKey = null;
-  function frame(ct, T, canvas) { const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, key = ct.seed + ':' + W + 'x' + H;
-    if (key !== recKey || !recSt || T < recSt.lastT) { recSt = newState(W, H, false); recKey = key; } recSt.lastT = T; g.setTransform(1, 0, 0, 1, 0, 0); frameAt(g, W, H, T, ct, recSt, false, false); }
+  function frame(ct, T, canvas, o = {}) { const g = canvas.getContext('2d'), sc = o.scale || 1, W = canvas.width / sc, H = canvas.height / sc, P = !!o.phone, key = ct.seed + ':' + W + 'x' + H + P;
+    if (key !== recKey || !recSt || T < recSt.lastT) { recSt = newState(W, H, P); recKey = key; } recSt.lastT = T; g.setTransform(sc, 0, 0, sc, 0, 0); frameAll(g, W, H, T, ct, recSt, P, false); }
+  // sizes for tests: the model's text, the subtitles, the pane titles (Nico: subtitles must not be smaller than the text on screen)
+  function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [] }; } finally { term = was; } }
   window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
-    loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => totalOf(ct),
+    loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot,
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont() };   // the bank tool samples through the same path
 })();

@@ -14,7 +14,7 @@
 //   (keep: leave the last frame, the void with a blinking cursor, on screen until __intro.close()).
 // Skippable: click, tap, Esc or any key, or "skip ›". prefers-reduced-motion: four still frames with fades. Phones: less detail.
 // Sound: synthesized through window.__audio (the one master: mute and volume apply); silent until the browser allows audio,
-// a "🔊 sound" button starts it mid-way. Debug: ?intro=storm | eerie | epic plays it on load; ?intro=0 never (window.__intro.off).
+// a "🔊 sound" button starts it mid-way. Debug: ?intro=storm | eerie | epic | epoch0 | boot plays it on load; ?intro=0 never (window.__intro.off).
 (() => {
   const Q = new URLSearchParams(location.search), qi = Q.get('intro');
   const reduce = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
@@ -392,9 +392,10 @@
   (document.head || document.documentElement).appendChild(css);
   // 'epoch0' (Nico's pick, Nov 1) is the default: the Oracle learns to speak, drawn by idle-epoch0.js (live model output, so not a fixed film);
   // storm / eerie / epic stay selectable for comparison (?intro=storm)
-  const TONES = ['storm', 'eerie', 'epic'], ALL = TONES.concat('epoch0'), DEF = () => window.__epoch0 ? 'epoch0' : 'storm', toneOf = x => TONES.includes(x) ? x : 'storm', pick = x => ALL.includes(x) ? (x === 'epoch0' && !window.__epoch0 ? 'storm' : x) : DEF();
+  const TONES = ['storm', 'eerie', 'epic'], ALL = TONES.concat('epoch0', 'boot'), DEF = () => window.__epoch0 ? 'epoch0' : 'storm', toneOf = x => TONES.includes(x) ? x : 'storm', pick = x => ALL.includes(x) ? ((x === 'epoch0' || x === 'boot') && !window.__epoch0 ? 'storm' : x) : DEF();
   function play(opts = {}) {
     if (pick(opts.tone) === 'epoch0') return window.__epoch0.play(opts);
+    if (pick(opts.tone) === 'boot') return window.__epoch0.play({ ...opts, boot: true });   // the terminal boot (idle-boot.js), then Epoch 0 in its panes
     if (cur) return cur.promise; const tone = toneOf(opts.tone), P = phone(), RM = reduce(), scenes = film(tone, P), total = scenes.reduce((a, s) => a + s.d, 0);
     const el = document.createElement('div'); el.id = 'idleIntro'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)'); el.dataset.tone = tone;
     const cv = document.createElement('canvas'); el.appendChild(cv); const g = cv.getContext('2d');

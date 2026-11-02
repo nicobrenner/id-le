@@ -969,7 +969,7 @@ def t_intro_epoch0(P):
     wait_for(pg, "() => document.getElementById('idleIntro') && document.getElementById('idleIntro').dataset.tone === 'epoch0'", 5); pg.wait_for_timeout(4500)
     lit = pg.evaluate("""() => { const c = document.querySelector('#idleIntro canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 53) if (d[i] + d[i + 1] + d[i + 2] > 120) n++; return n; }""")
     need(lit > 20, f"no babble drawn after 4.5 s ({lit} lit samples)")
-    t0 = time.time(); r = wait_for(pg, "() => window.__t_r", 60); dt = time.time() - t0 + 4.5
+    t0 = time.time(); r = wait_for(pg, "() => window.__t_r", 80); dt = time.time() - t0 + 4.5   # on localhost the terminal boot plays first (~12 s)
     need(r.get("tone") == "epoch0" and r.get("skipped") is False, f"the intro ended with {r}")
     # readable: every line stays fully on screen ≥ 2 s after it has streamed (Nico: "going a bit too fast for me to read")
     clk = pg.evaluate("() => { const C = window.__epoch0.clock; return { hold: C.slot - C.stream - C.lead, lines: window.__epoch0.schedule.length }; }")
@@ -1302,6 +1302,38 @@ def t_story_intro(P):
     return f"{r['total']:.1f} s; flash {r['flash']:.0f}, black {r['black']:.1f}, cut {r['cut']:.1f}"
 
 
+def t_boot_intro(P):
+    """The terminal boot before Epoch 0 (idle-boot.js; Nico's boot-script.md): CRT, the globe of letters, the boot log, the login, the
+    prompt and "run project 24", then the run inside labelled panes; the subtitles at least 1.4x the model's text (desktop and phone);
+    ?intro=boot plays it, Esc skips the whole thing, and the boot is off when asked (play({ boot: false }), ?noboot)."""
+    pg = P.open("/arena.html?fresh=1&test&nofirst5"); booted(pg)
+    r = pg.evaluate("""async () => { const E = window.__epoch0, B = window.__termBoot; await E.loadBank(); await E.loadLoss();
+      const ct = E.makeContent({ seed: 4 }); ct.boot = true; const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
+      const at = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 31) if (d[i] + d[i + 1] + d[i + 2] > 150) n++; return n; };
+      const lit = {}; for (const T of [1.2, 4.5, 7.6, 10.2, B.dur + 6]) lit[T] = at(T);
+      const m = [E.metrics(1280, 720, false, true), E.metrics(390, 844, true, true), E.metrics(1280, 720, false, false), E.metrics(390, 844, true, false)];
+      return { dur: B.dur, total: E.total(ct), plain: E.total(E.makeContent({ seed: 4 })), lit, m, ev: B.events, want: [E.wantBoot({}), E.wantBoot({ boot: false }), E.wantBoot({ tone: 'boot' })] }; }""")
+    need(10 <= r["dur"] <= 16, f"the boot should take 10-16 s: {r['dur']}"); need(abs(r["total"] - r["plain"] - r["dur"]) < 0.01, f"the run should follow the boot: {r}")
+    need(all(v > 8 for v in r["lit"].values()), f"every stage of the boot should draw something: {r['lit']}")
+    titles = r["m"][0]["titles"]
+    need("TRAINING LOSS · project 24" in titles and "MODEL SAMPLE DIALOG OUTPUTS" in titles and len(titles) == 4, f"pane titles: {titles}")
+    for m in r["m"]: need(m["subFz"] >= 1.4 * m["paneFz"], f"subtitles {m['subFz']}px vs the model's text {m['paneFz']}px (must be >= 1.4x)")
+    need(r["want"] == [True, False, True], f"on localhost the boot plays unless play({{ boot: false }}): {r['want']}")
+    pg2 = P.open("/arena.html?intro=boot&fresh=1&test&nofirst5")
+    wait_for(pg2, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.boot === '1' && window.__epoch0.time() > 2", 30, P=P)
+    pg2.wait_for_timeout(1500)
+    lit = pg2.evaluate("""() => { const c = document.querySelector('#idleIntro canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 53) if (d[i] + d[i + 1] + d[i + 2] > 150) n++; return n; }""")
+    need(lit > 20, f"the boot log should be on screen ({lit} lit samples)")
+    pg2.evaluate("() => { window.__t_r = null; window.__epoch0.play().then(x => window.__t_r = x); }")
+    pg2.keyboard.press("Escape"); res = wait_for(pg2, "() => window.__t_r", 5, P=P)
+    need(res.get("skipped") is True and res.get("boot") is True, f"Esc should skip the boot and the run: {res}")
+    pg3 = P.open("/arena.html?intro=0&noboot&fresh=1&test&nofirst5"); booted(pg3)
+    need(pg3.evaluate("() => window.__epoch0.wantBoot({})") is False, "?noboot should skip the boot")
+    P.clean()
+    d, p = r["m"][0], r["m"][1]
+    return f"boot {r['dur']:.1f} s + run = {r['total']:.1f} s; 4 labelled panes; subtitles {d['subFz']}px vs {d['paneFz']}px (phone {p['subFz']} vs {p['paneFz']}); ?intro=boot plays, Esc skips, ?noboot off; {r['ev']} sounds"
+
+
 def t_chooser(P):
     """?genesis opens the chooser (Storyline · From scratch · A ready world); "From scratch" gives the free console with every chip."""
     pg = P.open("/arena.html?genesis&intro=0&test")
@@ -1473,7 +1505,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1528,6 +1560,7 @@ def main():
                 run("genesis", t_genesis)
                 run("story", t_story)
                 run("story intro", t_story_intro)
+                run("boot intro", t_boot_intro)
                 run("chooser", t_chooser)
                 run("genesis phone", t_genesis_phone, is_mobile=True, has_touch=True)
                 run("pedia desktop", t_pedia)
