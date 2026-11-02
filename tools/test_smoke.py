@@ -1262,23 +1262,25 @@ def t_story(P):
     story = pg.evaluate("() => window.__epoch0.last.story")
     need(story, "the storyline should play the story version of Epoch 0")
     pg.keyboard.press("Escape")
-    # the landing (story v2): only the void first, no Operator, no chips; clicks answer faintly; 3 clicks bring the Operator
-    wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'void'", 10, P=P)
-    v = pg.evaluate("() => ({ box: document.documentElement.classList.contains('gen-box'), con: !!document.querySelector('#genConsole [data-gsay]'), lab: !!(document.querySelector('#lab') && document.querySelector('#lab').classList.contains('open')) })")
-    need(not v["box"] and not v["con"] and not v["lab"], f"the void should come first, without the Operator: {v}")
-    vw = pg.viewport_size
-    for k in range(3): pg.mouse.click(vw["width"] * (0.3 + 0.2 * k), vw["height"] * 0.4); pg.wait_for_timeout(250)
-    ripples = pg.evaluate("() => document.querySelectorAll('.genRipple').length")
-    wait_for(pg, "() => window.__genesis.landing().phase !== 'void'", 3, P=P)
+    # the landing (story v3): the dark first (the night, its shapes, your lines), no Operator, no chips; a click moves the lines on; Esc skips to the Operator
+    wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 10, P=P)
+    v = pg.evaluate("() => ({ box: document.documentElement.classList.contains('gen-box'), con: !!document.querySelector('#genConsole [data-gsay]'), lab: !!(document.querySelector('#lab') && document.querySelector('#lab').classList.contains('open')), night: !!document.querySelector('#genNight'), handle: getComputedStyle(document.querySelector('#toHandle')).display, skip: !!document.querySelector('#genNightSkip') })")
+    need(not v["box"] and not v["con"] and not v["lab"] and v["night"] and v["skip"] and v["handle"] == "none", f"the dark should come first, without the Operator: {v}")
+    vw = pg.viewport_size; n0 = pg.evaluate("() => window.__genesis.landing().shown")
+    for k in range(4): pg.mouse.click(vw["width"] * (0.3 + 0.1 * k), vw["height"] * 0.3); pg.wait_for_timeout(200)
+    n1 = pg.evaluate("() => window.__genesis.landing().shown"); need(n1 > n0, f"clicks should move the lines on: {n0} → {n1}")
+    pg.keyboard.press("Escape")
+    wait_for(pg, "() => window.__genesis.landing().phase !== 'dark'", 3, P=P)
     lnd = pg.evaluate("() => window.__genesis.landing()")
-    need(lnd["why"] == "clicks" and lnd["after"] < 5.5, f"3 clicks should bring the Operator: {lnd}"); need(ripples >= 1, "clicks in the void should answer (a ripple)")
+    need(lnd["why"] == "skip", f"Esc should go straight to the Operator: {lnd}")
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genBackdrop')", 20, P=P)
     pg.click("#genConsole")   # a tap finishes the line being typed
     wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]')", 40, P=P)
     w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.querySelector('#genConsole [data-gsay]').textContent, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
     need(w["mode"] == "story" and w["pre"] == "lights on" and "lights on" in w["say"], f"the waking up should end on 'lights on', pre-filled: {w}")
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
-    need("parallel universe" in w["thread"] and "tumble" in w["thread"], "the Tiny Operator's lines should be in the thread")
+    need("new universe" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "only eat words" in w["thread"], "the Tiny Operator's lines should be in the thread")
+    son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
     pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
     line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
@@ -1324,10 +1326,10 @@ def t_boot_intro(P):
       const lit = {}; for (const T of [1.2, 4.5, 7.6, 10.2, B.dur + 6]) lit[T] = at(T);
       const m = [E.metrics(1280, 720, false, true), E.metrics(390, 844, true, true), E.metrics(1280, 720, false, false), E.metrics(390, 844, true, false)];
       const sc = E.makeContent({ seed: 4, story: true }); sc.boot = true; sc.arrive = true; const AR = B.arrive;
-      const cen = T => { E.frame(sc, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let n = 0, sy = 0; for (let y = 0; y < 360; y += 2) for (let x = 0; x < 640; x += 2) { const i = (y * 640 + x) * 4; if (d[i] + d[i + 1] + d[i + 2] > 300) { n++; sy += y; } } return n ? sy / n / 360 : -1; };
-      const mids = AR.lines.map(l => cen((l.typed + l.t1) / 2)), holds = AR.lines.map(l => +(l.t1 - l.typed).toFixed(2));
+      const cen = T => { E.frame(sc, T, cv); const s = AR.lastSay(); return s ? s.cy / s.H : -1; };   // where the line was drawn (the scenes behind it are lit now)
+      const mids = AR.lines.map(l => cen((l.typed + l.t1) / 2)), holds = AR.lines.map(l => +(l.t1 - l.t0).toFixed(2)), cab = AR.scenes.cab[1], thread = AR.thread.length, lester = AR.lines.filter(l => l.who === 'lester').length;
       return { dur: B.dur, total: E.total(ct), plain: E.total(E.makeContent({ seed: 4 })), lit, m, ev: B.events, want: [E.wantBoot({}), E.wantBoot({ boot: false }), E.wantBoot({ tone: 'boot' })],
-        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), mids, holds, lens: AR.lines.map(l => l.text.length), aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
+        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), mids, holds, thread, lester, lens: AR.lines.map(l => l.text.length), aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
     need(10 <= r["dur"] <= 16, f"the boot should take 10-16 s: {r['dur']}"); need(abs(r["total"] - r["plain"] - r["dur"]) < 0.01, f"the run should follow the boot: {r}")
     need(all(v > 8 for v in r["lit"].values()), f"every stage of the boot should draw something: {r['lit']}")
     titles = r["m"][0]["titles"]
@@ -1337,8 +1339,9 @@ def t_boot_intro(P):
     # arriving at the lab (story v2): before the boot in the story; six lines, each in the middle of the screen, held >= 2.5 s (longer for long lines)
     need(abs(r["stotal"] - r["splain"] - r["dur"] - r["arr"]) < 0.01, f"story: arrival + boot + run: {r['stotal']} vs {r['splain']} + {r['dur']} + {r['arr']}")
     need(r["warr"] == [True, False], f"the arrival plays in the story only (or ?intro=boot): {r['warr']}")
-    need(len(r["mids"]) == 6 and all(0.4 <= y <= 0.6 for y in r["mids"]), f"the scientist's lines should sit in the middle (lit centroid as a share of the height): {r['mids']}")
-    need(all(h >= 2.5 for h in r["holds"]) and all(h >= 0.8 + n / 22 - 0.01 for h, n in zip(r["holds"], r["lens"])), f"each line held >= 2.5 s, longer for long lines: {r['holds']}")
+    need(len(r["mids"]) == 6 and all(abs(y - 0.5) < 0.01 for y in r["mids"]), f"the hallway lines should sit in the middle: {r['mids']}")
+    need(r["thread"] == 6 and r["lester"] == 3 and 22 <= r["arr"] <= 36, f"the arrival: 6 messages, Lester answers 3 times, ~30 s: {r['thread']}, {r['lester']}, {r['arr']}")
+    need(all(h >= 2.0 for h in r["holds"]) and all(h >= n * 0.042 - 0.01 for h, n in zip(r["holds"], r["lens"])), f"each line on screen >= 2 s, ~42 ms a character for long ones: {r['holds']}")
     need(all(m["sciY"] == (720 if i % 2 == 0 else 844) / 2 for i, m in enumerate(r["m"])), "the scientist's subtitles should be in the middle of the screen")
     pg2 = P.open("/arena.html?intro=boot&fresh=1&test&nofirst5")
     wait_for(pg2, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.boot === '1' && window.__epoch0.time() > 2", 30, P=P)
@@ -1356,20 +1359,25 @@ def t_boot_intro(P):
 
 
 def t_story_landing(P):
-    """The storyline's landing without clicks: the void alone, then the Operator arrives by itself ~6 s after the intro."""
+    """The storyline's dark landing with no input: the night and its shapes, your 8 lines one by one in the middle, then the Operator arrives
+    (Id and le fold into its window) and pings the dark: the rings rim the shapes. Lights on lifts the night."""
     pg = P.open("/arena.html?story&test")
     wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.last)", 40, P=P)
     pg.keyboard.press("Escape")
-    wait_for(pg, "() => window.__genesis.landing().phase === 'void'", 10, P=P)
-    pg.wait_for_timeout(4000)
-    mid = pg.evaluate("() => ({ phase: window.__genesis.landing().phase, box: document.documentElement.classList.contains('gen-box') })")
-    need(mid["phase"] == "void" and not mid["box"], f"4 s into the void the Operator should not be there yet: {mid}")
-    wait_for(pg, "() => window.__genesis.landing().phase !== 'void'", 6, P=P)
-    arr = pg.evaluate("() => ({ ...window.__genesis.landing(), canvas: !!document.querySelector('#genArrive') })")
-    need(arr["why"] == "time" and 5.5 <= arr["after"] <= 7, f"the Operator should arrive ~6 s after landing: {arr}")
+    wait_for(pg, "() => window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 10, P=P)
+    pg.wait_for_timeout(1200)
+    say = pg.evaluate("() => { const s = window.__termBoot.arrive.lastSay(); return s && { y: s.cy / s.H, who: s.who }; }")
+    need(say and abs(say["y"] - 0.5) < 0.01 and say["who"] == "you", f"your lines should be in the middle of the screen: {say}")
+    lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 35, P=P)
+    need(lnd["why"] == "lines" and lnd["shown"] == 8 and 14 <= lnd["after"] <= 30, f"all 8 lines, then the Operator: {lnd}")
+    son = wait_for(pg, "() => { const l = window.__genesis.landing(); return l.pings >= 2 && l.rimmed >= 1 && l; }", 15, P=P)
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
+    pg.click("#genConsole")
+    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 40, P=P)
+    pg.click("#genConsole [data-gsay]")
+    wait_for(pg, "() => window.__genesis.cosmos().lit && !document.querySelector('#genNight')", 10, P=P)
     P.clean()
-    return f"void alone for {arr['after']:.1f} s, then the arrival (Id and le fold into the window){' drawn' if arr['canvas'] else ''}, then the waking up"
+    return f"the dark for {lnd['after']:.1f} s (8 lines, centred), the Operator arrived, {son['pings']} pings rimmed {son['rimmed']} shapes; lights on lifted the night"
 
 
 # never stuck (Nico hit it in ?story): close every guided widget, then a way out must be on screen and must work
@@ -1383,7 +1391,8 @@ def stuck_check(pg, P, where):
     pg.evaluate(CLOSE_ALL); pg.wait_for_timeout(900)
     w = pg.evaluate(WAY_OUT)
     need(w["handle"] and w["onTop"], f"{where}: with everything closed the Operator's creature must be visible and on top: {w}")
-    pg.click("#toHandle"); pg.wait_for_timeout(600)
+    pg.click("#toHandle")
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => +getComputedStyle(document.querySelector('#topbar')).opacity > 0.95", 4, P=P)   # the menus fade back in
     after = pg.evaluate("() => ({ lab: document.querySelector('#lab').classList.contains('open'), calm: document.documentElement.classList.contains('gen-calm'), top: getComputedStyle(document.querySelector('#topbar')).opacity })")
     need(after["lab"] and not after["calm"] and float(after["top"]) > 0.5, f"{where}: tapping it should reopen the Operator and bring the menus back: {after}")
     return w, after

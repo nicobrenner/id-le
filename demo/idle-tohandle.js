@@ -1,7 +1,8 @@
 // idle-tohandle.js: never stuck (Nico, Nov 2: in ?story he closed every guided widget and was left in the void around a black hole, with
 // nothing bringing the menus back). The Tiny Operator is always somewhere on screen: when its window is closed it waits in a corner as a
 // small creature (#toHandle). Tapping it opens the Operator again and brings back every menu the guided start had hidden (gen-calm).
-// A watchdog keeps it there: whatever is closed or hidden, the creature is visible whenever the window is not.
+// A watchdog keeps it there: whatever is closed or hidden, the creature is visible whenever the window is not (except during the storyline's
+// dark landing, a scripted scene with its own skip ›, where the Operator hasn't arrived yet).
 (() => {
   const $ = s => document.querySelector(s);
   const css = document.createElement('style');
@@ -9,7 +10,7 @@
 #toHandle:hover{transform:scale(1.12)}#toHandle[hidden]{display:block!important;opacity:0;pointer-events:none}#toHandle svg{width:100%;height:100%;overflow:visible}
 #toHandle .leg{stroke:#7ee3f5;stroke-width:1.6;stroke-linecap:round;animation:toLeg 1.6s ease-in-out infinite;transform-origin:23px 26px}#toHandle .leg:nth-child(2n){animation-delay:-.8s}
 #toHandle .eye{animation:toBlink 4.2s infinite;transform-origin:center;transform-box:fill-box}#toHandle .tip{position:absolute;right:52px;bottom:8px;white-space:nowrap;font:600 11px system-ui;color:#cfe9f0;background:#0b0f18e6;border:1px solid #2b6f86;border-radius:10px;padding:3px 8px;opacity:0;pointer-events:none;transition:opacity .3s}
-#toHandle:hover .tip,#toHandle.hint .tip{opacity:1}
+#toHandle:hover .tip,#toHandle.hint .tip{opacity:1}html.gen-landing #toHandle{display:none!important}
 @keyframes toLeg{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}@keyframes toBlink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
 @media (prefers-reduced-motion: reduce){#toHandle .leg,#toHandle .eye{animation:none}}`;
   document.head.appendChild(css);

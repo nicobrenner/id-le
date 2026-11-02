@@ -4,23 +4,26 @@
 // multiplexer: TRAINING LOSS · project 24, MODEL SAMPLE DIALOG OUTPUTS, the training log, the GPUs. Epoch 0 (idle-epoch0.js) then runs inside
 // those panes: it asks panes() for its layout and draws chrome() around itself every frame.
 // Nothing here is real hardware or a real product: the numbers are invented, there are no vendor logos.
-// Before it, in the storyline (and ?intro=boot): arriving at the lab (boot-script.md, v2): a black screen, sound only (the car in the rain,
-// the indicator, the door, footsteps, a keycard beep) and the scientist's six lines, in Nico's words, big in the middle of the screen.
+// Before it, in the storyline (and ?intro=boot): arriving at the lab (boot-script.md, v3b): a driverless cab in the storm and a messages
+// thread on a phone held in both hands, the lab door's keycard reader, then a dim hallway where the scientist and Lester talk.
 // API: window.__termBoot = { dur, draw(g, W, H, T, P, RM), panes(W, H, P), chrome(g, W, H, Tf, P, RM, o), overlay(g, W, H, a),
 //   arrive: { dur, draw, fire, fireAll, beds, lines }, beds(ctx, dest, T, at) (continuous sounds already under way at T),
 //   fire(ctx, dest, T0, T1, at) (live sound for boot seconds T0..T1), fireAll(ctx, dest, t0) (recordings) }.
 (() => {
-  const DUR = 12.4;
   const BG = '#06090b', TXT = '#b9c6cc', DIM = '#5d6b74', OK = '#7fd38a', AMB = '#f0b45a', RED = '#ff5d5d', CY = '#7ee3f5', MAG = '#e0367a', BORDER = '#22323c', ACT = '#4fae63';
   const MONO = 'ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace';
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)), ease = u => u * u * (3 - 2 * u);
   const portOf = (W, H, P) => !!P || W < H * 1.1;
   // ---------- the script's clock (seconds) ----------
-  const K = { globe: 0.25, log: 2.35, login: 6.15, user: 6.35, pass: 7.2, last: 8.0, welcome: 8.25, shell: 8.55, cmd: 9.1, enter: 10.55, split: 11.25 };
   const CMD = 'run project 24', USER = 'operator', PASS = '**********';
+  // "run project 24" is typed by a person: 110–140 ms a key (Nico: "should have bigger fonts, and happen slightly slower")
+  const CK = (() => { let t = 9.5; return [...CMD].map((c, i) => (t += 0.11 + 0.03 * (((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1))); })();
+  const K = { globe: 0.25, log: 2.35, login: 6.65, user: 6.85, pass: 7.7, last: 8.5, welcome: 8.75, shell: 9.05, cmd: 9.5, enter: CK[CK.length - 1] + 0.35 };
+  K.split = K.enter + 0.7; const DUR = K.split + 1.15;
   // the boot log: [text, status, status colour, seconds it takes, shown on phones]
   const LOG = [
     ['LAB-BIOS 41.7 · observatory node 07', '', DIM, 0.24, 1],
+    ['ø Id|le OS v 0/67', '', '#e9f6ff', 0.55, 1, 'os'],
     ['cpu: 4 × 512 cores', 'OK', OK, 0.2, 1],
     ['unified memory: 1.0 TiB', 'checked', OK, 0.62, 1],
     ['fabric: 8 links, 9.6 TB/s', 'OK', OK, 0.18, 0],
@@ -38,9 +41,9 @@
   // the keys: a little irregular, like a person typing
   const typed = (s, t0, cps, T, RM) => RM ? (T >= t0 ? s : '') : s.slice(0, clamp(Math.floor((T - t0) * cps), 0, s.length));
   const keyTimes = (s, t0, cps) => [...s].map((c, i) => t0 + (i + 0.5 + 0.35 * Math.sin(i * 2.3)) / cps);
-  const CMD_CPS = CMD.length / (K.enter - K.cmd - 0.2);
-  const SHELL_OUT = [[10.72, '▸ project 24: a tiny language model, trained from scratch'], [10.88, '▸ gpu0–7 allocated · 1.0 TiB pinned'], [11.04, '▸ opening panes: loss · samples · gpu']];
-  const SHELL_OUT_P = [[10.72, '▸ project 24: a tiny model, from scratch'], [10.88, '▸ gpu0–7 allocated'], [11.04, '▸ opening panes']];
+  const cmdTyped = (T, RM) => RM ? (T >= K.cmd ? CMD : '') : CMD.slice(0, CK.filter(t => t <= T).length);
+  const SHELL_OUT = [[K.enter + 0.17, '▸ project 24: a tiny language model, trained from scratch'], [K.enter + 0.33, '▸ gpu0–7 allocated · 1.0 TiB pinned'], [K.enter + 0.49, '▸ opening panes: loss · samples · gpu']];
+  const SHELL_OUT_P = [[K.enter + 0.17, '▸ project 24: a tiny model, from scratch'], [K.enter + 0.33, '▸ gpu0–7 allocated'], [K.enter + 0.49, '▸ opening panes']];
 
   // ---------- the panes (a terminal multiplexer's layout) ----------
   function panes(W, H, P) {
@@ -118,14 +121,15 @@
     if (T < K.shell) {   // the boot log, then the login, scrolling like a console
       const rowsMax = Math.floor((H - pad * 2) / lh), lines = [], width = port ? 31 : 44;
       LOG.forEach((l, i) => { if (port && !l[4]) return; const t0 = LOGT[i]; if (T < t0) return; let txt = l[0];
-        if (i === 2 && T < t0 + l[3] * 0.85 && !RM) txt = `unified memory: ${Math.floor(1048576 * ease(clamp((T - t0) / (l[3] * 0.85)))).toLocaleString('en-US')} MB`;
-        const done = T >= t0 + l[3] * 0.6 || RM; lines.push({ txt: txt.length > width ? txt.slice(0, width - 1) + '…' : txt, st: l[1] && done ? l[1] : '', col: l[2], dots: !!l[1], width }); });
+        if (l[0].startsWith('unified memory') && T < t0 + l[3] * 0.85 && !RM) txt = `unified memory: ${Math.floor(1048576 * ease(clamp((T - t0) / (l[3] * 0.85)))).toLocaleString('en-US')} MB`;
+        const done = T >= t0 + l[3] * 0.6 || RM; lines.push({ txt: txt.length > width ? txt.slice(0, width - 1) + '…' : txt, st: l[1] && done ? l[1] : '', col: l[2], dots: !!l[1], width, os: l[5] === 'os' }); });
       if (T >= K.login) { lines.push({ txt: '' }); lines.push({ txt: 'lab-node-07 login: ' + typed(USER, K.user, 13, T, RM), cur: T < K.pass });
         if (T >= K.pass - 0.08) lines.push({ txt: 'password: ' + typed(PASS, K.pass + 0.1, 15, T, RM), cur: T < K.last });
         if (T >= K.last) lines.push({ txt: port ? 'Last login: Sun Nov 1 23:58 · obs-deck' : 'Last login: Sun Nov  1 23:58:12 2041 from observation-deck', col: DIM });
         if (T >= K.welcome) lines.push({ txt: port ? 'welcome back, operator.' : 'welcome back, operator. 23 universes archived, 0 running.', col: TXT }); }
       const vis = lines.slice(-rowsMax); g.font = `${fz}px ${MONO}`; g.textBaseline = 'middle';
       vis.forEach((L, i) => { const y = pad + lh * (i + 0.5); g.fillStyle = L.col && !L.dots ? L.col : TXT; let x = pad;
+        if (L.os) { g.save(); g.font = `700 ${Math.round(fz * 1.25)}px ${MONO}`; g.shadowColor = CY; g.shadowBlur = 14; g.fillStyle = '#e9f6ff'; g.fillText(L.txt, x, y); g.restore(); return; }   // the OS's name, bright
         const s = L.dots ? (L.txt + ' ').padEnd(L.width + 2, '.') + ' ' : L.txt; g.fillText(s, x, y); x += g.measureText(s).width;
         if (L.st) { if (L.st === 'BYPASSED') { g.fillStyle = AMB; g.globalAlpha = RM ? 1 : 0.6 + 0.4 * Math.abs(Math.sin(T * 9)); } else g.fillStyle = L.col; g.fillText(`[ ${L.st} ]`, x, y); g.globalAlpha = 1; }
         if (L.cur) cursor(g, x + 2, y, fz, T); });
@@ -137,12 +141,12 @@
     p.list.forEach((r, i) => { if (r === p.log) return; const a = RM ? (T >= K.split ? 1 : 0) : clamp((T - (K.split + 0.3 + i * 0.14)) / 0.25); if (a <= 0) return;
       frameOf(g, r, p, typed(r.title, K.split + 0.35 + i * 0.14, 48, T, RM), a, false); });
     frameOf(g, sh, p, u > 0.5 ? p.log.title : (port ? 'sh · project-24' : 'sh · session project-24'), 1, true);
-    shellText(g, sh, p, T, RM, null, u < 0.5 ? (port ? 12 : Math.round(clamp(W / 90, 12, 15))) : p.pfz);
+    shellText(g, sh, p, T, RM, null, u < 0.5 ? (port ? 18 : Math.round(clamp(W / 60, 18, 22))) : p.pfz);   // the shell, full screen: 1.5× (Nico: bigger)
     overlay(g, W, H); }
   // the shell's lines (the prompt, the command and its output; in the film, the training log follows)
   function shellLines(T, RM, port) {
     const out = [{ txt: port ? '[session project-24]' : '[session project-24 · 4 panes · zero universes running]', col: DIM }];
-    if (T >= K.cmd - 0.4) out.push({ prompt: true, cmd: typed(CMD, K.cmd, CMD_CPS, T, RM), cur: T < K.enter });
+    if (T >= K.cmd - 0.4) out.push({ prompt: true, cmd: cmdTyped(T, RM), cur: T < K.enter });
     (port ? SHELL_OUT_P : SHELL_OUT).forEach(([t0, s]) => { if (T >= t0) out.push({ txt: s, col: CY }); });
     return out; }
   function shellText(g, r, p, T, RM, extra, fz) {
@@ -188,7 +192,7 @@
   const EV = (() => { const ev = [{ t: 0.02, k: 'crt' }, { t: 0.3, k: 'relay' }, { t: K.log, k: 'disk', d: K.login - K.log }];
     LOG.forEach((l, i) => { ev.push({ t: LOGT[i], k: 'tick' }); if (l[1] === 'BYPASSED') ev.push({ t: LOGT[i] + l[3] * 0.6, k: 'warn' }); });
     keyTimes(USER, K.user, 13).forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.pass - 0.12, k: 'enter' }); keyTimes(PASS, K.pass + 0.1, 15).forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.last - 0.1, k: 'enter' });
-    keyTimes(CMD, K.cmd, CMD_CPS).forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.enter, k: 'enter' }); SHELL_OUT.forEach(([t]) => ev.push({ t, k: 'tick' })); ev.push({ t: K.split, k: 'whoomp' });
+    CK.forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.enter, k: 'enter' }); SHELL_OUT.forEach(([t]) => ev.push({ t, k: 'tick' })); ev.push({ t: K.split, k: 'whoomp' });
     return ev.sort((a, b) => a.t - b.t); })();
   const noiseOf = new WeakMap();
   function noise(ctx) { let b = noiseOf.get(ctx); if (b) return b; const n = ctx.sampleRate | 0; b = ctx.createBuffer(1, n, ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; noiseOf.set(ctx, b); return b; }
@@ -210,71 +214,182 @@
   // continuous sounds already under way at T (the sound was switched on mid-way, or resumed after a hold): start them for what is left
   function bootBeds(ctx, dest, T, at) { for (const e of EV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { sound(ctx, dest, { ...e, d: e.t + e.d - T }, at); } catch (er) {} } }
 
-  // ---------- arriving at the lab (v2): black, sound, the scientist's lines ----------
-  // Nico's lines, verbatim (boot-script.md v2, section 0). Each is typed, then held: at least 2.5 s, longer for long lines.
-  const ARR = [
-    { who: 'scientist · on the phone', text: "Yes honey, it's an important day at the lab today… we're going to attempt a post PROJECT 23 run" },
-    { who: 'scientist · on the phone', text: "I'm excited, but a bit concerned too…" },
-    { who: 'scientist · on the phone', text: "yes, I'm sure everything will be fine… ok, arriving now, see you later", ind: true },
-    { beat: true },   // engine off, the door, footsteps in the rain, the keycard: LAB 07 · ACCESS GRANTED, a door hisses open
+  // ---------- arriving at the lab (v3b, boot-script.md): the cab, the door, the hallway ----------
+  // 1. the back seat of a driverless cab in the storm, a phone held in both hands: a messages thread with "❤️" (our own drawing)
+  // 2. the lab door in the rain: a keycard reader goes from red to green, LAB 07 · ACCESS GRANTED
+  // 3. a dim hallway of server racks; the scientist and Lester talk (subtitles in the middle; Lester's in green with his name)
+  const THREAD = [
+    { me: false, text: 'big day today? 🤞' },
+    { me: true, text: "yes!! important day at the lab today, we're going to attempt a post PROJECT 23 run 🧪" },
+    { me: true, text: "I'm excited… but a bit concerned too 😬" },
+    { me: false, text: "it'll be fine ❤️ dinner at 7?" },
+    { me: true, text: "yes, I'm sure everything will be fine… ok, arriving now, see you later 😘" },
+    { me: false, text: 'good luck!! 🍀' }];
+  // when each message lands: hers after typing dots, his after a short pause; then enough time to read it
+  const TH = (() => { let t = 1.0; return THREAD.map(m => { const dots = m.me ? 0 : 0.6, at = t + dots; t = at + Math.max(1.0, m.text.length * 0.028); return { ...m, dots: at - dots, at }; }); })();
+  const CAB = TH[TH.length - 1].at + 1.3, DOOR = CAB, ROOM = DOOR + 2.3;
+  const ROOMLINES = [
     { who: 'scientist', text: "Oh hey Lester, thank you for spotting me the other day with 23, glad to have you back. Wish me luck with 24!" },
-    { who: 'scientist', text: "this Tiny Oracle model got pretty intense last time… I wonder what happens if it gets too smart… oh well", steps: true },
-    { who: 'scientist', text: "Alright, let's boot this cluster and start the run right away…" }];
-  const CPS = 42, BEAT = 4.8, GAP = 0.4;
-  const holdOf = s => Math.max(2.5, 0.8 + s.length / 22);
-  const AL = (() => { let t = 1.6; const out = []; for (const l of ARR) { if (l.beat) { out.push({ beat: true, t0: t, t1: t + BEAT }); t += BEAT; continue; }
-    const ty = l.text.length / CPS, h = holdOf(l.text); out.push({ ...l, t0: t, typed: t + ty, t1: t + ty + h }); t += ty + h + GAP; } return out; })();
-  const ADUR = AL[AL.length - 1].t1 + 0.8, BT = AL.find(l => l.beat).t0;
+    { who: 'lester', text: 'anytime, doc. 23 was… something' },
+    { who: 'scientist', text: "this Tiny Oracle model got pretty intense last time… I wonder what happens if it gets too smart… oh well" },
+    { who: 'lester', text: "I'll keep a hand on the breaker this time" },
+    { who: 'scientist', text: "Alright, let's boot this cluster and start the run right away…" },
+    { who: 'lester', text: 'good luck, doc' }];
+  const CPS = 80, GAP = 0.15, holdOf = s => Math.max(2.0, s.length * 0.042 + 0.25);   // at least 2 s; long lines ~42 ms a character
+  const AL = (() => { let t = ROOM + 0.3; return ROOMLINES.map(l => { const d = holdOf(l.text), o = { ...l, t0: t, typed: t + l.text.length / CPS, t1: t + d }; t += d + GAP; return o; }); })();
+  const ADUR = AL[AL.length - 1].t1 + 0.5, BT = DOOR;
+  const WHO = { scientist: { label: 'scientist', col: '#ffe2b8', bar: '#ffcf8a', lab: '#c9a26b' }, lester: { label: 'lester', col: '#c4f2dd', bar: '#6fd6a8', lab: '#6fd6a8' } };
   function wrapRows(g, text, maxW) { const ws = text.split(/(?<= )/), rows = []; let a = ''; for (const w of ws) { if (a && g.measureText(a + w).width > maxW) { rows.push(a); a = w; } else a += w; } rows.push(a); return rows; }
+  let lastSay = null;
   // a line in the middle of the screen: big, typed, on a dim band, with who says it above
-  function say(g, W, H, text, n, who, fz, a = 1) {
+  function say(g, W, H, text, n, who, fz, a = 1, st = WHO.scientist) {
     if (n <= 0 || a <= 0) return; g.save(); g.globalAlpha = a; const FONT = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.font = FONT; g.textBaseline = 'middle';
     const rows = wrapRows(g, text, Math.min(W * 0.84, 900)), lh = fz * 1.3, y0 = H / 2 - (rows.length - 1) * lh / 2, bw = Math.min(W - 16, Math.max(...rows.map(r => g.measureText(r).width)) + fz * 1.8), bh = rows.length * lh + fz * 0.9, by = y0 - lh / 2 - fz * 0.45;
-    g.fillStyle = '#000000b8'; g.fillRect(0, by - fz * 0.9, W, bh + fz * 1.8); g.fillStyle = '#0b0d12e6'; g.fillRect(W / 2 - bw / 2, by, bw, bh); g.fillStyle = '#ffcf8a'; g.fillRect(W / 2 - bw / 2, by, 3, bh);
-    if (who) { g.font = `600 ${Math.max(10, Math.round(fz * 0.42))}px ${MONO}`; g.fillStyle = '#c9a26b'; g.textAlign = 'left'; g.fillText(who.toUpperCase(), W / 2 - bw / 2 + 8, by - fz * 0.45); g.font = FONT; }
-    g.fillStyle = '#ffe2b8'; g.textAlign = 'left'; let left = n; rows.forEach((r, k) => { const t = r.slice(0, Math.max(0, left)); left -= r.length; if (t) g.fillText(t, W / 2 - g.measureText(r).width / 2, y0 + k * lh); });
-    g.restore(); }
+    g.fillStyle = '#000000a0'; g.fillRect(0, by - fz * 0.9, W, bh + fz * 1.8); g.fillStyle = '#0b0d12e6'; g.fillRect(W / 2 - bw / 2, by, bw, bh); g.fillStyle = st.bar; g.fillRect(W / 2 - bw / 2, by, 3, bh);
+    if (who) { g.font = `600 ${Math.max(10, Math.round(fz * 0.42))}px ${MONO}`; g.fillStyle = st.lab; g.textAlign = 'left'; g.fillText(who.toUpperCase(), W / 2 - bw / 2 + 8, by - fz * 0.45); g.font = FONT; }
+    g.fillStyle = st.col; g.textAlign = 'left'; let left = n; rows.forEach((r, k) => { const t = r.slice(0, Math.max(0, left)); left -= r.length; if (t) g.fillText(t, W / 2 - g.measureText(r).width / 2, y0 + k * lh); });
+    lastSay = { cy: H / 2, H, who, fz }; g.restore(); }
   const sayFz = (W, P) => P ? 21 : Math.round(clamp(W / 42, 22, 32));
+  const hash = (a, b = 0) => { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); };
+  const rr = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const BOLTS = [2.3, 6.4, 10.0];
+  const flashAt = T => BOLTS.reduce((m, b) => Math.max(m, T > b ? Math.exp(-(T - b) * 9) : 0, T > b + 0.13 ? 0.7 * Math.exp(-(T - b - 0.13) * 7) : 0), 0);
+
+  // 1. the cab: the windshield ahead (rain, wipers, the road, lightning far off), the empty driver's seat, AUTOPILOT; the phone in both hands
+  function drawCab(g, W, H, T, P, RM) {
+    const port = portOf(W, H, P), fl = RM ? 0 : flashAt(T); g.fillStyle = '#05070b'; g.fillRect(0, 0, W, H);
+    const wy0 = H * 0.05, wy1 = H * (port ? 0.3 : 0.44), wx0 = W * 0.04, wx1 = W * 0.96, ins = W * 0.07, hz = wy0 + (wy1 - wy0) * 0.58;
+    g.save(); g.beginPath(); g.moveTo(wx0 + ins, wy0); g.lineTo(wx1 - ins, wy0); g.lineTo(wx1, wy1); g.lineTo(wx0, wy1); g.closePath(); g.clip();
+    const sky = g.createLinearGradient(0, wy0, 0, hz); sky.addColorStop(0, `rgb(${12 + fl * 120},${16 + fl * 130},${30 + fl * 150})`); sky.addColorStop(1, `rgb(${22 + fl * 80},${26 + fl * 80},${38 + fl * 90})`); g.fillStyle = sky; g.fillRect(0, wy0, W, hz - wy0);
+    if (fl > 0.25) { const b = BOLTS.filter(x => T > x).pop() || 0, bx = W * (0.25 + 0.5 * hash(b)); g.strokeStyle = `rgba(230,240,255,${fl})`; g.lineWidth = 1.5; g.beginPath(); let x = bx, y = wy0; g.moveTo(x, y); while (y < hz - 4) { y += (hz - wy0) / 7; x += (hash(b, y) - 0.5) * 30; g.lineTo(x, y); } g.stroke(); }
+    // hills, the road, its dashes rushing in, a few far lights
+    g.fillStyle = '#07090d'; g.beginPath(); g.moveTo(0, hz); for (let x = 0; x <= W; x += W / 12) g.lineTo(x, hz - 6 - 10 * hash(x)); g.lineTo(W, wy1); g.lineTo(0, wy1); g.fill();
+    g.fillStyle = '#0d1016'; g.beginPath(); g.moveTo(W / 2 - 6, hz); g.lineTo(W / 2 + 6, hz); g.lineTo(W * 0.8, wy1); g.lineTo(W * 0.2, wy1); g.fill();
+    for (let k = 0; k < 7; k++) { const z = ((k / 7 + (RM ? 0 : T * 0.55)) % 1), y = hz + (wy1 - hz) * z * z, hgt = 2 + 14 * z * z; g.fillStyle = `rgba(220,210,170,${0.25 + 0.5 * z})`; g.fillRect(W / 2 - 1 - z * 3, y, 2 + z * 6, hgt); }
+    for (let i = 0; i < 6; i++) { g.fillStyle = `rgba(255,190,110,${0.35 + 0.3 * hash(i, Math.floor(T * 2))})`; g.fillRect(W * (0.1 + 0.8 * hash(i, 9)), hz - 3 - 4 * hash(i, 3), 2, 2); }
+    // rain on the glass, and the wipers
+    g.strokeStyle = 'rgba(170,190,215,0.28)'; g.lineWidth = 1; for (let i = 0; i < 90; i++) { const x = W * hash(i, 1), y = wy0 + ((hash(i, 2) * (wy1 - wy0) + (RM ? 0 : T * (60 + 90 * hash(i, 4)))) % (wy1 - wy0)); g.beginPath(); g.moveTo(x, y); g.lineTo(x - 1, y + 4 + 6 * hash(i, 5)); g.stroke(); }
+    const sw = RM ? -0.6 : Math.sin(T * Math.PI / 0.75) * 0.95 - 0.35, L = (wy1 - wy0) * 1.15; g.strokeStyle = '#020305'; g.lineWidth = 5; g.lineCap = 'round';
+    for (const px of [W * 0.33, W * 0.63]) { g.beginPath(); g.moveTo(px, wy1 + 4); g.lineTo(px + Math.sin(sw) * L, wy1 + 4 - Math.cos(sw) * L); g.stroke(); }
+    g.restore(); g.strokeStyle = '#0f131a'; g.lineWidth = 10; g.beginPath(); g.moveTo(wx0 + ins, wy0); g.lineTo(wx1 - ins, wy0); g.lineTo(wx1, wy1); g.lineTo(wx0, wy1); g.closePath(); g.stroke();
+    // the dashboard, AUTOPILOT, the front seats (the driver's is empty)
+    g.fillStyle = '#080a0e'; g.fillRect(0, wy1, W, H - wy1); g.fillStyle = '#0c0f14'; g.fillRect(0, wy1, W, H * 0.05);
+    g.save(); g.font = `600 ${port ? 9 : 11}px ${MONO}`; g.fillStyle = '#5fe0b0'; g.shadowColor = '#5fe0b0'; g.shadowBlur = 8; g.globalAlpha = 0.65 + 0.25 * Math.sin(T * 2); g.fillText('◉ AUTOPILOT', W * 0.18, wy1 + H * 0.032); g.restore();
+    g.fillStyle = '#0e1117'; for (const [cx, w] of [[W * 0.3, W * 0.16], [W * 0.7, W * 0.16]]) { rr(g, cx - w / 2, wy1 - H * 0.05, w, H * 0.16, 14); g.fill(); rr(g, cx - w * 0.28, wy1 - H * 0.11, w * 0.56, H * 0.08, 10); g.fill(); }
+    // the side windows: rain running down, a street light sweeping past now and then
+    const pass = (T * 0.45) % 1; for (const [x0, x1] of [[0, W * 0.08], [W * 0.92, W]]) { g.fillStyle = `rgba(255,200,130,${0.18 * Math.max(0, 1 - Math.abs(pass - 0.5) * 6)})`; g.fillRect(x0, 0, x1 - x0, H * 0.6); }
+    if (fl) { g.fillStyle = `rgba(200,215,255,${fl * 0.12})`; g.fillRect(0, 0, W, H); }
+    drawPhone(g, W, H, T, port, RM); }
+
+  // the phone: its screen is the thread; on a phone it fills the screen, on a wide screen it is held in both hands
+  function drawPhone(g, W, H, T, port, RM) {
+    const sway = RM ? 0 : Math.sin(T * 0.9) * 3, rot = RM ? 0 : Math.sin(T * 0.6) * 0.012;
+    let pw, ph, px, py; if (port) { pw = W * 0.94; ph = H * 0.97; px = W / 2; py = H * 0.015; } else { ph = H * 0.98; pw = ph * 0.48; px = W / 2; py = H * 0.13; }
+    g.save(); g.translate(px + sway, py + ph / 2); g.rotate(rot); g.translate(-px, -(py + ph / 2));
+    const x = px - pw / 2, r = pw * 0.13, b = pw * 0.03;
+    if (!port) { const glow = g.createRadialGradient(px, py + ph * 0.45, pw * 0.2, px, py + ph * 0.45, pw * 1.3); glow.addColorStop(0, 'rgba(120,150,200,0.16)'); glow.addColorStop(1, 'rgba(120,150,200,0)'); g.fillStyle = glow; g.fillRect(px - pw * 1.4, py - ph * 0.2, pw * 2.8, ph * 1.4); }
+    g.fillStyle = '#16181c'; rr(g, x, py, pw, ph, r); g.fill(); g.strokeStyle = '#2a2d33'; g.lineWidth = 1.5; g.stroke();
+    const sx = x + b, sy = py + b, sw = pw - b * 2, sh = ph - b * 2; g.save(); rr(g, sx, sy, sw, sh, r * 0.85); g.clip(); g.fillStyle = '#000'; g.fillRect(sx, sy, sw, sh);
+    const fs = port ? Math.round(clamp(W / 24, 14, 17)) : Math.round(clamp(sw / 21, 12, 17)), visBottom = port ? sy + sh - fs * 3.4 : H * 0.7;
+    // status bar, the contact ("❤️"), a camera dot
+    g.font = `600 ${Math.round(fs * 0.8)}px system-ui, sans-serif`; g.fillStyle = '#e8e8ea'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText('18:41', sx + sw * 0.08, sy + fs * 1.3);
+    g.fillStyle = '#e8e8ea'; for (let i = 0; i < 4; i++) g.fillRect(sx + sw * 0.8 + i * 4, sy + fs * 1.6 - i * 2.5, 3, 3 + i * 2.5); g.fillStyle = '#0b0b0b'; g.beginPath(); g.arc(px, sy + fs * 1.3, fs * 0.35, 0, 7); g.fill();
+    const ay = sy + fs * 3.8; g.fillStyle = '#3a3a3e'; g.beginPath(); g.arc(px, ay, fs * 1.5, 0, 7); g.fill(); g.font = `${Math.round(fs * 1.4)}px system-ui, "Apple Color Emoji", "Noto Color Emoji", sans-serif`; g.textAlign = 'center'; g.fillText('❤️', px, ay + 1);
+    g.font = `${Math.round(fs * 0.75)}px system-ui, sans-serif`; g.fillStyle = '#c9c9ce'; g.fillText('❤️ ›', px, ay + fs * 2.3); g.fillStyle = '#26262a'; g.fillRect(sx, ay + fs * 3.1, sw, 1);
+    // the messages: newest at the bottom, each sliding in; hers after three typing dots; Delivered / Read under his latest
+    g.font = `${fs}px system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Noto Color Emoji", sans-serif`; g.textAlign = 'left';
+    const maxW = sw * 0.68, padX = fs * 0.65, padY = fs * 0.45, lh = fs * 1.25, items = [];
+    TH.forEach((m, i) => { if (T >= m.at) items.push({ ...m, i, rows: wrapRows(g, m.text, maxW) }); else if (!m.me && T >= m.dots) items.push({ dotsOnly: true, i }); });
+    const lastMe = [...items].reverse().find(m => m.me), lastIdx = items.length ? items[items.length - 1].i : -1, readNow = lastMe && TH.slice(lastMe.i + 1).some(m => !m.me && T >= m.dots);
+    g.save(); g.beginPath(); g.rect(sx, ay + fs * 3.15, sw, sh); g.clip();   // older messages scroll up under the contact
+    let yb = visBottom; for (let k = items.length - 1; k >= 0; k--) { const m = items[k];
+      if (m.dotsOnly) { const bw = fs * 3.2, bh = fs * 1.9; yb -= bh; g.fillStyle = '#2c2c2e'; rr(g, sx + sw * 0.05, yb, bw, bh, bh / 2); g.fill(); for (let d = 0; d < 3; d++) { g.fillStyle = `rgba(200,200,205,${0.35 + 0.6 * (RM ? 1 : Math.max(0, Math.sin(T * 7 - d * 0.9)))})`; g.beginPath(); g.arc(sx + sw * 0.05 + fs * (0.9 + d * 0.7), yb + bh / 2, fs * 0.2, 0, 7); g.fill(); } yb -= fs * 0.5; continue; }
+      const u = RM ? 1 : ease(clamp((T - m.at) / 0.25)), tw = Math.max(...m.rows.map(rw => g.measureText(rw).width)), bw = tw + padX * 2, bh = m.rows.length * lh + padY * 2;
+      if (m.me && m === lastMe) { g.font = `${Math.round(fs * 0.7)}px system-ui, sans-serif`; g.fillStyle = '#8e8e93'; g.textAlign = 'right'; g.fillText(readNow ? 'Read 18:41' : 'Delivered', sx + sw * 0.95, yb - fs * 0.45); g.textAlign = 'left'; g.font = `${fs}px system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Noto Color Emoji", sans-serif`; yb -= fs * 1.1; }
+      yb -= bh; const bx = m.me ? sx + sw * 0.95 - bw : sx + sw * 0.05, oy = (1 - u) * fs * 1.2; g.globalAlpha = u;
+      g.fillStyle = m.me ? '#0a84ff' : '#2c2c2e'; rr(g, bx, yb + oy, bw, bh, Math.min(fs * 0.9, bh / 2)); g.fill(); g.fillStyle = m.me ? '#fff' : '#f2f2f7';
+      m.rows.forEach((rw, j) => g.fillText(rw, bx + padX, yb + oy + padY + lh * (j + 0.5))); g.globalAlpha = 1; yb -= fs * (k > 0 && items[k - 1].me === m.me ? 0.25 : 0.6); }
+    g.restore();
+    // the input field
+    const iy = port ? sy + sh - fs * 2.6 : H * 0.72; g.strokeStyle = '#3a3a3e'; g.lineWidth = 1; rr(g, sx + sw * 0.06, iy, sw * 0.88, fs * 1.8, fs * 0.9); g.stroke(); g.fillStyle = '#6b6b70'; g.font = `${Math.round(fs * 0.85)}px system-ui, sans-serif`; g.fillText('message', sx + sw * 0.1, iy + fs * 0.9);
+    g.restore(); g.restore();
+    // the hands (wide screens): two palms below, thumbs on the sides of the phone, lit by the screen
+    if (!port) { const skin = (a) => `rgba(${70 + 25 * a},${48 + 18 * a},${40 + 14 * a},1)`;
+      for (const s of [-1, 1]) { g.save(); g.translate(px + sway + s * pw * 0.56, H * 1.06); g.rotate(s * -0.3); g.fillStyle = skin(0.35); g.beginPath(); g.ellipse(0, 0, pw * 0.26, H * 0.2, 0, 0, 7); g.fill(); g.restore();
+        g.save(); g.translate(px + sway + s * pw * 0.47, H * 0.88); g.rotate(s * -0.6); g.fillStyle = skin(0.6); rr(g, -pw * 0.045, -pw * 0.16, pw * 0.09, pw * 0.24, pw * 0.045); g.fill(); g.restore(); } } }
+
+  // 2. the lab door in the rain: the reader goes red → green
+  function drawDoor(g, W, H, t, P, RM) {
+    const port = portOf(W, H, P); const wall = g.createLinearGradient(0, 0, W, H); wall.addColorStop(0, '#0d1118'); wall.addColorStop(1, '#06080c'); g.fillStyle = wall; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 9; i++) { g.fillStyle = `rgba(255,255,255,${0.012 + 0.01 * hash(i)})`; g.fillRect(0, H * i / 9, W, 1); }
+    g.fillStyle = '#0a0d12'; g.fillRect(W * 0.62, 0, W * 0.3, H); g.strokeStyle = '#1b2029'; g.lineWidth = 3; g.strokeRect(W * 0.62, -5, W * 0.3, H + 10); g.fillStyle = '#c9d2dc22'; g.font = `700 ${port ? 18 : 30}px ${MONO}`; g.fillText('07', W * 0.74, H * 0.2);
+    const ok = t > 1.0, rw = port ? 110 : 150, rh = port ? 160 : 210, rx = W * (port ? 0.3 : 0.45) - rw / 2, ry = H * 0.42 - rh / 2, led = ok ? '#7fd38a' : '#ff5d5d';
+    g.save(); g.shadowColor = led; g.shadowBlur = 40; g.fillStyle = '#14171c'; rr(g, rx, ry, rw, rh, 12); g.fill(); g.restore();
+    g.strokeStyle = '#2b313b'; g.lineWidth = 1.5; rr(g, rx, ry, rw, rh, 12); g.stroke(); g.fillStyle = '#05070a'; g.fillRect(rx + rw * 0.12, ry + rh * 0.1, rw * 0.76, rh * 0.32);
+    g.font = `700 ${port ? 10 : 12}px ${MONO}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = ok ? '#7fd38a' : '#c9d2dc'; g.fillText(ok ? 'ACCESS' : 'LAB 07', rx + rw / 2, ry + rh * 0.2); g.fillText(ok ? 'GRANTED' : 'TAP CARD', rx + rw / 2, ry + rh * 0.32);
+    g.save(); g.shadowColor = led; g.shadowBlur = 16; g.fillStyle = led; g.beginPath(); g.arc(rx + rw / 2, ry + rh * 0.62, rw * 0.06, 0, 7); g.fill(); g.restore();
+    // the card comes up to the reader
+    const u = RM ? 1 : ease(clamp((t - 0.35) / 0.55)), cx = rx + rw / 2 + (1 - u) * W * 0.25, cy = ry + rh * 0.8 + (1 - u) * H * 0.4; if (t < 1.6) { g.save(); g.translate(cx, cy); g.rotate(-0.15 * (1 - u)); g.fillStyle = '#d9dde3'; rr(g, -rw * 0.42, -rw * 0.27, rw * 0.84, rw * 0.54, 6); g.fill(); g.fillStyle = '#2f6fb5'; g.fillRect(-rw * 0.42, -rw * 0.12, rw * 0.84, rw * 0.1); g.restore(); }
+    if (ok) { const a = clamp((t - 1.0) / 0.15); g.save(); g.globalAlpha = a; g.font = `700 ${port ? 16 : 22}px ${MONO}`; g.fillStyle = '#7fd38a'; g.shadowColor = '#7fd38a'; g.shadowBlur = 12; g.fillText('LAB 07 · ACCESS GRANTED', W / 2, H * 0.78); g.restore(); }
+    // the puddle's glow, the rain in front
+    const pg = g.createRadialGradient(rx + rw / 2, H * 0.97, 4, rx + rw / 2, H * 0.97, W * 0.25); pg.addColorStop(0, ok ? '#7fd38a33' : '#ff5d5d33'); pg.addColorStop(1, '#00000000'); g.fillStyle = pg; g.fillRect(0, H * 0.85, W, H * 0.15);
+    g.strokeStyle = 'rgba(180,200,225,0.25)'; g.lineWidth = 1; for (let i = 0; i < 120; i++) { const x = W * hash(i, 7), y = (hash(i, 8) * H + (RM ? 0 : t * (700 + 300 * hash(i)))) % H; g.beginPath(); g.moveTo(x, y); g.lineTo(x - 3, y + 14); g.stroke(); }
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic'; }
+
+  // 3. the hallway: server racks with blinking lights, ceiling panels (one flickers), a terminal glowing at the end, Lester by a rack
+  function drawHall(g, W, H, t, P, RM) {
+    const port = portOf(W, H, P), vx = W / 2, vy = H * 0.44, f = H * (port ? 0.42 : 0.62) * (1 + (RM ? 0 : t * 0.012)), hw = port ? 1.1 : 1.7, yf = 1.15, yc = -1.25;
+    const pr = (x, y, z) => [vx + x * f / z, vy + y * f / z]; g.fillStyle = '#04060a'; g.fillRect(0, 0, W, H);
+    const quad = (a, b, c, d, fill) => { g.fillStyle = fill; g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.lineTo(...c); g.lineTo(...d); g.closePath(); g.fill(); };
+    const Z0 = 0.9, Z1 = 16; quad(pr(-hw, yf, Z0), pr(hw, yf, Z0), pr(hw, yf, Z1), pr(-hw, yf, Z1), '#121820'); quad(pr(-hw, yc, Z0), pr(hw, yc, Z0), pr(hw, yc, Z1), pr(-hw, yc, Z1), '#0b0f15');
+    quad(pr(-hw, yc, Z0), pr(-hw, yf, Z0), pr(-hw, yf, Z1), pr(-hw, yc, Z1), '#0f141b'); quad(pr(hw, yc, Z0), pr(hw, yf, Z0), pr(hw, yf, Z1), pr(hw, yc, Z1), '#0f141b');
+    // the far wall and the terminal
+    const [ax, ay] = pr(-hw, yc, Z1), [bx, by] = pr(hw, yf, Z1); g.fillStyle = '#05070b'; g.fillRect(ax, ay, bx - ax, by - ay); const [mx, my] = pr(-0.35, -0.35, Z1), [nx, ny] = pr(0.35, 0.2, Z1);
+    g.save(); g.shadowColor = '#7ee3f5'; g.shadowBlur = 30; g.fillStyle = '#0b2a33'; g.fillRect(mx, my, nx - mx, ny - my); g.restore(); if (Math.floor(t * 2.4) % 2 === 0) { g.fillStyle = '#7ee3f5'; g.fillRect(mx + (nx - mx) * 0.1, my + (ny - my) * 0.6, (nx - mx) * 0.08, (ny - my) * 0.15); }
+    // ceiling panels
+    for (let k = 0; k < 7; k++) { const z = 1.6 + k * 2, flick = k === 2 && !RM && hash(Math.floor(t * 8)) > 0.7 ? 0.2 : 1, a = (0.55 - k * 0.06) * flick; const [p1x, p1y] = pr(-0.4, yc + 0.01, z), [p2x] = pr(0.4, yc, z), [, p3y] = pr(0.4, yc, z + 0.6);
+      g.fillStyle = `rgba(190,215,235,${a})`; g.fillRect(p1x, p1y, p2x - p1x, Math.max(1, p3y - p1y)); const lg = g.createRadialGradient(vx, p1y, 1, vx, p1y, f / z * 1.4); lg.addColorStop(0, `rgba(120,150,175,${a * 0.18})`); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, W, H); }
+    // racks on both walls, their lights blinking
+    for (const s of [-1, 1]) for (let k = 0; k < 6; k++) { const z0 = 1.4 + k * 2.2, z1 = z0 + 1.6, x = s * (hw - 0.02); quad(pr(x, -0.95, z0), pr(x, yf - 0.02, z0), pr(x, yf - 0.02, z1), pr(x, -0.95, z1), '#171d26');
+      for (let i = 0; i < 10; i++) for (let j = 0; j < 3; j++) { const zz = z0 + 0.25 + j * 0.5, yy = -0.8 + i * 0.18, on = hash(k * 31 + i * 7 + j + (s > 0 ? 500 : 0), Math.floor(t * (2 + hash(i, j) * 4))) > 0.55; if (!on) continue;
+        const [lx, ly] = pr(x, yy, zz); g.fillStyle = hash(i, k + j) > 0.8 ? '#f0b45a' : '#5fe08a'; g.fillRect(lx, ly, Math.max(1, 3 / zz * (f / 400)), Math.max(1, 2 / zz * (f / 400))); } }
+    // Lester: a silhouette by the racks on the right, a small light on his badge
+    const [lx, ly] = pr(port ? 0.6 : 1.05, yf, 3.0), sc = f / 3.0; g.fillStyle = '#020304'; g.beginPath(); g.arc(lx, ly - sc * 1.62, sc * 0.11, 0, 7); g.fill(); rr(g, lx - sc * 0.2, ly - sc * 1.5, sc * 0.4, sc * 0.95, sc * 0.12); g.fill(); g.fillRect(lx - sc * 0.15, ly - sc * 0.6, sc * 0.12, sc * 0.6); g.fillRect(lx + sc * 0.03, ly - sc * 0.6, sc * 0.12, sc * 0.6);
+    g.strokeStyle = '#3b5568'; g.lineWidth = 1; g.beginPath(); g.arc(lx, ly - sc * 1.62, sc * 0.11, Math.PI * 1.1, Math.PI * 1.7); g.stroke(); g.fillStyle = '#7ee3f5'; g.globalAlpha = 0.6 + 0.3 * Math.sin(t * 3); g.fillRect(lx - sc * 0.12, ly - sc * 1.25, sc * 0.06, sc * 0.08); g.globalAlpha = 1; }
+
   function arriveDraw(g, W, H, T, P, RM) {
-    g.fillStyle = '#000'; g.fillRect(0, 0, W, H); const port = portOf(W, H, P);
-    // in the car: faint rain on the windscreen, and the indicator's amber blink while it says "arriving now"
-    if (T < BT + 1.2) { const a = 1 - clamp((T - BT) / 1.2); g.save(); g.globalAlpha = 0.09 * a; g.strokeStyle = '#9fb4c8'; g.lineWidth = 1;
-      if (!RM) for (let i = 0; i < 70; i++) { const x = ((i * 137.5) % W + T * 40 * (1 + (i % 5))) % W, y = ((i * 89.3) % H + T * 300 * (0.6 + (i % 3) * 0.3)) % H; g.beginPath(); g.moveTo(x, y); g.lineTo(x - 2, y + 10); g.stroke(); }
-      g.restore(); const ind = AL.find(l => l.ind); if (T > ind.t0 && T < BT + 0.4 && Math.floor((T - ind.t0) / 0.38) % 2 === 0) { const r = g.createRadialGradient(port ? 40 : 70, H - 60, 2, port ? 40 : 70, H - 60, 90); r.addColorStop(0, '#ffb24a55'); r.addColorStop(1, '#ffb24a00'); g.fillStyle = r; g.fillRect(0, H - 160, 200, 160); } }
-    // the keycard
-    if (T > BT + 2.9 && T < BT + BEAT) { const a = clamp((T - BT - 2.9) / 0.15) * (1 - clamp((T - BT - BEAT + 0.4) / 0.4)); g.save(); g.globalAlpha = a; g.font = `700 ${port ? 15 : 20}px ${MONO}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillStyle = '#7fd38a'; g.shadowColor = '#7fd38a'; g.shadowBlur = 12; g.fillText('LAB 07 · ACCESS GRANTED', W / 2, H / 2); g.restore(); }
-    for (const l of AL) { if (l.beat || T < l.t0 || T > l.t1) continue; const n = RM ? l.text.length : Math.floor((T - l.t0) * CPS), a = clamp((l.t1 - T) / 0.3);
-      say(g, W, H, l.text, n, l.who, sayFz(W, P), a); }
-    if (T > ADUR - 0.8) { g.fillStyle = '#000'; g.globalAlpha = clamp((T - (ADUR - 0.8)) / 0.6); g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
-  // sound: beds (the car, the rain outside, the room) and moments (the indicator, the door, steps, the keycard)
-  const AEV = (() => { const ev = [{ t: 0, k: 'car', d: BT + 0.6 }, { t: BT + 0.5, k: 'rainout', d: 2.9 }, { t: BT + 3.3, k: 'room', d: ADUR - BT - 3.3 }];
-    const ind = AL.find(l => l.ind); for (let t = ind.t0; t < BT; t += 0.38) ev.push({ t, k: 'ind', hi: Math.round((t - ind.t0) / 0.38) % 2 === 0 });
-    ev.push({ t: BT, k: 'engineoff' }, { t: BT + 0.45, k: 'dooropen' }, { t: BT + 0.95, k: 'doorslam' }); for (let i = 0; i < 5; i++) ev.push({ t: BT + 1.2 + i * 0.4, k: 'step', wet: true });
-    ev.push({ t: BT + 2.9, k: 'beep' }, { t: BT + 3.3, k: 'hiss' }); const st = AL.find(l => l.steps); for (let i = 0; i < 3; i++) ev.push({ t: st.t0 - 1.0 + i * 0.36, k: 'step' });
-    return ev.sort((a, b) => a.t - b.t); })();
+    if (T < DOOR) drawCab(g, W, H, T, P, RM); else if (T < ROOM) drawDoor(g, W, H, T - DOOR, P, RM); else drawHall(g, W, H, T - ROOM, P, RM);
+    // cuts: a short dip to black between the scenes
+    const dip = Math.max(...[DOOR, ROOM].map(c => 1 - clamp(Math.abs(T - c) / 0.3)), T < 0.6 ? 1 - T / 0.6 : 0); if (dip > 0) { g.fillStyle = `rgba(0,0,0,${dip})`; g.fillRect(0, 0, W, H); }
+    overlay(g, W, H, 0.5);
+    for (const l of AL) { if (T < l.t0 || T > l.t1) continue; const n = RM ? l.text.length : Math.floor((T - l.t0) * CPS), a = clamp((l.t1 - T) / 0.25); say(g, W, H, l.text, n, WHO[l.who].label, sayFz(W, P), a, WHO[l.who]); }
+    if (T > ADUR - 0.5) { g.fillStyle = '#000'; g.globalAlpha = clamp((T - (ADUR - 0.5)) / 0.4); g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
+  // sound: beds (the cab: road and rain on the glass; the rain outside the door; the hallway's room tone and fans) and moments
+  const AEV = (() => { const ev = [{ t: 0, k: 'car', d: CAB + 0.3 }, { t: DOOR, k: 'rainout', d: ROOM - DOOR + 0.3 }, { t: ROOM, k: 'room', d: ADUR - ROOM }];
+    for (let t = 0.75; t < CAB; t += 0.75) ev.push({ t, k: 'wiper' }); BOLTS.forEach(b => ev.push({ t: b + 0.9, k: 'thunder' }));
+    TH.forEach(m => ev.push({ t: m.at, k: m.me ? 'sent' : 'recv' })); ev.push({ t: DOOR + 0.95, k: 'beep' }, { t: DOOR + 1.9, k: 'hiss' });
+    for (let i = 0; i < 4; i++) ev.push({ t: ROOM + 0.1 + i * 0.42, k: 'step' }); return ev.sort((a, b) => a.t - b.t); })();
   function asound(ctx, dest, e, at) {
     const tone = (type, f, t0, dur, vol, f2) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur); v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(vol, t0 + Math.min(.01, dur / 4)); v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(v); v.connect(dest); o.start(t0); o.stop(t0 + dur + .05); };
-    const nz = (t0, dur, vol, type, f, q = 1, loop = false, fadeIn = 0.01) => { const s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noise(ctx); s.loop = loop; fl.type = type; fl.frequency.value = f; fl.Q.value = q;
-      v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(vol, t0 + fadeIn); if (loop) { v.gain.setValueAtTime(vol, t0 + Math.max(fadeIn, dur - 0.6)); v.gain.linearRampToValueAtTime(0.0001, t0 + dur); } else v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      s.connect(fl); fl.connect(v); v.connect(dest); s.start(t0, Math.random() * 0.5); s.stop(t0 + dur + 0.05); return v; };
+    const nz = (t0, dur, vol, type, f, q = 1, loop = false, fadeIn = 0.01, f2) => { const s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noise(ctx); s.loop = loop; fl.type = type; fl.frequency.setValueAtTime(f, t0); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t0 + dur); fl.Q.value = q;
+      v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(vol, t0 + fadeIn); if (loop) { v.gain.setValueAtTime(vol, t0 + Math.max(fadeIn, dur - 0.4)); v.gain.linearRampToValueAtTime(0.0001, t0 + dur); } else v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      s.connect(fl); fl.connect(v); v.connect(dest); s.start(t0, Math.random() * 0.5); s.stop(t0 + dur + 0.05); };
     switch (e.k) {
-      case 'car': { nz(at, e.d, 0.05, 'highpass', 1800, 0.6, true, 0.8); nz(at, e.d, 0.06, 'lowpass', 160, 0.8, true, 0.8);   // rain on the roof, the road
-        const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), v = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = 41; f.type = 'lowpass'; f.frequency.value = 130; v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(0.045, at + 0.8); v.gain.setValueAtTime(0.045, at + Math.max(0.8, e.d - 0.5)); v.gain.linearRampToValueAtTime(0.0001, at + e.d);
-        o.connect(f); f.connect(v); v.connect(dest); o.start(at); o.stop(at + e.d + 0.05); break; }
-      case 'rainout': nz(at, e.d, 0.09, 'bandpass', 3200, 0.5, true, 0.25); break;
-      case 'room': { nz(at, e.d, 0.012, 'lowpass', 400, 0.7, true, 0.6); const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sine'; o.frequency.value = 60; v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(0.02, at + 0.6); v.gain.setValueAtTime(0.02, at + Math.max(0.6, e.d - 0.6)); v.gain.linearRampToValueAtTime(0.0001, at + e.d); o.connect(v); v.connect(dest); o.start(at); o.stop(at + e.d + 0.05); break; }
-      case 'ind': tone('square', e.hi ? 2100 : 1700, at, 0.018, 0.035); nz(at, 0.02, 0.06, 'bandpass', 2600, 2); break;
-      case 'engineoff': tone('sawtooth', 41, at, 0.7, 0.04, 22); break;
-      case 'dooropen': nz(at, 0.08, 0.2, 'bandpass', 1500, 1.5); tone('square', 320, at + 0.02, 0.03, 0.04); break;
-      case 'doorslam': nz(at, 0.25, 0.35, 'lowpass', 300, 0.8); tone('sine', 70, at, 0.3, 0.2, 40); break;
-      case 'step': nz(at, e.wet ? 0.12 : 0.08, e.wet ? 0.22 : 0.15, e.wet ? 'bandpass' : 'lowpass', e.wet ? 900 : 500, 1); break;
+      case 'car': nz(at, e.d, 0.05, 'highpass', 1800, 0.6, true, 0.6); nz(at, e.d, 0.07, 'lowpass', 150, 0.8, true, 0.6); break;
+      case 'rainout': nz(at, e.d, 0.09, 'bandpass', 3200, 0.5, true, 0.2); break;
+      case 'room': { nz(at, e.d, 0.016, 'lowpass', 500, 0.7, true, 0.5); const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sine'; o.frequency.value = 60; v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(0.02, at + 0.5); v.gain.setValueAtTime(0.02, at + Math.max(0.5, e.d - 0.5)); v.gain.linearRampToValueAtTime(0.0001, at + e.d); o.connect(v); v.connect(dest); o.start(at); o.stop(at + e.d + 0.05); break; }
+      case 'wiper': nz(at, 0.18, 0.05, 'bandpass', 700, 1.2); break;
+      case 'thunder': nz(at, 2.2, 0.22, 'lowpass', 180, 0.7, false, 0.15); tone('sine', 45, at, 1.6, 0.08, 30); break;
+      case 'sent': nz(at, 0.22, 0.09, 'bandpass', 900, 1.4, false, 0.01, 3200); break;
+      case 'recv': tone('sine', 1320, at, 0.09, 0.05); tone('sine', 1760, at + 0.09, 0.12, 0.05); break;
       case 'beep': tone('sine', 1760, at, 0.08, 0.08); tone('sine', 2349, at + 0.11, 0.12, 0.08); break;
-      case 'hiss': nz(at, 0.7, 0.07, 'highpass', 2500, 0.7); break; } }
+      case 'hiss': nz(at, 0.7, 0.07, 'highpass', 2500, 0.7); break;
+      case 'step': nz(at, 0.08, 0.15, 'lowpass', 500, 1); break; } }
   const afire = (ctx, dest, T0, T1, at) => { for (const e of AEV) if (e.t > T0 && e.t <= T1) { try { asound(ctx, dest, e, at); } catch (er) {} } };
   const afireAll = (ctx, dest, t0) => { for (const e of AEV) { try { asound(ctx, dest, e, t0 + e.t); } catch (er) {} } };
   const abeds = (ctx, dest, T, at) => { for (const e of AEV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { asound(ctx, dest, { ...e, d: e.t + e.d - T }, at); } catch (er) {} } };
-  const arrive = { dur: ADUR, draw: arriveDraw, fire: afire, fireAll: afireAll, beds: abeds, lines: AL.filter(l => !l.beat).map(l => ({ t0: l.t0, typed: l.typed, t1: l.t1, text: l.text, who: l.who })), beat: BT, sayFz, events: AEV.length };
+  const arrive = { dur: ADUR, draw: arriveDraw, fire: afire, fireAll: afireAll, beds: abeds, lines: AL.map(l => ({ t0: l.t0, typed: l.typed, t1: l.t1, text: l.text, who: l.who })), thread: TH.map(m => ({ at: m.at, me: m.me, text: m.text })),
+    scenes: { cab: [0, CAB], door: [DOOR, ROOM], hall: [ROOM, ADUR] }, beat: BT, sayFz, events: AEV.length, lastSay: () => lastSay };
 
   window.__termBoot = { dur: DUR, draw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
 })();
