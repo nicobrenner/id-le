@@ -59,7 +59,7 @@
   // the storyline's waking up (Nico's lines, script section B), typed one by one in the Tiny Operator's voice
   const WAKE = ['Oh wow, looks like you took quite the tumble there… are you ok? We have a lot of work to do',
     "Ok, so whatever you were doing created a new parallel universe, and you've been appointed to see it grow",
-    'You have 6 or 7 days (depending on how you do), so grow it enough so that it can survive on its own… if you fail, this universe could wither, and you might need to start another one',
+    'You have 6 or 7 days (depending on how you do), to grow it enough so that it can survive on its own… if you fail, this universe could wither, and you might need to start another one',
     'First things first: the lights', 'Say: lights on'];
   const LIGHTS_ON = 'Nice!! we can see something now at least';
   // the days (script section D): each a set of goals that teach one part of the game. Day 1 is built; the rest are listed, coming soon.
@@ -203,7 +203,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
         `<div class="gs">${storyMode() ? 'day 1 · ' : ''}step ${GD.indexOf(g) + 1} of ${GD.length} · <a data-gskip="1">skip the guide</a></div>`; }
     else body = `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>` +
       `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`;
-    const said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p><b>TO</b>${esc(l)}</p>`).join('')}${wakeTyping ? `<p><b>TO</b>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl"><b>TO</b>${esc(line || '')}</div>`;
+    const said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
     c.innerHTML = `<div class="gt">🔭 THE SCIENTIST'S CONSOLE · UNIVERSE ${esc((S && S.n) || 1)}</div>` + said + body;
     prefill(); }
   // the console line, and the same line in the Operator's thread (unless the Tiny Operator is mid-reply: it answers in its own voice)
