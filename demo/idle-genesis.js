@@ -57,9 +57,10 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const storyMode = () => !!(S && S.mode === 'story');
   // the storyline's waking up (Nico's lines, script section B), typed one by one in the Tiny Operator's voice
-  const WAKE = ['Oh wow, looks like you took quite the tumble there… are you ok? We have a lot of work to do',
-    "Ok, so whatever you were doing created a new parallel universe, and you've been appointed to see it grow",
-    'You have 6 or 7 days (depending on how you do), to grow it enough so that it can survive on its own… if you fail, this universe could wither, and you might need to start another one',
+  // (story v3, final: Nico "perfect! love it"; the first comes with the sonar's first ping)
+  const WAKE = ['…hey. hey! relax, they only eat words', 'Oh wow, looks like you took quite the tumble there… are you ok? We have a lot of work to do',
+    "whatever you were running in that lab spilled over… it made a new universe, and you've been appointed to see it grow",
+    'You have 10 epochs to grow it enough so that it can survive on its own… if it fails, this universe could wither, and you might need to start another one',
     'First things first: the lights', 'Say: lights on'];
   const LIGHTS_ON = 'Nice!! we can see something now at least';
   // the days (script section D): each a set of goals that teach one part of the game. Day 1 is built; the rest are listed, coming soon.
@@ -299,7 +300,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function _light() { { const h = H(); if (!h) return null; if (did('light')) return 'already';
       cls('gen-lit', 1); const a = $('#arena'); if (a && !matchMedia('(prefers-reduced-motion: reduce)').matches) { const d = document.createElement('div'); d.id = 'genDawn'; a.appendChild(d); setTimeout(() => d.remove(), 3400); }
       const w = h.world(); h.applyWorld({ ...w, day: true, ...(S && S.feat && !(w.features || []).length ? { features: S.feat } : {}), id: 'world-' + now().toString(36).slice(-4) }, 'studio');
-      if (storyMode()) { cosmos.light(); wakeShown = []; } done('light', storyMode() ? LIGHTS_ON : null); if (storyMode()) setTimeout(undock, 2600); return true; } }
+      if (storyMode()) { cosmos.light(); wakeShown = []; nightEnd(); } done('light', storyMode() ? LIGHTS_ON : null); if (storyMode()) setTimeout(undock, 2600); return true; } }
   async function _weather(kind) { { if (did('weather')) return 'already'; const ks = (W() && W().weathers()) || [];
       const k = ks.includes(kind) ? kind : pick(ks.filter(x => x !== 'clear')) || 'rain'; const r = W() && W().setWeather(k); if (!r) return null; done('weather', null, null, { kind: k }); return r; } }
   async function _hut() { { if (did('hut')) return 'already'; const h = H(); if (!h) return null;
@@ -342,21 +343,86 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function readyWorld() { try { if (window.__first5 && await window.__first5.boot(true)) return true; } catch (e) { console.warn('genesis: ready', e); }
     try { const sw = await (await fetch('starter_world.json', { cache: 'no-store' })).json(); window.__design.restore(sw); return true; } catch (e) { console.warn('genesis: starter world', e); return false; } }
 
-  // ---------- the landing (Nico, story v2): after the cut, only the void for a few seconds (clicks answer faintly); then the Operator
-  // arrives: Id and le, the halves that crawled off at the end of the intro, come back from the edges, meet in the middle, crackle, and
-  // fold into the Operator's window. It comes ~6 s after landing, or after 3 clicks, whichever is first (?nolanding: straight to it).
-  let land = { phase: 'none', clicks: 0 };
+  // ---------- the landing (Nico, story v3): a moonless night. Black shapes against a sky only slightly lighter: creatures you can only tell
+  // apart when they move, slowly coming closer. You (the scientist, now inside the universe) talk to yourself in the middle of the screen;
+  // then the Operator arrives (Id and le, the halves that crawled off at the end of the intro, come back, meet and fold into its window) and
+  // pings a sonar: each ping is a faint ring that rims the shapes around with a thin outline for a moment. Lights on reveals everything.
+  // A click finishes the line (or goes to the next), holding pauses, Esc or "skip ›" goes straight to the Operator. ?nolanding skips it all.
+  const DARK = ['whaa…', 'oh my god, my girlfriend is going to be mad… where am I?', "I don't think I'll make it back in time for dinner…", 'ohhh man… this is a bit scary…',
+    "I can't seee anything… Lester!? are you there?…", 'what are those things moving over there?…', 'are they…. getting…. closer?!!', "aaaaaaaa! AAAAA!!! don't eat me pleasE!!!!"];
+  const darkHold = s => Math.max(1.4, s.length * 0.04 + 0.3), DCPS = 55;
+  let land = { phase: 'none', clicks: 0 }, nightCv = null;
   const clamp01 = x => Math.max(0, Math.min(1, x)), ease = u => u * u * (3 - 2 * u);
+  // the night: a canvas over the world (under the Operator's window), its shapes, the sonar
+  const nightState = { shapes: [], pings: [], t: 0, k: 0, rimmed: 0, fade: 0, calm: 0 };
+  function nightStart(RM) {
+    if (nightCv) return; const cv = document.createElement('canvas'); cv.id = 'genNight'; cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:2147481995;pointer-events:none;transition:opacity 1.6s';
+    document.body.appendChild(cv); nightCv = cv; cls('gen-landing', 1); const st = nightState; st.shapes = []; st.pings = []; st.rimmed = 0; st.fade = 0; st.calm = 0;
+    for (let i = 0; i < 9; i++) { const r = (a, b) => { const x = Math.sin((i + 1) * 91.7 + a * 13.1) * 43758.5; return b * (x - Math.floor(x)); };
+      st.shapes.push({ x: 0.06 + 0.88 * (i + r(1, 0.6)) / 9, d: 0.35 + r(2, 0.5), sp: 0.35 + r(3, 0.9), ph: r(4, 6.28), legs: 6 + 2 * Math.floor(r(5, 2)), body: 0.8 + r(6, 0.6), rim: 0, dir: r(7, 1) > 0.5 ? 1 : -1, wait: r(8, 4) }); }
+    const t0 = performance.now(); let last = t0;
+    const loop = () => { if (!nightCv) return; const now_ = performance.now(), dt = Math.min(0.05, (now_ - last) / 1000); last = now_; if (!land.paused) st.t += dt; drawNight(cv, st, dt, RM); requestAnimationFrame(loop); }; loop(); }
+  function drawNight(cv, st, dt, RM) {
+    const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2); if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); const hz = H * 0.8, small = Math.min(W, H);
+    const sky = g.createLinearGradient(0, 0, 0, hz); sky.addColorStop(0, '#05070c'); sky.addColorStop(1, '#151b29'); g.fillStyle = sky; g.fillRect(0, 0, W, hz); g.fillStyle = '#020305'; g.fillRect(0, hz, W, H - hz);
+    for (let i = 0; i < 28; i++) { const x = (Math.sin(i * 7.7) * 0.5 + 0.5) * W, y = (Math.sin(i * 3.1) * 0.5 + 0.5) * hz * 0.8; g.fillStyle = `rgba(180,190,220,${0.05 + 0.05 * Math.sin(st.t * 0.7 + i)})`; g.fillRect(x, y, 1, 1); }
+    // the sonar: rings from the Operator's window (or the middle), rimming what they pass
+    const lab = document.querySelector('#lab'), lr = lab && lab.classList.contains('open') ? lab.getBoundingClientRect() : null, ox = lr ? lr.left + lr.width / 2 : W / 2, oy = lr ? lr.top + lr.height / 2 : H / 2, maxR = Math.hypot(W, H) * 0.75;
+    for (const p of st.pings) { p.r += dt * maxR / 2.2; }
+    st.pings = st.pings.filter(p => p.r < maxR);
+    // the shapes: they shuffle, stop, look, and creep closer (closer = bigger and lower); when the Operator is there they settle
+    const approach = st.calm ? Math.max(0, st.k - st.calm * 0.3) : st.k;
+    for (const s of st.shapes) { const moving = RM ? false : Math.sin(st.t * s.sp * 0.7 + s.ph) > -0.2, step = moving ? s.sp : 0;
+      if (!RM) { s.x += s.dir * step * dt * 0.012; if (s.x < 0.03 || s.x > 0.97) s.dir *= -1; }
+      const near = clamp01(s.d * 0.4 + approach * (0.55 + s.d * 0.3)), sc = small * (0.05 + 0.13 * near) * s.body, x = s.x * W + (0.5 - s.x) * W * near * 0.25, y = hz - sc * 0.15 + near * H * 0.12;
+      s.sx = x; s.sy = y - sc * 0.55; s.sc = sc; s.mv = moving;
+      // a ring passing over a shape rims it for a moment
+      for (const p of st.pings) { const d = Math.hypot(x - ox, s.sy - oy); if (Math.abs(d - p.r) < sc * 0.8 && !p.hit.has(s)) { p.hit.add(s); s.rim = 1; st.rimmed++; } }
+      if (!RM) s.rim = Math.max(0, s.rim - dt / 1.3);
+      drawShape(g, s, x, y, sc, RM ? 0 : st.t * s.sp * 6 * (moving ? 1 : 0.1), '#000', 0);
+      if (s.rim > 0.02) drawShape(g, s, x, y, sc, RM ? 0 : st.t * s.sp * 6 * (moving ? 1 : 0.1), null, s.rim); }
+    for (const p of st.pings) { g.strokeStyle = `rgba(126,227,245,${0.28 * (1 - p.r / maxR)})`; g.lineWidth = 1.2; g.beginPath(); g.arc(ox, oy, p.r, 0, 7); g.stroke(); }
+    // two faint glints now and then: eyes
+    for (const s of st.shapes) if (!RM && Math.sin(st.t * 0.9 + s.ph * 3) > 0.93) { g.fillStyle = 'rgba(220,230,255,0.35)'; g.fillRect(s.sx - s.sc * 0.15, s.sy - s.sc * 0.1, 2, 2); g.fillRect(s.sx + s.sc * 0.1, s.sy - s.sc * 0.1, 2, 2); }
+    if (land.shake && !RM) { cv.style.transform = `translate(${(Math.random() - 0.5) * 6}px,${(Math.random() - 0.5) * 6}px)`; } else cv.style.transform = '';
+    // the line being said, in the middle (the same style as the arrival at the lab)
+    if (land.line) { const B = window.__termBoot, L = land.line, n = RM ? L.text.length : Math.floor((st.t - L.t0) * DCPS); if (B && B.say) B.say(g, W, H, L.text, n, 'you', B.arrive.sayFz(W, W < 600), 1); } }
+  function drawShape(g, s, x, y, sc, ph, fill, rim) {   // a creature-ish silhouette: a body and legs that step
+    g.save(); g.translate(x, y - sc * 0.55); const bw = sc * 0.55, bh = sc * 0.36;
+    if (rim) { g.strokeStyle = `rgba(126,227,245,${0.85 * rim})`; g.lineWidth = 1.2; g.shadowColor = '#7ee3f5'; g.shadowBlur = 6 * rim; } else { g.fillStyle = fill; g.strokeStyle = fill; g.lineWidth = Math.max(1.5, sc * 0.05); }
+    for (let i = 0; i < s.legs; i++) { const side = i % 2 ? 1 : -1, k = Math.floor(i / 2), n = s.legs / 2, ax = (k - (n - 1) / 2) * bw * 0.5, sw = Math.sin(ph + i * 1.7) * sc * 0.12;
+      g.beginPath(); g.moveTo(ax, 0); g.lineTo(ax + side * sc * 0.25 + sw, -sc * 0.18 * side * 0.2 + sc * 0.12); g.lineTo(ax + side * sc * 0.38 + sw * 1.3, sc * 0.55); g.stroke(); }
+    g.beginPath(); g.ellipse(0, 0, bw, bh, 0, 0, 7); if (rim) g.stroke(); else g.fill(); g.restore(); }
+  function ping() { if (!nightCv) return; nightState.pings.push({ r: 0, hit: new Set() }); land.pings = (land.pings || 0) + 1;
+    const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const t = c.currentTime, o = c.createOscillator(), v = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(1480, t); o.frequency.exponentialRampToValueAtTime(1320, t + 0.9);
+      v.gain.setValueAtTime(0.0001, t); v.gain.linearRampToValueAtTime(0.05, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0001, t + 1.2); o.connect(v); v.connect(A.out()); o.start(t); o.stop(t + 1.3); } catch (e) {} }
+  let sonarTimer = 0;
+  function sonar(on) { clearInterval(sonarTimer); if (on) { ping(); sonarTimer = setInterval(ping, 2600); } }
+  // lights on: the night lifts and shows everything
+  function nightEnd() { sonar(false); cls('gen-landing', 0); const cv = nightCv; if (!cv) return; nightCv = null; land.phase = 'lit'; cv.style.opacity = '0'; setTimeout(() => cv.remove(), 1700); }
   async function landing() { if (Q.has('nolanding')) { land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
-    // the void starts when the game's loading cover has gone (skipping the intro right away can land before it)
+    // the night starts when the game's loading cover has gone (skipping the intro right away can land before it)
     for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
-    return new Promise(res => {
-    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'void', clicks: 0, t0: now() }; let went = false, timer = 0;
-    const onDown = e => { if (e.target && e.target.closest && e.target.closest('button,input,textarea,select,a,#lab,#idleIntro')) return; land.clicks++; ripple(e.clientX, e.clientY, RM); if (land.clicks >= 3) go(); };
-    const go = async () => { if (went) return; went = true; clearTimeout(timer); document.removeEventListener('pointerdown', onDown, true);
-      land.phase = 'arriving'; land.why = land.clicks >= 3 ? 'clicks' : 'time'; land.after = (now() - land.t0) / 1000;
-      try { await arrival(RM); } catch (e) { console.warn('genesis: arrival', e); } land.phase = 'done'; res(); };
-    document.addEventListener('pointerdown', onDown, true); timer = setTimeout(go, 6000); }); }
+    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; nightStart(RM);
+    const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
+    document.body.appendChild(skipB);
+    await new Promise(res => { let i = -1, timer = 0, downAt = 0, done = false;
+      const st = nightState, next = () => { clearTimeout(timer); if (done) return; i++; if (i >= DARK.length) return finish('lines'); const text = DARK[i];
+        land.line = { text, t0: st.t }; land.shown = i + 1; land.shake = i === DARK.length - 1; st.k = (i + 1) / DARK.length; wait(darkHold(text) + text.length / DCPS); };
+      // the line's clock follows the night's (paused while held)
+      const wait = d => { const end = st.t + d; const tick = () => { if (done) return; if (st.t >= end) next(); else timer = setTimeout(tick, 50); }; timer = setTimeout(tick, 50); };
+      const finish = why => { if (done) return; done = true; clearTimeout(timer); land.line = null; land.shake = false; land.why = why; land.after = (now() - land.t0) / 1000;
+        removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); document.removeEventListener('pointerdown', onDown, true); document.removeEventListener('pointerup', onUp, true); skipB.remove(); res(); };
+      const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish('skip'); } else if (e.key === ' ' && !e.repeat) { e.preventDefault(); land.paused = true; } };
+      const onKeyUp = e => { if (e.key === ' ') land.paused = false; };
+      const onDown = e => { if (e.target === skipB) return; if (e.target && e.target.closest && e.target.closest('button,input,textarea,select,a,#lab')) return; downAt = performance.now(); land.paused = true; };
+      const onUp = e => { if (!downAt) return; const short = performance.now() - downAt < 280; downAt = 0; land.paused = false; if (!short) return; land.clicks++; ripple(e.clientX, e.clientY, RM);
+        const L = land.line; if (L && (st.t - L.t0) * DCPS < L.text.length) L.t0 = st.t - L.text.length / DCPS; else next(); };   // a click: finish the line, or the next one
+      skipB.addEventListener('click', e => { e.stopPropagation(); finish('skip'); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
+      document.addEventListener('pointerdown', onDown, true); document.addEventListener('pointerup', onUp, true); next(); });
+    land.phase = 'arriving'; st_calm(); try { await arrival(RM); } catch (e) { console.warn('genesis: arrival', e); } land.phase = 'sonar'; }
+  const st_calm = () => { nightState.calm = 1; };
   function ripple(x, y, RM) {   // a click in the void: a faint ring, and a faint note if the sound is on
     const d = document.createElement('div'); d.className = 'genRipple'; d.style.cssText = `position:fixed;left:${x - 8}px;top:${y - 8}px;width:16px;height:16px;border-radius:50%;border:1px solid #7ee3f580;pointer-events:none;z-index:2147481980;transition:transform .9s ease-out,opacity .9s ease-out`;
     document.body.appendChild(d); requestAnimationFrame(() => { d.style.transform = `scale(${RM ? 2 : 7})`; d.style.opacity = '0'; }); setTimeout(() => d.remove(), 1000);
@@ -392,7 +458,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
 
   // ---------- the storyline's waking up: the Operator as a window in the middle (a lightbox), the Tiny Operator's lines typed one by one
   async function wake() { const lab = $('#lab'); let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
-    cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole();
+    cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; let skip = false; const onTap = () => { skip = true; }; if (lab) lab.addEventListener('pointerdown', onTap);
     for (const line of WAKE) { if (RM) { wakeShown.push(line); renderConsole(); await new Promise(r => setTimeout(r, 900)); continue; }
       for (let i = 1; i <= line.length; i += 2) { if (skip) break; wakeTyping = line.slice(0, i); renderConsole(); await new Promise(r => setTimeout(r, 26)); }
@@ -476,6 +542,6 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // ?genesis on a browser that already has a world: a new universe (the world is kept as a snapshot first, its creatures rest)
   if (Q.has('genesis') || Q.has('story')) { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh && window.__restored && !window.__genesisVoid) { clearInterval(iv); newUniverse(); } else if (window.__genesisVoid || ++k > 120) clearInterval(iv); }, 500); }
 
-  window.__genesis = { landing: () => ({ ...land }), ab: AB, wants, variant, boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant, boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();

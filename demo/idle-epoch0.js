@@ -37,7 +37,7 @@
   // and comments in subtitles, gets excited, then scared: the curve keeps falling past the chart's floor, lines pour out and overlap,
   // "can we stop it?!", "run!!!!", a white flash and a tear, silence; then the cut (Idle → Id|le) and the halves crawl off into the dark.
   // No "in the beginning there was…" and no "your turn" here: the Tiny Operator takes over (idle-genesis.js, the waking up).
-  const CS = { over: 23.2, panic: 25.0, run: 27.3, tear: 29.5, flash: 29.75, split: 31.0, crawl: 33.5, end: 36.4 };
+  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 31.0, crawl: 33.5, end: 36.4 };
   const SUBS = [   // [film second it starts, the scientist's line] (typed; a different font from the model's)
     [1.9, "…ok. it's babbling. that's normal."], [9.2, 'oh wow, these losses are exceptional…'], [12.8, 'wait… it keeps learning!!'],
     [16.4, "and it's only a… a few megabytes?!"], [20.0, "look at those losses, after all these epochs, and… it doesn't stop…"],
@@ -250,6 +250,16 @@
   function termChrome(g, W, H, T, P, RM, L, ci, a, cap) {
     const over = story ? clamp((T - CS.over) / (CS.flash - CS.over)) : 0, lossAt = t => ci.all[Math.min(ci.N, Math.round(dotK(ci, Math.max(0, t))))] + 0.02 * Math.sin(t * 17);
     window.__termBoot.chrome(g, W, H, T, P, RM, { a, prog: clamp(T / C.stack), over, overT: story ? Math.max(0, T - CS.over) : 0, overStart: CS.over, lossAt, cap }); }
+  // the crash (Nico: "instead of exploding, it should all start twirling around and speed up, and then exploding"): the frame as drawn is
+  // cut into rings around the centre; each turns, the inner ones faster, and everything is pulled in, faster and faster, until the flash
+  let vbuf = null;
+  function vortex(g, k) { const c = g.canvas; if (!vbuf || vbuf.width !== c.width || vbuf.height !== c.height) { vbuf = document.createElement('canvas'); vbuf.width = c.width; vbuf.height = c.height; }
+    const o = vbuf.getContext('2d'); o.setTransform(1, 0, 0, 1, 0, 0); o.clearRect(0, 0, vbuf.width, vbuf.height); o.drawImage(c, 0, 0);
+    const cx = c.width / 2, cy = c.height / 2, R = Math.hypot(cx, cy), N = 12, spin = Math.pow(k, 2.2) * 16, shrink = 1 - 0.6 * Math.pow(k, 1.6);
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
+    for (let i = N - 1; i >= 0; i--) { const r0 = R * i / N, r1 = R * (i + 1) / N; g.save(); g.beginPath(); g.arc(cx, cy, r1, 0, 7); g.arc(cx, cy, r0, 0, 7, true); g.clip();
+      g.translate(cx, cy); g.rotate(spin * (1.7 - i / N)); const s2 = shrink * (1 - 0.25 * k * (1 - i / N)); g.scale(s2, s2); g.drawImage(vbuf, -cx, -cy); g.restore(); }
+    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, R * 0.5); glow.addColorStop(0, `rgba(255,240,255,${0.6 * k * k})`); glow.addColorStop(1, 'rgba(224,54,122,0)'); g.fillStyle = glow; g.fillRect(0, 0, c.width, c.height); g.restore(); }
   function frameStory(g, W, H, T, ct, st, P, RM) {
     if (T >= CS.flash + 0.45) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); if (T >= CS.split) drawSplit(g, W, H, T - (CS.split - C.split), P, RM, st); return; }
     const L = layout(W, H, P), ci = curveInfo(); g.save();
@@ -263,8 +273,7 @@
     else drawBabble(g, W, H, Math.min(T, CS.flash), ct, P, RM, st, L, ci);
     if (T >= CS.over) drawOverrun(g, W, H, T, ct, P, RM, L);
     drawCurve(g, W, H, T, P, 0, L, ci, RM); if (L.term) window.__termBoot.overlay(g, W, H, 0.6); drawSub(g, W, H, T, P, RM, L); g.restore();
-    if (!RM && T >= CS.tear && T < CS.flash) { const k = (T - CS.tear) / (CS.flash - CS.tear);   // the tear: bands of the screen slide apart
-      for (let y = 0; y < H; y += 18 + (y * 7) % 23) { const off = (((y * 37) % 11) - 5) * 14 * k; try { g.drawImage(g.canvas, 0, y * (g.canvas.height / H), g.canvas.width, 14 * (g.canvas.height / H), off, y, W, 14); } catch (e) {} } }
+    if (!RM && T >= CS.spin && T < CS.flash) vortex(g, (T - CS.spin) / (CS.flash - CS.spin));   // everything twirls into a vortex, then the flash
     if (T >= CS.flash) { g.globalAlpha = RM ? clamp((T - CS.flash) / 0.45) : 1 - clamp((T - CS.flash - 0.08) / 0.37); g.fillStyle = RM ? '#000' : '#fff'; g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
   function frameAt(g, W, H, T, ct, st, P, RM) {
     story = !!ct.story; term = !!ct.boot && !!window.__termBoot; if (story) return frameStory(g, W, H, T, ct, st, P, RM);
