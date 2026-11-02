@@ -1028,7 +1028,7 @@ def t_genesis(P):
     """The guided genesis (?genesis&intro=0): a calm, dark void with the Operator open and "let there be light" pre-filled; words made
     out of order are still visible; enter on the pre-filled phrase builds the step; the glowing suggestion too; after four guided steps
     the guide ends and the normal UI fades in; a new universe keeps a snapshot; stats() reports the steps."""
-    pg = P.open("/arena.html?genesis&intro=0&test")
+    pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
     wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
     st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), calm: document.documentElement.classList.contains('gen-calm'), lit: document.documentElement.classList.contains('gen-lit'), next: window.__genesis.next(), pre: (document.getElementById('lab-text') || {}).value, g: window.__genesis.state(), ab: window.__genesis.ab })"
     v0 = pg.evaluate(st)
@@ -1065,7 +1065,7 @@ def t_genesis(P):
     firsts = pg.evaluate("() => (window.__advisor && window.__advisor.state().firsts) || {}")
     need(all(("genesis-" + k) in firsts for k in ("words", "creatures", "light")), f"each step should be a Gazette first: {sorted(firsts)}")
     n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
-    pg.evaluate("() => window.__genesis.newUniverse()")
+    pg.evaluate("() => window.__genesis.newUniverse('guided')")
     wait_for(pg, "() => window.__genesis.state().n === 2 && document.documentElement.classList.contains('gen-void') && window.__genesis.next() === 'light'", 20, P=P)
     n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
     need(n1 == n0 + 1, f"a new universe must keep the old world as a snapshot first ({n0} → {n1})")
@@ -1073,9 +1073,71 @@ def t_genesis(P):
     return f"calm void, light pre-filled; words out of order visible (lum {ink['lum']:.0f}); enter → light, ▶ → life (alive), enter → weather → guide ends; steps {end['stats']['steps']}; new universe kept a snapshot ({n0}→{n1})"
 
 
+def t_story(P):
+    """The storyline (?story): the Epoch 0 intro in its story version (skipped here with Esc), the Tiny Operator's waking-up lines in a
+    lightbox, "lights on" pre-filled, the primordial universe lighting up, the window docking with the Day 1 card, words and first life
+    by the glowing suggestion, the Day 1 front page, then Day 2 (coming soon) and the free console."""
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro')", 40, P=P)
+    wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.last)", 20, P=P)
+    story = pg.evaluate("() => window.__epoch0.last.story")
+    need(story, "the storyline should play the story version of Epoch 0")
+    pg.keyboard.press("Escape")
+    wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genBackdrop')", 20, P=P)
+    pg.click("#genConsole")   # a tap finishes the line being typed
+    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]')", 40, P=P)
+    w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.querySelector('#genConsole [data-gsay]').textContent, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
+    need(w["mode"] == "story" and w["pre"] == "lights on" and "lights on" in w["say"], f"the waking up should end on 'lights on', pre-filled: {w}")
+    need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
+    need("parallel universe" in w["thread"] and "tumble" in w["thread"], "the Tiny Operator's lines should be in the thread")
+    pg.click("#genConsole [data-gsay]")
+    wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
+    line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
+    need("we can see something" in line, f"the lights-on reaction line: {line!r}")
+    wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
+    day = pg.inner_text("#genDay")
+    need("DAY 1" in day and "lights on" in day, f"the Day 1 card: {day!r}")
+    for _ in range(2):
+        wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 30, P=P)
+        pg.click("#genConsole [data-gsay]"); pg.wait_for_timeout(2500)
+    wait_for(pg, "() => !!document.querySelector('#genFront')", 30, P=P)
+    front = pg.inner_text("#genFront")
+    need("DAY 1" in front.upper() and "GAZETTE" in front.upper(), f"the Day 1 front page: {front[:120]!r}")
+    pg.click("#genFront button")
+    wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('DAY 2')", 10, P=P)
+    end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos() } }")
+    need(end["days"] and "1" in end["days"] and end["day"] == 2 and end["free"] and end["alive"] and end["c"] >= 2, f"after Day 1: day 2 next, alive, free console: {end}")
+    P.clean()
+    return f"story intro, wake-up lightbox → 'lights on' → cosmos lit, docked Day 1 card; words, life → front page → Day 2 (soon); {end['c']} creatures"
+
+
+def t_story_intro(P):
+    """The story version of Epoch 0, drawn frame by frame: the scientist's subtitles, the overrun, the white flash, black, the cut."""
+    pg = P.open("/arena.html?fresh=1&test&nofirst5"); booted(pg)
+    r = pg.evaluate("""async () => { const E = window.__epoch0; await E.loadBank(); await E.loadLoss(); const ct = E.makeContent({ story: true, seed: 3 }), cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
+      const at = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let s = 0; for (let i = 0; i < d.length; i += 4 * 97) s += d[i] + d[i + 1] + d[i + 2]; return s / (d.length / (4 * 97)) / 3; };
+      const out = { total: E.total(ct), dark: at(3), sub: 0, flash: 0, black: 0, cut: 0 }; for (const T of [5, 10, 20, 24, 28]) out.sub = Math.max(out.sub, at(T)); out.flash = at(29.8); out.black = at(30.6); out.cut = at(32.2); return out; }""")
+    need(30 < r["total"] < 42, f"the story intro should run ~37 s: {r}")
+    need(r["flash"] > 200 and r["black"] < 5 and r["cut"] > r["black"], f"white flash, then black, then the cut: {r}")
+    P.clean()
+    return f"{r['total']:.1f} s; flash {r['flash']:.0f}, black {r['black']:.1f}, cut {r['cut']:.1f}"
+
+
+def t_chooser(P):
+    """?genesis opens the chooser (Storyline · From scratch · A ready world); "From scratch" gives the free console with every chip."""
+    pg = P.open("/arena.html?genesis&intro=0&test")
+    wait_for(pg, "() => document.querySelectorAll('#genChoose button[data-m]').length === 3", 40, P=P)
+    pg.click("#genChoose button[data-m='free']")
+    wait_for(pg, "() => window.__genesis.mode() === 'free' && document.querySelectorAll('#genConsole [data-gen]').length >= 3", 20, P=P)
+    st = pg.evaluate("() => ({ next: window.__genesis.next(), calm: document.documentElement.classList.contains('gen-calm'), chips: document.querySelectorAll('#genConsole [data-gen]').length })")
+    need(st["next"] is None and not st["calm"], f"from scratch: no guide, the UI not hidden: {st}")
+    P.clean()
+    return f"3 choices; from scratch → {st['chips']} chips, no guide"
+
+
 def t_genesis_phone(P):
     """Phones: the same guide, the Operator as a sheet, the phrase pre-filled but NOT focused (no keyboard), a big ▶ to say it."""
-    pg = P.open("/arena.html?genesis&intro=0&test"); pg.set_viewport_size({"width": 390, "height": 844})
+    pg = P.open("/arena.html?genesis&start=guided&intro=0&test"); pg.set_viewport_size({"width": 390, "height": 844})
     wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
     st = pg.evaluate("() => ({ coarse: matchMedia('(pointer: coarse)').matches, focus: (document.activeElement || {}).id, pre: document.getElementById('lab-text').value, say: !!document.querySelector('#genConsole .say'), label: document.querySelector('#genConsole [data-gsay]').textContent })")
     need(st["coarse"], f"the phone context should have a coarse pointer: {st}")
@@ -1231,7 +1293,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["genesis", "genesis phone", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["genesis", "genesis phone", "story", "story intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1280,6 +1342,9 @@ def main():
                 run("trick or treat", t_treat)
                 run("wikipedia world", t_wiki)
                 run("genesis", t_genesis)
+                run("story", t_story)
+                run("story intro", t_story_intro)
+                run("chooser", t_chooser)
                 run("genesis phone", t_genesis_phone, is_mobile=True, has_touch=True)
                 run("pedia desktop", t_pedia)
                 run("pedia halloween", t_pedia_halloween)

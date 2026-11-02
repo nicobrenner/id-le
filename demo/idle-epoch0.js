@@ -29,6 +29,16 @@
   // the film's clock (seconds)
   // each line streams for C.stream s and then stays fully readable (≥ 2 s) before the next starts; then the whole story holds (C.stack)
   const C = { cursor: 0, babble: 1.6, lead: 0.2, slot: 3.6, stream: 1.35, curve: 0.5, stack: 23.2, final: 25.6, split: 30.1, crawl: 32.6, turn: 35.2, total: 37.5 };   // split..total move later if the first line needs it
+  // the storyline's version (?story, or play({ story: true }); Nico's script, storyline-script.md, section A): a scientist watches the run
+  // and comments in subtitles, gets excited, then scared: the curve keeps falling past the chart's floor, lines pour out and overlap,
+  // "can we stop it?!", "run!!!!", a white flash and a tear, silence; then the cut (Idle → Id|le) and the halves crawl off into the dark.
+  // No "in the beginning there was…" and no "your turn" here: the Tiny Operator takes over (idle-genesis.js, the waking up).
+  const CS = { over: 23.2, panic: 25.0, run: 27.3, tear: 29.5, flash: 29.75, split: 31.0, crawl: 33.5, end: 36.4 };
+  const SUBS = [   // [film second it starts, the scientist's line] (typed; a different font from the model's)
+    [1.9, "…ok. it's babbling. that's normal."], [9.2, 'oh wow, these losses are exceptional…'], [12.8, 'wait… it keeps learning!!'],
+    [16.4, "and it's only a… a few megabytes?!"], [20.0, "look at those losses, after all these epochs, and… it doesn't stop…"],
+    [23.6, "can we stop it?! OMG, it won't stop!!!"], [27.3, "…run!!!! it's tooooo llaaaaaaaa………"]];
+  let story = false;   // set per frame from the content (frameAt)
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)), ease = u => u * u * (3 - 2 * u);
   const clean = s => String(s || '').replace(/�/g, '').replace(/^\s*\*\w*\s*/, '').replace(/\s+/g, ' ').replace(/\s+([,.!?'])/g, '$1').trim();
   // also out: persona details from the chat data (ages, people, money, health) and anything that looks like a name: a capitalized word
@@ -65,6 +75,7 @@
     const seed = o.seed != null ? o.seed : (Math.random() * 2 ** 31) | 0, r = rng(seed);
     const ct = { seed, lines: SCHED.map(st => { const text = bankLine(st.e, r); return { e: st.e, text, pieces: piecesOf(text, st.e), src: bank ? 'bank' : 'fallback' }; }), cont: bankCont(r), contSrc: bank ? 'bank' : 'fallback', gaps: [] };
     for (let i = 0; i < 400; i++) ct.gaps.push(0.35 + r() * 1.3 + (r() < 0.12 ? 1.4 : 0));   // irregular token timing (relative units)
+    ct.story = !!o.story; ct.extra = []; for (let i = 0; i < 18; i++) { const e = [12, 8, 12, 6][i % 4]; ct.extra.push({ text: bankLine(e, r), x: r(), y: r(), t: CS.over + 0.35 + i * (0.42 - i * 0.012), w: r() }); }
     return ct; }
   async function fillLive(ct, startedAt) {   // runs during play; startedAt(): seconds into the film
     const r = rng(ct.seed ^ 0x5bd1e995);
@@ -114,7 +125,7 @@
     const k0 = i ? ci.ks[i - 1] : 0; return k0 + (ci.ks[i] - k0) * u; }
   function entryY(L, i) { return L.ln.y + i * L.ln.eh; }
   function drawCurve(g, W, H, T, P, S, L, ci, RM) {
-    const a = clamp((T - C.curve) / 0.6) * (1 - clamp((T - (C.final - 0.4)) / 0.4)); if (a <= 0) return;
+    const a = clamp((T - C.curve) / 0.6) * (story ? 1 - clamp((T - CS.flash) / 0.1) : 1 - clamp((T - (C.final - 0.4)) / 0.4)); if (a <= 0) return;
     const { x, y, w, h } = L.cv, kd = RM ? ci.ks[clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1)] : dotK(ci, T), kn = Math.floor(kd);
     g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h);
     g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.fillText('training loss', x + 8, y - 8);
@@ -126,14 +137,18 @@
     // the points where lines were born, then the bright dot with its value
     const shown = T < C.babble ? 0 : clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1);
     for (let i = 0; i < shown; i++) { const [px, py] = ptXY(ci, L, ci.ks[i]); g.fillStyle = '#4f7f8c'; g.beginPath(); g.arc(px, py, 2.5, 0, 7); g.fill(); }
+    let v = ci.all[Math.round(kd)];
+    if (story && T > CS.over) {   // past the end of the curve: it keeps falling, through the chart's floor and off the screen
+      const u = (T - CS.over) / (CS.flash - CS.over), [ex, ey] = ptXY(ci, L, ci.N), fall = u * u * (h + H * 0.9), ox = ex + Math.min(40, u * 60);
+      g.beginPath(); g.moveTo(ex, ey); g.quadraticCurveTo(ex + 20, ey + 4, ox, ey + fall); g.strokeStyle = MAG; g.lineWidth = 2; g.shadowColor = MAG; g.shadowBlur = 10; g.stroke(); g.shadowBlur = 0; dx = ox; dy = ey + fall; v = ci.all[ci.N] - u * u * 9; }
     g.shadowColor = CUR; g.shadowBlur = 14; g.fillStyle = '#e8fbff'; g.beginPath(); g.arc(dx, dy, 4.5, 0, 7); g.fill(); g.shadowBlur = 0;
-    g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = CUR; const v = ci.all[Math.round(kd)];
-    g.fillText(`loss ${v.toFixed(2)}`, Math.min(dx + 9, x + w - 80), Math.max(dy - 9, y + 14));
+    g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = story && T > CS.over ? MAG : CUR;
+    g.fillText(`loss ${v.toFixed(2)}`, Math.min(dx + 9, x + w - 80), clamp(dy - 9, y + 14, H - 30));
     g.restore(); }
   function epochAt(T) { if (T < C.babble) return 0; const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1); return SCHED[i].e; }
   function drawBabble(g, W, H, T, ct, P, RM, st, L, ci) {
     const fz = L.ln.fz, cur = clamp(Math.floor((T - C.babble) / C.slot), -1, SCHED.length - 1), maxW = L.ln.w;
-    const fade = 1 - clamp((T - (C.final - 0.4)) / 0.4), stack = clamp((T - C.stack) / 0.6);   // the finale: every line back to full, linked to its point
+    const fade = story ? 1 - clamp((T - CS.flash) / 0.1) : 1 - clamp((T - (C.final - 0.4)) / 0.4), stack = story ? 0 : clamp((T - C.stack) / 0.6);   // the finale: every line back to full, linked to its point
     for (let i = 0; i <= cur; i++) { const Ln = ct.lines[i], tr = lineReveal(ct, i); let n = RM ? Ln.pieces.length : tr.filter(t => t <= T).length; if (i < cur) n = Ln.pieces.length;
       let txt = Ln.pieces.slice(0, n).join('').replace(/�/g, '').replace(/\s+([,.!?'])/g, '$1').replace(/^\s+/, '');
       const y = entryY(L, i), back = cur - i, base = back === 0 ? 1 : 0.5, al = (base + (1 - base) * stack) * fade; if (al <= 0) continue;
@@ -147,7 +162,7 @@
       while (rows.some(r => g.measureText(r).width > maxW) && f > 10) { f--; g.font = `${f}px ui-monospace, Menlo, monospace`; }
       g.globalAlpha = al; g.fillStyle = Ln.e <= 2 ? '#c9d6c2' : Ln.e <= 6 ? '#dcdccb' : INK; g.textBaseline = 'middle'; const ty = y + fz * 0.95;
       rows.forEach((r, k) => g.fillText(r, L.ln.x, ty + k * f * 1.35)); const last = rows[rows.length - 1], ly = ty + (rows.length - 1) * f * 1.35;
-      if (back === 0 && T < C.stack && Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(L.ln.x + g.measureText(last).width + 3, ly - f * 0.55, f * 0.55, f * 1.05); }
+      if (back === 0 && T < (story ? CS.over : C.stack) && Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(L.ln.x + g.measureText(last).width + 3, ly - f * 0.55, f * 0.55, f * 1.05); }
       // the leader: a glow from the curve's point to the line as it is born; in the finale, every line keeps a thin one
       // (phones: the curve sits above the lines, so only the birth glow, drawn to the line's label; no finale leaders crossing the text)
       const born = T - (C.babble + i * C.slot), la = RM ? 0 : Math.max(back === 0 ? clamp(1 - (born - 0.6) / (L.port ? 0.6 : 1.2)) * clamp(born / 0.25) : 0, L.port ? 0 : stack * 0.45) * fade;
@@ -185,8 +200,40 @@
     g.globalAlpha = a; g.font = `italic ${fz}px Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK; g.fillText('your turn', W / 2, H * 0.5); const w = g.measureText('your turn').width;
     if (Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(W / 2 + w / 2 + 5, H * 0.5 - fz * .5, fz * .5, fz); } g.textAlign = 'left'; g.globalAlpha = 1; }
   // the first line takes as long as the model's own ending needs (typed, held, deleted, then "nothing"); everything after waits for it
-  const extraOf = ct => Math.max(0, finalDone(ct) + 0.9 - C.split), totalOf = ct => C.total + extraOf(ct);
+  const extraOf = ct => ct.story ? 0 : Math.max(0, finalDone(ct) + 0.9 - C.split), totalOf = ct => ct.story ? CS.end + 0.5 : C.total + extraOf(ct);
+  // the overrun: lines pour out faster and faster, overlapping, shaking; then "run!!!!", a tear and a white flash, silence
+  function drawOverrun(g, W, H, T, ct, P, RM, L) {
+    const fz = L.ln.fz; g.textBaseline = 'middle';
+    for (const x of ct.extra) { if (T < x.t) continue; const age = T - x.t, n = Math.min(x.text.length, Math.floor(age * (40 + 70 * x.w))), al = (RM ? 0.7 : 0.45 + 0.5 * Math.abs(Math.sin(T * 9 + x.x * 20))) * (1 - clamp((T - CS.flash) / 0.1));
+      if (al <= 0 || n <= 0) continue; g.globalAlpha = al; g.font = `${Math.round(fz * (0.8 + x.w * 0.6))}px ui-monospace, Menlo, monospace`; g.fillStyle = x.w > 0.6 ? MAG : INK;
+      g.fillText(x.text.slice(0, n), L.ln.x - 40 + x.x * Math.max(60, L.ln.w * 0.5) - 60 * x.w, L.ln.y + x.y * (H - L.ln.y - 120)); }
+    g.globalAlpha = 1; }
+  function drawSub(g, W, H, T, P, RM) {   // the scientist's subtitle: typed, sans-serif, warm, bottom centre
+    let cur = null; for (const s of SUBS) if (T >= s[0]) cur = s; if (!cur || T >= CS.tear) return; const last = cur === SUBS[SUBS.length - 1];
+    const n = Math.floor((T - cur[0]) * (last ? 22 : 34)); let txt = cur[1].slice(0, Math.max(0, n)); if (!txt) return;
+    const fz = P ? 15 : Math.round(clamp(W / 52, 17, 26)); g.save(); g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const y = H - (P ? 96 : 74), panic = T >= SUBS[5][0];
+    if (last && !RM) { const sm = clamp((T - cur[0]) / (CS.tear - cur[0])); g.translate(W / 2, y); g.scale(1 + sm * 1.6, 1 - sm * 0.35);   // the words stretch and smear as it gets away
+      for (let k = 4; k >= 1; k--) { g.globalAlpha = 0.12 * k * (1 - sm * 0.5); g.fillStyle = '#ffd9a0'; g.fillText(txt, -k * sm * 18, 0); } g.globalAlpha = 1; g.fillStyle = '#ffe9c9'; g.fillText(txt, 0, 0); }
+    else { const sh = panic && !RM ? (Math.random() - 0.5) * 3 : 0; g.fillStyle = '#00000099'; const w = g.measureText(txt).width; g.fillRect(W / 2 - w / 2 - 10, y - fz * 0.75, w + 20, fz * 1.5); g.fillStyle = panic ? '#ffd0c4' : '#ffe2b8'; g.fillText(txt, W / 2 + sh, y + sh); }
+    g.restore(); }
+  function frameStory(g, W, H, T, ct, st, P, RM) {
+    if (T >= CS.flash + 0.45) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); if (T >= CS.split) drawSplit(g, W, H, T - (CS.split - C.split), P, RM, st); return; }
+    const L = layout(W, H, P), ci = curveInfo(); g.save();
+    if (!RM && T > CS.panic) { const k = clamp((T - CS.panic) / (CS.tear - CS.panic)); g.translate((Math.random() - 0.5) * 9 * k, (Math.random() - 0.5) * 9 * k); }   // the room shakes
+    g.fillStyle = '#000'; g.fillRect(-20, -20, W + 40, H + 40);
+    if (T < CS.over) { const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1); const cap = T < C.babble ? 'epoch 0 · nothing yet' : `${epochLabel(ci, ci.ks[i])} · ${SCHED[i].cap}`;
+      g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.fillText(cap, P ? 14 : 28, H - (P ? 44 : 28)); }
+    else { g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = MAG; g.textBaseline = 'alphabetic'; g.fillText(`epoch ${Math.floor(300 + (T - CS.over) * 900)} · it does not stop`, P ? 14 : 28, H - (P ? 44 : 28)); }
+    if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = L.ln.fz; g.fillStyle = CUR; g.fillRect(L.ln.x, entryY(L, 0) + fz * 0.4, fz * .55, fz * 1.05); } }
+    else drawBabble(g, W, H, Math.min(T, CS.flash), ct, P, RM, st, L, ci);
+    if (T >= CS.over) drawOverrun(g, W, H, T, ct, P, RM, L);
+    drawCurve(g, W, H, T, P, 0, L, ci, RM); drawSub(g, W, H, T, P, RM); g.restore();
+    if (!RM && T >= CS.tear && T < CS.flash) { const k = (T - CS.tear) / (CS.flash - CS.tear);   // the tear: bands of the screen slide apart
+      for (let y = 0; y < H; y += 18 + (y * 7) % 23) { const off = (((y * 37) % 11) - 5) * 14 * k; try { g.drawImage(g.canvas, 0, y * (g.canvas.height / H), g.canvas.width, 14 * (g.canvas.height / H), off, y, W, 14); } catch (e) {} } }
+    if (T >= CS.flash) { g.globalAlpha = RM ? clamp((T - CS.flash) / 0.45) : 1 - clamp((T - CS.flash - 0.08) / 0.37); g.fillStyle = RM ? '#000' : '#fff'; g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
   function frameAt(g, W, H, T, ct, st, P, RM) {
+    story = !!ct.story; if (story) return frameStory(g, W, H, T, ct, st, P, RM);
     const ex = extraOf(ct), S = C.split + ex, Tl = T >= S ? T - ex : Math.min(T, C.split - 1e-3);   // Tl: the film's clock after the first line
     g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
     const L = layout(W, H, P), ci = curveInfo();
@@ -204,22 +251,32 @@
   function synth(ctx, dest, t0) {   // t0: ctx time of film second 0
     const out = ctx.createGain(); out.gain.value = 0.9; out.connect(dest); const nodes = [];
     const tone = (type, f, at, dur, vol, f2) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, at); if (f2) o.frequency.exponentialRampToValueAtTime(f2, at + dur); v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(vol, at + Math.min(.01, dur / 4)); v.gain.exponentialRampToValueAtTime(0.0001, at + dur); o.connect(v); v.connect(out); o.start(at); o.stop(at + dur + .05); nodes.push(o); };
-    const hum = (ex = 0) => { const o = ctx.createOscillator(), o2 = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = 55; o2.type = 'sine'; o2.frequency.value = 110.4; const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
+    const hum = (ex = 0, sty = false) => { const o = ctx.createOscillator(), o2 = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = 55; o2.type = 'sine'; o2.frequency.value = 110.4; const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
       o.connect(f); o2.connect(f); f.connect(v); v.connect(out); v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(0.035, t0 + 1.2);
       for (let i = 0; i < SCHED.length; i++) { const at = t0 + C.babble + i * C.slot; v.gain.linearRampToValueAtTime(0.035 + i * 0.006, at + 0.4); f.frequency.linearRampToValueAtTime(220 + i * 70, at + 0.4); }
+      if (sty) {   // the story: it keeps climbing through the overrun, then the flash cuts it dead
+        v.gain.linearRampToValueAtTime(0.09, t0 + CS.tear); f.frequency.linearRampToValueAtTime(1400, t0 + CS.tear); o.frequency.linearRampToValueAtTime(55, t0 + CS.over); o.frequency.exponentialRampToValueAtTime(220, t0 + CS.tear);
+        v.gain.setValueAtTime(0.0001, t0 + CS.flash); o.start(t0); o2.start(t0); o.stop(t0 + CS.flash + .1); o2.stop(t0 + CS.flash + .1); nodes.push(o, o2); return; }
       v.gain.linearRampToValueAtTime(0.0001, t0 + C.final + 0.3); v.gain.setValueAtTime(0.0001, t0 + ex + C.turn - 0.1); v.gain.linearRampToValueAtTime(0.02, t0 + ex + C.turn + 0.6); v.gain.linearRampToValueAtTime(0.0001, t0 + ex + C.total);
       o.start(t0); o2.start(t0); o.stop(t0 + ex + C.total + .2); o2.stop(t0 + ex + C.total + .2); nodes.push(o, o2); };
     return { out, nodes, tone, hum,
       tick: (at, e) => tone('square', 1400 + Math.random() * 900 - e * 40, at, 0.018 + e * 0.002, 0.03),
       note: at => { tone('sine', 65.4, at, 2.6, 0.12); tone('sine', 98, at + .05, 2.2, 0.05); },
       cut: at => { tone('square', 2400, at, 0.035, 0.09, 600); tone('sine', 180, at, 0.12, 0.08, 60); },
+      crash: at => { const n = Math.floor(ctx.sampleRate * 0.9), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5);
+        const src = ctx.createBufferSource(), v = ctx.createGain(); src.buffer = b; v.gain.value = 0.35; src.connect(v); v.connect(out); src.start(at); nodes.push(src); tone('sine', 50, at, 1.6, 0.25, 28); },
       skitter: (a, b) => { for (let t = a; t < b; t += 0.05 + Math.random() * 0.07) tone('triangle', 3000 + Math.random() * 1500, t, 0.012, 0.02); },
       stop: (fade = .4) => { try { out.gain.setTargetAtTime(0, ctx.currentTime, fade / 3); setTimeout(() => nodes.forEach(n => { try { n.stop(); } catch (e) {} }), fade * 1000 + 200); } catch (e) {} } }; }
   function scheduleAll(S, ct, t0) {   // recordings: every timed sound of the film at once (offline)
-    const ex = extraOf(ct); S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
+    const ex = extraOf(ct);
+    if (ct.story) { S.hum(0, true); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e)); for (let t = CS.over; t < CS.tear; t += 0.03 + 0.12 * (1 - (t - CS.over) / (CS.tear - CS.over)) * Math.random()) S.tick(t0 + t, 12);
+      S.crash(t0 + CS.flash); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); S.skitter(t0 + d + C.crawl + 0.2, t0 + d + C.turn - 0.3); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
     S.note(t0 + C.final + 0.2); S.cut(t0 + ex + C.split + 0.95); S.skitter(t0 + ex + C.crawl + 0.2, t0 + ex + C.turn - 0.3); }
   function liveSound(S, ct, T0, T1, now) {   // live: sounds for what was drawn between film seconds T0 and T1 (ticks follow the tokens shown)
     const ex = extraOf(ct), cross = t => t > T0 && t <= T1;
+    if (ct.story) { for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
+      if (T1 > CS.over && T1 < CS.tear && Math.random() < 0.25 + 0.6 * (T1 - CS.over) / (CS.tear - CS.over)) S.tick(now, 12);
+      const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); if (cross(d + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); return; }
     for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
     if (cross(C.final + 0.2)) S.note(now); if (cross(ex + C.split + 0.95)) S.cut(now); if (cross(ex + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); }
   async function renderAudio(ct) { const sr = 44100, oc = new OfflineAudioContext(2, Math.ceil(sr * (totalOf(ct) + 1)), sr), S = synth(oc, oc.destination, 0); scheduleAll(S, ct, 0);
@@ -250,11 +307,11 @@
     const size = () => { const dpr = Math.min(devicePixelRatio || 1, P ? 1.5 : 2); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0); st = newState(innerWidth, innerHeight, P); };
     size(); addEventListener('resize', size);
     const audioReady = () => { const A = window.__audio; try { return A && !A.muted() && A.ctx().state === 'running'; } catch (e) { return false; } };
-    const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - elapsed()); S.ctx = ctx; S.hum(extraOf(ct)); soundT = elapsed(); syncSnd(); };
+    const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - elapsed()); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); syncSnd(); };
     const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) ? 'none' : ''; };
     sndB.addEventListener('click', e => { e.stopPropagation(); const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
     const finish = skipped => { if (done) return; done = true; cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
-      const out = { tone: 'epoch0', skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
+      const out = { tone: 'epoch0', story: !!(ct && ct.story), skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
       try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'end', ...out } })); } catch (e) {}
       if (opts.keep && !skipped) { cur = { promise, el, close: () => { el.classList.add('out'); setTimeout(() => el.remove(), 650); cur = null; } }; res(out); return; }
       el.classList.add('out'); setTimeout(() => { el.remove(); cur = null; res(out); }, skipped ? 350 : 650); };
@@ -264,7 +321,7 @@
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
     skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
     cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt };
-    Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent(); start = performance.now(); window.__epoch0.last = ct;
+    Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent({ story: !!(opts.story || Q.has('story')) }); start = performance.now(); window.__epoch0.last = ct;
       if (liveOK) fillLive(ct, elapsed).catch(() => {}); if (audioReady()) startSound(); syncSnd();
       const loop = () => { if (done) return; const T = elapsed(); if (T >= total()) { frameAt(g, innerWidth, innerHeight, RM ? rmTime(total() - 0.01, ct) : totalOf(ct) - 0.01, ct, st, P, RM); return finish(false); }
         frameAt(g, innerWidth, innerHeight, RM ? rmTime(T, ct) : T, ct, st, P, RM);
@@ -273,8 +330,8 @@
     try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'start', tone: 'epoch0', reduced: RM } })); } catch (e) {}
     return promise; }
   // reduced motion: whole lines one epoch at a time (no scroll, no stutter), the cut as a single frame, the halves still, then "your turn"
-  function rmTime(T, ct) { const S = C.split + extraOf(ct); return T < S ? T : T < S + 1.8 ? S + (C.crawl - 0.1 - C.split) : S + (C.turn + 1.2 - C.split) + (T - S - 1.8); }
-  const rmTotal = ct => C.split + extraOf(ct) + 3.4;
+  function rmTime(T, ct) { if (ct.story) return T; const S = C.split + extraOf(ct); return T < S ? T : T < S + 1.8 ? S + (C.crawl - 0.1 - C.split) : S + (C.turn + 1.2 - C.split) + (T - S - 1.8); }
+  const rmTotal = ct => ct.story ? totalOf(ct) : C.split + extraOf(ct) + 3.4;
 
   // ---------- recordings / tests: draw any moment (call in increasing T for one content) ----------
   let recSt = null, recKey = null;
