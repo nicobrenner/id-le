@@ -1296,6 +1296,7 @@ def t_story(P):
     wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('DAY 2')", 10, P=P)
     end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos() } }")
     need(end["days"] and "1" in end["days"] and end["day"] == 2 and end["free"] and end["alive"] and end["c"] >= 2, f"after Day 1: day 2 next, alive, free console: {end}")
+    stuck_check(pg, P, "storyline")
     P.clean()
     return f"story intro, wake-up lightbox → 'lights on' → cosmos lit, docked Day 1 card; words, life → front page → Day 2 (soon); {end['c']} creatures"
 
@@ -1369,6 +1370,36 @@ def t_story_landing(P):
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
     P.clean()
     return f"void alone for {arr['after']:.1f} s, then the arrival (Id and le fold into the window){' drawn' if arr['canvas'] else ''}, then the waking up"
+
+
+# never stuck (Nico hit it in ?story): close every guided widget, then a way out must be on screen and must work
+CLOSE_ALL = """() => { const l = document.querySelector('#lab'); if (l && l.classList.contains('open')) document.querySelector('#lab-close').click();
+  document.querySelectorAll('#genDay button.x, #genConsole button.x, #genFront button.x, #genDay .x').forEach(b => b.click());
+  return { lab: !!(l && l.classList.contains('open')) }; }"""
+WAY_OUT = """() => { const vis = el => { if (!el) return false; const s = getComputedStyle(el), r = el.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.3 && s.pointerEvents !== 'none' && r.width > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; };
+  const h = document.querySelector('#toHandle'), r = h && h.getBoundingClientRect(), top = h && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { handle: vis(h), onTop: !!(top && h.contains(top)), toggle: vis(document.querySelector('#lab-toggle')), calm: document.documentElement.classList.contains('gen-calm') }; }"""
+def stuck_check(pg, P, where):
+    pg.evaluate(CLOSE_ALL); pg.wait_for_timeout(900)
+    w = pg.evaluate(WAY_OUT)
+    need(w["handle"] and w["onTop"], f"{where}: with everything closed the Operator's creature must be visible and on top: {w}")
+    pg.click("#toHandle"); pg.wait_for_timeout(600)
+    after = pg.evaluate("() => ({ lab: document.querySelector('#lab').classList.contains('open'), calm: document.documentElement.classList.contains('gen-calm'), top: getComputedStyle(document.querySelector('#topbar')).opacity })")
+    need(after["lab"] and not after["calm"] and float(after["top"]) > 0.5, f"{where}: tapping it should reopen the Operator and bring the menus back: {after}")
+    return w, after
+
+
+def t_never_stuck(P):
+    """Never stuck: in the guided start (menus hidden), close the Operator and every guided widget; the Operator's creature is on screen,
+    on top of everything, and tapping it reopens the Operator and brings back the menus (⚙ included). With the window open it hides."""
+    pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
+    wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
+    pg.wait_for_timeout(900)
+    need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the creature should hide while the Operator's window is open")
+    w, _ = stuck_check(pg, P, "guided start")
+    need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the creature should hide again once the window is open")
+    P.clean()
+    return f"closed everything in the guided start (menus hidden: {w['calm']}, Operator button visible: {w['toggle']}) → the creature on top → tap → Operator open, menus back"
 
 
 def t_chooser(P):
@@ -1542,7 +1573,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1596,6 +1627,7 @@ def main():
                 run("wikipedia world", t_wiki)
                 run("genesis", t_genesis)
                 run("story", t_story)
+                run("never stuck", t_never_stuck)
                 run("story landing", t_story_landing)
                 run("story intro", t_story_intro)
                 run("boot intro", t_boot_intro)
