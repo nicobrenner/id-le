@@ -986,11 +986,12 @@ def t_clicks(P):
     rip = pg.evaluate("() => document.querySelectorAll('.ck-ripple').length")
     need(rip >= 1, "a click on empty floor left no ripple")
     r = pg.evaluate("""() => { const k = window.__clickKit, a = document.getElementById('arena').getBoundingClientRect(), out = {};
-      for (let i = 0; i < 4000 && !out.word; i++) { const x = a.left + 60 + Math.random() * (a.width - 120), y = a.top + 100 + Math.random() * (a.height - 160); const w = k.wordAt(x, y); if (w && !k.critAt(x, y)) { window.__clicks.answer(x, y); out.word = w.text; out.wtip = [...document.querySelectorAll('.ck-tip')].map(e => e.textContent).join(' | '); } }
+      for (let i = 0; i < 4000 && !out.word; i++) { const x = a.left + 60 + Math.random() * (a.width - 120), y = a.top + 100 + Math.random() * (a.height - 160); const w = k.wordAt(x, y), top = document.elementFromPoint(x, y); if (w && !k.critAt(x, y) && !(top && top.closest && top.closest('.thing, .design'))) { window.__clicks.answer(x, y); out.word = w.text; out.wtip = [...document.querySelectorAll('.ck-tip')].map(e => e.textContent).join(' | '); } }
       const c = window.__arena.raw().find(c => { if (c._off || c.state === 'sleep' || !c.bub) return false; const s = k.screenOf(c.x, c.y); return s.x > a.left + 40 && s.x < a.right - 40 && s.y > a.top + 80 && s.y < a.bottom - 40; });
       if (c) { c.bub.classList.remove('on'); c._ckT = 0; const s = k.screenOf(c.x, c.y); window.__clicks.answer(s.x, s.y); out.crit = c.name; out.said = c.bub.classList.contains('on') ? c.bub.textContent : null; }
-      const th = [...document.querySelectorAll('#arena .thing, #arena .design')].find(e => { const b = e.getBoundingClientRect(); return b.width > 10 && b.left > a.left && b.right < a.right && b.top > a.top && b.bottom < a.bottom; });
-      if (th) { const b = th.getBoundingClientRect(); window.__clicks.answer(b.left + b.width / 2, b.top + Math.min(12, b.height / 2)); out.wob = th.classList.contains('ck-wobble'); }
+      for (const th of document.querySelectorAll('#arena .thing, #arena .design')) { const b = th.getBoundingClientRect(); if (b.width < 10 || b.left < a.left || b.right > a.right || b.top < a.top || b.bottom > a.bottom) continue;
+        let pt = null; for (let i = 0; i < 40 && !pt; i++) { const x = b.left + 4 + Math.random() * (b.width - 8), y = b.top + 4 + Math.random() * (b.height - 8); if (!k.critAt(x, y) && !k.wordAt(x, y) && th.contains(document.elementFromPoint(x, y))) pt = { x, y }; }
+        if (!pt) continue; window.__clicks.answer(pt.x, pt.y); out.wob = th.classList.contains('ck-wobble'); break; }
       return out; }""")
     need(r.get("word") and r["word"] in (r.get("wtip") or ""), f"a word click showed no label: {r}")
     need(r.get("said"), f"a creature click got no line: {r}")
