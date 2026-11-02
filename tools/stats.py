@@ -179,6 +179,27 @@ def server_days(days):
     return rows
 
 
+def feedback_summary():
+    """Tell the Oracle (tools/feedback.py): counts by kind and the latest 20; None when the queue can't be read"""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import feedback
+        return feedback.summary(feedback.KV())
+    except Exception as e:   # the dashboard never fails because of this section
+        print(f"(Tell the Oracle: not read: {e})")
+        return None
+
+
+def feedback_html(fb):
+    e = lambda s: html.escape(str(s or ""))
+    kinds = {"idea": "💡 ideas", "bug": "🐞 bugs", "loved": "💜 loved", "off": "🌀 felt off"}
+    rows = "".join(f"<li><b>{e(kinds.get(k, k))}</b>: {n[1]} ({n[0]} new)</li>" for k, n in sorted(fb["by_kind"].items(), key=lambda x: -x[1][1])) or '<li class="muted">nothing yet</li>'
+    latest = "".join(f"<li><small>{e(dt.datetime.fromtimestamp((v.get('t') or 0) / 1000).strftime('%b %d %H:%M'))} · {e(kinds.get(v.get('kind'), v.get('kind')))}"
+                     f"{' · reviewed' if v.get('status') == 'reviewed' else ''} · <code>{e(v.get('id'))}</code></small><br>{e(v.get('text'))}</li>" for v in fb["latest"]) or '<li class="muted">nothing yet</li>'
+    return (f"<section><h2>🔮 Told to the Oracle ({fb['total']} kept)</h2><p class=\"muted\">Private: only this local page shows them. Review with "
+            f"<code>python3 tools/feedback.py</code>; promote to the roadmap with <code>feedback.py promote ID --title …</code>.</p><ul>{rows}</ul><h3>Latest 20</h3><ul>{latest}</ul></section>")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=14)
@@ -215,11 +236,17 @@ def main():
     if a.json:
         print(json.dumps(days, indent=1, sort_keys=True))
         return
+    fb = feedback_summary()
     if a.html:
         traffic, note = zone_traffic(tok, since)
-        open(a.html, "w", encoding="utf-8").write(dashboard(days, since, traffic, note))
+        page = dashboard(days, since, traffic, note)
+        if fb:   # Tell the Oracle: for Nico only (this page is local); the texts are what players wrote, already scrubbed of emails/links/numbers
+            page = page.replace("</div></main></body></html>", feedback_html(fb) + "</div></main></body></html>", 1)
+        open(a.html, "w", encoding="utf-8").write(page)
         print(f"wrote {a.html} ({len(days)} days with stats)")
         return
+    if fb is not None:
+        print("told to the Oracle: " + (", ".join(f"{k} {n[1]} ({n[0]} new)" for k, n in fb["by_kind"].items()) or "nothing yet") + "   (python3 tools/feedback.py to read them)\n")
     if not days:
         print(f"no stats since {since}")
         return
