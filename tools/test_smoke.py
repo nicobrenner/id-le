@@ -1254,7 +1254,7 @@ def t_genesis(P):
 
 def t_story(P):
     """The storyline (?story): the Epoch 0 intro in its story version (skipped here with Esc), the Tiny Operator's waking-up lines in a
-    lightbox, "lights on" pre-filled, the primordial universe lighting up, the window docking with the Day 1 card, words and first life
+    lightbox, "lights on" pre-filled, the primordial universe lighting up, the window docking with the Epoch 1 card, words and first life
     by the glowing suggestion, the Day 1 front page, then Day 2 (coming soon) and the free console."""
     pg = P.open("/arena.html?story&test")
     wait_for(pg, "() => !!document.querySelector('#idleIntro')", 40, P=P)
@@ -1287,20 +1287,20 @@ def t_story(P):
     need("we can see something" in line, f"the lights-on reaction line: {line!r}")
     wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
     day = pg.inner_text("#genDay")
-    need("DAY 1" in day and "lights on" in day, f"the Day 1 card: {day!r}")
+    need("EPOCH 1" in day and "first life" in day and "DAY" not in day, f"the Epoch 1 card: {day!r}")
     for _ in range(2):
         wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 30, P=P)
         pg.click("#genConsole [data-gsay]"); pg.wait_for_timeout(2500)
     wait_for(pg, "() => !!document.querySelector('#genFront')", 30, P=P)
     front = pg.inner_text("#genFront")
-    need("DAY 1" in front.upper() and "GAZETTE" in front.upper(), f"the Day 1 front page: {front[:120]!r}")
+    need("EPOCH 1" in front.upper() and "GAZETTE" in front.upper() and "EPOCH 2" in front.upper(), f"the Epoch 1 front page: {front[:160]!r}")
     pg.click("#genFront button")
-    wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('DAY 2')", 10, P=P)
+    wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('EPOCH 2')", 10, P=P)
     end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos() } }")
     need(end["days"] and "1" in end["days"] and end["day"] == 2 and end["free"] and end["alive"] and end["c"] >= 2, f"after Day 1: day 2 next, alive, free console: {end}")
     stuck_check(pg, P, "storyline")
     P.clean()
-    return f"story intro, wake-up lightbox → 'lights on' → cosmos lit, docked Day 1 card; words, life → front page → Day 2 (soon); {end['c']} creatures"
+    return f"story intro, wake-up lightbox → 'lights on' → cosmos lit, docked Epoch 1 card; words, life → front page → Epoch 2 (soon); {end['c']} creatures"
 
 
 def t_story_intro(P):
