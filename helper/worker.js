@@ -120,7 +120,8 @@ async function worlds(req, env, path) {   // the same relay as demo_server.py, s
 const SHARD = Math.floor(Math.random() * 16).toString(16), FEATS = /^[a-z0-9_-]{1,24}$/, BUCKETS = ['<20', '20-40', '40-55', '55+'];
 // where visits came from (the referring site's name only), a campaign tag, time on screen, where a guided start stopped
 const REF = /^[a-z0-9][a-z0-9.-]{0,59}$/, UTM = /^[a-z0-9-]{1,24}$/, DWELL = ['<1', '1-5', '5-20', '20+'];
-const DLSTEP = ['what', 'travel', 'irc', 'kinds', 'team', 'review', 'stats', 'where', 'finished', 'ended'];   // the data lab walkthrough (idle-dlwalk.js)
+const DLSTEP = ['what', 'travel', 'irc', 'kinds', 'team', 'review', 'stats', 'where', 'finished', 'ended'];
+const GSTEP = ['light', 'words', 'creatures', 'weather', 'music', 'hut', 'guided', 'skipped'];   // the genesis steps and how its guide ended (idle-genesis.js)   // the data lab walkthrough (idle-dlwalk.js)
 const F5STOP = ['none', 'card', 'hwwiki', 'name', 'feed', 'dream', 'gazette', 'weather', 'reel', 'keep', 'finished', 'skipped'];
 // engagement, per page load and counted once in its last bucket (eg0 takes back the bucket reported before): creatures in the world,
 // and how many were born, charts made, buildings finished and words fed during the page load; plus visible seconds, a plain daily sum
@@ -147,7 +148,7 @@ const X_CAP = { fav: 60, rage: 50, path: 30 }, EMPTY_X = () => ({ did: {}, ws: {
 const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and shard; the rest are counted as 'other'
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
-const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
+const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
@@ -178,6 +179,7 @@ function addStats(p) {
     const x = d.m[k] = d.m[k] || { n: 0, sum: 0, b: {} }; x.n++; x.sum += Math.round(sec); bump(x.b, sec < 60 ? '<1m' : sec < 180 ? '1-3m' : sec < 600 ? '3-10m' : '10m+'); }
   if (p.f5 === 'finished' || p.f5 === 'skipped') bump(d.f5, p.f5);
   if (Array.isArray(p.dl)) for (const k of new Set(p.dl.slice(0, 10))) if (DLSTEP.includes(k)) bump(d.dl, k);
+  if (p.gs && typeof p.gs === 'object' && !Array.isArray(p.gs)) for (const [k, v] of Object.entries(p.gs).slice(0, 10)) if (GSTEP.includes(k) && Number.isFinite(v) && v >= 0 && v <= 3600) { d.gs = d.gs || {}; d.gss = d.gss || {}; bump(d.gs, k); if (v) bump(d.gss, k, Math.round(v)); }
   if (p.eg && typeof p.eg === 'object') for (const [k, B] of Object.entries(EG)) { const v = p.eg[k], v0 = p.eg0 && p.eg0[k]; if (v === undefined) continue;
     if (B.includes(v) && (v0 === undefined || B.includes(v0) && v0 !== v)) { bump(d.eg, k + ':' + v); if (v0 !== undefined) bump(d.eg, k + ':' + v0, -1); } }
   if (Number.isInteger(p.sec) && p.sec > 0 && p.sec <= 6 * 3600) d.secs += p.sec;
@@ -195,7 +197,7 @@ async function flushStats(env) {
   for (const [day, add] of Object.entries(buf)) {
     const key = `stats:${day}:${SHARD}`, cur = JSON.parse(await env.STATS.get(key) || 'null') || { ...EMPTY(), writes: 0 };
     cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches; cur.writes = (cur.writes || 0) + 1;
-    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
+    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
     cur.secs = (cur.secs || 0) + add.secs; cur.v2visits = (cur.v2visits || 0) + (add.v2visits || 0);
     cur.pv = mergePv(cur.pv, add.pv);
     { const q = cur.x = cur.x || EMPTY_X(); for (const k of Object.keys(EMPTY_X())) { q[k] = q[k] || {}; for (const [a, n] of Object.entries((add.x || {})[k] || {})) if (n) (X_CAP[k] ? capped(q[k], a, n, X_CAP[k]) : bump(q[k], a, n)); } }

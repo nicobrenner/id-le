@@ -982,32 +982,64 @@ def t_pedia(P, phone=False):
 
 
 def t_genesis(P):
-    """?genesis&intro=0 starts in the void; each console chip builds its step; three steps make it alive; a new universe keeps a snapshot."""
+    """The guided genesis (?genesis&intro=0): a calm, dark void with the Operator open and "let there be light" pre-filled; words made
+    out of order are still visible; enter on the pre-filled phrase builds the step; the glowing suggestion too; after four guided steps
+    the guide ends and the normal UI fades in; a new universe keeps a snapshot; stats() reports the steps."""
     pg = P.open("/arena.html?genesis&intro=0&test")
-    wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gen]'))", 40, P=P)
-    st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), g: window.__genesis.state(), ab: window.__genesis.ab })"
+    wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
+    st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), calm: document.documentElement.classList.contains('gen-calm'), lit: document.documentElement.classList.contains('gen-lit'), next: window.__genesis.next(), pre: (document.getElementById('lab-text') || {}).value, g: window.__genesis.state(), ab: window.__genesis.ab })"
     v0 = pg.evaluate(st)
-    need(v0["c"] == 0 and v0["w"] == 0 and v0["v"], f"genesis should start empty and dark: {v0}")
+    need(v0["c"] == 0 and v0["w"] == 0 and v0["v"] and v0["calm"], f"genesis should start empty, dark and calm: {v0}")
     need(v0["ab"] == "off", f"the A/B switch must ship off: {v0['ab']}")
-    e0 = pg.evaluate("() => ({ pills: [...document.querySelectorAll('#ntf .np')].filter(e => e.offsetParent !== null).length, open: document.querySelector('#lab').classList.contains('open'), focus: (document.activeElement || {}).id, flag: /[?&]genesis\\b/.test(location.search) })")
+    need(v0["next"] == "light" and v0["pre"] == "let there be light", f"the first guided step should be light, pre-filled: {v0['next']} / {v0['pre']!r}")
+    wait_for(pg, "() => getComputedStyle(document.getElementById('topbar')).opacity === '0'", 8, P=P)   # it fades out (1.6 s)
+    e0 = pg.evaluate("""() => { const vis = el => !!el && getComputedStyle(el).opacity !== '0' && el.offsetParent !== null;
+        return { pills: [...document.querySelectorAll('#ntf .np')].filter(e => e.offsetParent !== null).length, open: document.querySelector('#lab').classList.contains('open'),
+          focus: (document.activeElement || {}).id, flag: /[?&]genesis\\b/.test(location.search), topbar: vis(document.getElementById('topbar')),
+          page: [...document.querySelectorAll('#ai-thread .ai-row.page')].filter(e => e.offsetParent !== null).length, glow: document.querySelectorAll('#genConsole .glow').length }; }""")
     need(e0["pills"] == 0 and e0["open"] and e0["focus"] == "lab-text" and not e0["flag"], f"the void must be empty with the Operator open and focused, and the flag dropped: {e0}")
-    chip = "k => { const b = [...document.querySelectorAll('#genConsole [data-gen]')].find(b => b.dataset.gen.split(':')[0] === k); if (!b) return false; b.click(); return true; }"
-    for k, ok in (("words", "() => window.__genHooks.words().length > 10"), ("creatures", "() => window.__arena.raw().filter(c => !c.lab).length >= 2"), ("light", "() => !document.documentElement.classList.contains('gen-void')")):
-        need(pg.evaluate(chip, k), f"no '{k}' chip in the console")
-        wait_for(pg, ok, 30, P=P)
+    need(not e0["topbar"] and e0["page"] == 0 and e0["glow"] == 1, f"the void must be calm (no toolbar, no old paragraph) with ONE glowing suggestion: {e0}")
+    # out of order: words before light are still visible (the night palette), and the guide still asks for light first
+    pg.evaluate("() => window.__genesis.actions.letThereBeWords('')"); wait_for(pg, "() => window.__genHooks.words().length > 10", 30, P=P)
+    ink = pg.evaluate("() => { const w = window.__genHooks.words().find(w => w.el && w.el.offsetParent); const c = w ? getComputedStyle(w.el).color : ''; const m = c.match(/\\d+/g) || [0, 0, 0]; return { dark: window.__genDark, next: window.__genesis.next(), lum: (+m[0] + +m[1] + +m[2]) / 3, c }; }")
+    need(ink["dark"] and ink["next"] == "light" and ink["lum"] > 120, f"words made before the light must be visible on the dark void, and light still comes first: {ink}")
+    # enter on the pre-filled phrase builds the step; the next phrase is pre-filled (words are done: life is next)
+    pg.focus("#lab-text"); pg.keyboard.press("Enter")
+    wait_for(pg, "() => document.documentElement.classList.contains('gen-lit')", 20, P=P)
+    wait_for(pg, "() => window.__genesis.next() === 'creatures' && document.getElementById('lab-text').value === 'bring life'", 10, P=P)
+    # the glowing suggestion: life → alive (three steps), still calm while the guide runs
+    pg.click("#genConsole [data-gsay]"); wait_for(pg, "() => window.__arena.raw().filter(c => !c.lab).length >= 2 && window.__genesis.state().alive", 30, P=P)
     s3 = pg.evaluate(st)
-    need(s3["g"].get("alive") and not s3["v"], f"three steps should make the universe alive: {s3}")
-    for k in ("weather", "hut", "music"):
-        need(pg.evaluate(chip, k), f"no '{k}' chip"); wait_for(pg, f"() => !!(window.__genesis.state().steps || {{}})['{k}']", 20, P=P)
+    need(not s3["v"] and s3["calm"] and s3["next"] == "sky", f"three steps should make it alive while the guide still runs (calm), sky next: {s3}")
+    # the fourth step (weather) ends the guide: the UI fades in, free chips appear, the pre-fill is gone
+    pg.focus("#lab-text"); pg.keyboard.press("Enter")
+    wait_for(pg, "() => !document.documentElement.classList.contains('gen-calm') && !!document.querySelector('#genConsole [data-gen]')", 15, P=P)
+    end = pg.evaluate("() => ({ next: window.__genesis.next(), stats: window.__genesis.stats(), topbar: getComputedStyle(document.getElementById('topbar')).opacity, pre: document.getElementById('lab-text').value })")
+    need(end["next"] is None and end["stats"]["end"] == "guided" and set(end["stats"]["steps"]) >= {"light", "words", "creatures", "weather"}, f"the guide should end after four steps and report them: {end}")
+    for k in ("hut", "music"):
+        need(pg.evaluate("k => { const b = [...document.querySelectorAll('#genConsole [data-gen]')].find(b => b.dataset.gen === k); if (b) b.click(); return !!b; }", k), f"no free '{k}' chip after the guide")
+        wait_for(pg, f"() => !!(window.__genesis.state().steps || {{}})['{k}']", 20, P=P)
     firsts = pg.evaluate("() => (window.__advisor && window.__advisor.state().firsts) || {}")
     need(all(("genesis-" + k) in firsts for k in ("words", "creatures", "light")), f"each step should be a Gazette first: {sorted(firsts)}")
     n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
     pg.evaluate("() => window.__genesis.newUniverse()")
-    wait_for(pg, "() => window.__genesis.state().n === 2 && document.documentElement.classList.contains('gen-void')", 20, P=P)
+    wait_for(pg, "() => window.__genesis.state().n === 2 && document.documentElement.classList.contains('gen-void') && window.__genesis.next() === 'light'", 20, P=P)
     n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
     need(n1 == n0 + 1, f"a new universe must keep the old world as a snapshot first ({n0} → {n1})")
     P.clean()
-    return f"void → words {s3['w']}, creatures {s3['c']}, alive after 3 steps; all 6 steps; firsts in the Gazette; new universe kept a snapshot ({n0}→{n1})"
+    return f"calm void, light pre-filled; words out of order visible (lum {ink['lum']:.0f}); enter → light, ▶ → life (alive), enter → weather → guide ends; steps {end['stats']['steps']}; new universe kept a snapshot ({n0}→{n1})"
+
+
+def t_genesis_phone(P):
+    """Phones: the same guide, the Operator as a sheet, the phrase pre-filled but NOT focused (no keyboard), a big ▶ to say it."""
+    pg = P.open("/arena.html?genesis&intro=0&test"); pg.set_viewport_size({"width": 390, "height": 844})
+    wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
+    st = pg.evaluate("() => ({ coarse: matchMedia('(pointer: coarse)').matches, focus: (document.activeElement || {}).id, pre: document.getElementById('lab-text').value, say: !!document.querySelector('#genConsole .say'), label: document.querySelector('#genConsole [data-gsay]').textContent })")
+    need(st["coarse"], f"the phone context should have a coarse pointer: {st}")
+    need(st["focus"] != "lab-text" and st["pre"] == "let there be light" and st["say"] and st["label"].startswith("▶"), f"phones: pre-filled, not focused, a big ▶: {st}")
+    pg.tap("#genConsole [data-gsay]"); wait_for(pg, "() => document.documentElement.classList.contains('gen-lit') && window.__genesis.next() === 'words'", 20, P=P)
+    P.clean()
+    return f"pre-filled, not focused, ▶ '{st['label']}' → light"
 
 
 def t_halloween(P):
@@ -1156,7 +1188,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["genesis", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["genesis", "genesis phone", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1204,6 +1236,7 @@ def main():
                 run("trick or treat", t_treat)
                 run("wikipedia world", t_wiki)
                 run("genesis", t_genesis)
+                run("genesis phone", t_genesis_phone, is_mobile=True, has_touch=True)
                 run("pedia desktop", t_pedia)
                 run("pedia halloween", t_pedia_halloween)
                 if a.full: run("fps", t_fps)
