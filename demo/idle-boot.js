@@ -4,7 +4,10 @@
 // multiplexer: TRAINING LOSS · project 24, MODEL SAMPLE DIALOG OUTPUTS, the training log, the GPUs. Epoch 0 (idle-epoch0.js) then runs inside
 // those panes: it asks panes() for its layout and draws chrome() around itself every frame.
 // Nothing here is real hardware or a real product: the numbers are invented, there are no vendor logos.
+// Before it, in the storyline (and ?intro=boot): arriving at the lab (boot-script.md, v2): a black screen, sound only (the car in the rain,
+// the indicator, the door, footsteps, a keycard beep) and the scientist's six lines, in Nico's words, big in the middle of the screen.
 // API: window.__termBoot = { dur, draw(g, W, H, T, P, RM), panes(W, H, P), chrome(g, W, H, Tf, P, RM, o), overlay(g, W, H, a),
+//   arrive: { dur, draw, fire, fireAll, beds, lines }, beds(ctx, dest, T, at) (continuous sounds already under way at T),
 //   fire(ctx, dest, T0, T1, at) (live sound for boot seconds T0..T1), fireAll(ctx, dest, t0) (recordings) }.
 (() => {
   const DUR = 12.4;
@@ -204,6 +207,74 @@
       case 'whoomp': tone('sine', 170, at, 0.45, 0.12, 52); burst(at, 0.35, 0.04, 500, 0.6); break; } }
   function fire(ctx, dest, T0, T1, at) { for (const e of EV) if (e.t > T0 && e.t <= T1) { try { sound(ctx, dest, e, at); } catch (er) {} } }
   function fireAll(ctx, dest, t0) { for (const e of EV) { try { sound(ctx, dest, e, t0 + e.t); } catch (er) {} } }
+  // continuous sounds already under way at T (the sound was switched on mid-way, or resumed after a hold): start them for what is left
+  function bootBeds(ctx, dest, T, at) { for (const e of EV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { sound(ctx, dest, { ...e, d: e.t + e.d - T }, at); } catch (er) {} } }
 
-  window.__termBoot = { dur: DUR, draw, panes, chrome, overlay, fire, fireAll, clock: K, events: EV.length };
+  // ---------- arriving at the lab (v2): black, sound, the scientist's lines ----------
+  // Nico's lines, verbatim (boot-script.md v2, section 0). Each is typed, then held: at least 2.5 s, longer for long lines.
+  const ARR = [
+    { who: 'scientist · on the phone', text: "Yes honey, it's an important day at the lab today… we're going to attempt a post PROJECT 23 run" },
+    { who: 'scientist · on the phone', text: "I'm excited, but a bit concerned too…" },
+    { who: 'scientist · on the phone', text: "yes, I'm sure everything will be fine… ok, arriving now, see you later", ind: true },
+    { beat: true },   // engine off, the door, footsteps in the rain, the keycard: LAB 07 · ACCESS GRANTED, a door hisses open
+    { who: 'scientist', text: "Oh hey Lester, thank you for spotting me the other day with 23, glad to have you back. Wish me luck with 24!" },
+    { who: 'scientist', text: "this Tiny Oracle model got pretty intense last time… I wonder what happens if it gets too smart… oh well", steps: true },
+    { who: 'scientist', text: "Alright, let's boot this cluster and start the run right away…" }];
+  const CPS = 42, BEAT = 4.8, GAP = 0.4;
+  const holdOf = s => Math.max(2.5, 0.8 + s.length / 22);
+  const AL = (() => { let t = 1.6; const out = []; for (const l of ARR) { if (l.beat) { out.push({ beat: true, t0: t, t1: t + BEAT }); t += BEAT; continue; }
+    const ty = l.text.length / CPS, h = holdOf(l.text); out.push({ ...l, t0: t, typed: t + ty, t1: t + ty + h }); t += ty + h + GAP; } return out; })();
+  const ADUR = AL[AL.length - 1].t1 + 0.8, BT = AL.find(l => l.beat).t0;
+  function wrapRows(g, text, maxW) { const ws = text.split(/(?<= )/), rows = []; let a = ''; for (const w of ws) { if (a && g.measureText(a + w).width > maxW) { rows.push(a); a = w; } else a += w; } rows.push(a); return rows; }
+  // a line in the middle of the screen: big, typed, on a dim band, with who says it above
+  function say(g, W, H, text, n, who, fz, a = 1) {
+    if (n <= 0 || a <= 0) return; g.save(); g.globalAlpha = a; const FONT = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.font = FONT; g.textBaseline = 'middle';
+    const rows = wrapRows(g, text, Math.min(W * 0.84, 900)), lh = fz * 1.3, y0 = H / 2 - (rows.length - 1) * lh / 2, bw = Math.min(W - 16, Math.max(...rows.map(r => g.measureText(r).width)) + fz * 1.8), bh = rows.length * lh + fz * 0.9, by = y0 - lh / 2 - fz * 0.45;
+    g.fillStyle = '#000000b8'; g.fillRect(0, by - fz * 0.9, W, bh + fz * 1.8); g.fillStyle = '#0b0d12e6'; g.fillRect(W / 2 - bw / 2, by, bw, bh); g.fillStyle = '#ffcf8a'; g.fillRect(W / 2 - bw / 2, by, 3, bh);
+    if (who) { g.font = `600 ${Math.max(10, Math.round(fz * 0.42))}px ${MONO}`; g.fillStyle = '#c9a26b'; g.textAlign = 'left'; g.fillText(who.toUpperCase(), W / 2 - bw / 2 + 8, by - fz * 0.45); g.font = FONT; }
+    g.fillStyle = '#ffe2b8'; g.textAlign = 'left'; let left = n; rows.forEach((r, k) => { const t = r.slice(0, Math.max(0, left)); left -= r.length; if (t) g.fillText(t, W / 2 - g.measureText(r).width / 2, y0 + k * lh); });
+    g.restore(); }
+  const sayFz = (W, P) => P ? 21 : Math.round(clamp(W / 42, 22, 32));
+  function arriveDraw(g, W, H, T, P, RM) {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H); const port = portOf(W, H, P);
+    // in the car: faint rain on the windscreen, and the indicator's amber blink while it says "arriving now"
+    if (T < BT + 1.2) { const a = 1 - clamp((T - BT) / 1.2); g.save(); g.globalAlpha = 0.09 * a; g.strokeStyle = '#9fb4c8'; g.lineWidth = 1;
+      if (!RM) for (let i = 0; i < 70; i++) { const x = ((i * 137.5) % W + T * 40 * (1 + (i % 5))) % W, y = ((i * 89.3) % H + T * 300 * (0.6 + (i % 3) * 0.3)) % H; g.beginPath(); g.moveTo(x, y); g.lineTo(x - 2, y + 10); g.stroke(); }
+      g.restore(); const ind = AL.find(l => l.ind); if (T > ind.t0 && T < BT + 0.4 && Math.floor((T - ind.t0) / 0.38) % 2 === 0) { const r = g.createRadialGradient(port ? 40 : 70, H - 60, 2, port ? 40 : 70, H - 60, 90); r.addColorStop(0, '#ffb24a55'); r.addColorStop(1, '#ffb24a00'); g.fillStyle = r; g.fillRect(0, H - 160, 200, 160); } }
+    // the keycard
+    if (T > BT + 2.9 && T < BT + BEAT) { const a = clamp((T - BT - 2.9) / 0.15) * (1 - clamp((T - BT - BEAT + 0.4) / 0.4)); g.save(); g.globalAlpha = a; g.font = `700 ${port ? 15 : 20}px ${MONO}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#7fd38a'; g.shadowColor = '#7fd38a'; g.shadowBlur = 12; g.fillText('LAB 07 · ACCESS GRANTED', W / 2, H / 2); g.restore(); }
+    for (const l of AL) { if (l.beat || T < l.t0 || T > l.t1) continue; const n = RM ? l.text.length : Math.floor((T - l.t0) * CPS), a = clamp((l.t1 - T) / 0.3);
+      say(g, W, H, l.text, n, l.who, sayFz(W, P), a); }
+    if (T > ADUR - 0.8) { g.fillStyle = '#000'; g.globalAlpha = clamp((T - (ADUR - 0.8)) / 0.6); g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
+  // sound: beds (the car, the rain outside, the room) and moments (the indicator, the door, steps, the keycard)
+  const AEV = (() => { const ev = [{ t: 0, k: 'car', d: BT + 0.6 }, { t: BT + 0.5, k: 'rainout', d: 2.9 }, { t: BT + 3.3, k: 'room', d: ADUR - BT - 3.3 }];
+    const ind = AL.find(l => l.ind); for (let t = ind.t0; t < BT; t += 0.38) ev.push({ t, k: 'ind', hi: Math.round((t - ind.t0) / 0.38) % 2 === 0 });
+    ev.push({ t: BT, k: 'engineoff' }, { t: BT + 0.45, k: 'dooropen' }, { t: BT + 0.95, k: 'doorslam' }); for (let i = 0; i < 5; i++) ev.push({ t: BT + 1.2 + i * 0.4, k: 'step', wet: true });
+    ev.push({ t: BT + 2.9, k: 'beep' }, { t: BT + 3.3, k: 'hiss' }); const st = AL.find(l => l.steps); for (let i = 0; i < 3; i++) ev.push({ t: st.t0 - 1.0 + i * 0.36, k: 'step' });
+    return ev.sort((a, b) => a.t - b.t); })();
+  function asound(ctx, dest, e, at) {
+    const tone = (type, f, t0, dur, vol, f2) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur); v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(vol, t0 + Math.min(.01, dur / 4)); v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(v); v.connect(dest); o.start(t0); o.stop(t0 + dur + .05); };
+    const nz = (t0, dur, vol, type, f, q = 1, loop = false, fadeIn = 0.01) => { const s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noise(ctx); s.loop = loop; fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+      v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(vol, t0 + fadeIn); if (loop) { v.gain.setValueAtTime(vol, t0 + Math.max(fadeIn, dur - 0.6)); v.gain.linearRampToValueAtTime(0.0001, t0 + dur); } else v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      s.connect(fl); fl.connect(v); v.connect(dest); s.start(t0, Math.random() * 0.5); s.stop(t0 + dur + 0.05); return v; };
+    switch (e.k) {
+      case 'car': { nz(at, e.d, 0.05, 'highpass', 1800, 0.6, true, 0.8); nz(at, e.d, 0.06, 'lowpass', 160, 0.8, true, 0.8);   // rain on the roof, the road
+        const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), v = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = 41; f.type = 'lowpass'; f.frequency.value = 130; v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(0.045, at + 0.8); v.gain.setValueAtTime(0.045, at + Math.max(0.8, e.d - 0.5)); v.gain.linearRampToValueAtTime(0.0001, at + e.d);
+        o.connect(f); f.connect(v); v.connect(dest); o.start(at); o.stop(at + e.d + 0.05); break; }
+      case 'rainout': nz(at, e.d, 0.09, 'bandpass', 3200, 0.5, true, 0.25); break;
+      case 'room': { nz(at, e.d, 0.012, 'lowpass', 400, 0.7, true, 0.6); const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sine'; o.frequency.value = 60; v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(0.02, at + 0.6); v.gain.setValueAtTime(0.02, at + Math.max(0.6, e.d - 0.6)); v.gain.linearRampToValueAtTime(0.0001, at + e.d); o.connect(v); v.connect(dest); o.start(at); o.stop(at + e.d + 0.05); break; }
+      case 'ind': tone('square', e.hi ? 2100 : 1700, at, 0.018, 0.035); nz(at, 0.02, 0.06, 'bandpass', 2600, 2); break;
+      case 'engineoff': tone('sawtooth', 41, at, 0.7, 0.04, 22); break;
+      case 'dooropen': nz(at, 0.08, 0.2, 'bandpass', 1500, 1.5); tone('square', 320, at + 0.02, 0.03, 0.04); break;
+      case 'doorslam': nz(at, 0.25, 0.35, 'lowpass', 300, 0.8); tone('sine', 70, at, 0.3, 0.2, 40); break;
+      case 'step': nz(at, e.wet ? 0.12 : 0.08, e.wet ? 0.22 : 0.15, e.wet ? 'bandpass' : 'lowpass', e.wet ? 900 : 500, 1); break;
+      case 'beep': tone('sine', 1760, at, 0.08, 0.08); tone('sine', 2349, at + 0.11, 0.12, 0.08); break;
+      case 'hiss': nz(at, 0.7, 0.07, 'highpass', 2500, 0.7); break; } }
+  const afire = (ctx, dest, T0, T1, at) => { for (const e of AEV) if (e.t > T0 && e.t <= T1) { try { asound(ctx, dest, e, at); } catch (er) {} } };
+  const afireAll = (ctx, dest, t0) => { for (const e of AEV) { try { asound(ctx, dest, e, t0 + e.t); } catch (er) {} } };
+  const abeds = (ctx, dest, T, at) => { for (const e of AEV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { asound(ctx, dest, { ...e, d: e.t + e.d - T }, at); } catch (er) {} } };
+  const arrive = { dur: ADUR, draw: arriveDraw, fire: afire, fireAll: afireAll, beds: abeds, lines: AL.filter(l => !l.beat).map(l => ({ t0: l.t0, typed: l.typed, t1: l.t1, text: l.text, who: l.who })), beat: BT, sayFz, events: AEV.length };
+
+  window.__termBoot = { dur: DUR, draw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
 })();

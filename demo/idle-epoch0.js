@@ -130,7 +130,8 @@
   function curveInfo() { const { b, f } = lossPts(), all = b.concat(f), N = all.length - 1, hi = Math.max(...all), lo = Math.min(...all);
     const ks = SCHED.map(st => st.k < 0 ? N : Math.min(N, st.k)); return { b, f, all, N, hi, lo, ks }; }
   const epochLabel = (ci, k) => k < ci.b.length ? `epoch ${k + 1}` : `fine-tune ${k - ci.b.length + 1}`;
-  function ptXY(ci, L, k) { const { x, y, w, h } = L.cv; return [x + 10 + (w - 20) * k / ci.N, y + 10 + (h - 30) * (1 - (ci.all[k] - ci.lo) / (ci.hi - ci.lo || 1))]; }
+  // x: the square root of the epoch's share of the run, so the first epochs (where the loss falls fastest) get room; y: the real loss
+  function ptXY(ci, L, k) { const { x, y, w, h } = L.cv; return [x + 22 + (w - 32) * Math.sqrt(k / ci.N), y + 10 + (h - 30) * (1 - (ci.all[k] - ci.lo) / (ci.hi - ci.lo || 1))]; }
   // the dot: at the current line's point, travelling there in the first 0.7 s of its slot
   function dotK(ci, T) { if (T < C.babble) return 0; const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1), u = ease(clamp((T - C.babble - i * C.slot) / 0.7));
     const k0 = i ? ci.ks[i - 1] : 0; return k0 + (ci.ks[i] - k0) * u; }
@@ -234,10 +235,11 @@
     const fz = subFz(L, P), lh = fz * 1.28; g.save(); g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
     // wrap the whole line first (rows don't jump while it types), then show the typed part
     const rows = subRows(g, s.text, Math.min(W * 0.88, 980)); let left = n; const shown = rows.map(r => { const t = r.slice(0, Math.max(0, left)); left -= r.length; return t; }).filter(t => t);
-    const cy = L.term ? L.panes.band.y + L.panes.band.h / 2 + (s.who ? fz * 0.18 : 0) : H - (P ? 104 : 80) - (rows.length - 1) * lh / 2, y0 = cy - (rows.length - 1) * lh / 2;
+    const cy = s.who ? H / 2 : L.term ? L.panes.band.y + L.panes.band.h / 2 : H - (P ? 104 : 80) - (rows.length - 1) * lh / 2, y0 = cy - (rows.length - 1) * lh / 2;
     if (s.last && !RM) { const sm = clamp((T - s.t0) / (CS.tear - s.t0)); const txt = shown.join(''); g.translate(W / 2, cy); g.scale(1 + sm * 1.6, 1 - sm * 0.35);   // the words stretch and smear as it gets away
       for (let k = 4; k >= 1; k--) { g.globalAlpha = 0.12 * k * (1 - sm * 0.5); g.fillStyle = '#ffd9a0'; g.fillText(txt, -k * sm * 18, 0); } g.globalAlpha = 1; g.fillStyle = '#ffe9c9'; g.fillText(txt, 0, 0); g.restore(); return; }
     const bw = Math.min(W - 16, Math.max(...rows.map(r => g.measureText(r).width)) + fz * 1.6), bh = rows.length * lh + fz * 0.7, sh = s.panic && !RM ? (Math.random() - 0.5) * 3 : 0, by = y0 - lh / 2 - fz * 0.35;
+    if (s.who) { g.fillStyle = '#000000a8'; g.fillRect(0, by - fz * 0.9, W, bh + fz * 1.8); }   // in the middle, over the panes: dim them behind the line
     g.fillStyle = '#000000c4'; g.fillRect(W / 2 - bw / 2, by, bw, bh); g.fillStyle = s.panic ? '#ff8a7a' : '#ffcf8a'; g.fillRect(W / 2 - bw / 2, by, 3, bh);
     if (s.who) { g.font = `600 ${Math.round(fz * 0.48)}px ui-monospace, Menlo, monospace`; g.textAlign = 'left'; g.fillStyle = '#c9a26b'; g.fillText(s.who.toUpperCase(), W / 2 - bw / 2 + 8, by - fz * 0.42);
       g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; }
@@ -280,8 +282,13 @@
     drawCurve(g, W, H, T, P, S, L, ci, RM); if (L.term && fade > 0) window.__termBoot.overlay(g, W, H, 0.6 * fade); drawSub(g, W, H, T, P, RM, L);
     drawWords(g, W, H, T, ct, P, S); if (T >= S) { drawSplit(g, W, H, Tl, P, RM, st); drawTurn(g, W, H, Tl, P); } }
   // the whole intro: the boot (if any), then the run; A: seconds since the start
-  const bootOf = ct => ct && ct.boot && window.__termBoot ? window.__termBoot.dur : 0;
-  function frameAll(g, W, H, A, ct, st, P, RM) { const B = bootOf(ct); if (A < B) { term = true; return window.__termBoot.draw(g, W, H, A, P, RM); } frameAt(g, W, H, A - B, ct, st, P, RM); }
+  const arrOf = ct => ct && ct.boot && ct.arrive && window.__termBoot ? window.__termBoot.arrive.dur : 0;
+  const bootOf = ct => ct && ct.boot && window.__termBoot ? arrOf(ct) + window.__termBoot.dur : 0;   // everything before the run: the arrival, then the boot
+  function frameAll(g, W, H, A, ct, st, P, RM) { const R = arrOf(ct), B = bootOf(ct); if (A < R) { term = true; return window.__termBoot.arrive.draw(g, W, H, A, P, RM); }
+    if (A < B) { term = true; return window.__termBoot.draw(g, W, H, A - R, P, RM); } frameAt(g, W, H, A - B, ct, st, P, RM); }
+  // the prelude's sounds between whole-intro seconds T0 and T1 (live), all at once (recordings), or the beds already under way at T
+  function preSound(ctx, dest, ct, T0, T1, at) { const R = arrOf(ct), TB = window.__termBoot; if (!TB || !ct.boot) return; if (R && T0 < R) TB.arrive.fire(ctx, dest, T0, Math.min(T1, R), at); TB.fire(ctx, dest, T0 - R, T1 - R, at); }
+  function preBeds(ctx, dest, ct, T, at) { const R = arrOf(ct), TB = window.__termBoot; if (!TB || !ct.boot) return; if (T < R) TB.arrive.beds(ctx, dest, T, at); else if (T < bootOf(ct)) TB.beds(ctx, dest, T - R, at); }
   const newState = (W, H, P) => { const r = rng(7); let gl = 0, glT = -1; return { cr: crawlers(W, H, P), glitch: T => { if (T - glT > 0.09) { glT = T; gl = r() < 0.18; } return gl; } }; };
 
   // ---------- sound (window.__audio; optional: the intro works silent) ----------
@@ -316,7 +323,7 @@
       const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); if (cross(d + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); return; }
     for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
     if (cross(C.final + 0.2)) S.note(now); if (cross(ex + C.split + 0.95)) S.cut(now); if (cross(ex + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); }
-  async function renderAudio(ct) { const B = bootOf(ct), sr = 44100, oc = new OfflineAudioContext(2, Math.ceil(sr * (B + totalOf(ct) + 1)), sr), S = synth(oc, oc.destination, B); if (B) window.__termBoot.fireAll(oc, S.out, 0); scheduleAll(S, ct, B);
+  async function renderAudio(ct) { const B = bootOf(ct), sr = 44100, oc = new OfflineAudioContext(2, Math.ceil(sr * (B + totalOf(ct) + 1)), sr), S = synth(oc, oc.destination, B); if (B) { const R = arrOf(ct); if (R) window.__termBoot.arrive.fireAll(oc, S.out, 0); window.__termBoot.fireAll(oc, S.out, R); } scheduleAll(S, ct, B);
     const buf = await oc.startRendering(), n = buf.length, L = buf.getChannelData(0), R = buf.getChannelData(1), dv = new DataView(new ArrayBuffer(44 + n * 4)); const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
     w(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 4, true);
     for (let i = 0; i < n; i++) { dv.setInt16(44 + i * 4, clamp(L[i], -1, 1) * 32767, true); dv.setInt16(46 + i * 4, clamp(R[i], -1, 1) * 32767, true); }
@@ -345,11 +352,11 @@
     const size = () => { const dpr = Math.min(devicePixelRatio || 1, P ? 1.5 : 2); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0); st = newState(innerWidth, innerHeight, P); };
     size(); addEventListener('resize', size);
     const audioReady = () => { const A = window.__audio; try { return A && !A.muted() && A.ctx().state === 'running'; } catch (e) { return false; } };
-    const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - (elapsed() - B())); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); syncSnd(); };
+    const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - (elapsed() - B())); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); try { preBeds(ctx, S.out, ct, soundT, ctx.currentTime); } catch (e) {} syncSnd(); };
     const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) ? 'none' : ''; };
     sndB.addEventListener('click', e => { e.stopPropagation(); const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
     const finish = skipped => { if (done) return; done = true; cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
-      const out = { tone: 'epoch0', story: !!(ct && ct.story), boot, skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
+      const out = { tone: 'epoch0', story: !!(ct && ct.story), boot, arrive: !!(ct && ct.arrive), skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
       try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'end', ...out } })); } catch (e) {}
       if (opts.keep && !skipped) { cur = { promise, el, close: () => { el.classList.add('out'); setTimeout(() => el.remove(), 650); cur = null; } }; res(out); return; }
       el.classList.add('out'); setTimeout(() => { el.remove(); cur = null; res(out); }, skipped ? 350 : 650); };
@@ -359,16 +366,18 @@
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
     skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
     cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt };
-    Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent({ story: !!(opts.story || Q.has('story')) }); ct.boot = boot; start = performance.now(); window.__epoch0.last = ct;
+    Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent({ story: !!(opts.story || Q.has('story')) }); ct.boot = boot; ct.arrive = boot && wantArrive(opts, ct.story); start = performance.now(); window.__epoch0.last = ct;
       if (liveOK) fillLive(ct, () => elapsed() - B()).catch(() => {}); if (audioReady()) startSound(); syncSnd();
       const loop = () => { if (done) return; const T = elapsed(); if (T >= total()) { frameAll(g, innerWidth, innerHeight, filmT(total() - 0.01), ct, st, P, RM); return finish(false); }
         frameAll(g, innerWidth, innerHeight, filmT(T), ct, st, P, RM);
-        if (S && !RM) { const b = B(); try { if (b && soundT < b) window.__termBoot.fire(S.ctx, S.out, soundT, T, S.ctx.currentTime); liveSound(S, ct, soundT - b, T - b, S.ctx.currentTime); } catch (e) {} soundT = T; }
+        if (S && !RM) { const b = B(); try { if (b && soundT < b) preSound(S.ctx, S.out, ct, soundT, T, S.ctx.currentTime); liveSound(S, ct, soundT - b, T - b, S.ctx.currentTime); } catch (e) {} soundT = T; }
         raf = requestAnimationFrame(loop); }; loop(); });
     try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'start', tone: 'epoch0', boot, reduced: RM } })); } catch (e) {}
     return promise; }
   // the boot plays on staging and local copies (where Nico tries things), or when asked for; never on id-le.com unless asked; ?noboot skips it
   const bootHost = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  // arriving at the lab (v2) comes before the boot in the storyline and with ?intro=boot; ?noarrive leaves it out
+  function wantArrive(o = {}, story) { if (Q.has('noarrive') || o.arrive === false) return false; return o.arrive === true || !!story || o.tone === 'boot' || Q.get('intro') === 'boot' || Q.has('boot'); }
   function wantBoot(o = {}) { if (!window.__termBoot || Q.has('noboot') || o.boot === false) return false; return o.boot === true || o.tone === 'boot' || Q.has('boot') || Q.get('intro') === 'boot' || bootHost(); }
   // reduced motion: whole lines one epoch at a time (no scroll, no stutter), the cut as a single frame, the halves still, then "your turn"
   function rmTime(T, ct) { if (ct.story) return T; const S = C.split + extraOf(ct); return T < S ? T : T < S + 1.8 ? S + (C.crawl - 0.1 - C.split) : S + (C.turn + 1.2 - C.split) + (T - S - 1.8); }
@@ -379,8 +388,9 @@
   function frame(ct, T, canvas, o = {}) { const g = canvas.getContext('2d'), sc = o.scale || 1, W = canvas.width / sc, H = canvas.height / sc, P = !!o.phone, key = ct.seed + ':' + W + 'x' + H + P;
     if (key !== recKey || !recSt || T < recSt.lastT) { recSt = newState(W, H, P); recKey = key; } recSt.lastT = T; g.setTransform(sc, 0, 0, sc, 0, 0); frameAll(g, W, H, T, ct, recSt, P, false); }
   // sizes for tests: the model's text, the subtitles, the pane titles (Nico: subtitles must not be smaller than the text on screen)
-  function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [] }; } finally { term = was; } }
+  function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [], sciY: H / 2,
+    arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
   window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
-    loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot,
+    loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont() };   // the bank tool samples through the same path
 })();

@@ -1262,6 +1262,16 @@ def t_story(P):
     story = pg.evaluate("() => window.__epoch0.last.story")
     need(story, "the storyline should play the story version of Epoch 0")
     pg.keyboard.press("Escape")
+    # the landing (story v2): only the void first, no Operator, no chips; clicks answer faintly; 3 clicks bring the Operator
+    wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'void'", 10, P=P)
+    v = pg.evaluate("() => ({ box: document.documentElement.classList.contains('gen-box'), con: !!document.querySelector('#genConsole [data-gsay]'), lab: !!(document.querySelector('#lab') && document.querySelector('#lab').classList.contains('open')) })")
+    need(not v["box"] and not v["con"] and not v["lab"], f"the void should come first, without the Operator: {v}")
+    vw = pg.viewport_size
+    for k in range(3): pg.mouse.click(vw["width"] * (0.3 + 0.2 * k), vw["height"] * 0.4); pg.wait_for_timeout(250)
+    ripples = pg.evaluate("() => document.querySelectorAll('.genRipple').length")
+    wait_for(pg, "() => window.__genesis.landing().phase !== 'void'", 3, P=P)
+    lnd = pg.evaluate("() => window.__genesis.landing()")
+    need(lnd["why"] == "clicks" and lnd["after"] < 5.5, f"3 clicks should bring the Operator: {lnd}"); need(ripples >= 1, "clicks in the void should answer (a ripple)")
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genBackdrop')", 20, P=P)
     pg.click("#genConsole")   # a tap finishes the line being typed
     wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]')", 40, P=P)
@@ -1312,13 +1322,23 @@ def t_boot_intro(P):
       const at = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 31) if (d[i] + d[i + 1] + d[i + 2] > 150) n++; return n; };
       const lit = {}; for (const T of [1.2, 4.5, 7.6, 10.2, B.dur + 6]) lit[T] = at(T);
       const m = [E.metrics(1280, 720, false, true), E.metrics(390, 844, true, true), E.metrics(1280, 720, false, false), E.metrics(390, 844, true, false)];
-      return { dur: B.dur, total: E.total(ct), plain: E.total(E.makeContent({ seed: 4 })), lit, m, ev: B.events, want: [E.wantBoot({}), E.wantBoot({ boot: false }), E.wantBoot({ tone: 'boot' })] }; }""")
+      const sc = E.makeContent({ seed: 4, story: true }); sc.boot = true; sc.arrive = true; const AR = B.arrive;
+      const cen = T => { E.frame(sc, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let n = 0, sy = 0; for (let y = 0; y < 360; y += 2) for (let x = 0; x < 640; x += 2) { const i = (y * 640 + x) * 4; if (d[i] + d[i + 1] + d[i + 2] > 300) { n++; sy += y; } } return n ? sy / n / 360 : -1; };
+      const mids = AR.lines.map(l => cen((l.typed + l.t1) / 2)), holds = AR.lines.map(l => +(l.t1 - l.typed).toFixed(2));
+      return { dur: B.dur, total: E.total(ct), plain: E.total(E.makeContent({ seed: 4 })), lit, m, ev: B.events, want: [E.wantBoot({}), E.wantBoot({ boot: false }), E.wantBoot({ tone: 'boot' })],
+        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), mids, holds, lens: AR.lines.map(l => l.text.length), aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
     need(10 <= r["dur"] <= 16, f"the boot should take 10-16 s: {r['dur']}"); need(abs(r["total"] - r["plain"] - r["dur"]) < 0.01, f"the run should follow the boot: {r}")
     need(all(v > 8 for v in r["lit"].values()), f"every stage of the boot should draw something: {r['lit']}")
     titles = r["m"][0]["titles"]
     need("TRAINING LOSS · project 24" in titles and "MODEL SAMPLE DIALOG OUTPUTS" in titles and len(titles) == 4, f"pane titles: {titles}")
     for m in r["m"]: need(m["subFz"] >= 1.4 * m["paneFz"], f"subtitles {m['subFz']}px vs the model's text {m['paneFz']}px (must be >= 1.4x)")
     need(r["want"] == [True, False, True], f"on localhost the boot plays unless play({{ boot: false }}): {r['want']}")
+    # arriving at the lab (story v2): before the boot in the story; six lines, each in the middle of the screen, held >= 2.5 s (longer for long lines)
+    need(abs(r["stotal"] - r["splain"] - r["dur"] - r["arr"]) < 0.01, f"story: arrival + boot + run: {r['stotal']} vs {r['splain']} + {r['dur']} + {r['arr']}")
+    need(r["warr"] == [True, False], f"the arrival plays in the story only (or ?intro=boot): {r['warr']}")
+    need(len(r["mids"]) == 6 and all(0.4 <= y <= 0.6 for y in r["mids"]), f"the scientist's lines should sit in the middle (lit centroid as a share of the height): {r['mids']}")
+    need(all(h >= 2.5 for h in r["holds"]) and all(h >= 0.8 + n / 22 - 0.01 for h, n in zip(r["holds"], r["lens"])), f"each line held >= 2.5 s, longer for long lines: {r['holds']}")
+    need(all(m["sciY"] == (720 if i % 2 == 0 else 844) / 2 for i, m in enumerate(r["m"])), "the scientist's subtitles should be in the middle of the screen")
     pg2 = P.open("/arena.html?intro=boot&fresh=1&test&nofirst5")
     wait_for(pg2, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.boot === '1' && window.__epoch0.time() > 2", 30, P=P)
     pg2.wait_for_timeout(1500)
@@ -1331,7 +1351,24 @@ def t_boot_intro(P):
     need(pg3.evaluate("() => window.__epoch0.wantBoot({})") is False, "?noboot should skip the boot")
     P.clean()
     d, p = r["m"][0], r["m"][1]
-    return f"boot {r['dur']:.1f} s + run = {r['total']:.1f} s; 4 labelled panes; subtitles {d['subFz']}px vs {d['paneFz']}px (phone {p['subFz']} vs {p['paneFz']}); ?intro=boot plays, Esc skips, ?noboot off; {r['ev']} sounds"
+    return f"arrival {r['arr']:.1f} s (lines held {min(r['holds'])}-{max(r['holds'])} s, centred at {min(r['mids']):.2f}-{max(r['mids']):.2f} of the height, {r['aev']} sounds); boot {r['dur']:.1f} s + run = {r['total']:.1f} s (story {r['stotal']:.1f} s); 4 labelled panes; subtitles {d['subFz']}px vs {d['paneFz']}px (phone {p['subFz']} vs {p['paneFz']}); ?intro=boot plays, Esc skips, ?noboot off; {r['ev']} sounds"
+
+
+def t_story_landing(P):
+    """The storyline's landing without clicks: the void alone, then the Operator arrives by itself ~6 s after the intro."""
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.last)", 40, P=P)
+    pg.keyboard.press("Escape")
+    wait_for(pg, "() => window.__genesis.landing().phase === 'void'", 10, P=P)
+    pg.wait_for_timeout(4000)
+    mid = pg.evaluate("() => ({ phase: window.__genesis.landing().phase, box: document.documentElement.classList.contains('gen-box') })")
+    need(mid["phase"] == "void" and not mid["box"], f"4 s into the void the Operator should not be there yet: {mid}")
+    wait_for(pg, "() => window.__genesis.landing().phase !== 'void'", 6, P=P)
+    arr = pg.evaluate("() => ({ ...window.__genesis.landing(), canvas: !!document.querySelector('#genArrive') })")
+    need(arr["why"] == "time" and 5.5 <= arr["after"] <= 7, f"the Operator should arrive ~6 s after landing: {arr}")
+    wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
+    P.clean()
+    return f"void alone for {arr['after']:.1f} s, then the arrival (Id and le fold into the window){' drawn' if arr['canvas'] else ''}, then the waking up"
 
 
 def t_chooser(P):
@@ -1505,7 +1542,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1559,6 +1596,7 @@ def main():
                 run("wikipedia world", t_wiki)
                 run("genesis", t_genesis)
                 run("story", t_story)
+                run("story landing", t_story_landing)
                 run("story intro", t_story_intro)
                 run("boot intro", t_boot_intro)
                 run("chooser", t_chooser)
