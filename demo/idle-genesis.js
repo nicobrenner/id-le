@@ -116,7 +116,7 @@ html.gen-void #ai-thread>.ai-row.page{display:none}
 @keyframes genBlink{50%{opacity:0}}
 #genBackdrop{position:fixed;inset:0;z-index:2147481990;background:#02030acc;backdrop-filter:blur(2px);transition:opacity 1.2s}#genBackdrop.out{opacity:0;pointer-events:none}
 html.gen-box #lab{position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:min(560px,92vw)!important;height:auto!important;max-height:84vh!important;z-index:2147482000!important;border-radius:16px!important;box-shadow:0 24px 90px #000e,0 0 0 1px #6b7cff55!important;overflow:auto!important}
-html.gen-box #lab #ai-thread{max-height:24vh}
+html.gen-box #lab :is(#ai-thread,#lab-thread,#ai-bar,#ai-set,#ai-smart-btn,#ai-smart){display:none!important}
 #genChoose{position:fixed;inset:0;z-index:2147483100;background:radial-gradient(90% 70% at 50% 40%,#0d1030,#020208);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px;color:#cfd6ff;font:14px system-ui;transition:opacity .6s}
 #genChoose.out{opacity:0;pointer-events:none}#genChoose h2{font:italic 26px Georgia,serif;color:#fff;margin:0;letter-spacing:.01em}#genChoose .sub{opacity:.7;margin:-8px 0 6px}
 #genChoose .opts{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;max-width:860px}
@@ -351,7 +351,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
       wakeTyping = ''; wakeShown.push(line); renderConsole(); if (!skip) await new Promise(r => setTimeout(r, Math.min(1600, 500 + line.length * 18))); skip = false; }
     if (lab) lab.removeEventListener('pointerdown', onTap);
     wakeBusy = false; try { WAKE.forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {}
-    curLine = WAKE[WAKE.length - 1]; wakeShown = WAKE.slice(-2); renderConsole(); }
+    curLine = WAKE[WAKE.length - 1]; wakeShown = WAKE.slice(); renderConsole(); }
   // after the lights: the window docks where the Operator usually is, and the day's goals appear
   function undock() { const bd = $('#genBackdrop'); if (bd) { bd.classList.add('out'); setTimeout(() => bd.remove(), 1300); } wakeShown = []; cls('gen-box', 0); renderConsole(); renderDay(); }
 
