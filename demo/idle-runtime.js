@@ -13,13 +13,37 @@ window.IDLE_REPO = 'https://github.com/nicobrenner/id-le';
 // creatures talk (and you talk to them); the Operator is the AI you bring, which can change this world. The data lab is a third thing.
 window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Relay Chat', sub: 'the world and its creatures talking' }, op: { icon: '📟', short: 'Operator', sub: 'your AI changes this world' } };
 (() => {
-  // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) never
-  // fires pagehide, so its record stays 'alive: false'. The next load sees it and starts safer: level 1 = the Oracle on one
-  // thread and light quality, level 2 = no Oracle at all. Surviving 40 s or leaving normally resets it.
-  try { const G = 'idle.bootGuard', prev = JSON.parse(localStorage.getItem(G) || 'null'), died = prev && prev.alive === false ? prev.n : 0;
-    window.__safeLevel = died >= 2 ? 2 : died >= 1 ? 1 : 0; localStorage.setItem(G, JSON.stringify({ n: died + 1, alive: false }));
-    const ok = () => { try { localStorage.setItem(G, JSON.stringify({ n: 0, alive: true })); } catch (e) {} };
-    setTimeout(ok, 40000); addEventListener('pagehide', ok); window.__bootOk = ok;   // a reload the page asks for itself is not a crash: it calls this first (WebKit doesn't always fire pagehide then, so a first visit started in safe mode)
+  // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) leaves its
+  // record 'alive: false'. The next load starts safer: level 1 = the Oracle on one thread and light quality, level 2 = no Oracle.
+  // v2 (11-02: 11 of 116 visits a day were wrongly in level 2): only a likely crash counts. The record is 'alive' again as soon as the
+  // page is hidden, frozen or left, or has been running 6 s after the Oracle loaded (or 40 s), and a heartbeat says when the page
+  // was last seen. A record that went quiet more than 10 min before this load, another tab of the game still running (it answers
+  // on a BroadcastChannel), or an old-format record (no times) is not a crash. Crashes older than 30 min are forgotten, and level 2
+  // needs two within those 30 min. window.__guard.reset() turns the Oracle back on.
+  try { const G = 'idle.bootGuard', now = Date.now(), WIN = 30 * 60e3, QUIET = 10 * 60e3, id = Math.random().toString(36).slice(2);
+    const prev = JSON.parse(localStorage.getItem(G) || 'null') || {};
+    let crashes = (Array.isArray(prev.crashes) ? prev.crashes : []).filter(t => now - t < WIN);
+    const suspect = prev.alive === false && typeof prev.seen === 'number' && now - prev.seen < QUIET;
+    if (suspect) crashes.push(now);
+    const levelOf = c => c.length >= 2 ? 2 : c.length ? 1 : 0;
+    window.__safeLevel = levelOf(crashes);
+    let done = false, alive = false;
+    const put = o => { try { localStorage.setItem(G, JSON.stringify(Object.assign({ v: 2, id, t: now, crashes }, o))); } catch (e) {} };
+    put({ alive: false, seen: now });
+    const beat = setInterval(() => { if (!done && !alive) put({ alive: false, seen: Date.now() }); }, 5000);
+    const rest = () => { if (!done) { alive = true; put({ alive: true, seen: Date.now() }); } };          // hidden / frozen / left: not loading any more
+    const wake = () => { if (!done && document.visibilityState === 'visible') { alive = false; put({ alive: false, seen: Date.now() }); } };
+    const ok = () => { if (done) return; done = true; clearInterval(beat); crashes = []; put({ alive: true, seen: Date.now() }); };
+    setTimeout(ok, 40000); addEventListener('pagehide', rest); addEventListener('freeze', rest);
+    document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' ? rest() : wake());
+    window.__bootOk = ok;   // a reload the page asks for itself is not a crash: it calls this first
+    window.__guardReady = () => setTimeout(ok, 6000);   // arena.html: the Oracle loaded (or failed cleanly): the risky part is over
+    // another tab of the game still running is not a crash: ask on a channel; a live tab answers, a crashed one can't
+    try { const bc = new BroadcastChannel('idle.guard'); bc.onmessage = e => { const m = e.data || {};
+        if (m.q && m.q !== id) bc.postMessage({ a: m.q });
+        else if (m.a === id && suspect) { crashes = crashes.filter(t => t !== now); window.__safeLevel = levelOf(crashes); put({ alive, seen: Date.now() }); } };
+      if (suspect) bc.postMessage({ q: id }); } catch (e) {}
+    window.__guard = { level: () => window.__safeLevel, suspect, reset() { done = true; crashes = []; try { localStorage.setItem(G, JSON.stringify({ v: 2, alive: true, seen: Date.now(), crashes: [] })); } catch (e) {} location.reload(); } };
   } catch (e) { window.__safeLevel = 0; }
   window.__isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const CFG = Object.assign({ mode: 'auto', helper: '' }, window.IDLE_CFG || {});

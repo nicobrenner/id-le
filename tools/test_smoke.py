@@ -481,6 +481,63 @@ def t_fresh_load(P):
 
 
 
+def t_crash_guard(P, old=False):
+    """the crash guard counts only likely crashes (v2, 11-02). The stored record is written from /privacy.html (which doesn't run the
+    guard) exactly as each situation leaves it, then the game loads and reports its level. old=True: the same situations in the
+    pre-v2 record format, to count how often the old guard misfired (run against an old build with --dist)."""
+    G = "idle.bootGuard"
+    def settled(pg):   # the first load reloads once for cross-origin isolation: wait for the document that stays
+        pg.set_default_timeout(20000)
+        with contextlib.suppress(Exception): wait_for(pg, "() => self.crossOriginIsolated && !!window.__guard", 20)
+        pg.wait_for_timeout(1500); return pg
+    side = P.open("/privacy.html")
+    for pg0 in P.ctx.pages:
+        pg0.set_default_timeout(20000)
+    def load_level(record):
+        side.evaluate("([G, r]) => r === null ? localStorage.removeItem(G) : localStorage.setItem(G, JSON.stringify(r))", [G, record])
+        pg = settled(P.open("/arena.html?fresh=1&test"))
+        lv = pg.evaluate("() => window.__safeLevel"); return pg, lv
+    now = "Date.now()"
+    t = side.evaluate("() => Date.now()")
+    out = {}
+    def fresh(): side.evaluate("G => localStorage.removeItem(G)", G)
+    # 1. a page killed in the background (hidden, then gone without pagehide): v2 marks the record alive when hidden
+    pg, out["first visit"] = load_level(None)
+    pg.evaluate("() => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }")
+    rec = side.evaluate("G => JSON.parse(localStorage.getItem(G))", G)
+    out["record alive after hidden"] = bool(rec and rec.get("alive"))
+    with contextlib.suppress(Exception): pg.evaluate("() => { window.__bootOk = null; }")
+    side.evaluate("([G, r]) => localStorage.setItem(G, JSON.stringify(r))", [G, rec])   # freeze it as the killed page left it
+    pg.close()   # (close would run pagehide; the record above is what a kill leaves)
+    side.evaluate("([G, r]) => localStorage.setItem(G, JSON.stringify(r))", [G, rec])
+    pg, out["killed while hidden"] = load_level(rec)
+    # 2. a second tab while the first is still loading: the first answers on the BroadcastChannel
+    side.evaluate("G => { const r = JSON.parse(localStorage.getItem(G)); r.alive = false; r.seen = Date.now(); localStorage.setItem(G, JSON.stringify(r)); }", G)   # the first tab is still 'loading'
+    pg2 = settled(P.open("/arena.html?fresh=1&test")); out["second tab"] = pg2.evaluate("() => window.__safeLevel"); out["second tab suspect"] = pg2.evaluate("() => window.__guard.suspect")
+    pg2.close(); pg.close()
+    # 3. a load that went quiet 20 min before this one (closed without pagehide long ago)
+    t = side.evaluate("() => Date.now()")
+    pg, out["quiet 20 min"] = load_level({"v": 2, "alive": False, "seen": t - 20 * 60000, "crashes": []}); pg.close()
+    # 4. the old format ({n, alive:false}) left by the pre-v2 guard: forgotten
+    pg, out["old record n=3"] = load_level({"n": 3, "alive": False}); pg.close()
+    # 5. real crashes while loading: the record says loading, seen a few seconds ago
+    t = side.evaluate("() => Date.now()")
+    pg, out["crash 1"] = load_level({"v": 2, "alive": False, "seen": t - 3000, "crashes": []}); pg.close()
+    t = side.evaluate("() => Date.now()")
+    pg, out["crash 2"] = load_level({"v": 2, "alive": False, "seen": t - 3000, "crashes": [t - 120000]})
+    # 6. 'turn the Oracle back on'
+    with contextlib.suppress(Exception): pg.evaluate("() => window.__guard.reset()")
+    pg.wait_for_timeout(2500); out["after reset"] = pg.evaluate("() => window.__safeLevel"); pg.close()
+    # 7. a crash an hour ago: forgotten
+    t = side.evaluate("() => Date.now()")
+    pg, out["crash an hour ago"] = load_level({"v": 2, "alive": True, "seen": t - 3600000, "crashes": [t - 3600000]}); pg.close()
+    want = {"first visit": 0, "record alive after hidden": True, "killed while hidden": 0, "second tab": 0, "quiet 20 min": 0, "old record n=3": 0,
+            "crash 1": 1, "crash 2": 2, "after reset": 0, "crash an hour ago": 0}
+    bad = {k: (out.get(k), v) for k, v in want.items() if out.get(k) != v}
+    need(not bad, f"crash guard (got, want): {bad}")
+    return ", ".join(f"{k} {v}" for k, v in out.items())
+
+
 def t_fresh_slow(P):
     """a first visit on a slow network: the service worker's one-time reload (cross-origin isolation) lands while the starter world
     is still downloading. It used to mark the page ready early, autosave the empty default world on the way out, and the next load took
@@ -724,6 +781,26 @@ def t_stats_v2(P):
     need(all(n in starter or n == "other" for n in names), f"a name outside the starter world was sent: {names}")
     P.clean()
     return f"card {name}: pt {x.get('pt')}, ws {x.get('ws')}, path {path}, rage {x.get('rage')}, {len(x.get('fav', {}))} favorite keys"
+
+
+def t_op_actions(P):
+    """'Operator actions that ran' counts only the Operator (11-02): the world's own evolve/disaster events and the Tiny Operator's tool
+    logs (ai_*) don't count; the Tiny Operator's acted turns do; your own AI's ai_* tools count only during its turn (op_msg → op_done)"""
+    pg = P.open("/arena.html?statstest&test"); booted(pg)
+    pg.evaluate("""() => { const ev = (type, extra) => dispatchEvent(new CustomEvent('idle:ev', { detail: { type, extra: extra || {} } }));
+      for (let i = 0; i < 5; i++) ev('evolve', { who: 'x', how: 'mutate' }); ev('disaster', { k: 'quake' });   // the world on its own
+      ev('ai_weather', {}); ev('tiny_operator', { option: 'weather', p: 0.97, acted: 'weather', out: 'acted' });   // a TO turn: its tool log + its turn
+      ev('op_msg', { brain: 'anthropic' }); ev('ai_spawn', {}); ev('op_done', { brain: 'anthropic', tools: true, error: false });   // your own AI
+      ev("ai_disaster", {}); }""")   # after the turn: not counted
+    pg.wait_for_timeout(600)
+    pg.evaluate("() => window.__stats._send('3m')"); pg.wait_for_timeout(500)
+    opa = {}
+    for b in P.stats:
+        t = b if isinstance(b, str) else b.decode()
+        with contextlib.suppress(Exception):
+            for k, v in ((json.loads(t).get("x") or {}).get("opa") or {}).items(): opa[k] = opa.get(k, 0) + v
+    need(opa == {"weather": 1, "ai_spawn": 1}, f"Operator actions counted {opa}, want weather 1 (TO) and ai_spawn 1 (your own AI)")
+    return f"counted {opa}"
 
 
 def t_op_stats(P):
@@ -1396,7 +1473,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["clicks", "genesis", "genesis phone", "story", "story intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1418,6 +1495,7 @@ def main():
                     finally: ctx.close()
                 run("fresh load", t_fresh_load)
                 run("fresh slow", t_fresh_slow)
+                run("crash guard", t_crash_guard)
                 run("camera desktop", t_camera)
                 run("panels", t_panels)
                 run("sound", t_sound)
@@ -1425,6 +1503,7 @@ def main():
                 run("stats", t_stats)
                 run("stats v2", t_stats_v2)
                 run("op stats", t_op_stats)
+                run("op actions", t_op_actions)
                 run("pedia stats", t_pedia_stats)
                 run("data lab", t_datalab, 90 if a.full else 45)
                 run("data lab stuck", t_datalab_stuck)
