@@ -36,6 +36,21 @@ def need(cond, msg):
 
 
 # ---------------------------------------------------------------- static checks (no browser)
+def no_conflict_markers():
+    """A merge once left <<<<<<< / ======= / >>>>>>> blocks in arena.html: browsers ignore them and load every module twice."""
+    import re, subprocess
+    files = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.split()
+    bad = []
+    for f in files:
+        if not re.search(r"\.(html|js|mjs|py|json|md|css|toml)$", f): continue
+        try: lines = open(os.path.join(ROOT, f), encoding="utf-8").read().split("\n")
+        except Exception: continue
+        for i, l in enumerate(lines, 1):
+            if re.match(r"^(<{7}|>{7})( |$)", l) or (l == "=======" and not f.endswith(".md")): bad.append(f"{f}:{i}")
+    need(not bad, "conflict markers: " + ", ".join(bad[:10]))
+    return f"{len(files)} files clean"
+
+
 def js_syntax():
     files = [os.path.join(DEMO, f) for f in sorted(os.listdir(DEMO)) if f.endswith(".js")] + [os.path.join(ROOT, "helper", "worker.js")]
     tmp = tempfile.mkdtemp(prefix="idle-js-"); bad = []
@@ -1377,6 +1392,7 @@ def main():
     want = lambda name: a.k.lower() in name.lower()
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
+    if want("conflict markers"): check("conflict markers", no_conflict_markers)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
