@@ -46,7 +46,7 @@ def main():
                     if pg.evaluate("() => !!(window.__oracle && window.__oracle.ready && window.__epoch0 && window.__critDraw)"): break
                     pg.wait_for_timeout(500)
                 for take in range(1, a.takes + 1):
-                    ct = pg.evaluate("async ([s, story, boot]) => { const c = await window.__epoch0.makeLiveContent({ seed: s, story }); c.boot = boot; window.__rec = c; return { seed: c.seed, lines: c.lines.map(l => [l.e, l.src, l.text]), cont: c.cont, contSrc: c.contSrc, total: window.__epoch0.total(c) }; }", [int(time.time()) % 100000 + take * 7, a.story, a.boot])
+                    ct = pg.evaluate("async ([s, story, boot]) => { const c = await window.__epoch0.makeLiveContent({ seed: s, story }); c.boot = boot; c.arrive = boot && story; window.__rec = c; return { seed: c.seed, lines: c.lines.map(l => [l.e, l.src, l.text]), cont: c.cont, contSrc: c.contSrc, total: window.__epoch0.total(c) }; }", [int(time.time()) % 100000 + take * 7, a.story, a.boot])
                     frames = tempfile.mkdtemp(prefix=f"e0f{take}-"); n = int(ct["total"] * a.fps)
                     pg.evaluate(f"() => {{ window.__cv = document.createElement('canvas'); window.__cv.width = {W}; window.__cv.height = {H}; window.__cvp = document.createElement('canvas'); window.__cvp.width = 780; window.__cvp.height = 1688; }}")
                     for i in range(n):
