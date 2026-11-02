@@ -43,7 +43,7 @@
     try { const S = window.__build && window.__build._st && window.__build._st(); if (S) for (const s of S.structs) if (s.done && s.door) out.push({ x: s.door.x, y: s.door.y + 18, name: s.name || 'a ' + s.kind, kind: 'house', w: 3 }); } catch (e) {}
     for (const c of B().creatures()) if (c.state === 'sleep' && !c.lab && c.name && !skip.has(c)) out.push({ x: c.x, y: c.y + 34, name: c.name + '’s bed', who: c.name, kind: 'bed', w: 2 });
     try { for (const t of A().things()) if (t.kind === 'design' && t.d && t.d.by && t.d.done !== false) out.push({ x: t.x, y: t.y + 30, name: t.d.by + '’s ' + (t.d.f ? 'chart' : 'design'), who: t.d.by, kind: 'landmark', w: 1 }); } catch (e) {}
-    const cam = B().cam(), vs = B().viewSize(); out.push({ x: cam.x, y: cam.y - vs.h / 2 / (cam.z || 1) + 70, name: 'the Oracle', kind: 'oracle', w: 1.5 });
+    const cam = B().cam(), vs = B().viewSize(); out.push({ x: cam.x, y: cam.y - vs.h / 2 / (cam.z || 1) + 70, name: 'the Tiny Oracle', kind: 'oracle', w: 1.5 });
     const names = new Set([...skip].map(c => c.name)), near = out.filter(d => !(d.who && names.has(d.who)) && dist(from, d) < 1100 && dist(from, d) > 60); if (!near.length) return null;   // nobody knocks at its own door
     let tot = 0; for (const d of near) tot += d.w; let r = Math.random() * tot; for (const d of near) { r -= d.w; if (r <= 0) return d; } return near[0]; }
 

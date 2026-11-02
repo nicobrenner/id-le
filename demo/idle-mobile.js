@@ -46,7 +46,7 @@
   // ---------- ☰ more: every top-bar button that isn't kept on the bar, plus the chats and sound
   const LABELS = { labBtn: ['🧪', 'data lab'], connBtn: ['🌐', 'connect'], snapBtn: ['📸', 'snapshot'], evolveWorldBtn: ['🌦', 'evolve'], reelsBtn: ['🎞', 'reels'], pediaBtn: ['📖', 'pedia'],
     djBtn: ['🎧', 'music'], advBtn: ['📊', 'advisor'], drawerBtn: ['🗄', 'drawer'], treesBtn: ['🌳', 'family trees'], almanacBtn: ['🌊', 'almanac'], keepDetail: ['🏰', 'detail'],
-    'rc-open': [(window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.icon : '💬', (window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.short : 'IRC'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': [(window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.icon : '📟', (window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.short : 'Operator'], soundBtn: ['🔊', 'sound'], sndMore: ['🎚', 'volume'] };
+    'rc-open': [(window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.icon : '💬', (window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.short : 'IRC'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': [(window.IDLE_NAMES || {}).oracle ? IDLE_NAMES.oracle.icon : '🔮', (window.IDLE_NAMES || {}).oracle ? IDLE_NAMES.oracle.short : 'Oracle'], soundBtn: ['🔊', 'sound'], sndMore: ['🎚', 'volume'] };
   const KEEP = ['herdBtn', 'ntfBtn', 'studioBtn', 'mMore'];
   let sheet = null, more = null;
   function mount() {

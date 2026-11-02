@@ -1,4 +1,4 @@
-// idle-feedback.js: 🔮 Tell the Oracle, and the 🗺 roadmap you can vote on (11-01).
+// idle-feedback.js: 🧪 tell the scientists (was "Tell the Oracle" until 11-02; the name went to the bring-your-own-AI panel), and the 🗺 roadmap you can vote on (11-01).
 // Nico: "something like 'submit it to The Oracle'… a ticket/request… then we could show them the roadmap… users get to vote".
 // - Tell the Oracle: a kind (an idea, a bug, I loved this, something felt off) and a few words (≤ 600 characters), plus a little context
 //   the player can see and untick (which page, which place, the build, phone or desktop, the last error message). Never anything from the
@@ -12,9 +12,9 @@
   { const h = location.hostname; if (!(/^staging\./.test(h) || h === 'localhost' || h === '127.0.0.1' || /[?&]oracle\b/.test(location.search))) return; }
   const $ = s => document.querySelector(s), esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const VOTED = 'idle.votes', KINDS = [['idea', '💡 an idea'], ['bug', '🐞 a bug'], ['loved', '💜 I loved this'], ['off', '🌀 something felt off']];
-  const THANKS = ['noted. I will whisper it to the maker', 'the Oracle heard you. the maker reads everything that comes through here', 'thank you. small worlds grow from words like these',
+  const THANKS = ['noted. I will whisper it to the maker', 'the scientists heard you. the maker reads everything that comes through here', 'thank you. small worlds grow from words like these',
     'received. it goes on the pile the maker reads at night', 'heard. if it shapes the world, you will see it on the roadmap'];
-  const IRC = /^(?:@oracle\b|tell the oracle\b)[:,]?\s*/i;
+  const IRC = /^(?:@oracle\b|@scientists\b|tell the scientists\b|tell the oracle\b)[:,]?\s*/i;   // the old phrasing still works
   const scrub = t => String(t || '').replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[email]').replace(/\b(?:https?:\/\/|www\.)\S+/gi, '[link]').replace(/\+?\d[\d\s().-]{6,}\d/g, '[number]');
   let lastErr = '';
   addEventListener('error', e => { if (e && e.message) lastErr = String(e.message).slice(0, 160); });
@@ -39,7 +39,7 @@
   document.head.appendChild(css);
 
   const el = document.createElement('div'); el.id = 'oracle'; document.body.appendChild(el);
-  const btn = document.createElement('button'); btn.id = 'oracleBtn'; btn.title = 'Tell the Oracle (an idea, a bug, what you loved) · vote on the roadmap'; btn.textContent = '🔮';
+  const btn = document.createElement('button'); btn.id = 'oracleBtn'; btn.title = 'Tell the scientists (an idea, a bug, what you loved) · vote on the roadmap'; btn.textContent = '🧪';
   const mountBtn = () => { if (btn.isConnected) return; const bar = $('#topbar'); if (!bar) return setTimeout(mountBtn, 300); const s = $('#settingsBtn'), more = $('#mMore'); if (s) s.before(btn, ' '); else if (more) more.before(btn, ' '); else bar.appendChild(btn); };
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', mountBtn); else mountBtn();
   btn.addEventListener('click', () => toggle());
@@ -59,7 +59,7 @@
   function render() {
     el.classList.toggle('on', open); if (!open) return;
     const c = context();
-    const head = `<div class="hd"><b>🔮 the Oracle</b><button class="x" data-a="close" title="close">✕</button></div><div class="tabs"><button data-tab="tell" class="${tab === 'tell' ? 'on' : ''}">tell the Oracle</button><button data-tab="road" class="${tab === 'road' ? 'on' : ''}">🗺 the roadmap</button></div>`;
+    const head = `<div class="hd"><b>🧪 the scientists</b><button class="x" data-a="close" title="close">✕</button></div><div class="tabs"><button data-tab="tell" class="${tab === 'tell' ? 'on' : ''}">tell the scientists</button><button data-tab="road" class="${tab === 'road' ? 'on' : ''}">🗺 the roadmap</button></div>`;
     if (tab === 'tell') {
       const ctxRows = [['page', `page: ${c.page}`], ['place', `place: ${c.place}`], ['build', c.build ? `version: ${c.build}` : ''], ['device', `on a ${c.device}`], ['err', c.err ? `the last error: “${c.err}”` : '']]
         .filter(r => r[1]).map(([k, label]) => `<label><input type="checkbox" data-ctx="${k}"${ctxOn[k] ? ' checked' : ''}> ${esc(label)}</label>`).join('');
@@ -67,7 +67,7 @@
 <div class="kinds">${KINDS.map(([k, l]) => `<button data-kind="${k}" class="${kind === k ? 'on' : ''}">${l}</button>`).join('')}</div>
 <textarea maxlength="600" placeholder="a few words… (no need for your name or email)">${esc(draft)}</textarea>
 <div class="ctx"><small>also send (untick anything you'd rather not):</small>${ctxRows}</div>
-<div class="row"><button class="send" data-a="send"${sending ? ' disabled' : ''}>send to the Oracle</button><small>${(draft || '').length}/600</small></div>
+<div class="row"><button class="send" data-a="send"${sending ? ' disabled' : ''}>send to the scientists</button><small>${(draft || '').length}/600</small></div>
 ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}<div class="ctx"><small>What's kept and for how long: <a href="privacy.html#oracle" target="_blank" rel="noopener">privacy</a></small></div>`;
       return;
     }
@@ -97,8 +97,8 @@ ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}<div class="ctx"><small>What's
       const c = context(), ctx = {}; for (const k of Object.keys(c)) if (ctxOn[k] && c[k]) ctx[k] = c[k];
       sending = true; render();
       try { const r = await fetch('/lab/oracle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, text, ctx }) }); const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.ok) throw new Error(j.error || ('the Oracle is not answering (' + r.status + ')'));
-        const line = THANKS[Math.floor(Math.random() * THANKS.length)]; msg = '🔮 ' + line; draft = ''; kind = '';
+        if (!r.ok || !j.ok) throw new Error(j.error || ('the scientists are not answering (' + r.status + ')'));
+        const line = THANKS[Math.floor(Math.random() * THANKS.length)]; msg = '🧪 ' + line; draft = ''; kind = '';
         if (window.__oracleSay) window.__oracleSay(line); emit('sent');
       } catch (er) { msg = String(er.message || er); }
       sending = false; render(); }
@@ -109,7 +109,7 @@ ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}<div class="ctx"><small>What's
   window.__feedback = {
     open: (which, text, k) => { if (text != null) draft = String(text).slice(0, 600); if (k) kind = k; toggle(true, which || 'tell'); },
     close: () => toggle(false),
-    // 💬 IRC: "tell the Oracle …" / "@oracle …" opens the form with those words; returns true when the line was taken
+    // 💬 IRC: "tell the scientists …" (or "tell the Oracle …", "@oracle …") opens the form with those words; returns true when the line was taken
     fromIrc: t => { if (!IRC.test(String(t || ''))) return false; window.__feedback.open('tell', String(t).replace(IRC, '').trim(), kind || 'idea'); return true; },
     state: () => ({ open, tab, kind, draft, road }),
   };

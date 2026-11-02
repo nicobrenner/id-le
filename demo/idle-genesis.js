@@ -454,7 +454,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
 
   // ---------- the storyline's waking up: the Operator as a window in the middle (a lightbox), the Tiny Operator's lines typed one by one
   async function wake() { const lab = $('#lab'); let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
-    cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
+    cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); opTitle(true); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; let skip = false; const onTap = () => { skip = true; }; if (lab) lab.addEventListener('pointerdown', onTap);
     for (const line of WAKE) { if (RM) { wakeShown.push(line); renderConsole(); await new Promise(r => setTimeout(r, 900)); continue; }
       for (let i = 1; i <= line.length; i += 2) { if (skip) break; wakeTyping = line.slice(0, i); renderConsole(); await new Promise(r => setTimeout(r, 26)); }
@@ -463,7 +463,9 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     wakeBusy = false; try { WAKE.forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {}
     curLine = WAKE[WAKE.length - 1]; wakeShown = WAKE.slice(); renderConsole(); }
   // after the lights: the window docks where the Operator usually is, and the epoch's goals appear
-  function undock() { const bd = $('#genBackdrop'); if (bd) { bd.classList.add('out'); setTimeout(() => bd.remove(), 1300); } wakeShown = []; cls('gen-box', 0); renderConsole(); renderDay(); }
+  // while TO speaks in the lightbox, the window is titled as the Operator's; docked, it goes back to the panel's own name (the 🔮 Oracle)
+  function opTitle(on) { const b = $('#lab-head b'), N = window.IDLE_NAMES; if (!b || !N) return; const n = on ? N.op : (N.oracle || N.op); b.textContent = n.icon + ' ' + n.short; }
+  function undock() { opTitle(false); const bd = $('#genBackdrop'); if (bd) { bd.classList.add('out'); setTimeout(() => bd.remove(), 1300); } wakeShown = []; cls('gen-box', 0); renderConsole(); renderDay(); }
 
   // ---------- the epochs: the goal card, and a front page when an epoch is done
   function renderDay() { if (!storyMode()) return; const d = DAYS[(S.day || 1) - 1]; if (!d) return; let el = $('#genDay');
