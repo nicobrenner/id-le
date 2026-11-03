@@ -148,6 +148,7 @@ X.op = [].concat(['acted', 'unsure', 'nudged', 'chat', 'error'].map(k => 'out:' 
   ['bring', 'chop', 'come', 'fetch', 'greet', 'hand', 'hide', 'sleep', 'none', 'creature', 'disaster', 'evolve', 'look', 'rave_off', 'rave_on', 'rename', 'spawn', 'weather', 'words', 'first_creatures', 'light', 'music'].map(k => 'opt:' + k),
   ['words', 'creatures', 'light', 'weather', 'hut', 'music'].flatMap(k => ['gt:' + k, 'gn:' + k, 'gd:' + k]));
 X.did.push('op_miss', 'op_rephrase', 'op_abandon');
+X.did.push('ni_seen', 'qe_seen');   // v2 of left-without-clicking / left-soon-after (11-03): only page loads that were on screen ≥ 5 s (idle-stats.js)
 const FAV = /^(job|fam|body):[a-z_]{1,16}$|^name:[A-Za-z][A-Za-z|' -]{0,19}$/, PATHSEGS = ['advisor', 'music', 'reels', 'drawer', 'trees', 'almanac', 'studio', 'creatures', 'notices', 'pedia', 'datalab',
   'connect', 'snapshot', 'evolve', 'chat', 'roomchat', 'settings', 'sound', 'more', 'collection', 'add', 'card'];
 const okPath = v => typeof v === 'string' && v.length <= 80 && v.split('>').length <= 3 && v.split('>').every(x => PATHSEGS.includes(x)) && new Set(v.split('>')).size === v.split('>').length;
@@ -156,9 +157,12 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
+const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
-  'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown'];
+  'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
+  // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
+  'rv_open_link', 'rv_open_lab', 'rv_open_end', 'rv_play', 'rv_sent', 'rv_already'];
+const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
@@ -182,7 +186,9 @@ function addStats(p) {
   if (F5STOP.includes(p.fl) && (p.fl0 === undefined || F5STOP.includes(p.fl0) && p.fl0 !== p.fl)) { bump(d.fl, p.fl); if (p.fl0 !== undefined) bump(d.fl, p.fl0, -1); }
   // the genesis A/B (idle-genesis.js; off until Nico switches it on): visits, time on screen and features per variant
   // the storyline's funnel: each moment once per browser, by arm (story | current | none)
-  if (Array.isArray(p.sf)) { const arm = p.gv === 'story' || p.gv === 'current' ? p.gv : 'none'; for (const k of new Set(p.sf.slice(0, 30))) if (SFSTEP.includes(k)) { d.sf = d.sf || {}; bump(d.sf, arm + '|' + k); } }
+  // the story's logo A/B (idle-epoch0.js, Nov 3): the moments from the logo on are also counted per logo arm ('lg:c3|lights'), so the two logos compare
+  if (Array.isArray(p.sf)) { const arm = p.gv === 'story' || p.gv === 'current' ? p.gv : 'none', lg = p.lg === 'c3' || p.lg === 'crt' ? p.lg : null;
+    for (const k of new Set(p.sf.slice(0, 30))) if (SFSTEP.includes(k)) { d.sf = d.sf || {}; bump(d.sf, arm + '|' + k); if (lg && LGSTEP.includes(k)) bump(d.sf, 'lg:' + lg + '|' + k); } }
   if (p.gv === 'genesis' || p.gv === 'starter' || p.gv === 'story' || p.gv === 'current') { d.gv = d.gv || {}; if (p.visit === 1) bump(d.gv, p.gv + '|visit');
     if (DWELL.includes(p.dw) && (p.dw0 === undefined || DWELL.indexOf(p.dw0) >= 0 && DWELL.indexOf(p.dw0) < DWELL.indexOf(p.dw))) { bump(d.gv, p.gv + '|dw:' + p.dw); if (p.dw0 !== undefined) bump(d.gv, p.gv + '|dw:' + p.dw0, -1); }
     if (Array.isArray(p.feat)) for (const f of p.feat.slice(0, 30)) if (FEATS.test(f)) bump(d.gv, p.gv + '|feat:' + f); }
@@ -530,6 +536,72 @@ async function presence(req, env, path) {
   return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json' } });
 }
 
+// ---------- Reviews (11-03): Nico asks players to score a few experiments (the logo animations, the fonts…) ----------
+// Nico: "Hey, this is Nico, the creator of Id|le, and would love your feedback on the logo animation… take a look here: link".
+// A review is { kind, title, items, note?, showTotals?, open? }: the two below are built in; tools/review.py writes review:<rid> (a new
+// one, or a change to these) and the reviews:index list. GET /lab/review/<rid> returns it (plus each item's average only when
+// showTotals is on); POST /lab/review/<rid> takes { scores: {item: 0-5}, notes: {item: "…" ≤ 300}, bkey }, once per review per
+// browser key (below), and at most RV_DAY_MAX a day from one address (a hash with the daily salt, as for votes). Scores add up in review:<rid>:agg
+// ({ sends, items: {id: {n, sum, s: [n0..n5]}}, bk: [hashes] });
+// notes go to the private queue (fb:…, kind 'review') and are never shown to anyone else. Writes per send: the address's daily count,
+// the totals and, when there are notes, one queue entry. The totals are read-modify-write: two sends in the same instant can lose one of
+// them; at this scale that is fine (a Durable Object would make it exact, if reviews ever get busy).
+// logos: all three rounds of the logo lab, newest first, Nico's top two (c3 typed dust, c3 typed CRT) leading
+const REVIEWS = {
+  logos: { kind: 'logos', title: 'the logo', items: ['c3-typed-dust', 'c3-typed-crt', 'a3-dust', 'b3a-dust-crt', 'b3b-crt', 'scope-strike', 'scope-crt', 'typed-scope', 'scope-meter', 'scope-shockwave', 'strike-purr-static', 'crt-off'], showTotals: false, open: true },
+  fonts: { kind: 'fonts', title: 'our fonts', items: ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], showTotals: false, open: true },
+};
+// the browser key (idle.bkey, made in the browser, 128 random bits in base32) arrives only with a review; only SHA-256(key + BKEY_SALT) is
+// kept, in the review's totals (bk: a list of hashes, one per browser that sent it): a second review from the same key gets 409, and a
+// future "claim your reviews" can prove ownership by presenting the key. The salt is a constant: the hash must stay the same over time.
+const BKEY_SALT = 'id-le review bkey v1', BKEY = /^[a-z2-7]{26}$/;
+const bkHash = async k => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(k + '|' + BKEY_SALT))).slice(0, 16), x => x.toString(16).padStart(2, '0')).join('');
+const RID = /^[a-z0-9-]{1,30}$/, RITEM = /^[a-z0-9-]{1,40}$/, RV_KINDS = ['logos', 'fonts', 'creatures', 'objects'], RV_DAY_MAX = 12, rvMem = { cfg: new Map(), n: new Map() };
+const rvClean = c => { if (!c || typeof c !== 'object' || !RV_KINDS.includes(c.kind) || !Array.isArray(c.items)) return null;
+  const items = [...new Set(c.items.filter(x => typeof x === 'string' && RITEM.test(x)))].slice(0, 24); if (!items.length) return null;
+  return { kind: c.kind, title: String(c.title || '').slice(0, 80), items, note: typeof c.note === 'string' ? c.note.slice(0, 1200) : null, showTotals: !!c.showTotals, open: c.open !== false }; };
+async function reviewCfg(env, rid) {
+  const hit = rvMem.cfg.get(rid); if (hit && Date.now() - hit.t < 60e3) return hit.c;
+  let c = null; try { c = rvClean(JSON.parse(await fbKV(env).get('review:' + rid) || 'null')); } catch (e) {}
+  if (!c && REVIEWS[rid]) c = rvClean(REVIEWS[rid]);
+  rvMem.cfg.set(rid, { c, t: Date.now() }); if (rvMem.cfg.size > 200) rvMem.cfg.clear(); return c; }
+async function rvAgg(env, rid) { try { return JSON.parse(await fbKV(env).get('review:' + rid + ':agg') || 'null') || { sends: 0, items: {} }; } catch (e) { return { sends: 0, items: {} }; } }
+const rvTotals = (c, a) => Object.fromEntries(c.items.map(id => { const x = a.items[id] || { n: 0, sum: 0 }; return [id, { n: x.n, avg: x.n ? Math.round(x.sum / x.n * 100) / 100 : null }]; }));
+async function review(req, env, path, ip) {
+  const kv = fbKV(env);
+  if (path === '/lab/reviews') { if (req.method !== 'GET') return json({ error: 'GET only' }, 405);
+    let ids = Object.keys(REVIEWS); try { const x = JSON.parse(await kv.get('reviews:index') || 'null'); if (Array.isArray(x)) ids = [...new Set([...x.filter(i => typeof i === 'string' && RID.test(i)), ...ids])]; } catch (e) {}
+    const out = []; for (const rid of ids.slice(0, 20)) { const c = await reviewCfg(env, rid); if (c && c.open) out.push({ rid, kind: c.kind, title: c.title, n: c.items.length }); }
+    return json({ reviews: out }); }
+  const m = path.match(/^\/lab\/review\/([a-z0-9-]+)$/); if (!m || !RID.test(m[1])) return json({ error: 'no such review' }, 404);
+  const rid = m[1], c = await reviewCfg(env, rid); if (!c) return json({ error: 'no such review' }, 404);
+  if (req.method === 'GET') { const o = { rid, ...c }; if (c.showTotals) { const a = await rvAgg(env, rid); o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o); }
+  if (req.method !== 'POST') return json({ error: 'GET or POST' }, 405);
+  if (!c.open) return json({ error: 'this review has closed: thank you anyway' }, 410);
+  const txt = await req.text(); if (txt.length > 8000) return json({ error: 'too big' }, 413);
+  let q; try { q = JSON.parse(txt); } catch (e) { return json({ error: 'not JSON' }, 400); }
+  const sc = q && typeof q.scores === 'object' && !Array.isArray(q.scores) ? q.scores : {}, nt = q && typeof q.notes === 'object' && !Array.isArray(q.notes) ? q.notes : {};
+  const scores = {}, notes = {};
+  for (const [k, v] of Object.entries(sc).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); if (!Number.isInteger(v) || v < 0 || v > 5) return json({ error: 'scores are 0 to 5' }, 400); scores[k] = v; }
+  for (const [k, v] of Object.entries(nt).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); const t = scrub(v, 300); if (t) notes[k] = t; }
+  if (!Object.keys(scores).length) return json({ error: 'score at least one, please' }, 400);
+  const bk = typeof q.bkey === 'string' && BKEY.test(q.bkey) ? await bkHash(q.bkey) : null; if (!bk) return json({ error: 'a browser key is needed' }, 400);
+  { const a0 = await rvAgg(env, rid); if (Array.isArray(a0.bk) && a0.bk.includes(bk)) return json({ error: 'this browser already sent this review', already: true }, 409); }
+  // one review per browser key (exact, in the totals); per address only a daily cap (people behind one address may each send theirs)
+  const [day, h] = await fbHash(env, ip, 'review'), ck = 'rvrl:' + day + ':' + h;
+  const n = Math.max(rvMem.n.get(ck) || 0, +(await kv.get(ck)) || 0); if (n >= RV_DAY_MAX) return json({ error: 'that is a lot of reviews for one day' }, 429);
+  rvMem.n.set(ck, n + 1); if (rvMem.n.size > 20000) rvMem.n.clear(); await kv.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
+  const a = await rvAgg(env, rid); a.bk = Array.isArray(a.bk) ? a.bk : [];
+  if (a.bk.includes(bk)) return json({ error: 'this browser already sent this review', already: true }, 409);
+  a.sends = (a.sends || 0) + 1; a.bk.push(bk);
+  for (const [k, v] of Object.entries(scores)) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.n++; x.sum += v; x.s[v] = (x.s[v] || 0) + 1; }
+  await kv.put('review:' + rid + ':agg', JSON.stringify(a));
+  if (Object.keys(notes).length) { const id = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + '-' + crypto.randomUUID().slice(0, 6);
+    const text = (rid + ': ' + Object.entries(notes).map(([k, t]) => `${k}${scores[k] != null ? ' ' + scores[k] + '/5' : ''} “${t}”`).join(' · ')).slice(0, 2400);
+    await kv.put('fb:' + id, JSON.stringify({ t: Date.now(), kind: 'review', rid, scores, notes, text, ctx: fbCtx(q.ctx), status: 'new' }), { expirationTtl: FB_TTL }); }
+  const o = { ok: true }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o);
+}
+
 export default {
   pages: PV_PAGES,
   // the Pages wrapper (tools/build_static.py) calls this for every HTML page it serves, once the response is ready
@@ -549,6 +621,7 @@ export default {
     if (path === '/lab/live') return cors(env, req, await presence(req, env, path));   // the creator's live view: 404 without the key
     if (path === '/lab/oracle' || path === '/lab/roadmap' || path === '/lab/vote') return cors(env, req, await feedback(req, env, path, ip));
     if (path.startsWith('/lab/gift/')) return cors(env, req, await gift(req, env, path, ip));
+    if (path === '/lab/reviews' || path.startsWith('/lab/review/')) return cors(env, req, await review(req, env, path, ip));
     if (path === '/lab/stats' || path === '/lab/p') return stats(req, env, ctx);   // /lab/p: the same reports under a plain name   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {

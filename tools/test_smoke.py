@@ -106,6 +106,8 @@ def js_syntax():
     return f"{len(files)} scripts"
 
 
+REVIEW_STUB = {"logos": {"kind": "logos", "title": "the logo", "items": ["c3-typed-dust", "c3-typed-crt", "a3-dust", "b3a-dust-crt", "b3b-crt", "scope-strike", "scope-crt", "typed-scope", "scope-meter", "scope-shockwave", "strike-purr-static", "crt-off"], "showTotals": False, "open": True},
+               "fonts": {"kind": "fonts", "title": "our fonts", "items": ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"], "showTotals": False, "open": True}}
 WORKER_TEST = r"""
 globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; }; globalThis.__statFlushNow = true;   // production writes a stats batch STAT_EVERY after its first report (inside that request's waitUntil); tests run timers at once
 const kv = () => { const m = new Map(), puts = []; return { m, puts, get: async k => m.get(k) ?? null, put: async (k, v) => { puts.push(k); m.set(k, v); } }; };
@@ -129,7 +131,7 @@ await post('/lab/stats', { v: 1, page: 'pedia', dw: '5-20', dw0: '1-5', ps: ['ha
 await post('/lab/stats', { v: 1, x: { did: ['w_reel', 'w_dream', 'rage', 'p_music', 'w_reel', 'hacked'], ws: { reel: 40, dream: 12, mind: 7, evil: 5 }, pt: { music: 30, studio: 10, nope: 9 },
   ct: { reelplay: 2, reelend: 1, irc: 3, inbox: 1, op: 2, pedia: 1, bad: 4 }, opa: { weather: 1, ai_spawn: 1, rm_rf: 1 }, fav: { 'job:math': 3, 'fam:crawly': 1, 'name:Plotkin': 2, 'name:<script>': 1, 'secret:x': 1 },
   rage: { studioBtn: 1, world: 2, 'whisper:keep': 1, 'world:creature': 1, 'whisper:evil': 1, 'body > div': 1 } }, path: 'card>studio', eg: { reels: '1-5', errs: '0' } });
-await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
+await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit', 'ni_seen'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
 await post('/lab/stats', { v: 1, path: 'card>card', x: { ct: { op: 9999 } } });
 await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
 // the Operator (11-01): only fixed keys, small positive integers; text-like keys and junk dropped; op flags once
@@ -148,7 +150,7 @@ out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visit
 // /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
 { out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
 // the storyline funnel (11-02): known moments only, counted by arm; the arm's visits and dwell under gv
-{ await post('/lab/p', { v: 1, visit: 1, gv: 'story', sf: ['title', 'messages', 'skip:chat', 'evil<script>', 'title'], dw: '1-5' }); await post('/lab/p', { v: 1, sf: ['offer_shown', 'offer_accepted', 'fd_link', 'fd_badge_pipe', 'fd_badge_evil'] });
+{ await post('/lab/p', { v: 1, visit: 1, gv: 'story', sf: ['title', 'messages', 'skip:chat', 'evil<script>', 'title'], dw: '1-5' }); await post('/lab/p', { v: 1, sf: ['offer_shown', 'offer_accepted', 'fd_link', 'fd_badge_pipe', 'fd_badge_evil'] }); await post('/lab/p', { v: 1, lg: 'crt', sf: ['lg_shown:crt', 'landing', 'title'] }); await post('/lab/p', { v: 1, lg: 'evil', sf: ['lights'] });
   const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.sf = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.sf || {})) a[k] = (a[k] || 0) + n; return a; }, {});
   out.gv_story = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.gv || {})) a[k] = (a[k] || 0) + n; return a; }, {}); }
 // jeffy proxy: an allowlist of two paths; nothing else is relayed (no network needed for these answers)
@@ -228,6 +230,23 @@ out.rate_61st = last;
   const D = new M.Presence({}, {}); const r1 = await (await D.fetch(new Request('https://presence/beat', { method: 'POST', body: JSON.stringify({ v: 1, id: id1, mode: 'ready' }), headers: { 'X-Country': 'CL' } }))).json();
   const r2 = await (await D.fetch(new Request('https://presence/view'))).json(); P.do = { ok: r1.ok, online: r2.online, cc: r2.players[0] && r2.players[0].cc, mode: r2.players[0] && r2.players[0].mode };
   delete env.IDLE_ENV; delete env.LIVE_KEY; out.presence = P; }
+// reviews (11-03): the built-in config, validation (unknown item, bad score, nothing scored), once per visitor and day, totals add up,
+// notes to the private queue only, totals shown only when the review says so, a closed review refuses, KV configs override
+{ const cfg = await (await go('/lab/review/logos')).json(), list = await (await go('/lab/reviews')).json();
+  const bad1 = (await post('/lab/review/logos', { scores: { 'nope': 3 } }, '7.7.7.1')).status, bad2 = (await post('/lab/review/logos', { scores: { 'scope-strike': 6 } }, '7.7.7.1')).status;
+  const bad3 = (await post('/lab/review/logos', { scores: {} }, '7.7.7.1')).status, bad4 = (await post('/lab/review/logos', { scores: { 'scope-strike': 2.5 } }, '7.7.7.1')).status;
+  const K1 = 'abcdefghijklmnopqrstuvwxyz', K2 = 'zyxwvutsrqponmlkjihgfedcba', nokey = (await post('/lab/review/logos', { scores: { 'scope-strike': 3 } }, '7.7.7.1')).status;
+  const w0 = env.STATS.puts.length, s1 = await (await post('/lab/review/logos', { scores: { 'scope-strike': 5, 'typed-scope': 4 }, notes: { 'typed-scope': 'love the typing, mail me at a@b.co' }, bkey: K1 }, '7.7.7.1')).json(), w1 = env.STATS.puts.length;
+  const r2 = await post('/lab/review/logos', { scores: { 'scope-strike': 1 }, bkey: K1 }, '7.7.7.9'), s2 = await r2.json(), w2 = env.STATS.puts.length;
+  const s3 = await (await post('/lab/review/logos', { scores: { 'scope-strike': 3 }, bkey: K2 }, '7.7.7.1')).json(), w3 = env.STATS.puts.length;
+  const agg = JSON.parse(env.STATS.m.get('review:logos:agg')), fb = [...env.STATS.m.entries()].filter(([k, v]) => k.startsWith('fb:') && JSON.parse(v).kind === 'review').map(([k, v]) => JSON.parse(v));
+  env.STATS.m.set('review:closed1', JSON.stringify({ kind: 'fonts', title: 'old', items: ['f1'], open: false }));
+  env.STATS.m.set('review:tot1', JSON.stringify({ kind: 'fonts', title: 'shown', items: ['f1', 'f2'], showTotals: true }));
+  const closed = (await post('/lab/review/closed1', { scores: { f1: 3 }, bkey: K1 }, '7.7.7.3')).status, t1 = await (await post('/lab/review/tot1', { scores: { f1: 4 }, bkey: K1 }, '7.7.7.3')).json();
+  out.review = { kind: cfg.kind, items: cfg.items.length, totals0: 'totals' in cfg, listed: list.reviews.map(r => r.rid).sort().join(','), bad: [bad1, bad2, bad3, bad4],
+    nokey, s1: s1.ok === true && !s1.totals, writes1: w1 - w0, s2: r2.status === 409 && !!s2.already, writes2: w2 - w1, s3: s3.ok === true, writes3: w3 - w2,
+    rawkey: [...env.STATS.m.values()].some(v => v.includes(K1)), hashes: JSON.parse(env.STATS.m.get('review:logos:agg')).bk.length, sends: agg.sends, strike: agg.items['scope-strike'], typed: agg.items['typed-scope'].sum,
+    notes: fb.length, scrubbed: fb.length === 1 && !JSON.stringify(fb[0]).includes('a@b.co') && fb[0].rid === 'logos', closed, shown: t1.totals && t1.totals.f1.avg, unknown: (await go('/lab/review/nope')).status }; }
 console.log(JSON.stringify(out));
 """
 
@@ -291,7 +310,7 @@ def worker_unit():
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
-    need(o.get("sf") == {"story|title": 1, "story|messages": 1, "story|skip:chat": 1, "none|offer_shown": 1, "none|offer_accepted": 1, "none|fd_link": 1, "none|fd_badge_pipe": 1}, f"storyline funnel: {o.get('sf')}")
+    need(o.get("sf") == {"story|title": 1, "story|messages": 1, "story|skip:chat": 1, "none|offer_shown": 1, "none|offer_accepted": 1, "none|fd_link": 1, "none|fd_badge_pipe": 1, "none|lg_shown:crt": 1, "none|landing": 1, "none|title": 1, "lg:crt|lg_shown:crt": 1, "lg:crt|landing": 1, "none|lights": 1}, f"storyline funnel (with the logo arm): {o.get('sf')}")
     need(o.get("gv_story", {}).get("story|visit") == 1 and o.get("gv_story", {}).get("story|dw:1-5") == 1, f"the story arm's visits and dwell: {o.get('gv_story')}")
     ev = re.search(r"STAT_EVERY = (\d+)", open(os.path.join(ROOT, "helper", "worker.js")).read())
     need(ev and int(ev.group(1)) <= 25000, f"STAT_EVERY {ev and ev.group(1)} ms: must stay under the ~30 s a Worker's waitUntil may run after the response")
@@ -323,7 +342,7 @@ def worker_unit():
     need(pd["clips"] == 3 and pd["ref"] == {"news.ycombinator.com": 1}, f"pedia clips {pd['clips']}, ref {pd['ref']}")
     need("x is null @pedia-draw.js:3:9" in o["err_all"], "a pedia error was not kept")
     x = {k: {a: n for a, n in v.items() if n} for k, v in o["x"].items()}
-    need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1, "op_miss": 1, "op_rephrase": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
+    need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1, "ni_seen": 1, "op_miss": 1, "op_rephrase": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
     need(x["ws"] == {"reel": 40, "dream": 12, "mind": 7}, f"v2 watch seconds {x['ws']} (negative, fractional, absurd and unknown dropped)")
     need(x["pt"] == {"music": 30, "studio": 10}, f"v2 panel seconds {x['pt']}")
     need(x["ct"] == {"reelplay": 2, "reelend": 1, "irc": 3, "inbox": 1, "op": 2, "pedia": 1}, f"v2 counts {x['ct']} (an absurd count must be dropped)")
@@ -354,7 +373,10 @@ def worker_unit():
     need(pr["do"] == {"ok": True, "online": 1, "cc": "CL", "mode": "ready"}, f"the Durable Object: {pr['do']}")
     gf = o["gift"]
     need(gf == {"letter": "Hi Sam!", "label": False, "claimed0": False, "c1": True, "writes": 1, "c2": True, "claimed1": True, "unknown": 404, "revoked": 404, "bad": 404}, f"gift links: {gf}")
-    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links, presence"
+    rv = o["review"]
+    need(rv == {"kind": "logos", "items": 12, "totals0": False, "listed": "fonts,logos", "bad": [400, 400, 400, 400], "nokey": 400, "s1": True, "writes1": 3, "s2": True, "writes2": 0, "s3": True, "writes3": 2, "rawkey": False, "hashes": 2,
+                "sends": 2, "strike": {"n": 2, "sum": 8, "s": [0, 0, 0, 1, 0, 1]}, "typed": 4, "notes": 1, "scrubbed": True, "closed": 410, "shown": 4, "unknown": 404}, f"reviews: {rv}")
+    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links, reviews, presence"
 
 
 def local_server_unit():   # server.py, the local server anyone who clones the repo runs: no network (a stub site and a stub Jeffy on localhost)
@@ -516,6 +538,14 @@ class Page:
                     was = g["claimed"]; g["claimed"] = True; g["claims"] = g.get("claims", 0) + 1
                     return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": False, "already": True} if was else {"ok": True}))
                 return route.fulfill(status=200, content_type="application/json", body=json.dumps({"letter": g["letter"], "claimed": g["claimed"]}))
+            if path == "/lab/reviews": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"reviews": [{"rid": "logos", "kind": "logos", "title": "the logo", "n": 12}, {"rid": "fonts", "kind": "fonts", "title": "our fonts", "n": 8}]}))
+            if path.startswith("/lab/review/"):
+                rid = path[len("/lab/review/"):]; cfg = REVIEW_STUB.get(rid)
+                if not cfg: return route.fulfill(status=404, content_type="application/json", body='{"error":"no such review"}')
+                if route.request.method == "POST":
+                    self.fb.append(("review:" + rid, route.request.post_data or "")); n = len([k for k, _ in self.fb if k == "review:" + rid])
+                    return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "already": True} if n > 1 else {"ok": True}))
+                return route.fulfill(status=200, content_type="application/json", body=json.dumps({"rid": rid, **cfg}))
             if path == "/lab/oracle": self.fb.append(("oracle", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"id":"t1"}')
             if path == "/lab/vote": self.fb.append(("vote", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"votes":4}')
             if path == "/lab/roadmap": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"items": [{"id": "mods", "title": "Mods", "line": "share rules and looks", "status": "planned"}, {"id": "bodies", "title": "New bodies", "line": "", "status": "later"}], "votes": {"mods": 3}, "url": "https://github.com/nicobrenner/id-le/issues/20"}))
@@ -913,6 +943,42 @@ def t_stats_v2(P):
     need(all(n in starter or n == "other" for n in names), f"a name outside the starter world was sent: {names}")
     P.clean()
     return f"card {name}: pt {x.get('pt')}, ws {x.get('ws')}, path {path}, rage {x.get('rage')}, {len(x.get('fav', {}))} favorite keys"
+
+
+def t_stats_seen(P):
+    """left without clicking only counts tabs that were on screen (11-03): a page loaded hidden (a background tab, a prerender) sends
+    nothing until it is seen and is never 'left without clicking'; seen ≥ 5 s without a click → ni_seen; a click then leaving within 30 s
+    → qe_seen (never both). Also: canvas roundRect is polyfilled where it is missing (old Safari: 'g.roundRect is not a function')"""
+    HID = """window.__vis = 'hidden'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
+      get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
+    flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
+    def sent(): return [json.loads(b) for b in P.stats]
+    def did(): return set().union(*[set((q.get("x") or {}).get("did") or []) for q in sent()]) if P.stats else set()
+    # 1. loaded in the background, closed unseen: nothing at all
+    pg = P.ctx.new_page(); pg.on("pageerror", lambda e: P.errors.append(str(e)[:200])); pg.add_init_script(HID + " delete CanvasRenderingContext2D.prototype.roundRect;")
+    pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg); pg.wait_for_timeout(6500)
+    need(pg.evaluate("() => window.__settings.statsLive()"), "?statstest must make stats live")
+    rr = pg.evaluate("""() => { const c = document.createElement('canvas').getContext('2d'); c.beginPath(); c.roundRect(10, 10, 80, 40, 12);
+      return { has: typeof c.roundRect === 'function', inside: c.isPointInPath(50, 30), corner: c.isPointInPath(11, 11), edge: c.isPointInPath(50, 11) }; }""")
+    need(rr["has"] and rr["inside"] and not rr["corner"] and rr["edge"], f"roundRect polyfill: {rr}")
+    pg.evaluate("() => window.__stats._send('leave')"); pg.wait_for_timeout(300)
+    need(not P.stats, f"a page never on screen sent {len(P.stats)} reports: {sent()[:1]}")
+    # 2. now it is seen: the visit goes out; on screen 6 s with no click, then hidden → ni_seen (and no old-style flag reliance)
+    flip(pg, "visible"); pg.wait_for_timeout(6500); flip(pg, "hidden"); pg.wait_for_timeout(400)
+    s1 = sent(); need(s1 and s1[0].get("visit") == 1 and s1[0].get("why") == "open", f"first report once seen: {s1[:1]}")
+    need("ni_seen" in did() and "qe_seen" not in did(), f"seen 6 s, no click: did {did()}")
+    pg.close(); P.stats.clear()
+    # 3. seen, a click, hidden within 30 s → qe_seen, not ni_seen; a page seen < 5 s gets neither
+    pg = P.ctx.new_page(); pg.on("pageerror", lambda e: P.errors.append(str(e)[:200])); pg.add_init_script(HID)
+    pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg); flip(pg, "visible"); pg.wait_for_timeout(6000)
+    pg.mouse.click(300, 300); pg.wait_for_timeout(800); flip(pg, "hidden"); pg.wait_for_timeout(400)
+    need("qe_seen" in did() and "ni_seen" not in did(), f"a click, then gone: did {did()}")
+    pg.close(); P.stats.clear()
+    pg = P.ctx.new_page(); pg.add_init_script(HID); pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg)
+    flip(pg, "visible"); pg.wait_for_timeout(3600); flip(pg, "hidden"); pg.wait_for_timeout(400)
+    need(not ({"ni_seen", "qe_seen"} & did()), f"on screen < 5 s: did {did()}")
+    pg.close(); P.clean()
+    return "unseen tab: nothing sent; seen 6 s no click → ni_seen; click then hidden → qe_seen; < 5 s → neither; roundRect polyfilled"
 
 
 def t_op_actions(P):
@@ -1695,6 +1761,46 @@ def t_story_clock(P):
     return "every time on screen: " + " · ".join(sorted(set(r["strings"]))[:12])
 
 
+def t_logo_ab(P):
+    """The story's logo A/B (Nico, Nov 3: C3 · Typed, dust vs C3-crt · Typed, CRT off): each forced arm draws its own logo in the logo window
+    (CS.split on) and schedules its one rendered sound there, and nothing of the old logo (the cut's thunder, the purr, the cut); an unforced
+    browser gets an arm once and keeps it across reloads; a live story reaching the logo marks lg_shown:<arm> in the funnel."""
+    pg = P.open("/arena.html?test&intro=0"); booted(pg)
+    r = pg.evaluate("""async () => { const E = window.__epoch0, CS = E.storyClock; await E.loadBank(); await E.loadLoss(); const out = {};
+      for (const arm of ['c3', 'crt']) { const L = await E.prepLogo(arm); if (!L) { out[arm] = { L: false }; continue; }
+        const ct = E.makeContent({ story: true, seed: 3 }); ct.logo = { arm, id: E.logoArms[arm], L }; const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
+        const lit = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let s = 0, red = 0; for (let i = 0; i < d.length; i += 4 * 7) { s += d[i] + d[i + 1] + d[i + 2]; if (d[i] > 150 && d[i + 1] < 90) red++; } return { s: s / (d.length / 28) / 3, red }; };
+        const frames = []; for (let t = 0; t < 30.5; t += 2) E.frame(ct, t, cv); for (let t = 0.2; t < L.duration; t += 0.5) frames.push(lit(CS.split + t));
+        const log = [], P0 = BaseAudioContext.prototype, f0 = P0.createBufferSource; P0.createBufferSource = function () { const n = f0.call(this), st = n.start.bind(n); n.start = (t = 0, o = 0) => { log.push({ t, dur: n.buffer ? n.buffer.duration : 0 }); return st(t, o); }; return n; };
+        const o0 = P0.createOscillator; let osc = 0; P0.createOscillator = function () { const n = o0.call(this), st = n.start.bind(n); n.start = (t = 0) => { if (t >= CS.split - 0.01) osc++; return st(t); }; return n; };
+        try { await E.renderAudio(ct); } finally { P0.createBufferSource = f0; P0.createOscillator = o0; }
+        const inLogo = log.filter(x => x.t >= CS.split - 0.01);
+        out[arm] = { L: true, dur: L.duration, total: E.total(ct), split: CS.split, lit: frames.filter(f => f.s > 1.2).length, n: frames.length, red: Math.max(...frames.map(f => f.red)), inLogo: inLogo.map(x => [+x.t.toFixed(2), +x.dur.toFixed(2)]), osc }; }
+      return out; }""")
+    for arm in ("c3", "crt"):
+        a = r[arm]; need(a["L"], f"{arm}: the logo did not load or render")
+        need(abs(a["total"] - (a["split"] + a["dur"] + 0.4)) < 0.01, f"{arm}: the story's length follows the logo: {a}")
+        need(a["lit"] >= a["n"] * 0.6 and a["red"] > 0, f"{arm}: the logo is drawn in the logo window (lit {a['lit']}/{a['n']} frames, red {a['red']})")
+        need(len(a["inLogo"]) == 1 and abs(a["inLogo"][0][0] - a["split"]) < 0.01 and abs(a["inLogo"][0][1] - a["dur"]) < 0.05 and a["osc"] == 0, f"{arm}: only the logo's own sound in its window (no thunder, purr or cut): {a['inLogo']}, oscillators {a['osc']}")
+    pg.close()
+    # an unforced browser: one arm, kept across reloads
+    pg = P.open("/arena.html?test&intro=0"); booted(pg)
+    a1 = pg.evaluate("() => { localStorage.removeItem('idle.logoArm'); const a = window.__epoch0.logoArm(); return [a, window.__epoch0.logoArm(), localStorage.getItem('idle.logoArm')]; }")
+    pg.reload(wait_until="load"); booted(pg); a2 = pg.evaluate("() => window.__epoch0.logoArm()")
+    need(a1[0] in ("c3", "crt") and a1[0] == a1[1] == a1[2] == a2, f"the logo arm is chosen once and kept: {a1} then {a2}")
+    pg.close()
+    # live: the keyframe at the logo with a forced arm (?story&at=logo&logo=crt): the story plays C3-crt and marks lg_shown:crt in the funnel
+    pg = P.open("/arena.html?story&at=logo&logo=crt"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+    wait_for(pg, "() => window.__funnel.reached().includes('lg_shown:crt')", 30, P=P)
+    g = pg.evaluate("() => { const E = window.__epoch0, last = E.last; return { arm: last && last.logo && last.logo.arm, ready: !!(last && E.logoOf(last)), f: window.__funnel.reached().filter(k => k.startsWith('lg_')) }; }")
+    need(g["arm"] == "crt" and g["ready"] and g["f"] == ["lg_shown:crt"], f"?logo=crt: the live story plays C3-crt and marks the funnel: {g}")
+    pg.wait_for_timeout(9000)   # through the logo to the landing
+    land = pg.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), funnel: window.__funnel.reached() })")
+    need(not land["intro"] and "landing" in land["funnel"], f"after the logo, the landing: {land}")
+    P.clean()
+    return " · ".join(f"{a}: {r[a]['dur']:.1f} s logo, story {r[a]['total']:.1f} s, drawn {r[a]['lit']}/{r[a]['n']} frames, one sound at {r[a]['split']:.1f} s" for a in ("c3", "crt")) + f"; arm kept ({a2}); ?logo=crt live → lg_shown:crt"
+
+
 def t_logo_solo(P):
     """Story v12 (Nico: "the music and other sounds are still going on in the background during the opening logo animation… there should only be
     the animation sound"): (1) in the intro's own schedule nothing started before the logo (CS.split) is still sounding after it: the music, the
@@ -1934,6 +2040,55 @@ def t_founder(P):
     need(not dup["letter"] and not dup["lab"] and not dup["avail"] and dup["n"] == 1 and dup["toast"], f"one Founder per browser, even with a gift link: {dup}")
     P.clean()
     return f"no offer for a later world; offer → letter (draft, signed) → 3 experiments, undo, {trees} generations → 'Nibbet Prime' with the seed badge; snapshot first, +1 creature, card mark, can't be removed, first in the sidebar, kept through a reload and in snapshots; a second gift link: refused"
+
+def t_reviews(P):
+    """⭐ reviews (idle-reviews.js): ?review=logos opens the lightbox with Nico's note and the five logos; ▶ plays one (drawn from the audio
+    clock, the game hushed meanwhile, still playing after a score); scores and a note are sent once (to the stub); reopened it shows them
+    sent and can't send again; the 🧪 reviewer row in ⚙; 🧪's ⭐ reviews tab lists both and opens the fonts review; closing un-hushes."""
+    pg = P.open("/arena.html?review=logos&test"); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; }")
+    wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 60, P=P)
+    r0 = pg.evaluate("() => ({ note: document.querySelector('#review .note').innerText, logos: !!window.IdleLogos, hushed: window.__audio.hushed(), kind: window.__reviews.state().kind })")
+    need("Nico" in r0["note"] and r0["logos"] and r0["hushed"] and r0["kind"] == "logos", f"the logo review: {r0}")
+    pg.click("#review .card[data-item=scope-strike] .play")
+    wait_for(pg, "() => window.__reviews.state().playing", 20, P=P); pg.wait_for_timeout(1800)
+    pg.click("#review .card[data-item=scope-strike] [data-score='5']"); pg.click("#review .card[data-item=typed-scope] [data-score='4']")
+    lit = pg.evaluate("() => { const c = document.querySelector('#review .card[data-item=scope-strike] canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 64) n += d[i] + d[i + 1] + d[i + 2] > 60; return { n, connected: c.isConnected, playing: window.__reviews.state().playing }; }")
+    need(lit["n"] > 0 and lit["connected"], f"the logo didn't draw (or its canvas was replaced by a score): {lit}")
+    pg.fill("#review textarea[data-note=typed-scope]", "love the typing")
+    pg.click("#review .send")
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__reviews.state().sent", 15, P=P)
+    st = pg.evaluate("() => window.__reviews.state()"); need(st["sent"], f"not sent: {st} {P.fb}")
+    sent = [json.loads(b) for k, b in P.fb if k == "review:logos"]
+    bk = pg.evaluate("() => localStorage.getItem('idle.bkey')")
+    need(len(sent) == 1 and sent[0]["scores"] == {"scope-strike": 5, "typed-scope": 4} and sent[0]["notes"] == {"typed-scope": "love the typing"} and sent[0].get("bkey") == bk and re.fullmatch(r"[a-z2-7]{26}", bk or ""), f"sent: {sent} (bkey {bk})")
+    pg.evaluate("() => window.__reviews.close()"); un = pg.evaluate("() => window.__audio.hushed()")
+    need(not un, "the game stayed hushed after the review closed")
+    pg.evaluate("() => window.__reviews.open('logos')"); wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 20, P=P)
+    again = pg.evaluate("() => ({ send: !!document.querySelector('#review .send'), dis: [...document.querySelectorAll('#review [data-score]')].every(b => b.disabled), on: document.querySelectorAll('#review [data-score].on').length, first: [...document.querySelectorAll('#review .card')].slice(0, 2).map(c => c.dataset.item), groups: [...document.querySelectorAll('#review .grp')].map(g => g.textContent), sent: window.__reviews.state().sent })")
+    need(not again["send"] and again["dis"] and again["on"] == 2 and again["sent"], f"a second send must not be possible: {again}")
+    need(again["first"] == ["c3-typed-dust", "c3-typed-crt"] and len(again["groups"]) == 3 and again["groups"][0].startswith("round 3"), f"the logos grouped by round, Nico's top two first: {again}")
+    pg.evaluate("() => window.__reviews.close()")
+    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); row = pg.evaluate("() => !!document.getElementById('reviewerRow')"); pg.evaluate("() => window.__settings.close()")
+    need(row, "no 🧪 reviewer row in ⚙ after sending")
+    pg.evaluate("() => { window.__feedback.open('rev'); }"); wait_for(pg, "() => document.querySelectorAll('#oracle [data-review]').length === 2", 15, P=P)
+    pg.click("#oracle [data-review=fonts]"); wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 8", 20, P=P)
+    f = pg.evaluate("() => ({ kind: window.__reviews.state().kind, fam: getComputedStyle(document.querySelector('#review .card .sample')).fontFamily })")
+    need(f["kind"] == "fonts" and "Idle F1" in f["fam"], f"the fonts review: {f}")
+    pg.close(); P.clean()
+    return f"?review=logos: Nico's note, 12 logos in 3 rounds (C3 pair first), ▶ drew {lit['n']} lit samples with the game hushed, scored 2 + a note, sent once, reopened sent (no send), ⚙ reviewer row, 🧪 ⭐ tab → fonts (8, Idle F1…)"
+
+
+def t_reviews_phone(P):
+    """⭐ reviews at 375 px: the lightbox fills the screen without sideways scroll; ▶ and the score buttons are tappable."""
+    pg = P.open("/arena.html?review=logos&test"); booted(pg)
+    wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 60, P=P)
+    r = pg.evaluate("() => { const b = document.querySelector('#review .box').getBoundingClientRect(), p = document.querySelector('#review .play').getBoundingClientRect(), s = document.querySelector('#review [data-score]').getBoundingClientRect(); return { w: innerWidth, l: b.left, r: b.right, sw: document.getElementById('review').scrollWidth, cw: document.getElementById('review').clientWidth, play: Math.round(p.height), score: Math.round(s.height) }; }")
+    need(r["l"] >= 0 and r["r"] <= r["w"] and r["sw"] <= r["cw"] and r["play"] >= 36 and r["score"] >= 30, f"the review at 375 px: {r}")
+    lastBtn = pg.evaluate("() => Math.max(...[...document.querySelectorAll('#review [data-score]')].map(b => b.getBoundingClientRect().right))")
+    need(lastBtn <= r["w"], f"score buttons run off the screen: {lastBtn} > {r['w']}")
+    pg.screenshot(path=os.path.join(tempfile.gettempdir(), "review-375.png")); pg.close(); P.clean()
+    return f"375 px: box {r['l']:.0f}–{r['r']:.0f}, no sideways scroll, ▶ {r['play']} px, scores {r['score']} px"
+
 
 def t_founder_link(P):
     """Founder by a gift link (a brand-new browser): the letter right away; an expired link shows a note and no letter"""
@@ -2216,13 +2371,17 @@ def t_prod_gates(P, root):
         pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
         g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
         need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
+    # ⭐ reviews (idle-reviews.js) are off on id-le.com: ?review= opens nothing, 🧪 has no ⭐ tab
+    pg = P.open("/arena.html?review=logos"); booted(pg); pg.wait_for_timeout(3000)
+    rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: window.__reviews, box: !!document.querySelector('#review'), tab: t }; }")
+    need(rv["api"] is None and not rv["box"] and not rv["tab"], f"reviews on production: {rv}"); pg.close()
     # keyframes (idle-keys.js) do nothing on id-le.com: no gate, no sandbox, no strip
     pg = P.open("/arena.html?at=end#keys"); booted(pg)
     k = pg.evaluate("() => ({ key: window.__storyKey || null, keys: !!window.__keys, gate: !!document.querySelector('#keyGate'), strip: !!document.querySelector('#keyStrip'), real: Object.getOwnPropertyDescriptor(window, 'localStorage') ? 'own' : 'proto' })")
     need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
-    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)"
+    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)/reviews"
 
 
 def t_presence(P):
@@ -2450,7 +2609,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2479,6 +2638,7 @@ def main():
                 run("haunted music", t_haunted)
                 run("stats", t_stats)
                 run("stats v2", t_stats_v2)
+                run("stats seen", t_stats_seen)
                 run("op stats", t_op_stats)
                 run("op actions", t_op_actions)
                 run("pedia stats", t_pedia_stats)
@@ -2515,6 +2675,8 @@ def main():
                 run("never stuck", t_never_stuck)
                 run("founder", t_founder)
                 run("founder link", t_founder_link)
+                run("reviews", t_reviews)
+                run("reviews phone", t_reviews_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("founder personal", t_founder_personal)
                 run("founder phone", t_founder_phone, is_mobile=True, has_touch=True)
                 run("story landing", t_story_landing)
@@ -2523,6 +2685,7 @@ def main():
                 run("story fans", t_story_fans)
                 run("story clock", t_story_clock)
                 run("logo solo", t_logo_solo)
+                run("logo ab", t_logo_ab)
                 run("story ring", t_story_ring)
                 run("boot intro", t_boot_intro)
                 run("chooser", t_chooser)
