@@ -437,8 +437,11 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
     'and why is there no sound?! not a hum, not even my own steps…', 'is that a black…',
     'ohhh what?! is that a black hole!!! this is not good!!', 'wait, what... why is that black hole moving...', "it's coming my way,....", "today really isn't my luckyyyy daaaaayyyyy!!!! aaaaahhhhh!!!"];   // the last three: Nico, story v5
   const darkHold = s => Math.max(1.4, s.length * 0.04 + 0.3), DCPS = 55;
-  const APPROACH = DARK.indexOf('wait, what... why is that black hole moving...'), lineDur = s => darkHold(s) + s.length / DCPS;   // v12: the ringing ends as the hole starts moving
-  const untilApproach = (i, d) => d + DARK.slice(i + 1, APPROACH).reduce((a, x) => a + lineDur(x), 0);   // night seconds from now (line i just shown, held d s) to the approach
+  const APPROACH = DARK.indexOf('wait, what... why is that black hole moving...'), lineDur = s => darkHold(s) + s.length / DCPS;
+  // the ringing ends (v13, Nico: "the ringing lasts too long… definitely 1 or 2 messages before the Doc says 'why is there no sound?'") at the start
+  // of the line two before it ("oh my god, my girlfriend…"), so "dinner" is a whole line of true silence before Doc asks about it
+  const SILENT = DARK.findIndex(x => x.startsWith('and why is there no sound')), RING_END = Math.max(1, SILENT - 2);
+  const untilLine = (i, d, to = RING_END) => d + DARK.slice(i + 1, to).reduce((a, x) => a + lineDur(x), 0);   // night seconds from now (line i just shown, held d s) to line `to`
   let land = { phase: 'none', clicks: 0 }, nightCv = null;
   const clamp01 = x => Math.max(0, Math.min(1, x)), ease = u => u * u * (3 - 2 * u);
   // the dark: a canvas over the world (under the Operator's window): a dim veil, the hole and its letters, the sonar
@@ -493,9 +496,9 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
   // around the storyline's hush (straight to the speakers, at the player's volume; nothing if they muted), waking the audio context if needed
   // v12 (Nico: "the ringing-ears sound should go up in intensity very quickly, then down, then linger for a bit, slowly reaching zero by the
   // time the black hole starts approaching"): up in 0.2 s, down to ~37% by 0.6 s, a linger that moves a little (a slow tremolo, a slight drift),
-  // then a slow linear fade that reaches exactly 0 at endAt: the moment the hole starts moving (DARK[APPROACH]). The lines' clock can run
+  // then a linear fade that reaches exactly 0 at endAt (v13: the start of DARK[RING_END], two lines before 'why is there no sound?!'). The lines' clock can run
   // faster (clicks) or stop (held), so the landing re-aims the end on every line (retarget) and closes it at the approach (end)
-  const RING = { peak: 0.06, attack: 0.2, drop: 0.6, hold: 0.37 };
+  const RING = { peak: 0.045, attack: 0.2, drop: 0.6, hold: 0.37 };   // v13: a bit quieter (Nico: "very loud")
   function ringSound(c, dest, t, endAt = t + 2.6) {
     const env = c.createGain(), trem = c.createGain(), lfo = c.createOscillator(), lg = c.createGain(), drift = c.createOscillator(), dg = c.createGain(), oscs = [], H = RING.peak * RING.hold;
     trem.gain.value = 1; lfo.frequency.value = 0.4; lg.gain.value = 0.12; lfo.connect(lg); lg.connect(trem.gain); drift.frequency.value = 0.13; dg.gain.value = 4; drift.connect(dg);
@@ -530,12 +533,12 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
       land = { phase: 'sonar', clicks: 0, t0: now(), shown: 0, pings: 0, why: 'key' }; nightStart(matchMedia('(prefers-reduced-motion: reduce)').matches); silence(true); blackCover(false); return; }
     // the night starts when the game's loading cover has gone (skipping the intro right away can land before it)
     for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
-    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; blackCover(true); nightStart(RM); mark('landing'); ringing(untilApproach(-1, 3.0)); setTimeout(() => silence(true), 2800); setTimeout(() => blackCover(false), 1500);
+    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; blackCover(true); nightStart(RM); mark('landing'); ringing(untilLine(-1, 3.0)); setTimeout(() => silence(true), 2800); setTimeout(() => blackCover(false), 1500);
     const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
     document.body.appendChild(skipB);
     await new Promise(res => { let i = -1, timer = 0, downAt = 0, done = false;
       const st = nightState, next = () => { clearTimeout(timer); if (done) return; i++; if (i >= DARK.length) return finish('lines'); const text = DARK[i];
-        land.line = { text, t0: st.t }; land.shown = i + 1; if (i === DARK.length - 2 && !land.shakeT) { land.shakeT = st.t; rumble(true); } land.shake = !!land.shakeT; st.k = (i + 1) / DARK.length; const d = darkHold(text) + text.length / DCPS; if (i < APPROACH) ringAim(untilApproach(i, d)); else if (i === APPROACH) { land.approachSt = st.t; ringAim(0); } wait(d); };
+        land.line = { text, t0: st.t }; land.shown = i + 1; if (i === DARK.length - 2 && !land.shakeT) { land.shakeT = st.t; rumble(true); } land.shake = !!land.shakeT; st.k = (i + 1) / DARK.length; const d = darkHold(text) + text.length / DCPS; if (i < RING_END) ringAim(untilLine(i, d)); else if (i === RING_END) { land.ringEndSt = st.t; ringAim(0); } if (i === APPROACH) land.approachSt = st.t; wait(d); };
       // the line's clock follows the night's (paused while held)
       const wait = d => { const end = st.t + d; const tick = () => { if (done) return; if (st.t >= end) next(); else timer = setTimeout(tick, 50); }; timer = setTimeout(tick, 50); };
       const finish = why => { if (done) return; done = true; if (why === 'skip') mark('skip:landing'); ringAim(0); clearTimeout(timer); land.line = null; land.shake = false; land.shakeT = 0; rumble(false); land.why = why; land.after = (now() - land.t0) / 1000;
@@ -726,6 +729,6 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
   if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && S.steps.music) && !genesisDone() && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   applyUnlocks();
-  window.__genesis = { noLife, darkLines: DARK.slice(), approach: APPROACH, untilApproach, ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();

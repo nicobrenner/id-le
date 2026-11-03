@@ -105,6 +105,19 @@ th{background:var(--box);font-weight:600}
 </ul>
 <p>The data lab only runs when you open it. Turning off the public helper in <b>⚙ settings</b> also turns this off.</p>
 
+<h2 id="presence">Who's playing right now (the live view)</h2>
+<p>So the maker can see, live, how many people are playing and where they are in the game, an open game tab says "I'm here" to <code>id-le.com/lab/here</code> about every 20 seconds while it is on screen, and "bye" when it is closed or hidden. It follows the same ⚙ switch as the anonymous stats, and it sends nothing if your browser sends <b>Global Privacy Control</b> or <b>Do Not Track</b>. Each "I'm here" carries only:</p>
+<ul>
+<li>a random number made when the page loaded, kept only in that tab's memory (never stored; a reload makes a new one), so two tabs count as two players</li>
+<li>phone, tablet or desktop</li>
+<li>how you're playing: the storyline (and, only while two beginnings are being tested, which one this browser got; the epoch and step reached), free play, a ready world or the plain world</li>
+<li>which panels are open (music, studio, the Operator, a creature card, ⚙…), at most three</li>
+<li>how many creatures your world has, as a range (0–12, 13–30, 31–60, 61–150, more)</li>
+<li>how many seconds ago the page was opened</li>
+<li>whether this browser had been here before (a yes/no, not an identifier)</li>
+</ul>
+<p>The server adds the country Cloudflare guesses from your address; the address itself is not kept. All of it is held <b>in memory only, for about a minute</b> after the last "I'm here", then dropped. It is never written to storage, never added to the daily totals and never linked to anything else. Only the maker can see the live view, with a private key. Never sent: words, messages, names, anything from your world, AI keys.</p>
+
 <h2 id="oracle">Tell the scientists and roadmap votes</h2>
 <p>When you use <b>🧪 Tell the scientists</b>, these are sent to id-le.com and kept in a private list for <b>180 days</b>:</p>
 <ul>
@@ -114,14 +127,15 @@ th{background:var(--box);font-weight:600}
 <p>It is read by the maker of Id|le to decide what to fix and build. It is not published, and it is not sent to GitHub. If an idea makes it onto the public roadmap, it appears in the maker's own words, never with yours or with any context. To avoid floods, the server allows a few messages a day per visitor; for that it keeps a hash of your network address mixed with a secret that changes every day, for two days, and never the address itself. No account, no cookie.</p>
 <p><b>Roadmap votes</b>: the list itself is public. A vote adds 1 to an item's count. This browser remembers which items you voted for (in its own storage), and the server keeps each visitor to one vote per item per day with the same daily hash, kept two days. Only the counts are kept.</p>
 
-<h2 id="reviews">Reviews</h2>
-<p>When the maker asks for <b>⭐ a review</b> (for example of the logo animations or the fonts) and you press <b>send my scores</b>, these are sent to id-le.com:</p>
+<h2 id="reviews">Reviews and the team</h2>
+<p>When the maker asks for <b>⭐ a review</b> (for example of the logo animations or the fonts), each swipe and pick you make is sent to id-le.com in small batches:</p>
 <ul>
-<li><b>your scores</b> (0 to 5 for the items you scored). They are only added to each item's totals (how many scores, their sum, how many of each 0–5); nobody's scores are kept on their own.</li>
+<li><b>your swipes</b> (✕ nah, ✓ like, ★ love, kept as scores 1, 3 and 5) and your <b>"which one?" picks</b> (which of two items you preferred). They are added to each item's totals (how many, their sum, how many of each score) and to a count of head-to-head wins per pair. Next to the totals the server keeps, for your browser key's hash only, which items and pairs it already sent (so nothing counts twice).</li>
 <li><b>your notes</b>, if you wrote any (at most 300 characters each; email addresses, links and phone numbers are blanked). They go to the same private list as 🧪 Tell the scientists, kept <b>180 days</b>, read by the maker, never published.</li>
 <li><b>a browser key</b>: a random key made in your browser, sent only when you send a review, kept hashed, used to stop double reviews and so you could claim your reviews later; clearing site data forgets it. It isn't made from anything about you or your device, and the anonymous stats never use it.</li>
 </ul>
-<p>To avoid floods, the server also counts reviews per visitor per day with the same daily hash as votes (kept two days). Nothing from your world is sent. This browser remembers which reviews you sent and shows a 🧪 reviewer badge in ⚙; that stays in this browser only.</p>
+<p><b>The team</b> (the Humans in the Loop): when you press <i>I'm in</i>, your browser key is sent once and id-le.com keeps its hash, the time you joined and how many review batches you sent (that count is how the 14-day, 3-review cliff can be checked later), plus the team's size. Your status (vesting, ✓, your level) is worked out and kept in this browser. Nothing else about you is kept, and nothing from your world is sent.</p>
+<p>To avoid floods, the server also counts reviews per visitor per day with the same daily hash as votes (kept two days).</p>
 
 <h2 id="founders">Founder gifts</h2>
 <p>A <b>personal gift link</b> stores, on id-le.com, only the letter the maker wrote for it (with a private label he gave it) and whether the link has been opened, for up to <b>180 days</b>. Opening it marks it opened; nothing about the reader is stored with it. Whether this browser is a Founder, the letter it opened and the creature it made stay in this browser's own storage, like the rest of your world.</p>

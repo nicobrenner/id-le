@@ -161,7 +161,9 @@ const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
-  'rv_open_link', 'rv_open_lab', 'rv_open_end', 'rv_play', 'rv_sent', 'rv_already'];
+  'rv_open_link', 'rv_open_lab', 'rv_open_end', 'rv_play', 'rv_sent', 'rv_already',
+  // v2: the Operator's invitation (shown, I'm in, not now), the pledge, swipes (✕ ✓ ★), keep going / done, which one?, the cliff passed
+  'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested'];
 const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
@@ -460,70 +462,184 @@ async function gift(req, env, path, ip) {
   await kv.put(key, JSON.stringify(g), { expirationTtl: ttl }); return json({ ok: true });
 }
 
-// ---------- Reviews (11-03): Nico asks players to score a few experiments (the logo animations, the fonts…) ----------
-// Nico: "Hey, this is Nico, the creator of Id|le, and would love your feedback on the logo animation… take a look here: link".
-// A review is { kind, title, items, note?, showTotals?, open? }: the two below are built in; tools/review.py writes review:<rid> (a new
-// one, or a change to these) and the reviews:index list. GET /lab/review/<rid> returns it (plus each item's average only when
-// showTotals is on); POST /lab/review/<rid> takes { scores: {item: 0-5}, notes: {item: "…" ≤ 300}, bkey }, once per review per
-// browser key (below), and at most RV_DAY_MAX a day from one address (a hash with the daily salt, as for votes). Scores add up in review:<rid>:agg
-// ({ sends, items: {id: {n, sum, s: [n0..n5]}}, bk: [hashes] });
-// notes go to the private queue (fb:…, kind 'review') and are never shown to anyone else. Writes per send: the address's daily count,
-// the totals and, when there are notes, one queue entry. The totals are read-modify-write: two sends in the same instant can lose one of
-// them; at this scale that is fine (a Durable Object would make it exact, if reviews ever get busy).
-// logos: all three rounds of the logo lab, newest first, Nico's top two (c3 typed dust, c3 typed CRT) leading
+// ---------- presence, for the creator's live view (11-03) ----------
+// Each open game tab (idle-presence.js) says "here" about every 20 s while it is visible, and "bye" when it closes. A beat carries a
+// random id that lives in the tab's memory only (a new one each page load), plus coarse state from fixed lists: device, mode (storyline
+// arm, epoch and step; free; a ready world), panels open, a creature-count bucket, seconds since the page opened, first visit or not.
+// The country comes from Cloudflare (request.cf). No address, no User-Agent, no world content, no text: all of it is held in memory
+// by one Durable Object (Presence, deployed as its own small Worker: helper/presence/) and dropped 60 s after the last beat; nothing is
+// written to storage. Without the binding (local copies, tests) the table lives in this isolate's memory instead.
+// /live (demo/live.html) reads it with a secret key (env.LIVE_KEY, a wrangler secret); without the key the read answers 404.
+// Off on id-le.com until Nico's go: the page doesn't beat there (PRESENCE_ON_PROD in idle-presence.js), and the server takes beats
+// only on staging (IDLE_ENV=staging), when PRESENCE_ON=1, or without a STATS namespace (local).
+const PR = { dev: ['phone', 'tablet', 'desktop'], mode: ['story', 'free', 'ready', 'world'], arm: ['story', 'current', 'none'],
+  step: ['intro', 'dark', 'lights', 'words', 'life', 'genesis-done', 'epoch', 'end'],
+  panel: ['music', 'studio', 'lab', 'advisor', 'almanac', 'drawer', 'trees', 'reels', 'operator', 'creatures', 'irc', 'card', 'settings', 'feedback', 'oracle', 'review'],
+  cr: ['0-12', '13-30', '31-60', '61-150', '151+'] };
+const PR_TTL = 60e3, PR_MAX = 5000, PR_HIST = 60, PR_ID = /^[a-f0-9]{16}$/;
+export class PresenceTable {
+  constructor(now = () => Date.now()) { this.now = now; this.m = new Map(); this.hist = []; }
+  minute() { const m = Math.floor(this.now() / 60e3); let h = this.hist[this.hist.length - 1];
+    if (!h || h.m !== m) { h = { m, on: this.m.size, arr: 0, left: 0 }; this.hist.push(h); if (this.hist.length > PR_HIST) this.hist.shift(); } return h; }
+  sweep() { const t = this.now(); for (const [id, e] of this.m) if (t - e.last > PR_TTL) { this.m.delete(id); this.minute().left++; } }
+  // a beat: validated field by field against the fixed lists; anything else is dropped, never stored
+  beat(q, cc) {
+    this.sweep(); if (!q || typeof q !== 'object' || q.v !== 1 || !PR_ID.test(q.id || '')) return { ok: false, error: 'bad beat' };
+    const t = this.now(), h = this.minute();
+    if (q.bye === 1) { if (this.m.delete(q.id)) h.left++; h.on = Math.max(h.on, this.m.size); return { ok: true }; }
+    let e = this.m.get(q.id); if (!e) { if (this.m.size >= PR_MAX) return { ok: false, error: 'full' }; e = { since: t }; this.m.set(q.id, e); h.arr++; }
+    e.last = t; e.cc = typeof cc === 'string' && /^[A-Z0-9]{2}$/.test(cc) ? cc : 'XX';
+    e.dev = PR.dev.includes(q.dev) ? q.dev : 'desktop'; e.mode = PR.mode.includes(q.mode) ? q.mode : 'world'; e.arm = PR.arm.includes(q.arm) ? q.arm : 'none';
+    e.step = e.mode === 'story' && PR.step.includes(q.step) ? q.step : null; e.ep = e.mode === 'story' && Number.isInteger(q.ep) && q.ep >= 0 && q.ep <= 9 ? q.ep : null;
+    e.p = Array.isArray(q.p) ? [...new Set(q.p.filter(x => PR.panel.includes(x)))].slice(0, 3) : [];
+    e.cr = PR.cr.includes(q.cr) ? q.cr : null; e.t = Number.isFinite(q.t) && q.t >= 0 ? Math.min(Math.round(q.t), 24 * 3600) : 0; e.back = q.back === 1 ? 1 : 0;
+    h.on = Math.max(h.on, this.m.size); return { ok: true, next: 20 };
+  }
+  // the creator's view: everyone online now (a short alias of the tab id, never the id itself), totals and the last hour
+  view() {
+    this.sweep(); const t = this.now(), players = [], tot = { mode: {}, cc: {}, dev: {}, panel: {}, step: {} }, inc = (o, k) => { if (k != null) o[k] = (o[k] || 0) + 1; };
+    for (const [id, e] of this.m) { players.push({ a: id.slice(0, 6), since: Math.round((t - e.since) / 1000), t: e.t, cc: e.cc, dev: e.dev, mode: e.mode, arm: e.arm, step: e.step, ep: e.ep, p: e.p, cr: e.cr, back: e.back });
+      inc(tot.mode, e.mode); inc(tot.cc, e.cc); inc(tot.dev, e.dev); e.p.forEach(x => inc(tot.panel, x)); if (e.mode === 'story') inc(tot.step, e.step === 'epoch' ? 'epoch ' + e.ep : e.step); }
+    this.minute(); return { now: t, online: this.m.size, players, tot, hist: this.hist.map(h => ({ ...h })) };
+  }
+}
+// the Durable Object: one instance (idFromName('live')) holds the table in memory; it is never written to storage
+export class Presence {
+  constructor(state, env) { this.table = new PresenceTable(); }
+  async fetch(req) {
+    const u = new URL(req.url);
+    if (u.pathname === '/beat') { const q = await req.json().catch(() => null); return json(this.table.beat(q, req.headers.get('X-Country') || '')); }
+    if (u.pathname === '/view') return json(this.table.view());
+    return json({ error: 'unknown' }, 404);
+  }
+}
+const prMem = { table: null };
+const presenceOn = env => env.IDLE_ENV === 'staging' || env.PRESENCE_ON === '1' || !env.STATS;
+async function prCall(env, path, init) {   // the Durable Object when bound, else this isolate's own table (local copies and tests)
+  if (env.PRESENCE) { const stub = env.PRESENCE.get(env.PRESENCE.idFromName('live')); return stub.fetch('https://presence' + path, init); }
+  const T = prMem.table || (prMem.table = new PresenceTable());
+  if (path === '/beat') { let q = null; try { q = JSON.parse(init.body); } catch (e) {} return json(T.beat(q, init.headers['X-Country'])); }
+  return json(T.view());
+}
+async function liveKeyOk(req, env) {   // compares SHA-256 digests, so the comparison takes the same time whatever the key
+  const want = env.LIVE_KEY || '', got = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if (want.length < 24 || !got) return false;
+  const d = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))), a = await d(want), b = await d(got);
+  let x = 0; for (let i = 0; i < a.length; i++) x |= a[i] ^ b[i]; return x === 0;
+}
+async function presence(req, env, path) {
+  if (path === '/lab/live') { if (req.method !== 'GET' || !(await liveKeyOk(req, env))) return json({ error: 'unknown path' }, 404);
+    const r = await prCall(env, '/view', { method: 'GET' }); return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }
+  if (!presenceOn(env)) return new Response(null, { status: 204 });   // production, until Nico's go: beats are accepted and dropped
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+  const txt = await req.text(); if (txt.length > 600) return json({ error: 'too big' }, 413);
+  const cc = req.cf && typeof req.cf.country === 'string' ? req.cf.country : '';
+  const r = await prCall(env, '/beat', { method: 'POST', body: txt, headers: { 'Content-Type': 'application/json', 'X-Country': cc } });
+  return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json' } });
+}
+
+// ---------- Reviews (11-03; v2 the same evening) and teams: Nico asks players to judge a few experiments (the logo animations, the fonts…) ----------
+// Nico: "Hey, this is Nico, the creator of Id|le, and would love your feedback on the logo animation… take a look here: link"; v2: "a huge
+// list doesn't work… something like a 'tinder for…'", and a team to join first ("the Founders… vesting with a cliff").
+// A review is { kind, title, items, note?, stage: 'team' | 'public', team? ('loop': the Humans in the Loop), from?, showTotals?, open? }: two are built in; tools/review.py
+// writes review:<rid> (new ones, changes, and `promote` → a public stage with the team's top N) and the reviews:index list.
+// - GET /lab/review/<rid>: the config, and `order` (per item: how many rated it, and its like-rate rounded to 0.1) so each browser is shown
+//   the least-rated and least-certain items first; the full totals (average, like-rate, Bradley-Terry) only when showTotals is on.
+// - POST /lab/review/<rid>: { bkey, scores: {item: 0-5}, notes: {item: "…" ≤ 300}, pairs: [[winner, loser]] }. A swipe is a score
+//   (✕ 1, ✓ 3, ★ 5); "which one?" is a pair. Sent in small batches as the player swipes; each browser key counts once per item and once
+//   per pair (what it already sent is skipped; a batch with nothing new gets 409). A team-stage review takes only that team's members.
+// Totals in review:<rid>:agg: { sends (browsers), items: {id: {n, sum, s: [n0..n5]}}, pw: {"a>b": n}, k: {hash: {i: [items], p: [pairs], t}} }.
+// Notes go to the private queue (fb:…, kind 'review'), never shown to anyone else. Writes per batch: the address's daily count, the totals,
+// the team's contribution count (members only) and one queue entry when there are notes. The totals are read-modify-write: two batches in
+// the same instant can lose one; at this scale that is fine (a Durable Object would make it exact if reviews ever get busy).
+// logos: all three rounds of the logo lab (Nico's top two, C3 typed dust and C3 typed CRT, lead the list); the team stage first
 const REVIEWS = {
-  logos: { kind: 'logos', title: 'the logo', items: ['c3-typed-dust', 'c3-typed-crt', 'a3-dust', 'b3a-dust-crt', 'b3b-crt', 'scope-strike', 'scope-crt', 'typed-scope', 'scope-meter', 'scope-shockwave', 'strike-purr-static', 'crt-off'], showTotals: false, open: true },
-  fonts: { kind: 'fonts', title: 'our fonts', items: ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], showTotals: false, open: true },
+  logos: { kind: 'logos', title: 'the logo', items: ['c3-typed-dust', 'c3-typed-crt', 'a3-dust', 'b3a-dust-crt', 'b3b-crt', 'scope-strike', 'scope-crt', 'typed-scope', 'scope-meter', 'scope-shockwave', 'strike-purr-static', 'crt-off'], stage: 'team', team: 'loop', showTotals: false, open: true },
+  fonts: { kind: 'fonts', title: 'our fonts', items: ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], stage: 'team', team: 'loop', showTotals: false, open: true },
 };
-// the browser key (idle.bkey, made in the browser, 128 random bits in base32) arrives only with a review; only SHA-256(key + BKEY_SALT) is
-// kept, in the review's totals (bk: a list of hashes, one per browser that sent it): a second review from the same key gets 409, and a
-// future "claim your reviews" can prove ownership by presenting the key. The salt is a constant: the hash must stay the same over time.
+// the browser key (idle.bkey, made in the browser, 128 random bits in base32) arrives only with a review or a team join; only
+// SHA-256(key + BKEY_SALT) is kept: in a review's totals (what that browser already rated) and in a team (that it joined, when, and how many
+// review batches it sent: the cliff check). A future "claim" can prove ownership by presenting the key. The salt is a constant: the hash
+// must stay the same over time.
 const BKEY_SALT = 'id-le review bkey v1', BKEY = /^[a-z2-7]{26}$/;
 const bkHash = async k => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(k + '|' + BKEY_SALT))).slice(0, 16), x => x.toString(16).padStart(2, '0')).join('');
-const RID = /^[a-z0-9-]{1,30}$/, RITEM = /^[a-z0-9-]{1,40}$/, RV_KINDS = ['logos', 'fonts', 'creatures', 'objects'], RV_DAY_MAX = 12, rvMem = { cfg: new Map(), n: new Map() };
+const RID = /^[a-z0-9-]{1,40}$/, RITEM = /^[a-z0-9-]{1,40}$/, RV_KINDS = ['logos', 'fonts', 'creatures', 'objects'], RV_DAY_MAX = 60, rvMem = { cfg: new Map(), n: new Map() };
+const TEAMS = ['loop', 'founders', 'reviewers', 'early-adopters'];   // 'loop': the Humans in the Loop (the client names it; the id stays)
 const rvClean = c => { if (!c || typeof c !== 'object' || !RV_KINDS.includes(c.kind) || !Array.isArray(c.items)) return null;
   const items = [...new Set(c.items.filter(x => typeof x === 'string' && RITEM.test(x)))].slice(0, 24); if (!items.length) return null;
-  return { kind: c.kind, title: String(c.title || '').slice(0, 80), items, note: typeof c.note === 'string' ? c.note.slice(0, 1200) : null, showTotals: !!c.showTotals, open: c.open !== false }; };
+  const stage = c.stage === 'public' ? 'public' : c.stage === 'team' ? 'team' : 'public', team = stage === 'team' ? (TEAMS.includes(c.team) ? c.team : 'loop') : null;
+  return { kind: c.kind, title: String(c.title || '').slice(0, 80), items, note: typeof c.note === 'string' ? c.note.slice(0, 1200) : null, stage, team,
+    from: typeof c.from === 'string' && RID.test(c.from) ? c.from : null, showTotals: !!c.showTotals, open: c.open !== false }; };
 async function reviewCfg(env, rid) {
   const hit = rvMem.cfg.get(rid); if (hit && Date.now() - hit.t < 60e3) return hit.c;
   let c = null; try { c = rvClean(JSON.parse(await fbKV(env).get('review:' + rid) || 'null')); } catch (e) {}
   if (!c && REVIEWS[rid]) c = rvClean(REVIEWS[rid]);
   rvMem.cfg.set(rid, { c, t: Date.now() }); if (rvMem.cfg.size > 200) rvMem.cfg.clear(); return c; }
-async function rvAgg(env, rid) { try { return JSON.parse(await fbKV(env).get('review:' + rid + ':agg') || 'null') || { sends: 0, items: {} }; } catch (e) { return { sends: 0, items: {} }; } }
-const rvTotals = (c, a) => Object.fromEntries(c.items.map(id => { const x = a.items[id] || { n: 0, sum: 0 }; return [id, { n: x.n, avg: x.n ? Math.round(x.sum / x.n * 100) / 100 : null }]; }));
+async function rvAgg(env, rid) { let a = null; try { a = JSON.parse(await fbKV(env).get('review:' + rid + ':agg') || 'null'); } catch (e) {}
+  a = a || {}; a.sends = a.sends || 0; a.items = a.items || {}; a.pw = a.pw || {}; a.k = a.k || {};
+  if (Array.isArray(a.bk)) { for (const h of a.bk) a.k[h] = a.k[h] || { i: ['*'], p: [], t: 0 }; delete a.bk; }   // v1 sent everything at once: those keys rated all items
+  return a; }
+// Bradley-Terry strengths from pairwise wins (MM updates; a small prior of one tie against an average opponent keeps unseen items finite)
+function bradleyTerry(items, pw) { const s = Object.fromEntries(items.map(i => [i, 1])), w = Object.fromEntries(items.map(i => [i, 0.5])), n = {};
+  for (const [k, v] of Object.entries(pw || {})) { const [a, b] = k.split('>'); if (!(a in s) || !(b in s)) continue; w[a] += v; const key = a < b ? a + '|' + b : b + '|' + a; n[key] = (n[key] || 0) + v; }
+  for (let it = 0; it < 60; it++) { const nx = {}; for (const i of items) { let d = 1 / (s[i] + 1); for (const [key, c] of Object.entries(n)) { const [a, b] = key.split('|'); if (a === i) d += c / (s[i] + s[b]); else if (b === i) d += c / (s[i] + s[a]); } nx[i] = w[i] / d; }
+    const g = Math.exp(items.reduce((t, i) => t + Math.log(nx[i]), 0) / items.length); for (const i of items) s[i] = nx[i] / g; }
+  return Object.fromEntries(items.map(i => [i, Math.round(s[i] * 100) / 100])); }
+const likeRate = x => x && x.n ? ((x.s && (x.s[3] || 0) + (x.s[4] || 0) + (x.s[5] || 0)) || 0) / x.n : null;
+const rvOrder = (c, a) => Object.fromEntries(c.items.map(id => { const x = a.items[id], lr = likeRate(x); return [id, { n: x ? x.n : 0, lr: lr == null ? null : Math.round(lr * 10) / 10 }]; }));
+const rvTotals = (c, a) => { const bt = bradleyTerry(c.items, a.pw); return Object.fromEntries(c.items.map(id => { const x = a.items[id] || { n: 0, sum: 0 }, lr = likeRate(x);
+  return [id, { n: x.n, avg: x.n ? Math.round(x.sum / x.n * 100) / 100 : null, like: lr == null ? null : Math.round(lr * 100) / 100, bt: bt[id] }]; })); };
+async function teamDoc(env, t) { let d = null; try { d = JSON.parse(await fbKV(env).get('team:' + t) || 'null'); } catch (e) {} d = d || {}; d.n = d.n || 0; d.m = d.m || {}; return d; }
+async function team(req, env, path) {
+  const kv = fbKV(env), m = path.match(/^\/lab\/team\/([a-z-]+)(\/join|\/me)?$/); if (!m || !TEAMS.includes(m[1])) return json({ error: 'no such team' }, 404);
+  const t = m[1]; if (!m[2]) { if (req.method !== 'GET') return json({ error: 'GET only' }, 405); return json({ team: t, n: (await teamDoc(env, t)).n }); }
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+  let q; try { q = JSON.parse((await req.text()).slice(0, 400)); } catch (e) { return json({ error: 'not JSON' }, 400); }
+  const bk = q && typeof q.bkey === 'string' && BKEY.test(q.bkey) ? await bkHash(q.bkey) : null; if (!bk) return json({ error: 'a browser key is needed' }, 400);
+  const d = await teamDoc(env, t);
+  if (m[2] === '/me') { const x = d.m[bk]; return json({ team: t, n: d.n, member: !!x, joined: x ? x.j : null, reviews: x ? x.c : 0 }); }
+  if (d.m[bk]) return json({ ok: true, already: true, team: t, n: d.n, joined: d.m[bk].j });
+  d.m[bk] = { j: Date.now(), c: 0 }; d.n = Object.keys(d.m).length; await kv.put('team:' + t, JSON.stringify(d));   // one write per join
+  return json({ ok: true, team: t, n: d.n, joined: d.m[bk].j }); }
 async function review(req, env, path, ip) {
   const kv = fbKV(env);
   if (path === '/lab/reviews') { if (req.method !== 'GET') return json({ error: 'GET only' }, 405);
     let ids = Object.keys(REVIEWS); try { const x = JSON.parse(await kv.get('reviews:index') || 'null'); if (Array.isArray(x)) ids = [...new Set([...x.filter(i => typeof i === 'string' && RID.test(i)), ...ids])]; } catch (e) {}
-    const out = []; for (const rid of ids.slice(0, 20)) { const c = await reviewCfg(env, rid); if (c && c.open) out.push({ rid, kind: c.kind, title: c.title, n: c.items.length }); }
+    const out = []; for (const rid of ids.slice(0, 20)) { const c = await reviewCfg(env, rid); if (c && c.open) out.push({ rid, kind: c.kind, title: c.title, n: c.items.length, stage: c.stage, team: c.team }); }
     return json({ reviews: out }); }
   const m = path.match(/^\/lab\/review\/([a-z0-9-]+)$/); if (!m || !RID.test(m[1])) return json({ error: 'no such review' }, 404);
   const rid = m[1], c = await reviewCfg(env, rid); if (!c) return json({ error: 'no such review' }, 404);
-  if (req.method === 'GET') { const o = { rid, ...c }; if (c.showTotals) { const a = await rvAgg(env, rid); o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o); }
+  if (req.method === 'GET') { const a = await rvAgg(env, rid), o = { rid, ...c, order: rvOrder(c, a) }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o); }
   if (req.method !== 'POST') return json({ error: 'GET or POST' }, 405);
   if (!c.open) return json({ error: 'this review has closed: thank you anyway' }, 410);
   const txt = await req.text(); if (txt.length > 8000) return json({ error: 'too big' }, 413);
   let q; try { q = JSON.parse(txt); } catch (e) { return json({ error: 'not JSON' }, 400); }
-  const sc = q && typeof q.scores === 'object' && !Array.isArray(q.scores) ? q.scores : {}, nt = q && typeof q.notes === 'object' && !Array.isArray(q.notes) ? q.notes : {};
-  const scores = {}, notes = {};
+  const sc = q && typeof q.scores === 'object' && !Array.isArray(q.scores) ? q.scores : {}, nt = q && typeof q.notes === 'object' && !Array.isArray(q.notes) ? q.notes : {}, pr = q && Array.isArray(q.pairs) ? q.pairs : [];
+  const scores = {}, notes = {}, pairs = [];
   for (const [k, v] of Object.entries(sc).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); if (!Number.isInteger(v) || v < 0 || v > 5) return json({ error: 'scores are 0 to 5' }, 400); scores[k] = v; }
   for (const [k, v] of Object.entries(nt).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); const t = scrub(v, 300); if (t) notes[k] = t; }
-  if (!Object.keys(scores).length) return json({ error: 'score at least one, please' }, 400);
+  for (const p of pr.slice(0, 12)) { if (!Array.isArray(p) || p.length !== 2 || p[0] === p[1] || !c.items.includes(p[0]) || !c.items.includes(p[1])) return json({ error: 'a pair is two different items of this review' }, 400); pairs.push(p[0] + '>' + p[1]); }
+  if (!Object.keys(scores).length && !pairs.length) return json({ error: 'score at least one, please' }, 400);
   const bk = typeof q.bkey === 'string' && BKEY.test(q.bkey) ? await bkHash(q.bkey) : null; if (!bk) return json({ error: 'a browser key is needed' }, 400);
-  { const a0 = await rvAgg(env, rid); if (Array.isArray(a0.bk) && a0.bk.includes(bk)) return json({ error: 'this browser already sent this review', already: true }, 409); }
-  // one review per browser key (exact, in the totals); per address only a daily cap (people behind one address may each send theirs)
+  let td = null; if (c.stage === 'team') { td = await teamDoc(env, c.team); if (!td.m[bk]) return json({ error: 'this review is for the team: join it first', team: c.team }, 403); }
+  const a = await rvAgg(env, rid), mine = a.k[bk] || { i: [], p: [], t: 0 }, all = mine.i.includes('*');
+  const newS = Object.entries(scores).filter(([k]) => !all && !mine.i.includes(k)), newP = pairs.filter(p => { const [x, y] = p.split('>'); return !mine.p.includes(p) && !mine.p.includes(y + '>' + x); });
+  if (!newS.length && !newP.length) return json({ error: 'this browser already sent these', already: true }, 409);
+  // per address only a daily cap (people behind one address may each send theirs)
   const [day, h] = await fbHash(env, ip, 'review'), ck = 'rvrl:' + day + ':' + h;
   const n = Math.max(rvMem.n.get(ck) || 0, +(await kv.get(ck)) || 0); if (n >= RV_DAY_MAX) return json({ error: 'that is a lot of reviews for one day' }, 429);
   rvMem.n.set(ck, n + 1); if (rvMem.n.size > 20000) rvMem.n.clear(); await kv.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
-  const a = await rvAgg(env, rid); a.bk = Array.isArray(a.bk) ? a.bk : [];
-  if (a.bk.includes(bk)) return json({ error: 'this browser already sent this review', already: true }, 409);
-  a.sends = (a.sends || 0) + 1; a.bk.push(bk);
-  for (const [k, v] of Object.entries(scores)) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.n++; x.sum += v; x.s[v] = (x.s[v] || 0) + 1; }
-  await kv.put('review:' + rid + ':agg', JSON.stringify(a));
+  if (!a.k[bk]) a.sends++; mine.t = Date.now();
+  for (const [k, v] of newS) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.n++; x.sum += v; x.s[v] = (x.s[v] || 0) + 1; mine.i.push(k); }
+  for (const p of newP) { a.pw[p] = (a.pw[p] || 0) + 1; mine.p.push(p); }
+  a.k[bk] = mine; await kv.put('review:' + rid + ':agg', JSON.stringify(a));
+  // the team counts what a member contributed (one per batch with something new): the server's half of the cliff check
+  if (!td) { const tt = await teamDoc(env, 'loop'); if (tt.m[bk]) td = tt, td._t = 'loop'; } else td._t = c.team;
+  if (td && td.m[bk]) { td.m[bk].c = (td.m[bk].c || 0) + 1; const t = td._t; delete td._t; await kv.put('team:' + t, JSON.stringify(td)); }
   if (Object.keys(notes).length) { const id = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + '-' + crypto.randomUUID().slice(0, 6);
     const text = (rid + ': ' + Object.entries(notes).map(([k, t]) => `${k}${scores[k] != null ? ' ' + scores[k] + '/5' : ''} “${t}”`).join(' · ')).slice(0, 2400);
     await kv.put('fb:' + id, JSON.stringify({ t: Date.now(), kind: 'review', rid, scores, notes, text, ctx: fbCtx(q.ctx), status: 'new' }), { expirationTtl: FB_TTL }); }
-  const o = { ok: true }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o);
+  const o = { ok: true, added: newS.length, pairs: newP.length, skipped: Object.keys(scores).length - newS.length }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o);
 }
 
 export default {
@@ -538,11 +654,15 @@ export default {
     // background calls a page makes by itself (stats batches, world-link polls, notices) count in their own, larger budget, so they
     // never use up what the player's own actions (reading a page, its pictures) may do in a minute
     const bg = path === '/lab/stats' || path === '/lab/p' || path === '/worlds/state' || path === '/lab/notices';
+    // presence beats: one tab beats 3 times a minute; 30 a minute per address leaves room for a household or a classroom behind one address
+    if (path === '/lab/here') { const pk = ip + '|' + min + '|here', pn = (mem.hits.get(pk) || 0) + 1; mem.hits.set(pk, pn); if (mem.hits.size > 5000) mem.hits.clear(); if (pn > 30) return cors(env, req, json({ error: 'slow down' }, 429)); return cors(env, req, await presence(req, env, path)); }
     const k = ip + '|' + min + (bg ? '|bg' : ''), n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (bg ? 240 : (+env.RATE_PER_MIN || 60))) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
+    if (path === '/lab/live') return cors(env, req, await presence(req, env, path));   // the creator's live view: 404 without the key
     if (path === '/lab/oracle' || path === '/lab/roadmap' || path === '/lab/vote') return cors(env, req, await feedback(req, env, path, ip));
     if (path.startsWith('/lab/gift/')) return cors(env, req, await gift(req, env, path, ip));
     if (path === '/lab/reviews' || path.startsWith('/lab/review/')) return cors(env, req, await review(req, env, path, ip));
+    if (path.startsWith('/lab/team/')) return cors(env, req, await team(req, env, path));
     if (path === '/lab/stats' || path === '/lab/p') return stats(req, env, ctx);   // /lab/p: the same reports under a plain name   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {

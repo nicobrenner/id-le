@@ -40,3 +40,17 @@ Costs: the free Workers plan (100,000 requests a day) covers a small audience; K
 | word meanings for the Crawler (`/lab/embed`) | the built-in 32-number word vectors (already the fallback) |
 | lab chat with the manager (`/lab/notes`, `/lab/replies`) | notes stay in the browser; the BYO-AI chat replaces the replies (docs/byo_ai.md) |
 | manager notices (`/lab/notices`) | none |
+
+## The creator's live view (/live, presence)
+
+Open game tabs beat `POST /lab/here` (demo/idle-presence.js); `GET /lab/live` returns who is online now for `demo/live.html`, only with
+`Authorization: Bearer <LIVE_KEY>` (else 404). Everything is in memory for about a minute; nothing is written to KV. To run it on Cloudflare:
+
+1. `npx wrangler deploy -c helper/presence/wrangler.toml` (the `Presence` Durable Object in its own Worker, `idle-presence`).
+2. Bind it to the Pages project as `PRESENCE` (class `Presence`, script `idle-presence`), for the preview (staging) environment first.
+3. Set the key as an encrypted secret named `LIVE_KEY` for the preview environment (dashboard: the Pages project → Settings → Variables and
+   secrets → Preview; or the Pages API). Use a long random value and keep the only other copy on your own machine.
+
+Without the binding the table lives in each isolate's memory: fine locally (`node helper/dev_server.mjs` with `LIVE_KEY=…`), incomplete on
+Cloudflare. Beats are accepted only where `IDLE_ENV=staging` or `PRESENCE_ON=1` (or with no STATS namespace, i.e. locally); the page itself
+doesn't beat on id-le.com until `PRESENCE_ON_PROD` in demo/idle-presence.js is switched on.

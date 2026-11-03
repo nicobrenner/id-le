@@ -106,8 +106,8 @@ def js_syntax():
     return f"{len(files)} scripts"
 
 
-REVIEW_STUB = {"logos": {"kind": "logos", "title": "the logo", "items": ["c3-typed-dust", "c3-typed-crt", "a3-dust", "b3a-dust-crt", "b3b-crt", "scope-strike", "scope-crt", "typed-scope", "scope-meter", "scope-shockwave", "strike-purr-static", "crt-off"], "showTotals": False, "open": True},
-               "fonts": {"kind": "fonts", "title": "our fonts", "items": ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"], "showTotals": False, "open": True}}
+REVIEW_STUB = {"logos": {"kind": "logos", "title": "the logo", "items": ["c3-typed-dust", "c3-typed-crt", "a3-dust", "b3a-dust-crt", "b3b-crt", "scope-strike", "scope-crt", "typed-scope", "scope-meter", "scope-shockwave", "strike-purr-static", "crt-off"], "stage": "team", "team": "loop", "showTotals": False, "open": True},
+               "fonts": {"kind": "fonts", "title": "our fonts", "items": ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"], "stage": "team", "team": "loop", "showTotals": False, "open": True}}
 WORKER_TEST = r"""
 globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; }; globalThis.__statFlushNow = true;   // production writes a stats batch STAT_EVERY after its first report (inside that request's waitUntil); tests run timers at once
 const kv = () => { const m = new Map(), puts = []; return { m, puts, get: async k => m.get(k) ?? null, put: async (k, v) => { puts.push(k); m.set(k, v); } }; };
@@ -202,23 +202,61 @@ out.rate_61st = last;
   const g2 = await (await go('/lab/gift/' + id)).json();
   out.gift = { letter: g1.letter, label: JSON.stringify(g1).includes('private'), claimed0: g1.claimed, c1: c1.ok, writes: w1 - w0, c2: c2.already, claimed1: g2.claimed,
     unknown: (await go('/lab/gift/zzzzzzzzzzzzzzzzzzzzzzzz')).status, revoked: (await go('/lab/gift/revokedrevokedrevokedr')).status, bad: (await go('/lab/gift/AB')).status }; }
-// reviews (11-03): the built-in config, validation (unknown item, bad score, nothing scored), once per visitor and day, totals add up,
-// notes to the private queue only, totals shown only when the review says so, a closed review refuses, KV configs override
-{ const cfg = await (await go('/lab/review/logos')).json(), list = await (await go('/lab/reviews')).json();
-  const bad1 = (await post('/lab/review/logos', { scores: { 'nope': 3 } }, '7.7.7.1')).status, bad2 = (await post('/lab/review/logos', { scores: { 'scope-strike': 6 } }, '7.7.7.1')).status;
-  const bad3 = (await post('/lab/review/logos', { scores: {} }, '7.7.7.1')).status, bad4 = (await post('/lab/review/logos', { scores: { 'scope-strike': 2.5 } }, '7.7.7.1')).status;
-  const K1 = 'abcdefghijklmnopqrstuvwxyz', K2 = 'zyxwvutsrqponmlkjihgfedcba', nokey = (await post('/lab/review/logos', { scores: { 'scope-strike': 3 } }, '7.7.7.1')).status;
-  const w0 = env.STATS.puts.length, s1 = await (await post('/lab/review/logos', { scores: { 'scope-strike': 5, 'typed-scope': 4 }, notes: { 'typed-scope': 'love the typing, mail me at a@b.co' }, bkey: K1 }, '7.7.7.1')).json(), w1 = env.STATS.puts.length;
-  const r2 = await post('/lab/review/logos', { scores: { 'scope-strike': 1 }, bkey: K1 }, '7.7.7.9'), s2 = await r2.json(), w2 = env.STATS.puts.length;
-  const s3 = await (await post('/lab/review/logos', { scores: { 'scope-strike': 3 }, bkey: K2 }, '7.7.7.1')).json(), w3 = env.STATS.puts.length;
+// presence (11-03): beats from fixed lists only, held in memory (no KV write), dropped 60 s after the last beat, "bye" removes at once;
+// the creator's view needs the key (404 otherwise); production (no IDLE_ENV, with STATS) accepts beats and drops them
+{ const M = await import(process.argv[2]); const P = {};
+  const id1 = 'a1b2c3d4e5f60718', id2 = '0011223344556677', puts0 = env.STATS.puts.length + env.WORLDS.puts.length;
+  const beat = (b, ip = '4.4.4.4') => go('/lab/here', { method: 'POST', body: JSON.stringify(b) }, ip);
+  P.prod = (await beat({ v: 1, id: id1, dev: 'desktop', mode: 'world' })).status;
+  env.IDLE_ENV = 'staging'; env.LIVE_KEY = 'k'.repeat(40);
+  const live = async (k) => go('/lab/live', k === undefined ? {} : { headers: { 'CF-Connecting-IP': '4.4.4.4', Authorization: 'Bearer ' + k } });
+  P.view_before_prod_beat = (await (await live('k'.repeat(40))).json()).online;
+  P.b1 = await (await beat({ v: 1, id: id1, dev: 'phone', mode: 'story', arm: 'story', step: 'words', ep: 0, p: ['operator', 'evil', 'card', 'operator'], cr: '0-12', t: 42.4, back: 1, text: 'hello world', name: 'Doc' })).json();
+  P.b2 = await (await beat({ v: 1, id: id2, dev: 'toaster', mode: 'hack', step: 'words', ep: 3, p: 'music', cr: 'lots', t: -5 })).json();
+  P.bad = await (await beat({ v: 1, id: 'not-hex' })).json();
+  P.big = (await go('/lab/here', { method: 'POST', body: 'x'.repeat(700) })).status;
+  P.nokey = (await live()).status; P.wrong = (await live('wrong')).status; P.short = (env.LIVE_KEY = 'short', (await live('short')).status); env.LIVE_KEY = 'k'.repeat(40);
+  const v = await (await live('k'.repeat(40))).json(); P.online = v.online;
+  P.p1 = v.players.find(x => x.a === id1.slice(0, 6)); P.p2 = v.players.find(x => x.a === id2.slice(0, 6)); P.tot = v.tot; P.hist = v.hist.length ? v.hist[v.hist.length - 1] : null;
+  P.full_id = JSON.stringify(v).includes(id1); P.leak = /hello|Doc|4\.4\.4\.4/.test(JSON.stringify(v));
+  await beat({ v: 1, id: id2, bye: 1 }); P.after_bye = (await (await live('k'.repeat(40))).json()).online;
+  P.kv_writes = env.STATS.puts.length + env.WORLDS.puts.length - puts0;
+  let last = 0; for (let i = 0; i < 31; i++) last = (await beat({ v: 1, id: id1, mode: 'world' }, '3.3.3.3')).status; P.rate_31st = last;
+  // expiry, on a table with its own clock
+  let t = 1e12; const T = new M.PresenceTable(() => t); T.beat({ v: 1, id: id1, mode: 'world' }, 'US'); T.beat({ v: 1, id: id2, mode: 'free' }, 'DE');
+  t += 40e3; T.beat({ v: 1, id: id1, mode: 'world' }, 'US'); t += 25e3; const e = T.view();
+  P.expiry = { online: e.online, left: e.hist.reduce((a, h) => a + h.left, 0), arr: e.hist.reduce((a, h) => a + h.arr, 0) };
+  // the Durable Object class answers the same beat and view
+  const D = new M.Presence({}, {}); const r1 = await (await D.fetch(new Request('https://presence/beat', { method: 'POST', body: JSON.stringify({ v: 1, id: id1, mode: 'ready' }), headers: { 'X-Country': 'CL' } }))).json();
+  const r2 = await (await D.fetch(new Request('https://presence/view'))).json(); P.do = { ok: r1.ok, online: r2.online, cc: r2.players[0] && r2.players[0].cc, mode: r2.players[0] && r2.players[0].mode };
+  delete env.IDLE_ENV; delete env.LIVE_KEY; out.presence = P; }
+// reviews (11-03, v2): team stage (403 before joining), join once, per-item and per-pair dedupe by browser key (nothing new → 409, no
+// writes), notes private, team contributions counted, the order hint, totals with like-rate and Bradley-Terry only when shown, closed → 410
+{ const K1 = 'abcdefghijklmnopqrstuvwxyz', K2 = 'zyxwvutsrqponmlkjihgfedcba', P = (b, ip) => post('/lab/review/logos', b, ip || '7.7.7.1');
+  const cfg = await (await go('/lab/review/logos')).json(), list = await (await go('/lab/reviews')).json();
+  const bad = [(await P({ scores: { nope: 3 }, bkey: K1 })).status, (await P({ scores: { 'a3-dust': 6 }, bkey: K1 })).status, (await P({ scores: {}, bkey: K1 })).status, (await P({ scores: { 'a3-dust': 2.5 }, bkey: K1 })).status,
+    (await P({ pairs: [['a3-dust', 'a3-dust']], bkey: K1 })).status, (await P({ scores: { 'a3-dust': 3 } })).status];
+  const notMember = (await P({ scores: { 'a3-dust': 3 }, bkey: K1 })).status;
+  const j1 = await (await post('/lab/team/loop/join', { bkey: K1 })).json(), j1b = await (await post('/lab/team/loop/join', { bkey: K1 })).json(), badTeam = (await post('/lab/team/vikings/join', { bkey: K1 })).status;
+  const w0 = env.STATS.puts.length, s1 = await (await P({ scores: { 'c3-typed-dust': 5, 'c3-typed-crt': 3 }, notes: { 'c3-typed-crt': 'love the typing, mail me at a@b.co' }, bkey: K1 })).json(), w1 = env.STATS.puts.length;
+  const r2 = await P({ scores: { 'c3-typed-dust': 1 }, bkey: K1 }), w2 = env.STATS.puts.length;
+  const s3 = await (await P({ scores: { 'c3-typed-dust': 1, 'a3-dust': 1 }, pairs: [['c3-typed-dust', 'c3-typed-crt']], bkey: K1 })).json();
+  const r4 = (await P({ pairs: [['c3-typed-crt', 'c3-typed-dust']], bkey: K1 })).status;
+  await post('/lab/team/loop/join', { bkey: K2 }); const s5 = await (await P({ scores: { 'c3-typed-dust': 3 }, pairs: [['c3-typed-dust', 'c3-typed-crt']], bkey: K2 }, '7.7.7.2')).json();
+  const me = await (await post('/lab/team/loop/me', { bkey: K1 })).json(), size = await (await go('/lab/team/loop')).json();
   const agg = JSON.parse(env.STATS.m.get('review:logos:agg')), fb = [...env.STATS.m.entries()].filter(([k, v]) => k.startsWith('fb:') && JSON.parse(v).kind === 'review').map(([k, v]) => JSON.parse(v));
+  const order = (await (await go('/lab/review/logos')).json()).order;
   env.STATS.m.set('review:closed1', JSON.stringify({ kind: 'fonts', title: 'old', items: ['f1'], open: false }));
-  env.STATS.m.set('review:tot1', JSON.stringify({ kind: 'fonts', title: 'shown', items: ['f1', 'f2'], showTotals: true }));
-  const closed = (await post('/lab/review/closed1', { scores: { f1: 3 }, bkey: K1 }, '7.7.7.3')).status, t1 = await (await post('/lab/review/tot1', { scores: { f1: 4 }, bkey: K1 }, '7.7.7.3')).json();
-  out.review = { kind: cfg.kind, items: cfg.items.length, totals0: 'totals' in cfg, listed: list.reviews.map(r => r.rid).sort().join(','), bad: [bad1, bad2, bad3, bad4],
-    nokey, s1: s1.ok === true && !s1.totals, writes1: w1 - w0, s2: r2.status === 409 && !!s2.already, writes2: w2 - w1, s3: s3.ok === true, writes3: w3 - w2,
-    rawkey: [...env.STATS.m.values()].some(v => v.includes(K1)), hashes: JSON.parse(env.STATS.m.get('review:logos:agg')).bk.length, sends: agg.sends, strike: agg.items['scope-strike'], typed: agg.items['typed-scope'].sum,
-    notes: fb.length, scrubbed: fb.length === 1 && !JSON.stringify(fb[0]).includes('a@b.co') && fb[0].rid === 'logos', closed, shown: t1.totals && t1.totals.f1.avg, unknown: (await go('/lab/review/nope')).status }; }
+  env.STATS.m.set('review:tot1', JSON.stringify({ kind: 'logos', title: 'shown', items: ['a', 'b', 'c'], stage: 'public', showTotals: true }));
+  const closed = (await post('/lab/review/closed1', { scores: { f1: 3 }, bkey: K1 }, '7.7.7.3')).status;
+  const t1 = await (await post('/lab/review/tot1', { scores: { a: 5, b: 1 }, pairs: [['a', 'b'], ['a', 'c']], bkey: K2 }, '7.7.7.3')).json();   // public: no team needed
+  env.STATS.m.set('review:old1', JSON.stringify({ kind: 'fonts', title: 'v1', items: ['f1', 'f2'] })); env.STATS.m.set('review:old1:agg', JSON.stringify({ sends: 1, items: { f1: { n: 1, sum: 4, s: [0, 0, 0, 0, 1, 0] } }, bk: [await (async () => { const b = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(K1 + '|id-le review bkey v1'))); return Array.from(b.slice(0, 16), x => x.toString(16).padStart(2, '0')).join(''); })()] }));
+  const v1again = (await post('/lab/review/old1', { scores: { f2: 3 }, bkey: K1 }, '7.7.7.4')).status, v1other = (await post('/lab/review/old1', { scores: { f2: 3 }, bkey: K2 }, '7.7.7.4')).status;
+  out.review = { kind: cfg.kind, stage: cfg.stage, team: cfg.team, items: cfg.items.length, totals0: 'totals' in cfg, order0: cfg.order['a3-dust'].n, listed: list.reviews.map(r => r.rid).sort().join(','), bad, notMember,
+    j1: j1.ok === true && j1.n === 1, j1b: !!j1b.already, badTeam, s1: s1.added, writes1: w1 - w0, r2: r2.status, writes2: w2 - w1, s3: [s3.added, s3.pairs, s3.skipped], r4, s5: [s5.added, s5.pairs],
+    sends: agg.sends, dust: agg.items['c3-typed-dust'], pw: agg.pw, me: [me.member, me.reviews], size: size.n, notes: fb.length, scrubbed: fb.length === 1 && !JSON.stringify(fb[0]).includes('a@b.co'),
+    rawkey: [...env.STATS.m.values()].some(v => v.includes(K1)), order: order['c3-typed-dust'], closed, bt: t1.totals && t1.totals.a.bt > t1.totals.b.bt && t1.totals.a.like === 1 && t1.totals.b.like === 0, v1again, v1other,
+    unknown: (await go('/lab/review/nope')).status }; }
 console.log(JSON.stringify(out));
 """
 
@@ -329,12 +367,28 @@ def worker_unit():
          f"Operator signals {x.get('op')} (only fixed keys and small positive integers)")
     egx = {k: v for k, v in o["eg"].items() if v and (k.startswith("reels") or k.startswith("errs"))}
     need(egx == {"reels:1-5": 1, "errs:1": 1}, f"v2 buckets {egx}")
+    pr = o["presence"]
+    need(pr["prod"] == 204 and pr["view_before_prod_beat"] == 0, f"production must accept and drop beats: {pr['prod']}, then online {pr['view_before_prod_beat']}")
+    need(pr["b1"].get("ok") and pr["b2"].get("ok") and pr["bad"].get("ok") is False and pr["big"] == 413, f"beats: {pr['b1']} {pr['b2']} bad id {pr['bad']} too big {pr['big']}")
+    need(pr["nokey"] == 404 and pr["wrong"] == 404 and pr["short"] == 404, f"the live view without the right key must be 404: none {pr['nokey']}, wrong {pr['wrong']}, a short server key {pr['short']}")
+    p1, p2 = pr["p1"] or {}, pr["p2"] or {}
+    need(pr["online"] == 2 and p1.get("mode") == "story" and p1.get("step") == "words" and p1.get("ep") == 0 and p1.get("p") == ["operator", "card"] and p1.get("cr") == "0-12" and p1.get("t") == 42 and p1.get("back") == 1 and p1.get("dev") == "phone", f"story beat: {p1}")
+    need(p2.get("mode") == "world" and p2.get("dev") == "desktop" and p2.get("step") is None and p2.get("ep") is None and p2.get("p") == [] and p2.get("cr") is None and p2.get("t") == 0, f"junk must fall back or drop: {p2}")
+    need(set(p1) <= {"a", "since", "t", "cc", "dev", "mode", "arm", "step", "ep", "p", "cr", "back"} and not pr["full_id"] and not pr["leak"], f"the view must hold only coarse fields (no full id, text or address): {sorted(p1)}, id {pr['full_id']}, leak {pr['leak']}")
+    need(pr["tot"]["mode"] == {"story": 1, "world": 1} and pr["tot"]["panel"] == {"operator": 1, "card": 1} and pr["tot"]["step"] == {"words": 1}, f"totals {pr['tot']}")
+    need(pr["hist"] and pr["hist"]["arr"] >= 2, f"arrivals this minute: {pr['hist']}")
+    need(pr["after_bye"] == 1 and pr["kv_writes"] == 0, f"bye must remove at once ({pr['after_bye']} left) and presence never writes KV ({pr['kv_writes']} writes)")
+    need(pr["rate_31st"] == 429, f"31st beat in a minute from one address: {pr['rate_31st']}")
+    need(pr["expiry"] == {"online": 1, "left": 1, "arr": 2}, f"expiry 60 s after the last beat: {pr['expiry']}")
+    need(pr["do"] == {"ok": True, "online": 1, "cc": "CL", "mode": "ready"}, f"the Durable Object: {pr['do']}")
     gf = o["gift"]
     need(gf == {"letter": "Hi Sam!", "label": False, "claimed0": False, "c1": True, "writes": 1, "c2": True, "claimed1": True, "unknown": 404, "revoked": 404, "bad": 404}, f"gift links: {gf}")
     rv = o["review"]
-    need(rv == {"kind": "logos", "items": 12, "totals0": False, "listed": "fonts,logos", "bad": [400, 400, 400, 400], "nokey": 400, "s1": True, "writes1": 3, "s2": True, "writes2": 0, "s3": True, "writes3": 2, "rawkey": False, "hashes": 2,
-                "sends": 2, "strike": {"n": 2, "sum": 8, "s": [0, 0, 0, 1, 0, 1]}, "typed": 4, "notes": 1, "scrubbed": True, "closed": 410, "shown": 4, "unknown": 404}, f"reviews: {rv}")
-    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links, reviews"
+    need(rv == {"kind": "logos", "stage": "team", "team": "loop", "items": 12, "totals0": False, "order0": 0, "listed": "fonts,logos", "bad": [400, 400, 400, 400, 400, 400], "notMember": 403,
+                "j1": True, "j1b": True, "badTeam": 404, "s1": 2, "writes1": 4, "r2": 409, "writes2": 0, "s3": [1, 1, 1], "r4": 409, "s5": [1, 1],
+                "sends": 2, "dust": {"n": 2, "sum": 8, "s": [0, 0, 0, 1, 0, 1]}, "pw": {"c3-typed-dust>c3-typed-crt": 2}, "me": [True, 2], "size": 2, "notes": 1, "scrubbed": True,
+                "rawkey": False, "order": {"n": 2, "lr": 1}, "closed": 410, "bt": True, "v1again": 409, "v1other": 200, "unknown": 404}, f"reviews: {rv}")
+    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links, reviews, presence"
 
 
 def local_server_unit():   # server.py, the local server anyone who clones the repo runs: no network (a stub site and a stub Jeffy on localhost)
@@ -471,7 +525,10 @@ class Page:
         self.stats = stats_sink if stats_sink is not None else []
         self.fb = []
         self.gifts = {}
+        self.team_keys, self.rv_order = set(), {}   # ⭐ reviews: who joined the team (by browser key), the per-item counts the server would return
         self.root = None   # set: the build is served from this folder at self.base (a production hostname, t_prod_gates)
+        self.here = []      # presence beats (/lab/here) this page sent
+        self.helper = None  # set: /lab/here and /lab/live go to this local helper (node helper/dev_server.mjs), t_presence
         ctx.route("**/*", self._route)
 
     def _route(self, route):
@@ -480,6 +537,15 @@ class Page:
             path = u[len(self.base):].split("?")[0]
             if path.startswith("/jeffy/capabilities"): return route.fulfill(status=200, content_type="application/json", body=json.dumps(CAPS))
             if path.startswith("/jeffy/"): return route.fulfill(status=503, content_type="application/json", body='{"error":"busy"}')
+            if path in ("/lab/here", "/lab/live"):
+                if path == "/lab/here": self.here.append(route.request.post_data or "")
+                if not self.helper: return route.fulfill(status=204, body="")
+                import urllib.request, urllib.error
+                rq = urllib.request.Request(self.helper + path, data=(route.request.post_data or "").encode() if route.request.method == "POST" else None, method=route.request.method,
+                                            headers={k: v for k, v in route.request.headers.items() if k.lower() in ("authorization", "content-type")} | {"X-Country": "CL", "CF-Connecting-IP": "203.0.113.5"})
+                try:
+                    with urllib.request.urlopen(rq, timeout=10) as r: return route.fulfill(status=r.status, content_type="application/json", body=r.read())
+                except urllib.error.HTTPError as e: return route.fulfill(status=e.code, content_type="application/json", body=e.read())
             if path in ("/lab/stats", "/lab/p"): self.stats.append(route.request.post_data or ""); return route.fulfill(status=204, body="")
             if path == "/lab/notices": return route.fulfill(status=200, content_type="application/json", body="[]")
             if path.startswith("/worlds/state"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"me": {"name": "", "links": [], "requests": [], "inbox": []}, "peers": {}}))
@@ -492,14 +558,21 @@ class Page:
                     was = g["claimed"]; g["claimed"] = True; g["claims"] = g.get("claims", 0) + 1
                     return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": False, "already": True} if was else {"ok": True}))
                 return route.fulfill(status=200, content_type="application/json", body=json.dumps({"letter": g["letter"], "claimed": g["claimed"]}))
-            if path == "/lab/reviews": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"reviews": [{"rid": "logos", "kind": "logos", "title": "the logo", "n": 12}, {"rid": "fonts", "kind": "fonts", "title": "our fonts", "n": 8}]}))
+            if path == "/lab/reviews": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"reviews": [{"rid": "logos", "kind": "logos", "title": "the logo", "n": 12, "stage": "team", "team": "loop"}, {"rid": "fonts", "kind": "fonts", "title": "our fonts", "n": 8, "stage": "team", "team": "loop"}]}))
+            if path.startswith("/lab/team/"):
+                body = json.loads(route.request.post_data or "{}") if route.request.method == "POST" else {}
+                if path.endswith("/join"): self.fb.append(("join", route.request.post_data or "")); self.team_keys.add(body.get("bkey")); return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "n": len(self.team_keys)}))
+                if path.endswith("/me"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"member": body.get("bkey") in self.team_keys, "reviews": 0}))
+                return route.fulfill(status=200, content_type="application/json", body=json.dumps({"n": len(self.team_keys)}))
             if path.startswith("/lab/review/"):
                 rid = path[len("/lab/review/"):]; cfg = REVIEW_STUB.get(rid)
                 if not cfg: return route.fulfill(status=404, content_type="application/json", body='{"error":"no such review"}')
                 if route.request.method == "POST":
-                    self.fb.append(("review:" + rid, route.request.post_data or "")); n = len([k for k, _ in self.fb if k == "review:" + rid])
-                    return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "already": True} if n > 1 else {"ok": True}))
-                return route.fulfill(status=200, content_type="application/json", body=json.dumps({"rid": rid, **cfg}))
+                    body = json.loads(route.request.post_data or "{}")
+                    if cfg.get("stage") == "team" and body.get("bkey") not in self.team_keys: return route.fulfill(status=403, content_type="application/json", body=json.dumps({"error": "join first", "team": "loop"}))
+                    self.fb.append(("review:" + rid, route.request.post_data or ""))
+                    return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "added": len(body.get("scores") or {}), "pairs": len(body.get("pairs") or [])}))
+                return route.fulfill(status=200, content_type="application/json", body=json.dumps({"rid": rid, **cfg, "order": self.rv_order}))
             if path == "/lab/oracle": self.fb.append(("oracle", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"id":"t1"}')
             if path == "/lab/vote": self.fb.append(("vote", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"votes":4}')
             if path == "/lab/roadmap": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"items": [{"id": "mods", "title": "Mods", "line": "share rules and looks", "status": "planned"}, {"id": "bodies", "title": "New bodies", "line": "", "status": "later"}], "votes": {"mods": 3}, "url": "https://github.com/nicobrenner/id-le/issues/20"}))
@@ -1831,26 +1904,27 @@ def t_logo_solo(P):
 
 
 def t_story_ring(P):
-    """Story v12, the ringing at the landing (Nico: "go up in intensity very quickly, then down, then linger for a bit, slowly reaching zero by the
-    time the black hole starts approaching"): peak within 0.3 s, down to ~35-40% by 0.6 s, lingering, exactly 0 at its end; re-aimed mid-way it
-    still ends at 0 on the new time; the untouched landing aims it at the line where the hole starts moving."""
+    """Story v13, the ringing at the landing (Nico: "the ringing lasts too long, it should go rather quickly, definitely 1 or 2 messages before the
+    Doc says 'why is there no sound?'"; v12: "go up in intensity very quickly, then down, then linger"): peak within 0.3 s (at least 0.6× v12's),
+    down to ~35-40% by 0.75 s, a short linger, exactly 0 at the start of the line two before "and why is there no sound?!", silent through the
+    line before it and through it (untouched timing); re-aimed mid-way it still ends at 0 on the new time."""
     pg = P.open("/arena.html?test&intro=0"); booted(pg)
-    r = pg.evaluate("""async () => { const G = window.__genesis, end0 = G.untilApproach(-1, 3.0), sr = 44100;
-      const env = async (end, re) => { const oc = new OfflineAudioContext(1, Math.ceil(sr * (Math.max(end, re ? re[1] : 0) + 1)), sr), c = G.ringSound(oc, oc.destination, 0.05, end);
+    r = pg.evaluate("""async () => { const G = window.__genesis, end0 = G.untilLine(-1, 3.0), q0 = G.untilLine(-1, 3.0, G.silentLine - 1), q1 = G.untilLine(-1, 3.0, G.silentLine + 1), sr = 44100;
+      const env = async (end, len, re) => { const oc = new OfflineAudioContext(1, Math.ceil(sr * len), sr), c = G.ringSound(oc, oc.destination, 0.05, end);
         if (re) oc.suspend(re[0]).then(() => { c.retarget(re[1]); oc.resume(); }); const d = (await oc.startRendering()).getChannelData(0), w = 441, a0 = [];
         for (let i = 0; i + w <= d.length; i += w) { let p = 0; for (let j = i; j < i + w; j++) p = Math.max(p, Math.abs(d[j])); a0.push(p); }
         const a = a0.map((_, i) => Math.max(...a0.slice(Math.max(0, i - 10), i + 11)));   // the two tones beat 5 times a second: the envelope is the max over one beat
         return { a, a0, endAt: c.endAt }; };
-      const one = await env(0.05 + end0), two = await env(8, [2.0, 4.5]), pk = Math.max(...one.a), at = i => one.a[Math.round(i * 100)];
-      const peakT = one.a.indexOf(pk) / 100;
-      return { end0, pk, peakT, drop: at(0.75) / pk, linger: at(2.0) / pk, atEnd: Math.max(...one.a0.slice(Math.round((0.05 + end0) * 100), Math.round((0.05 + end0) * 100) + 3)),
-        reEnd: Math.max(...two.a0.slice(455, 460)), reMid: two.a[300] / Math.max(...two.a), dark: G.darkLines[G.approach] }; }""")
-    need(r["dark"] == "wait, what... why is that black hole moving...", f"the approach line: {r['dark']}")
-    need(r["peakT"] <= 0.35 and r["pk"] < 0.2, f"the ringing's attack/peak: {r}")
-    need(0.3 <= r["drop"] <= 0.48 and 0.15 <= r["linger"] <= 0.5, f"the ringing's drop/linger: {r}")
-    need(r["atEnd"] <= 0.001 and r["reEnd"] <= 0.001, f"the ringing doesn't reach 0 at the approach: {r}")
+      const one = await env(0.05 + end0, 0.05 + q1 + 0.5), two = await env(8, 9, [2.0, 3.5]), pk = Math.max(...one.a), at = t => one.a[Math.round(t * 100)];
+      const win = (x, t0, t1) => Math.max(...x.slice(Math.round(t0 * 100), Math.round(t1 * 100)));
+      return { end0, q0, q1, pk, peakT: one.a.indexOf(pk) / 100, drop: at(0.75) / pk, atEnd: win(one.a0, 0.05 + end0, 0.05 + end0 + 0.03), silent: win(one.a0, 0.05 + q0, 0.05 + q1),
+        reEnd: win(two.a0, 3.55, 3.6), ringLine: G.darkLines[G.ringEnd], silentLine: G.darkLines[G.silentLine], gap: G.silentLine - G.ringEnd }; }""")
+    need(r["silentLine"].startswith("and why is there no sound") and r["gap"] >= 2, f"the ringing must end two lines before 'why is there no sound': {r}")
+    need(r["peakT"] <= 0.3 and 0.127 * 0.6 <= r["pk"] < 0.2, f"the ringing's attack/peak: {r}")
+    need(0.3 <= r["drop"] <= 0.48, f"the ringing's drop: {r}")
+    need(r["atEnd"] <= 0.001 and r["silent"] <= 0.001 and r["reEnd"] <= 0.001, f"the ringing isn't 0 when it should be: {r}")
     P.clean()
-    return f"peak {r['pk']:.3f} at {r['peakT']:.2f} s, {r['drop'] * 100:.0f}% at 0.75 s, lingering {r['linger'] * 100:.0f}% at 2 s, 0 at the approach ({r['end0']:.1f} s untouched) and when re-aimed"
+    return f"peak {r['pk']:.3f} at {r['peakT']:.2f} s, {r['drop'] * 100:.0f}% at 0.75 s, 0 at {r['end0']:.1f} s (the start of '{r['ringLine'][:24]}…'), silent {r['q0']:.1f}-{r['q1']:.1f} s (the line before 'why is there no sound?!' and it), 0 when re-aimed"
 
 
 def t_story_intro(P):
@@ -1939,8 +2013,8 @@ def t_story_landing(P):
     lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 40, P=P)
     nd = pg.evaluate("() => window.__genesis.darkLines.length")   # v11: 9 lines (the two about the silence), ~29 s untouched
     need(lnd["why"] == "lines" and lnd["shown"] == nd and 14 <= lnd["after"] <= 33, f"all {nd} lines, then the Operator: {lnd}")
-    ra = pg.evaluate("() => { const l = window.__genesis.landing(); return { aim: l.ring && l.ring.aimSt, approach: l.approachSt }; }")
-    need(ra["aim"] is not None and ra["approach"] is not None and abs(ra["aim"] - ra["approach"]) < 0.2, f"the ringing must end when the hole starts moving: {ra}")
+    ra = pg.evaluate("() => { const l = window.__genesis.landing(), G = window.__genesis; return { aim: l.ring && l.ring.aimSt, end: l.ringEndSt, gap: G.silentLine - G.ringEnd }; }")
+    need(ra["aim"] is not None and ra["end"] is not None and abs(ra["aim"] - ra["end"]) < 0.2 and ra["gap"] >= 2, f"the ringing must end two lines before 'why is there no sound?!': {ra}")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark")
     son = wait_for(pg, "() => { const l = window.__genesis.landing(); return l.pings >= 2 && l.rimmed >= 1 && l; }", 15, P=P)
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
@@ -2010,13 +2084,13 @@ def t_founder(P):
     """Founder by an early world: a world, then (a launch date in the past) no offer; with the real dates the offer, Nico's letter, the
     creator (experiments, undo, the family tree, a name, a badge), release; a snapshot first, nothing lost, the badge on the card, a
     Founder can't be removed, it survives a reload and goes into snapshots, and a gift link later doesn't give a second one."""
-    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg = P.open("/arena.html?fresh=1&test&founder_test"); booted(pg)
     with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 30)
     wait_for(pg, FD_AUTOSAVED, 40, P=P); pg.close()
-    pg = P.open("/arena.html?founder&founder_before=2020-01-01&test"); booted(pg); pg.wait_for_timeout(3500)
+    pg = P.open("/arena.html?founder&founder_before=2020-01-01&test&founder_test"); booted(pg); pg.wait_for_timeout(3500)
     no = pg.evaluate("() => ({ offer: !!document.querySelector('#founderOffer'), e: window.__founder.eligible(), avail: window.__founder.available() })")
     need(not no["offer"] and not no["e"]["world"] and not no["avail"], f"a world newer than the launch is not a Founder: {no}"); pg.close()
-    pg = P.open("/arena.html?founder&test"); booted(pg)
+    pg = P.open("/arena.html?founder&test&founder_test"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderOffer')", 20, P=P)
     before = pg.evaluate("() => ({ names: window.__arena.raw().map(c => c.name), snaps: JSON.parse(localStorage.getItem('arena.snaps') || '[]').length })")
     pg.click("#founderOffer .go"); wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 5, P=P)
@@ -2039,69 +2113,149 @@ def t_founder(P):
     pg.evaluate("() => window.__genHooks.snapshot('founder test')")
     need(pg.evaluate("() => { const s = JSON.parse(localStorage.getItem('arena.snaps') || '[]').pop(); return (s.residents || []).some(r => r.genome && r.genome.founder && r.name === 'Nibbet Prime'); }"), "a new snapshot should carry the Founder")
     wait_for(pg, FD_IN_SAVE, 30, P=P); pg.close()
-    pg = P.open("/arena.html?gift=founder&test"); booted(pg); pg.wait_for_timeout(3500)
+    pg = P.open("/arena.html?gift=founder&test&founder_test"); booted(pg); pg.wait_for_timeout(3500)
     again = pg.evaluate(FD_ONE); dup = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), lab: !!document.querySelector('#founderLab'), avail: window.__founder.available(), n: window.__arena.raw().filter(c => c.g.founder).length, toast: document.body.innerText.includes('You already have your Founder') })")
     need(again and again["name"] == "Nibbet Prime" and again["badge"] == "seed", f"the Founder survives a reload: {again}")
     need(not dup["letter"] and not dup["lab"] and not dup["avail"] and dup["n"] == 1 and dup["toast"], f"one Founder per browser, even with a gift link: {dup}")
     P.clean()
     return f"no offer for a later world; offer → letter (draft, signed) → 3 experiments, undo, {trees} generations → 'Nibbet Prime' with the seed badge; snapshot first, +1 creature, card mark, can't be removed, first in the sidebar, kept through a reload and in snapshots; a second gift link: refused"
 
-def t_reviews(P):
-    """⭐ reviews (idle-reviews.js): ?review=logos opens the lightbox with Nico's note and the five logos; ▶ plays one (drawn from the audio
-    clock, the game hushed meanwhile, still playing after a score); scores and a note are sent once (to the stub); reopened it shows them
-    sent and can't send again; the 🧪 reviewer row in ⚙; 🧪's ⭐ reviews tab lists both and opens the fonts review; closing un-hushes."""
-    pg = P.open("/arena.html?review=logos&test"); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; }")
-    wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 60, P=P)
-    r0 = pg.evaluate("() => ({ note: document.querySelector('#review .note').innerText, logos: !!window.IdleLogos, hushed: window.__audio.hushed(), kind: window.__reviews.state().kind })")
-    need("Nico" in r0["note"] and r0["logos"] and r0["hushed"] and r0["kind"] == "logos", f"the logo review: {r0}")
-    pg.click("#review .card[data-item=scope-strike] .play")
-    wait_for(pg, "() => window.__reviews.state().playing", 20, P=P); pg.wait_for_timeout(1800)
-    pg.click("#review .card[data-item=scope-strike] [data-score='5']"); pg.click("#review .card[data-item=typed-scope] [data-score='4']")
-    lit = pg.evaluate("() => { const c = document.querySelector('#review .card[data-item=scope-strike] canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 64) n += d[i] + d[i + 1] + d[i + 2] > 60; return { n, connected: c.isConnected, playing: window.__reviews.state().playing }; }")
-    need(lit["n"] > 0 and lit["connected"], f"the logo didn't draw (or its canvas was replaced by a score): {lit}")
-    pg.fill("#review textarea[data-note=typed-scope]", "love the typing")
-    pg.click("#review .send")
-    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__reviews.state().sent", 15, P=P)
-    st = pg.evaluate("() => window.__reviews.state()"); need(st["sent"], f"not sent: {st} {P.fb}")
-    sent = [json.loads(b) for k, b in P.fb if k == "review:logos"]
-    bk = pg.evaluate("() => localStorage.getItem('idle.bkey')")
-    need(len(sent) == 1 and sent[0]["scores"] == {"scope-strike": 5, "typed-scope": 4} and sent[0]["notes"] == {"typed-scope": "love the typing"} and sent[0].get("bkey") == bk and re.fullmatch(r"[a-z2-7]{26}", bk or ""), f"sent: {sent} (bkey {bk})")
-    pg.evaluate("() => window.__reviews.close()"); un = pg.evaluate("() => window.__audio.hushed()")
-    need(not un, "the game stayed hushed after the review closed")
-    pg.evaluate("() => window.__reviews.open('logos')"); wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 20, P=P)
-    again = pg.evaluate("() => ({ send: !!document.querySelector('#review .send'), dis: [...document.querySelectorAll('#review [data-score]')].every(b => b.disabled), on: document.querySelectorAll('#review [data-score].on').length, first: [...document.querySelectorAll('#review .card')].slice(0, 2).map(c => c.dataset.item), groups: [...document.querySelectorAll('#review .grp')].map(g => g.textContent), sent: window.__reviews.state().sent })")
-    need(not again["send"] and again["dis"] and again["on"] == 2 and again["sent"], f"a second send must not be possible: {again}")
-    need(again["first"] == ["c3-typed-dust", "c3-typed-crt"] and len(again["groups"]) == 3 and again["groups"][0].startswith("round 3"), f"the logos grouped by round, Nico's top two first: {again}")
-    pg.evaluate("() => window.__reviews.close()")
-    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); row = pg.evaluate("() => !!document.getElementById('reviewerRow')"); pg.evaluate("() => window.__settings.close()")
-    need(row, "no 🧪 reviewer row in ⚙ after sending")
-    pg.evaluate("() => { window.__feedback.open('rev'); }"); wait_for(pg, "() => document.querySelectorAll('#oracle [data-review]').length === 2", 15, P=P)
-    pg.click("#oracle [data-review=fonts]"); wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 8", 20, P=P)
-    f = pg.evaluate("() => ({ kind: window.__reviews.state().kind, fam: getComputedStyle(document.querySelector('#review .card .sample')).fontFamily })")
-    need(f["kind"] == "fonts" and "Idle F1" in f["fam"], f"the fonts review: {f}")
+SHOTS = os.environ.get("IDLE_SHOTS")   # a folder: the reviews tests save their screenshots there (for the report)
+
+
+def _rv_page(P, q="/arena.html?test"):
+    pg = P.open(q); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); }"); return pg
+
+
+def t_reviews_invite(P):
+    """The 📟 Operator delivers Nico's message: 'I have a message from Nico:', then his lines one by one in a quoted bubble, in order;
+    [I'm in ✌️] / [not now]. 'not now' asks again once, a day later at the soonest, and never a third time. 'I'm in' joins the Founders
+    (the server gets the browser key), the rest of his lines (the draft ending last), the pledge, then 'check them out ›' opens the review."""
+    pg = _rv_page(P)
+    T = pg.evaluate("() => window.__reviews.text")
+    pg.evaluate("() => { window.__reviews.invite('logos'); }"); wait_for(pg, "() => document.querySelectorAll('.rvbtns button').length === 2", 30, P=P)
+    seq = pg.evaluate("() => { const rows = [...document.querySelectorAll('.rvop,.rvnico')]; return { kinds: rows.map(r => r.classList.contains('rvop') ? 'op:' + r.textContent : 'nico'), lines: [...document.querySelectorAll('.rvnico span')].map(s => s.textContent), open: document.getElementById('lab').classList.contains('open'), btns: [...document.querySelectorAll('.rvbtns button')].map(b => b.textContent) }; }")
+    need(seq["kinds"][-2:] == ["op:I have a message from Nico:", "nico"] and seq["lines"] == T["hello"][0] and seq["btns"] == [T["yes"], T["no"]] and seq["open"], f"the delivery: {seq}")
+    pg.click(".rvbtns button.alt"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.includes('another time'))", 10, P=P)
+    inv1 = pg.evaluate("() => JSON.parse(localStorage.getItem('idle.invite'))")
+    need(inv1["answer"] == "no" and inv1["asks"] == 1, f"not now: {inv1}")
+    n = lambda: pg.evaluate("() => document.querySelectorAll('.rvnico').length")
+    pg.evaluate("() => window.__reviews.test.auto(true, 200000)"); pg.wait_for_timeout(6500)
+    need(n() == 1, "asked again within a day")
+    pg.evaluate("() => { window.__reviews.test.shift(25 * 3600e3); window.__reviews.test.auto(true, 200000); }")
+    wait_for(pg, "() => document.querySelectorAll('.rvnico').length === 2 && document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 20, P=P)
+    pg.click(".rvbtns button.alt:not([disabled])"); pg.wait_for_timeout(300)
+    pg.evaluate("() => { window.__reviews.test.shift(25 * 3600e3); window.__reviews.test.auto(true, 200000); }"); pg.wait_for_timeout(6500)
+    need(n() == 2, f"asked a third time ({n()} bubbles)")
+    # I'm in
+    pg.evaluate("() => { localStorage.removeItem('idle.invite'); window.__reviews.invite('logos'); }"); wait_for(pg, "() => document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 30, P=P)
+    pg.click(".rvbtns button:not(.alt):not([disabled])"); wait_for(pg, "() => [...document.querySelectorAll('.rvbtns button:not([disabled])')].some(b => b.textContent.includes('check them out'))", 30, P=P)
+    last = pg.evaluate("() => { const b = [...document.querySelectorAll('.rvnico')].pop(); return { paras: [...b.querySelectorAll('p')].map(p => [...p.querySelectorAll('span')].map(s => s.textContent)), pledge: !!document.querySelector('.rvpledge'), team: window.__reviews.team.status() }; }")
+    need(last["paras"] == T["hello"] + T["after"] and last["paras"][-1][-1].startswith("to be the logo that opens the story") and last["pledge"], f"after I'm in: {last['paras']}")
+    need(last["team"]["state"] == "vesting" and last["team"]["label"] == "in the loop (vesting)", f"team status: {last['team']}")
+    joins = [json.loads(b) for k, b in P.fb if k == "join"]; bk = pg.evaluate("() => localStorage.getItem('idle.bkey')")
+    need(len(joins) == 1 and joins[0]["bkey"] == bk, f"the join: {joins}")
+    pg.click(".rvbtns button:not([disabled])"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 30, P=P)
     pg.close(); P.clean()
-    return f"?review=logos: Nico's note, 12 logos in 3 rounds (C3 pair first), ▶ drew {lit['n']} lit samples with the game hushed, scored 2 + a note, sent once, reopened sent (no send), ⚙ reviewer row, 🧪 ⭐ tab → fonts (8, Idle F1…)"
+    return f"Operator → Nico's {len(T['hello'][0])} lines in order, [I'm in]/[not now]; not now → asked once more a day later, never a third time; I'm in → joined (key sent), {sum(len(p) for p in T['after'])} more lines (draft ending), pledge, in the loop (vesting), the review opens"
+
+
+def t_reviews(P):
+    """The swipe deck: least-rated items first; the logo lab's card (frame, waveform strip) is ≥ 70% of the lightbox; space plays it;
+    ←/→/↑ and a mouse drag judge (✕ 1, ✓ 3, ★ 5); after 6 'keep going / done'; done → 'which one?' between the two favourites → the
+    pair recorded; everything sent in batches with the key; the thanks shows the team status; the 🧪 tab and ⚙ row."""
+    P.rv_order = {i: {"n": 9, "lr": 0.9} for i in ["c3-typed-dust", "c3-typed-crt", "a3-dust", "b3a-dust-crt", "scope-strike", "scope-crt", "typed-scope", "scope-meter", "scope-shockwave", "strike-purr-static", "crt-off"]}
+    P.rv_order["b3b-crt"] = {"n": 0, "lr": None}; P.rv_order["crt-off"] = {"n": 30, "lr": 1.0}
+    pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()"); pg.wait_for_timeout(300)
+    pg.evaluate("() => window.__reviews.open('logos')"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 40, P=P); pg.wait_for_timeout(600)
+    st = pg.evaluate("() => window.__reviews.state()")
+    need(st["queue"][0] == "b3b-crt" and st["queue"][-1] == "crt-off" and len(st["queue"]) == 12, f"order: {st['queue']}")
+    size = pg.evaluate("() => { const b = document.querySelector('#review .box').getBoundingClientRect(), c = document.querySelector('#review .deck .card').getBoundingClientRect(), v = document.querySelector('#review canvas.cv').getBoundingClientRect(); return { area: (c.width * c.height) / (b.width * b.height), cw: c.width / b.width, canvas: v.width, strip: !!document.querySelector('#review canvas.st'), leg: !!document.querySelector('#review .leg') }; }")
+    need(size["area"] >= 0.7 and size["strip"] and size["leg"], f"the card at 1280: {size}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "reviews-desktop.png"))
+    pg.keyboard.press(" "); wait_for(pg, "() => window.__reviews.state().playing", 10, P=P); pg.wait_for_timeout(1500)
+    lit = pg.evaluate("() => { const c = document.querySelector('#review canvas.cv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 64) n += d[i] + d[i + 1] + d[i + 2] > 60; return n; }")
+    need(lit > 0, "the logo didn't draw")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "reviews-desktop-playing.png"))
+    seen = []
+    for key in ["ArrowRight", "ArrowLeft", "ArrowUp"]:
+        cur = pg.evaluate("() => window.__reviews.state().current"); seen.append(cur); pg.keyboard.press(key); pg.wait_for_timeout(450)
+    # a drag to the right (✓) and one up (★)
+    for dx, dy in ((340, 0), (0, -260)):
+        cur = pg.evaluate("() => window.__reviews.state().current"); seen.append(cur)
+        b = pg.evaluate("() => { const r = document.querySelector('#review .deck .card').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }")
+        pg.mouse.move(b[0], b[1]); pg.mouse.down(); pg.mouse.move(b[0] + dx / 2, b[1] + dy / 2, steps=5); pg.mouse.move(b[0] + dx, b[1] + dy, steps=5); pg.mouse.up(); pg.wait_for_timeout(450)
+    cur = pg.evaluate("() => window.__reviews.state().current"); seen.append(cur)
+    pg.click("#review .notebar button"); pg.fill("#review textarea[data-note]", "the typing is great"); pg.click("#review .acts [data-act=like]"); pg.wait_for_timeout(450)
+    st = pg.evaluate("() => window.__reviews.state()")
+    need(st["rated"] == {seen[0]: 3, seen[1]: 1, seen[2]: 5, seen[3]: 3, seen[4]: 5, seen[5]: 3} and st["view"] == "check", f"swipes: {st['rated']} ({seen}) view {st['view']}")
+    pg.click("#review [data-a=done]"); wait_for(pg, "() => window.__reviews.state().view === 'h2h'", 10, P=P)
+    pair = pg.evaluate("() => window.__reviews.state().pair"); need(sorted(pair) == sorted([seen[2], seen[4]]), f"which one? should be the two ★: {pair}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "reviews-which-one.png"))
+    pg.click(f"#review .h2h [data-pick='{pair[1]}']"); wait_for(pg, "() => window.__reviews.state().view === 'end'", 10, P=P); pg.wait_for_timeout(500)
+    end = pg.evaluate("() => ({ txt: document.querySelector('#review .panel').innerText, sent: window.__reviews.sent('logos'), pairs: window.__reviews.state().pairs })")
+    sent = [json.loads(b) for k, b in P.fb if k == "review:logos"]; scores = {}; pairs = []; notes = {}
+    for x in sent: scores.update(x["scores"]); pairs += x.get("pairs", []); notes.update(x.get("notes", {}))
+    need(scores == st["rated"] and pairs == [[pair[1], pair[0]]] and notes == {seen[5]: "the typing is great"} and all(x["bkey"] == sent[0]["bkey"] for x in sent), f"sent: {sent}")
+    need("in the loop (vesting)" in end["txt"] and end["sent"], f"the end: {end}")
+    pg.evaluate("() => window.__reviews.close()"); pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300)
+    row = pg.evaluate("() => (document.getElementById('reviewerRow') || {}).innerText || ''"); pg.evaluate("() => window.__settings.close()")
+    need("in the loop (vesting)" in row, f"⚙ row: {row!r}")
+    pg.evaluate("() => { window.__feedback.open('rev'); }"); wait_for(pg, "() => document.querySelectorAll('#oracle [data-review]').length === 2", 15, P=P)
+    pg.click("#oracle [data-review=fonts]"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card' && window.__reviews.state().kind === 'fonts'", 20, P=P)
+    pg.close(); P.clean()
+    return f"order b3b-crt (0 ratings) first, crt-off (30) last; card {size['area'] * 100:.0f}% of the lightbox; ▶ drew; → ← ↑ + drag → + drag ↑ + note → 1/3/5 scores; done → which one? (the two ★) → pair; {len(sent)} batches with the key; ⚙ in the loop (vesting); 🧪 → fonts deck"
+
+
+def t_reviews_cliff(P):
+    """Vesting with a cliff: 'in the loop (vesting)' until 14 days and 2 reviews (fake clock), then 'in the loop ✓' for good (still after
+    the founding period; no Founder gift: it's hidden); a member who doesn't reach the cliff before the founding period ends is 'lapsed'."""
+    pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()")
+    s0 = pg.evaluate("() => window.__reviews.team.status()")
+    pg.evaluate("() => { const t = window.__reviews.test; t.done('logos'); t.done('fonts'); }"); s1 = pg.evaluate("() => window.__reviews.team.status()")
+    pg.evaluate("() => { window.__reviews.test.done('x3'); window.__reviews.test.shift(10 * 864e5); }"); s2 = pg.evaluate("() => window.__reviews.team.status()")
+    pg.evaluate("() => window.__reviews.test.shift(5 * 864e5)"); s3 = pg.evaluate("() => ({ s: window.__reviews.team.status(), off: window.__founder.off === true, avail: window.__founder.available() })")
+    pg.evaluate("() => window.__reviews.test.shift(90 * 864e5)"); s4 = pg.evaluate("() => window.__reviews.team.status()")
+    need(s0["state"] == "vesting" and s1["state"] == "vesting" and s2["state"] == "vesting" and s3["s"]["state"] == "vested" and s3["s"]["label"] == "in the loop ✓" and s3["off"] and not s3["avail"] and s4["state"] == "vested",
+         f"the cliff: {s0['state']} → {s1['state']} → {s2['state']} → {s3} → {s4['state']}")
+    pg.close(); P.clean()
+    pg = _rv_page(P); pg.evaluate("() => { localStorage.removeItem('idle.team'); localStorage.removeItem('idle.reviews'); window.__reviews.join(); window.__reviews.test.shift(40 * 864e5); }"); s5 = pg.evaluate("() => ({ s: window.__reviews.team.status() })")
+    need(s5["s"]["state"] == "lapsed", f"lapsed: {s5}")
+    pg.close(); P.clean()
+    return "vesting (2 reviews at day 0, still at day 10) → in the loop ✓ at day 15 (no Founder gift) → still ✓ after the founding period; no cliff before it ends → lapsed"
+
+
+def t_founder_off(P):
+    """The Founder gift is hidden everywhere (FOUNDER_ON = false), staging and local included: ?gift=founder and a personal link open
+    nothing, an early world gets no offer, no ⚙ row, a Founder creature's badge isn't drawn; ?founder_test still runs it (the founder tests)."""
+    P.gifts["abcdefghijklmnopqrstuvwx"] = {"letter": "hi", "claimed": False}
+    for q in ("gift=founder&test", "gift=abcdefghijklmnopqrstuvwx&test", "founder&founder_before=2030-01-01&test"):
+        pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(5000)
+        r = pg.evaluate("() => { window.__settings.open(); const row = document.body.innerText.includes('Founder gift'); window.__settings.close(); return { off: window.__founder.off === true, letter: !!document.querySelector('#founderLetter,#founderOffer,#founderLab'), row, draw: typeof window.__founderDraw }; }")
+        need(r["off"] and not r["letter"] and not r["row"] and r["draw"] == "undefined", f"?{q}: {r}"); pg.close()
+    pg = P.open("/arena.html?gift=founder&test&founder_test"); booted(pg); wait_for(pg, "() => !!document.querySelector('#founderLetter')", 30, P=P); pg.close()
+    P.clean()
+    return "hidden: ?gift=founder, a personal link and an early world open nothing, no ⚙ row, no badge drawing; ?founder_test still opens the letter"
 
 
 def t_reviews_phone(P):
-    """⭐ reviews at 375 px: the lightbox fills the screen without sideways scroll; ▶ and the score buttons are tappable."""
-    pg = P.open("/arena.html?review=logos&test"); booted(pg)
-    wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 60, P=P)
-    r = pg.evaluate("() => { const b = document.querySelector('#review .box').getBoundingClientRect(), p = document.querySelector('#review .play').getBoundingClientRect(), s = document.querySelector('#review [data-score]').getBoundingClientRect(); return { w: innerWidth, l: b.left, r: b.right, sw: document.getElementById('review').scrollWidth, cw: document.getElementById('review').clientWidth, play: Math.round(p.height), score: Math.round(s.height) }; }")
-    need(r["l"] >= 0 and r["r"] <= r["w"] and r["sw"] <= r["cw"] and r["play"] >= 36 and r["score"] >= 30, f"the review at 375 px: {r}")
-    lastBtn = pg.evaluate("() => Math.max(...[...document.querySelectorAll('#review [data-score]')].map(b => b.getBoundingClientRect().right))")
-    need(lastBtn <= r["w"], f"score buttons run off the screen: {lastBtn} > {r['w']}")
-    pg.screenshot(path=os.path.join(tempfile.gettempdir(), "review-375.png")); pg.close(); P.clean()
-    return f"375 px: box {r['l']:.0f}–{r['r']:.0f}, no sideways scroll, ▶ {r['play']} px, scores {r['score']} px"
+    """⭐ reviews at 375 px: the card is ≥ 70% of the lightbox and fills the width, no sideways scroll, ✕ ✓ ★ on screen."""
+    pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()"); pg.wait_for_timeout(200)
+    pg.evaluate("() => window.__reviews.open('logos')"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 40, P=P); pg.wait_for_timeout(800)
+    r = pg.evaluate("() => { const b = document.querySelector('#review .box').getBoundingClientRect(), c = document.querySelector('#review .deck .card').getBoundingClientRect(), a = [...document.querySelectorAll('#review .acts button')].map(x => x.getBoundingClientRect()); return { w: innerWidth, h: innerHeight, area: (c.width * c.height) / (b.width * b.height), cw: c.width / innerWidth, sw: document.getElementById('review').scrollWidth, acts: a.every(x => x.bottom <= innerHeight && x.right <= innerWidth && x.left >= 0), btn: Math.round(a[0].height) }; }")
+    need(r["area"] >= 0.7 and r["cw"] >= 0.9 and r["sw"] <= r["w"] and r["acts"] and r["btn"] >= 44, f"the deck at 375 px: {r}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "reviews-phone.png"))
+    pg.close(); P.clean()
+    return f"375 px: card {r['area'] * 100:.0f}% of the lightbox, {r['cw'] * 100:.0f}% of the width, no sideways scroll, buttons {r['btn']} px"
 
 
 def t_founder_link(P):
     """Founder by a gift link (a brand-new browser): the letter right away; an expired link shows a note and no letter"""
-    pg = P.open("/arena.html?gift=founder&founder_now=2027-06-01&test")
+    pg = P.open("/arena.html?gift=founder&founder_now=2027-06-01&test&founder_test")
     with contextlib.suppress(AssertionError): wait_for(pg, "() => document.body.innerText.includes('has expired')", 40, P=P)
     ex = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), note: document.body.innerText.includes('has expired'), e: window.__founder.eligible() })")
     need(not ex["letter"] and ex["note"] and ex["e"]["expired"], f"an expired link: {ex}"); pg.close()
-    pg = P.open("/arena.html?gift=founder&test"); booted(pg)
+    pg = P.open("/arena.html?gift=founder&test&founder_test"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
     need(pg.evaluate("() => window.__funnel.reached().includes('fd_link') && window.__founder.eligible().link"), "the link should be counted")
     P.clean()
@@ -2111,13 +2265,13 @@ def t_founder_personal(P):
     """a personal gift link: Nico's own letter (not the general draft), opened once (one claim), read again in the same browser, then the
     creator; in another browser the same link says it was already opened; an unknown link says it isn't valid"""
     gid = "abcdefghijklmnopqrstuvwx"; P.gifts[gid] = {"letter": "Hi Sam!\n\nThanks for the bug report on Halloween night.\nThis one is for you.", "claimed": False}
-    pg = P.open(f"/arena.html?gift={gid}&test"); booted(pg)
+    pg = P.open(f"/arena.html?gift={gid}&test&founder_test"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
     lt = pg.evaluate("() => ({ text: document.querySelector('#founderLetter .paper').innerText, draft: !!document.querySelector('#founderLetter .draft'), personal: document.querySelector('#founderLetter').dataset.personal, f: window.__funnel.reached() })")
     need("Hi Sam!" in lt["text"] and "Halloween night" in lt["text"] and "— Nico" in lt["text"] and not lt["draft"] and lt["personal"] == "1", f"the personal letter: {lt}")
     need("fd_personal" in lt["f"] and P.gifts[gid]["claims"] == 1, f"opened once: claims {P.gifts[gid].get('claims')}, funnel {lt['f']}")
     pg.click("#founderLetter .later"); pg.close()
-    pg = P.open(f"/arena.html?gift={gid}&test"); booted(pg)
+    pg = P.open(f"/arena.html?gift={gid}&test&founder_test"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
     need("Hi Sam!" in pg.evaluate("() => document.querySelector('#founderLetter .paper').innerText") and P.gifts[gid]["claims"] == 1, "the same browser reads it again, with no second claim")
     pg.click("#founderLetter .open"); wait_for(pg, "() => !!document.querySelector('#founderLab canvas.prev')", 5, P=P)
@@ -2126,10 +2280,10 @@ def t_founder_personal(P):
     P.clean(); pg.close()
     ctx2 = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); P2 = Page(ctx2, P.base); P2.gifts = P.gifts
     try:
-        pg2 = P2.open(f"/arena.html?gift={gid}&test")
+        pg2 = P2.open(f"/arena.html?gift={gid}&test&founder_test")
         wait_for(pg2, "() => document.body.innerText.includes('already opened')", 40, P=P2)
         need(not pg2.evaluate("() => !!document.querySelector('#founderLetter')"), "another browser must not see the letter")
-        pg2.close(); pg3 = P2.open("/arena.html?gift=zzzzzzzzzzzzzzzzzzzzzzzz&test")
+        pg2.close(); pg3 = P2.open("/arena.html?gift=zzzzzzzzzzzzzzzzzzzzzzzz&test&founder_test")
         wait_for(pg3, "() => document.body.innerText.includes(\"isn't valid\")", 40, P=P2)
         P2.clean()
     finally:
@@ -2163,7 +2317,7 @@ def gift_tool_unit():
 
 def t_founder_phone(P):
     """the creator on a 390×844 phone: no sideways scroll, the release button on screen, the whole flow works"""
-    pg = P.open("/arena.html?gift=founder&test"); pg.set_viewport_size({"width": 390, "height": 844}); booted(pg)
+    pg = P.open("/arena.html?gift=founder&test&founder_test"); pg.set_viewport_size({"width": 390, "height": 844}); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
     lw = pg.evaluate("() => { const r = document.querySelector('#founderLetter .paper').getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth }; }")
     need(lw["l"] >= 0 and lw["r"] <= lw["w"] + 1, f"the letter fits: {lw}")
@@ -2345,6 +2499,10 @@ def t_prod_gates(P, root):
       f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
       ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
     need(r["host"] == "id-le.com" and not r["live"], f"not emulating production: {r}")
+    # presence: off on id-le.com (PRESENCE_ON_PROD), even with stats live and a forced beat
+    pz = P.open("/arena.html"); booted(pz); pz.wait_for_timeout(4000)
+    pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on, sent: window.__presence.beat() })"); pz.close()
+    need(pr["stats"] and not pr["on"] and pr["sent"] is False and not P.here, f"presence beat on production: {pr}, {len(P.here)} beats")
     need(not r["void"] and not r["intro"] and not r["offer"] and not r["founder"], f"story/offer/founder visible on production: {r}")
     need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
     pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
@@ -2383,6 +2541,58 @@ def t_prod_gates(P, root):
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
     return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)/reviews"
+
+
+def t_presence(P):
+    """the creator's live view: two game tabs beat and show up as two players in /live, one closes (bye) and is gone; a tab with stats off
+    or Global Privacy Control never beats; the key is needed (a wrong one is refused)"""
+    import secrets, socket, subprocess as sp
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    key = secrets.token_urlsafe(32)
+    node = sp.Popen(["node", os.path.join(ROOT, "helper", "dev_server.mjs"), str(port)], env={**os.environ, "LIVE_KEY": key}, stdout=sp.PIPE, stderr=sp.STDOUT)
+    try:
+        t0 = time.time()
+        while time.time() - t0 < 10:
+            try: socket.create_connection(("127.0.0.1", port), 0.3).close(); break
+            except OSError: time.sleep(0.2)
+        P.helper = f"http://127.0.0.1:{port}"
+        tabs = []
+        for i in range(2):
+            pg = P.open("/arena.html?statstest&test"); booted(pg)
+            wait_for(pg, "() => window.__presence && window.__presence.state().running", 20, P=P); tabs.append(pg)
+        ids = {json.loads(b)["id"] for b in P.here if b}
+        need(len(ids) == 2, f"two tabs, {len(ids)} ids beating ({len(P.here)} requests, first {P.here[:1]!r}, state {tabs[0].evaluate('() => window.__presence.state()')})")
+        lv = P.open("/live.html"); lv.wait_for_selector("#key input", state="visible", timeout=10000)
+        lv.fill("#key input", "wrong-key-" + "x" * 30); lv.click("#key button")
+        wait_for(lv, "() => /not accepted/.test(document.querySelector('#key .err').textContent)", 15, P=P)
+        lv.fill("#key input", key); lv.click("#key button")
+        wait_for(lv, "() => window.__live.state().online === 2 && window.__live.state().nodes.length === 2", 20, P=P)
+        tip = lv.evaluate("() => document.querySelector('#bMode').textContent + '|' + document.querySelector('#bCc').textContent")
+        need("plain world" in tip and "CL" in tip, f"side charts: {tip}")
+        tabs[1].evaluate("() => window.__presence.bye()"); tabs[1].goto("about:blank")   # what pagehide does (a beacon sent from an unloading page never reaches the test's routes)
+        try: wait_for(lv, "() => window.__live.state().online === 1", 20, P=P)
+        except AssertionError: raise AssertionError(f"no bye: {[b for b in P.here if 'bye' in b]}, live {lv.evaluate('() => window.__live.state()')}")
+        lv.wait_for_timeout(1800)
+        need(len(lv.evaluate("() => window.__live.state().nodes")) == 1, "the closed tab's circle is still there")
+        lv.screenshot(path=os.path.join(tempfile.gettempdir(), "idle-live-view.png"))
+        # stats off, and Global Privacy Control: no beat at all (the game tabs close first: they'd keep beating)
+        tabs[0].evaluate("() => window.__presence.bye()"); tabs[0].goto("about:blank"); wait_for(lv, "() => window.__live.state().online === 0", 20, P=P); lv.wait_for_timeout(500)
+        n0 = len(P.here)
+        pg = P.ctx.new_page(); pg.add_init_script("try { localStorage.setItem('idle.settings', JSON.stringify({ stats: false })); } catch (e) {}")
+        pg.goto(P.base + "/arena.html?statstest&test"); booted(pg); pg.wait_for_timeout(4000)
+        off = pg.evaluate("() => ({ on: window.__presence.state().on, sent: window.__presence.beat() })")
+        g = P.ctx.new_page(); g.add_init_script("Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', { get: () => true }); try { localStorage.removeItem('idle.settings'); } catch (e) {}")
+        g.goto(P.base + "/arena.html?statstest&test"); booted(g); g.wait_for_timeout(4000)
+        gpc = g.evaluate("() => ({ on: window.__presence.state().on, stats: window.__settings.statsLive() })")
+        need(not off["on"] and off["sent"] is False and not gpc["on"] and gpc["stats"] and len(P.here) == n0, f"stats off {off}, GPC {gpc}, beats sent meanwhile {len(P.here) - n0}")
+        bad = [b for b in P.here if b and set(json.loads(b)) - {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye"}]
+        need(not bad, f"a beat carried a field outside the list: {bad[:1]}")
+        for x in (pg, g): x.close()
+        P.clean()
+        return f"{len(P.here)} beats from 2 tabs; /live showed 2, then 1 after a bye; wrong key refused; stats off and GPC silent"
+    finally:
+        node.terminate()
+        with contextlib.suppress(Exception): node.wait(5)
 
 
 def t_chooser(P):
@@ -2558,7 +2768,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2624,7 +2834,10 @@ def main():
                 run("never stuck", t_never_stuck)
                 run("founder", t_founder)
                 run("founder link", t_founder_link)
-                run("reviews", t_reviews)
+                run("reviews invite", t_reviews_invite)
+                run("reviews", t_reviews, viewport={"width": 1280, "height": 800})
+                run("reviews cliff", t_reviews_cliff)
+                run("founder off", t_founder_off)
                 run("reviews phone", t_reviews_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("founder personal", t_founder_personal)
                 run("founder phone", t_founder_phone, is_mobile=True, has_touch=True)
@@ -2644,6 +2857,7 @@ def main():
                 run("pedia halloween", t_pedia_halloween)
                 run("fonts", t_fonts)
                 run("fonts phone", t_fonts_phone, is_mobile=True, has_touch=True)
+                run("presence", t_presence, service_workers="block")   # requests a service worker makes itself pass by the test routes
                 run("prod gates", t_prod_gates, out, service_workers="block")
                 if a.full: run("fps", t_fps)
             finally:
