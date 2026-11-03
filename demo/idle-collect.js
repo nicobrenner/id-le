@@ -113,7 +113,7 @@
 
   // ---------- the 🗄 window ----------
   const css = document.createElement('style'); css.textContent = `
-#drawer{position:fixed;right:16px;top:56px;z-index:9996;display:none;width:min(470px,calc(100vw - 32px));max-height:76vh;overflow:auto;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px #0006;font:12px system-ui;box-sizing:border-box}
+#drawer{position:fixed;right:16px;top:56px;z-index:9996;display:none;width:min(470px,calc(100vw - 32px));max-height:76vh;overflow:auto;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px #0006;font:12px var(--ui-font,system-ui);box-sizing:border-box}
 #drawer.on{display:block}#drawer .hd{display:flex;justify-content:space-between;align-items:center;margin:-8px -10px 6px;padding:8px 10px 6px;position:sticky;top:-8px;z-index:3;background:var(--floor);border-bottom:1px solid #8883;cursor:grab;user-select:none;touch-action:none}#drawer.drag .hd{cursor:grabbing}
 #drawer .hd b{font-size:13px}#drawer button{font:inherit;font-size:11.5px;padding:1px 7px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}#drawer button.on{background:#2b5cff;color:#fff;border-color:#2b5cff}
 #drawer .sh{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 8px}#drawer .sh button.drop{outline:2px dashed #2b5cff;outline-offset:1px}#drawer .sh .mine{border-style:dashed}#drawer .sub{opacity:.65;font-size:11px}
@@ -123,12 +123,12 @@
 #drawer .tile .ac{display:flex;gap:3px;flex-wrap:wrap}#drawer .tile .ac button{padding:0 5px}#drawer .big{font-size:28px}#drawer .gz{font:italic 600 11px Georgia,serif;opacity:.75}
 #drawer .dwword{position:static!important;transform:none!important;display:inline-block}#drawer .dwui,#drawerView .dwui{position:static}#drawerView .dwword{position:static!important;transform:none!important;display:inline-block;font-size:18px}
 #drawerView{position:fixed;inset:0;z-index:10004;display:none;align-items:center;justify-content:center;background:#0007}#drawerView.on{display:flex}
-#drawerView .box{background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:14px;padding:12px 14px;max-width:min(640px,calc(100vw - 32px));max-height:86vh;overflow:auto;box-shadow:0 12px 40px #0008;font:12px system-ui;display:flex;flex-direction:column;gap:8px}
+#drawerView .box{background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:14px;padding:12px 14px;max-width:min(640px,calc(100vw - 32px));max-height:86vh;overflow:auto;box-shadow:0 12px 40px #0008;font:12px var(--ui-font,system-ui);display:flex;flex-direction:column;gap:8px}
 #drawerView .art{display:flex;justify-content:center;align-items:center;min-height:120px;background:#8881;border-radius:10px;padding:10px}#drawerView .art img{max-width:100%;max-height:52vh}#drawerView .art .design{transform:scale(1.6);transform-origin:center;margin:60px 70px}
 #drawerView input,#drawerView textarea,#drawerView select{font:inherit;background:none;color:inherit;border:1px solid #8886;border-radius:6px;padding:3px 6px}#drawerView textarea{width:100%;box-sizing:border-box;min-height:44px}
 #drawerView button{font:inherit;font-size:12px;padding:2px 9px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}#drawerView .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}#drawerView .k{opacity:.65}
 #drawerView .diary{font:11px/1.45 Georgia,serif;font-style:italic;opacity:.85;max-height:120px;overflow:auto}
-#dkeep{position:fixed;z-index:9990;display:none;font:12px system-ui;padding:1px 6px;border-radius:9px;border:1px solid #8886;background:var(--floor);color:var(--ink);cursor:pointer;box-shadow:0 2px 8px #0004}#dkeep.on{display:block}`;
+#dkeep{position:fixed;z-index:9990;display:none;font:12px var(--ui-font,system-ui);padding:1px 6px;border-radius:9px;border:1px solid #8886;background:var(--floor);color:var(--ink);cursor:pointer;box-shadow:0 2px 8px #0004}#dkeep.on{display:block}`;
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'drawer'; document.body.appendChild(el);
   const vw = document.createElement('div'); vw.id = 'drawerView'; document.body.appendChild(vw);

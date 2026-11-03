@@ -17,6 +17,8 @@
 // API (used by idle-intro.js for tone 'epoch0'): window.__epoch0.play(opts) → Promise<{ tone:'epoch0', skipped }>, close(), playing();
 // recordings and tests: makeContent({ live }), frame(content, T, canvas) (call in increasing T), renderAudio(content) → base64 WAV.
 (() => {
+  // Id|le's own fonts when loaded (idle-fonts.js): Doc's lines in f3, the panes in the terminal face f1
+  const SUBF = (window.IDLE_FONTS && window.IDLE_FONTS.sub) || '"Helvetica Neue", Helvetica, Arial, system-ui, sans-serif', TERMF = (window.IDLE_FONTS && window.IDLE_FONTS.term) || 'ui-monospace, Menlo, monospace';
   // anything matching is resampled (live) or dropped (bank): unkind words, bodies, violence, and names that must never appear
   const BLOCK = /\b(sex\w*|porn\w*|nud\w*|naked|kill\w*|suicid\w*|rap(e|ed|ing|ist)|nazi\w*|hitler|drug\w*|cocaine|heroin|weed|fuck\w*|shit\w*|bitch\w*|damn\w*|bastard|nigg\w*|fag\w*|retard\w*|slut\w*|whore\w*|dick\w*|cock\w*|puss\w*|cunt\w*|terror\w*|bomb\w*|guns?|shoot\w*|blood\w*|die|died|dies|dead|death|murder\w*|hate\w*|stupid|idiot|ugly|fat|nico\w*|brenner|jeffy|password|depress\w*|cancer|hospital|funeral|war|wars)\b|https?:|www\.|@|\d{3,}/i;
   // the schedule: one line per "epoch", hot to cool (probed on the real model: 2.5/full vocabulary is joyful babble, 0.55/30 is almost sense)
@@ -154,7 +156,7 @@
   const storyPt = T => [keyed(SKX, T), keyed(SKY, T)];
   function drawStoryCurve(g, W, H, T, L, RM) {
     lastRef = null; const a = clamp((T - C.curve) / 0.6) * (1 - clamp((T - CS.flash) / 0.1)); if (a <= 0) return; const { x, y, w, h } = L.cv, px = u => x + 10 + (w - 20) * u, py = v => y + 8 + (h - 16) * v, fz = L.port ? 10 : 11;
-    g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h); g.font = `${fz}px ui-monospace, Menlo, monospace`; g.textBaseline = 'alphabetic';
+    g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h); g.font = `${fz}px ${TERMF}`; g.textBaseline = 'alphabetic';
     if (!L.term) { g.fillStyle = DIM; g.fillText('training loss', x + 8, y - 8); } g.fillStyle = DIM; g.textAlign = 'right'; g.fillText('epochs → (stylized)', x + w - 8, y + h + 16); g.textAlign = 'left';
     // the reference lines: dotted, labelled at the right; the one the curve has just passed glows a little
     for (const [v, lab] of REFS) { const yy = py(v), passed = keyed(SKY, T) >= v; g.setLineDash([2, 4]); g.strokeStyle = passed ? '#7ee3f566' : '#3a4a56'; g.beginPath(); g.moveTo(x + 4, yy); g.lineTo(x + w - 4, yy); g.stroke(); g.setLineDash([]);
@@ -170,7 +172,7 @@
     const a = clamp((T - C.curve) / 0.6) * (story ? 1 - clamp((T - CS.flash) / 0.1) : 1 - clamp((T - (C.final - 0.4)) / 0.4)); if (a <= 0) return;
     const { x, y, w, h } = L.cv, kd = RM ? ci.ks[clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1)] : dotK(ci, T), kn = Math.floor(kd);
     g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h);
-    g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; if (!L.term) g.fillText('training loss', x + 8, y - 8);   // in the panes, the pane's title says it
+    g.font = `${L.port ? 11 : 13}px ${TERMF}`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; if (!L.term) g.fillText('training loss', x + 8, y - 8);   // in the panes, the pane's title says it
     g.textAlign = 'right'; g.fillText(ci && ci.s ? 'epochs → (compressed)' : 'epochs →', x + w - 8, y + h + 16); g.textAlign = 'left';
     // the curve so far, up to the dot
     g.beginPath(); for (let k = 0; k <= kn; k++) { const [px, py] = ptXY(ci, L, k); k ? g.lineTo(px, py) : g.moveTo(px, py); }
@@ -184,7 +186,7 @@
       const u = (T - CS.over) / (CS.flash - CS.over), [ex, ey] = ptXY(ci, L, ci.N), fall = u * u * (h + H * 0.9), ox = ex + (ci.s ? u * (w - 32) * 0.22 : Math.min(40, u * 60));
       g.beginPath(); g.moveTo(ex, ey); g.quadraticCurveTo(ex + 20, ey + 4, ox, ey + fall); g.strokeStyle = MAG; g.lineWidth = 2; g.shadowColor = MAG; g.shadowBlur = 10; g.stroke(); g.shadowBlur = 0; dx = ox; dy = ey + fall; v = ci.all[ci.N] - u * u * 9; }
     g.shadowColor = CUR; g.shadowBlur = 14; g.fillStyle = '#e8fbff'; g.beginPath(); g.arc(dx, dy, 4.5, 0, 7); g.fill(); g.shadowBlur = 0;
-    g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = story && T > CS.over ? MAG : CUR;
+    g.font = `${L.port ? 11 : 13}px ${TERMF}`; g.fillStyle = story && T > CS.over ? MAG : CUR;
     g.fillText(`loss ${v.toFixed(2)}`, Math.min(dx + 9, x + w - 80), clamp(dy - 9, y + 14, H - 30));
     g.restore(); }
   function epochAt(T) { if (T < C.babble) return 0; const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1); return SCHED[i].e; }
@@ -195,13 +197,13 @@
       let txt = Ln.pieces.slice(0, n).join('').replace(/�/g, '').replace(/\s+([,.!?'])/g, '$1').replace(/^\s+/, '');
       const y = entryY(L, i), back = cur - i, base = back === 0 ? 1 : 0.5, al = (base + (1 - base) * stack) * fade; if (al <= 0) continue;
       // label from the curve: epoch and loss at the point this line was born
-      g.globalAlpha = al * 0.85; g.font = `${Math.max(10, Math.round(fz * 0.62))}px ui-monospace, Menlo, monospace`; g.fillStyle = '#5f8a96'; g.textBaseline = 'alphabetic';
+      g.globalAlpha = al * 0.85; g.font = `${Math.max(10, Math.round(fz * 0.62))}px ${TERMF}`; g.fillStyle = '#5f8a96'; g.textBaseline = 'alphabetic';
       g.fillText(`${epochLabel(ci, ci.ks[i])} · loss ${ci.all[ci.ks[i]].toFixed(2)}`, L.ln.x, y);
       if (back === 0 && Ln.e <= 2 && !RM && n > 0 && n < Ln.pieces.length && st.glitch(T)) txt += txt.slice(-1).repeat(1 + Math.floor((T * 13) % 3));   // early epochs stutter
-      let f = fz; g.font = `${f}px ui-monospace, Menlo, monospace`;
+      let f = fz; g.font = `${f}px ${TERMF}`;
       // desktop: one row, shrinking if it must; phones: up to two rows (the first row's words, the rest below)
       let rows = [txt]; if (L.port) { const ws = txt.split(/(?<=\s)/); let a = ''; rows = []; for (const w of ws) { if (a && g.measureText(a + w).width > maxW) { rows.push(a); a = w; } else a += w; } rows.push(a); if (rows.length > 2) rows = [rows[0], rows.slice(1).join('')]; }
-      while (rows.some(r => g.measureText(r).width > maxW) && f > 10) { f--; g.font = `${f}px ui-monospace, Menlo, monospace`; }
+      while (rows.some(r => g.measureText(r).width > maxW) && f > 10) { f--; g.font = `${f}px ${TERMF}`; }
       g.globalAlpha = al; g.fillStyle = Ln.e <= 2 ? '#c9d6c2' : Ln.e <= 6 ? '#dcdccb' : INK; g.textBaseline = 'middle'; const ty = y + fz * 0.95;
       rows.forEach((r, k) => g.fillText(r, L.ln.x, ty + k * f * 1.35)); const last = rows[rows.length - 1], ly = ty + (rows.length - 1) * f * 1.35;
       if (back === 0 && T < (story ? CS.over : C.stack) && Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(L.ln.x + g.measureText(last).width + 3, ly - f * 0.55, f * 0.55, f * 1.05); }
@@ -247,7 +249,7 @@
   function drawOverrun(g, W, H, T, ct, P, RM, L) {
     const fz = L.ln.fz; g.textBaseline = 'middle';
     for (const x of ct.extra) { if (T < x.t) continue; const age = T - x.t, n = Math.min(x.text.length, Math.floor(age * (40 + 70 * x.w))), al = (RM ? 0.7 : 0.45 + 0.5 * Math.abs(Math.sin(T * 9 + x.x * 20))) * (1 - clamp((T - CS.flash) / 0.1));
-      if (al <= 0 || n <= 0) continue; g.globalAlpha = al; g.font = `${Math.round(fz * (0.8 + x.w * 0.6))}px ui-monospace, Menlo, monospace`; g.fillStyle = x.w > 0.6 ? MAG : INK;
+      if (al <= 0 || n <= 0) continue; g.globalAlpha = al; g.font = `${Math.round(fz * (0.8 + x.w * 0.6))}px ${TERMF}`; g.fillStyle = x.w > 0.6 ? MAG : INK;
       g.fillText(x.text.slice(0, n), L.ln.x - 40 + x.x * Math.max(60, L.ln.w * 0.5) - 60 * x.w, L.ln.y + x.y * (H - L.ln.y - 120)); }
     g.globalAlpha = 1; }
   // the subtitle: the scientist's line in the story; otherwise the caption (where the run is, in words). Big, centred, on a dark band,
@@ -263,7 +265,7 @@
   let lastRef = null, lastBand = null;   // the 'conscious' label's box (drawStoryCurve) and the dialog band's (drawSub), this frame
   function drawSub(g, W, H, T, P, RM, L) {
     const s = subNow(T); if (!s) return; const n = RM ? s.text.length : Math.floor((T - s.t0) * (s.last ? 22 : 34)); if (n <= 0) return;
-    const fz = subFz(L, P), lh = fz * 1.28; g.save(); g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const fz = subFz(L, P), lh = fz * 1.28; g.save(); g.font = `italic 600 ${fz}px ${SUBF}`; g.textAlign = 'center'; g.textBaseline = 'middle';
     // wrap the whole line first (rows don't jump while it types), then show the typed part
     const rows = subRows(g, s.text, Math.min(W * 0.88, 980)); let left = n; const shown = rows.map(r => { const t = r.slice(0, Math.max(0, left)); left -= r.length; return t; }).filter(t => t);
     let cy = s.who ? H / 2 : L.term ? L.panes.band.y + L.panes.band.h / 2 : H - (P ? 104 : 80) - (rows.length - 1) * lh / 2;
@@ -274,8 +276,8 @@
     const bw = Math.min(W - 16, Math.max(...rows.map(r => g.measureText(r).width)) + fz * 1.6), bh = rows.length * lh + fz * 0.7, sh = s.panic && !RM ? (Math.random() - 0.5) * 3 : 0, by = y0 - lh / 2 - fz * 0.35;
     if (s.who) { g.fillStyle = '#000000a8'; g.fillRect(0, by - fz * 0.9, W, bh + fz * 1.8); }   // in the middle, over the panes: dim them behind the line
     g.fillStyle = '#000000c4'; g.fillRect(W / 2 - bw / 2, by, bw, bh); g.fillStyle = s.panic ? '#ff8a7a' : '#ffcf8a'; g.fillRect(W / 2 - bw / 2, by, 3, bh);
-    if (s.who) { g.font = `600 ${Math.round(fz * 0.48)}px ui-monospace, Menlo, monospace`; g.textAlign = 'left'; g.fillStyle = '#c9a26b'; g.fillText(s.who.toUpperCase(), W / 2 - bw / 2 + 8, by - fz * 0.42);
-      g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; }
+    if (s.who) { g.font = `600 ${Math.round(fz * 0.48)}px ${TERMF}`; g.textAlign = 'left'; g.fillStyle = '#c9a26b'; g.fillText(s.who.toUpperCase(), W / 2 - bw / 2 + 8, by - fz * 0.42);
+      g.font = `italic 600 ${fz}px ${SUBF}`; }
     g.fillStyle = s.panic ? '#ffd0c4' : s.who ? '#ffe2b8' : '#eef6f8'; g.textAlign = 'left';
     shown.forEach((t, k) => { const w = g.measureText(rows[k]).width; g.fillText(t, W / 2 - w / 2 + sh, y0 + k * lh + sh); });
     g.restore(); }
@@ -321,7 +323,7 @@
     const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1);
     const cap = T < CS.over ? { text: T < C.babble ? 'epoch 0 · nothing yet' : `${epochLabel(ci, ci.ks[i])} · ${SCHED[i].cap}`, col: DIM } : { text: `epoch ${Math.floor(300 + (T - CS.over) * 900)} · it does not stop`, col: MAG };
     if (L.term) termChrome(g, W, H, T, P, RM, L, ci, 1, cap);
-    else { g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = cap.col; g.textBaseline = 'alphabetic'; g.fillText(cap.text, P ? 14 : 28, H - (P ? 44 : 28)); }
+    else { g.font = `${P ? 11 : 13}px ${TERMF}`; g.fillStyle = cap.col; g.textBaseline = 'alphabetic'; g.fillText(cap.text, P ? 14 : 28, H - (P ? 44 : 28)); }
     if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = L.ln.fz; g.fillStyle = CUR; g.fillRect(L.ln.x, entryY(L, 0) + fz * 0.4, fz * .55, fz * 1.05); } }
     else drawBabble(g, W, H, Math.min(T, CS.flash), ct, P, RM, st, L, ci);
     if (T >= CS.over) drawOverrun(g, W, H, T, ct, P, RM, L);
@@ -337,7 +339,7 @@
     const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1);
     const cap = { text: T < C.babble ? 'epoch 0' : T < C.stack ? `${epochLabel(ci, ci.ks[i])} · loss ${ci.all[ci.ks[i]].toFixed(2)}` : T < C.final ? 'the whole run' : 'done', col: DIM };
     if (L.term) { if (fade > 0) termChrome(g, W, H, T, P, RM, L, ci, fade, cap); }
-    else if (T < S) { g.font = `${P ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.globalAlpha = 1 - clamp((T - (S - 0.4)) / 0.4);
+    else if (T < S) { g.font = `${P ? 11 : 13}px ${TERMF}`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; g.globalAlpha = 1 - clamp((T - (S - 0.4)) / 0.4);
       g.fillText(cap.text, P ? 14 : 28, H - (P ? 44 : 28)); g.globalAlpha = 1; }
     if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = L.ln.fz; g.fillStyle = CUR; g.fillRect(L.ln.x, entryY(L, 0) + fz * 0.4, fz * .55, fz * 1.05); } }
     else if (T < C.final) drawBabble(g, W, H, T, ct, P, RM, st, L, ci);
@@ -400,8 +402,8 @@
   let cur = null;
   const css = () => { if (document.getElementById('idleE0css')) return; const s = document.createElement('style'); s.id = 'idleE0css';
     s.textContent = `#idleIntro{position:fixed;inset:0;z-index:2147483000;background:#000;cursor:default;transition:opacity .6s;touch-action:none;user-select:none;-webkit-user-select:none}#idleIntro canvas{width:100%;height:100%;display:block}
-#idleIntro .hint{position:absolute;bottom:20px;right:88px;font:12px system-ui;color:#7f8a95;pointer-events:none;user-select:none}#idleIntro.paused .hint{color:#7ee3f5}@media (max-width:420px){#idleIntro .hint{right:14px;bottom:50px}}
-#idleIntro .ib{position:absolute;bottom:14px;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
+#idleIntro .hint{position:absolute;bottom:20px;right:88px;font:12px var(--ui-font,system-ui);color:#7f8a95;pointer-events:none;user-select:none}#idleIntro.paused .hint{color:#7ee3f5}@media (max-width:420px){#idleIntro .hint{right:14px;bottom:50px}}
+#idleIntro .ib{position:absolute;bottom:14px;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
   function play(opts = {}) {
     if (cur) return cur.promise; css(); const P = phone(), RM = reduce(), safe = (window.__safeLevel | 0) > 0, liveOK = !P && !safe && !Q.has('intro_bank'), boot = wantBoot(opts);
     const el = document.createElement('div'); el.id = 'idleIntro'; el.dataset.tone = 'epoch0'; el.dataset.boot = boot ? '1' : '0'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)');

@@ -99,10 +99,10 @@ def skeletons(g):
 
     # uppercase
     G["A"] = (1.1, [P((0, 0), (0, C), (1, C), (1, 0)), P((0, 0.45 * C), (1, 0.45 * C))])
-    G["B"] = (1.1, [P((0, 0), (0, C), (0.85, C), (0.85, 0.52 * C), (0, 0.52 * C)),
+    G["B"] = (1.1, [P((0, 0), (0, C, "s"), (0.85, C), (0.85, 0.52 * C), (0, 0.52 * C)),
                     P((0.85, 0.52 * C), (1, 0.52 * C), (1, 0), (0, 0))])
     G["C"] = (1.08, [P((1, C - k * C * 0.7), (1, C), (0, C), (0, 0), (1, 0), (1, k * C * 0.7))])
-    G["D"] = (1.12, [L((0, 0), (0, C), (0.72, C), (1, 0.78 * C), (1, 0.22 * C), (0.72, 0))])
+    G["D"] = (1.12, [L((0, 0, "s"), (0, C, "s"), (0.62, C), (1, 0.7 * C), (1, 0.3 * C), (0.62, 0))])
     G["E"] = (0.98, [P((1, C), (0, C), (0, 0), (1, 0)), P((0, H), (0.82, H))])
     G["F"] = (0.95, [P((1, C), (0, C), (0, 0)), P((0, H), (0.82, H))])
     G["G"] = (1.12, [P((1, C - k * C * 0.6), (1, C), (0, C), (0, 0), (1, 0), (1, 0.45 * C), (0.5, 0.45 * C))])
@@ -114,9 +114,9 @@ def skeletons(g):
     G["M"] = (1.32, [P((0, 0), (0, C), (0.5, 0.52 * C), (1, C), (1, 0))])
     G["N"] = (1.12, [P((0, 0), (0, C), (1, 0), (1, C))])
     G["O"] = (1.15, [box(0, 0, 1, C)])
-    G["P"] = (1.05, [P((0, 0), (0, C), (1, C), (1, 0.47 * C), (0, 0.47 * C))])
+    G["P"] = (1.05, [P((0, 0), (0, C, "s"), (1, C), (1, 0.47 * C), (0, 0.47 * C))])
     G["Q"] = (1.15, [box(0, 0, 1, C), P((0.62, 0.22 * C), (1, -0.12 * C))])
-    G["R"] = (1.08, [P((0, 0), (0, C), (1, C), (1, 0.5 * C), (0, 0.5 * C)), P((0.45, 0.5 * C), (1, 0))])
+    G["R"] = (1.08, [P((0, 0), (0, C, "s"), (1, C), (1, 0.5 * C), (0, 0.5 * C)), P((0.45, 0.5 * C), (1, 0))])
     G["S"] = (1.05, [P((1, C - k * C * 0.6), (1, C), (0, C), (0, H), (1, H), (1, 0), (0, 0), (0, k * C * 0.6))])
     G["T"] = (1.05, [P((0, C), (1, C)), P((0.5, C), (0.5, 0))])
     G["U"] = (1.12, [P((0, C), (0, 0), (1, 0), (1, C))])
@@ -226,20 +226,22 @@ CMAP = {**{c: c for c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"}
         "ï": "idieresis", "ö": "odieresis", "ç": "ccedilla",
         "Á": "Aacute", "É": "Eacute", "Í": "Iacute", "Ó": "Oacute", "Ú": "Uacute", "Ñ": "Ntilde", "Ü": "Udieresis"}
 
-# not i or ! : a cut stem under a dot reads as "!" (seen in round 1: "Mathemat!c!an")
-PIPE_ALWAYS = {"bar", "I", "l", "Iacute", "one"}
-NEVER_CUT = {"i", "j", "iacute", "idieresis", "exclam", "exclamdown"}
+# only | and the capital I carry the cut: on i, j, l, 1 and ! it reads as "!" ("Mathemat!c!an", "a smal! language mode!")
+PIPE_ALWAYS = {"bar", "I", "Iacute"}
+NEVER_CUT = {"i", "j", "l", "one", "iacute", "idieresis", "exclam", "exclamdown"}
 
 
 # ---------------------------------------------------------------- geometry
-def treat_corners(pts, closed, style, size, w):
-    """Replace each corner of a polyline by a chamfer or a rounded arc (square keeps it sharp)."""
+def treat_corners(pts, closed, style, size, w, sharp=()):
+    """Replace each corner of a polyline by a chamfer or a rounded arc (square keeps it sharp).
+    Corners listed in `sharp` (a D's back, a B's spine) and acute corners (N, M, Z, K: under ~65°) stay sharp:
+    cutting them made D read as O and turned N inside out (round 1, f4)."""
     if style == "square" or len(pts) < 3 and not closed:
         return pts
     n = len(pts)
     out = []
     for i in range(n):
-        if not closed and (i == 0 or i == n - 1):
+        if (not closed and (i == 0 or i == n - 1)) or i in sharp:
             out.append(pts[i]); continue
         p0, p1, p2 = pts[i - 1], pts[i], pts[(i + 1) % n]
         a = (p0[0] - p1[0], p0[1] - p1[1]); b = (p2[0] - p1[0], p2[1] - p1[1])
@@ -247,7 +249,7 @@ def treat_corners(pts, closed, style, size, w):
         if la < 1 or lb < 1:
             out.append(p1); continue
         cosang = (a[0] * b[0] + a[1] * b[1]) / (la * lb)
-        if cosang < -0.97:                       # nearly straight
+        if cosang < -0.97 or cosang > 0.42:      # nearly straight, or acute
             out.append(p1); continue
         r = min(size * min(la, lb), la * 0.48, lb * 0.48)
         r = max(r, w * 0.6) if r > w * 0.6 else r
@@ -288,6 +290,17 @@ def seg_poly(p, q, w, cap_start=0.0, cap_end=0.0):
     nx, ny = -uy * w / 2, ux * w / 2
     p = (p[0] - ux * cap_start, p[1] - uy * cap_start); q = (q[0] + ux * cap_end, q[1] + uy * cap_end)
     return [(p[0] + nx, p[1] + ny), (q[0] + nx, q[1] + ny), (q[0] - nx, q[1] - ny), (p[0] - nx, p[1] - ny)]
+
+
+def miter(p0, p1, p2, w):
+    """The two miter points of a join (outer and inner corner), so square corners stay square; none past 60°."""
+    l1 = math.hypot(p1[0] - p0[0], p1[1] - p0[1]) or 1; l2 = math.hypot(p2[0] - p1[0], p2[1] - p1[1]) or 1
+    n1 = (-(p1[1] - p0[1]) / l1, (p1[0] - p0[0]) / l1); n2 = (-(p2[1] - p1[1]) / l2, (p2[0] - p1[0]) / l2)
+    k = 1 + n1[0] * n2[0] + n1[1] * n2[1]
+    if k < 0.5:
+        return []
+    mx, my = (n1[0] + n2[0]) / k * w / 2, (n1[1] + n2[1]) / k * w / 2
+    return [(p1[0] + mx, p1[1] + my), (p1[0] - mx, p1[1] - my)]
 
 
 def hull(points):
@@ -346,9 +359,10 @@ def build_glyph(name, spec, g):
         if kind == "D":
             dots.append((mx(data[0]), my(data[1])))
             continue
-        pts = [(mx(x), my(y)) for x, y in data]
+        sharp = {i for i, p in enumerate(data) if len(p) > 2}
+        pts = [(mx(p[0]), my(p[1])) for p in data]
         closed = kind == "L"
-        pts = treat_corners(pts, closed, g["corner"], g["corner_size"], w)
+        pts = treat_corners(pts, closed, g["corner"], g["corner_size"], w, sharp)
         segs = list(zip(pts, pts[1:] + ([pts[0]] if closed else [])))
         segs = cut_stems(segs, g, name, w)
         segs_all.append((segs, closed, pts))
@@ -373,7 +387,7 @@ def build_glyph(name, spec, g):
             for i in rng:
                 p0, p1, p2 = pts[i - 1], pts[i], pts[(i + 1) % n]
                 a = seg_poly(p0, p1, w); b = seg_poly(p1, p2, w)
-                polys.append(hull([a[1], a[2], b[0], b[3], p1]))
+                polys.append(hull([a[1], a[2], b[0], b[3], p1] + miter(p0, p1, p2, w)))
         for c in dots:
             polys.append(dot_poly(c, w, g["dot"]))
 
@@ -461,7 +475,7 @@ def build_font(g, name, out_dir):
                        "copyright": "Id|le fontgen (MIT), generated", "licenseDescription": "MIT"})
     fb.setupOS2(sTypoAscender=900, sTypoDescender=-260, sTypoLineGap=0, usWinAscent=960, usWinDescent=300,
                 sxHeight=int(CAP * g["xheight"]), sCapHeight=CAP, fsType=0)
-    fb.setupPost(isFixedPitch=1 if g["mono"] else 0)
+    fb.setupPost(isFixedPitch=1 if g["mono"] else 0, italicAngle=-float(g["slant"]))
     os.makedirs(out_dir, exist_ok=True)
     ttf = os.path.join(out_dir, f"{name}.ttf")
     fb.save(ttf)
