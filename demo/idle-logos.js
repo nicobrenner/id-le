@@ -46,7 +46,8 @@ function key(ctx, out, at, v = 1, seed = 3) { const s = ctx.createBufferSource()
 const cutTick = (ctx, out, at) => { tone(ctx, out, 'square', 2400, at, 0.035, 0.09, 600); tone(ctx, out, 'sine', 180, at, 0.12, 0.08, 60); };
 
 // ---------------- picture helpers ----------------
-function lay(g, W, H, font) { const big = Math.min(H * 0.5, W * 0.2); g.font = `${big}px ${font}`; g.textBaseline = 'alphabetic';
+let BIG = 0;   // the host's letter size (the intro draws at its own scale: drawAt(..., { big })); 0 = the card's own
+function lay(g, W, H, font) { const big = BIG || Math.min(H * 0.5, W * 0.2); g.font = `${big}px ${font}`; g.textBaseline = 'alphabetic';
   return { big, wId: g.measureText('Id').width, wle: g.measureText('le').width, base: H * 0.5 + big * 0.32, cx: W / 2, font }; }
 function word(g, L, gap, o = {}) { const xA = L.cx - gap / 2 - L.wId + (o.dx || 0), xB = L.cx + gap / 2 + (o.dx || 0), y = L.base + (o.dy || 0);
   g.font = `${L.big}px ${L.font}`; g.textBaseline = 'alphabetic'; g.globalAlpha = o.a ?? 1; g.fillStyle = o.col || INK;
@@ -331,7 +332,12 @@ async function render(v) { const probe = new OfflineAudioContext(1, SR, SR); con
 // returns { stop(), done } (done: a promise that resolves when it ends or is stopped). opts: { font, destination }.
 const LOGO_CACHE = new Map(), prepareLogo = v => { if (!LOGO_CACHE.has(v.id)) LOGO_CACHE.set(v.id, render(v)); return LOGO_CACHE.get(v.id); };
 const LOGOS = V.map(v => { const probe = new OfflineAudioContext(1, SR, SR), duration = v.build(probe, probe.destination).dur;
-  return { id: v.id, name: v.name, idea: v.idea, duration, prepare: () => prepareLogo(v),
+  let ready = null;   // the rendered sound and its analysis, once prepare() has finished
+  return { id: v.id, name: v.name, idea: v.idea, duration, prepare: () => prepareLogo(v).then(r => (ready = r)),
+    // for a host that runs its own frame loop and its own sound (the story's intro): the rendered buffer, and the picture at second t
+    ready: () => !!ready, buffer: () => ready ? ready.buf : null,
+    drawAt(g, W, H, t, o = {}) { if (!ready || t < 0) return false; ready.S.font = o.font || v.font || "'Idle F1', monospace"; const was = BIG; BIG = o.big || 0;
+      try { g.save(); v.draw(g, W, H, t, ready.S); } finally { g.restore(); BIG = was; } return t <= ready.R.dur; },
     // for ⭐ reviews (idle-reviews.js, v2): the rendered sound and its marked events (the strip under each logo, as on the lab's pages), and a
     // still frame at time t (the poster before it plays)
     info: () => prepareLogo(v).then(r => ({ buf: r.buf, ev: r.R.ev || [], dur: r.R.dur, poster: Math.min(r.R.dur - 0.6, r.R.M && r.R.M.c != null ? r.R.M.c + 1.0 : 2) })),

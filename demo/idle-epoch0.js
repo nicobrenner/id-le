@@ -60,6 +60,23 @@
   const nameLike = s => (s.match(/[A-Z][a-z]+(?:'[a-z]+)?/g) || []).some(w => !OKCAP.has(w.replace(/'/g, '')));
   const fit = s => !!s && s.length >= 3 && !BLOCK.test(s) && !SOFT.test(s) && !nameLike(s);
   const Q = new URLSearchParams(location.search);
+  // the story's logo (Nico, Nov 3, after three rounds of the logo lab: "I'd go with either C3 · Typed, dust or C3-crt · Typed, CRT off...
+  // maybe we go with these as A/B testing on the story"): each browser gets one arm, once, kept in idle.logoArm (independent of the storyline's
+  // own A/B); ?logo=c3|crt forces it on staging and local copies. The logo comes from idle-logos.js (the lab's module, also used by ⭐ reviews),
+  // loaded and rendered while the story plays its first scenes; if it can't load, the story keeps its old logo (the cut, the rainbow pipe, the purr).
+  const LOGO_ARMS = { c3: 'c3-typed-dust', crt: 'c3-typed-crt' }, testHost = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  function logoArm() { const f = Q.get('logo'); if (f && LOGO_ARMS[f] && testHost()) return f;
+    let a = null; try { a = localStorage.getItem('idle.logoArm'); } catch (e) {} if (LOGO_ARMS[a]) return a;
+    a = Math.random() < 0.5 ? 'c3' : 'crt'; try { localStorage.setItem('idle.logoArm', a); } catch (e) {} return a; }
+  let logosP = null;
+  const loadLogos = () => window.IdleLogos ? Promise.resolve(window.IdleLogos) : logosP || (logosP = new Promise((res, rej) => { const s = document.createElement('script'), v = (window.IDLE_CFG && window.IDLE_CFG.build) || '';
+    s.src = 'idle-logos.js' + (v ? '?v=' + encodeURIComponent(v) : ''); s.onload = () => window.IdleLogos ? res(window.IdleLogos) : rej(new Error('no IdleLogos')); s.onerror = () => { logosP = null; rej(new Error('idle-logos.js did not load')); }; document.head.appendChild(s); }));
+  // the arm's logo, loaded and its sound rendered (null on failure or after `wait` ms: the old logo plays)
+  function prepLogo(arm, wait = 6000) { const id = LOGO_ARMS[arm]; if (!id) return Promise.resolve(null);
+    const p = loadLogos().then(M => { const L = M.byId(id); return L ? L.prepare().then(() => L) : null; }).catch(() => null);
+    return Promise.race([p, new Promise(r => setTimeout(() => r(null), wait))]); }
+  const logoOf = ct => ct && ct.story && ct.logo && ct.logo.L && ct.logo.L.ready() ? ct.logo : null;   // the new logo plays in this film
+  const LOGO_TAIL = 0.4;   // black after the logo's last frame, before the landing
   const phone = () => matchMedia('(max-width: 600px)').matches || matchMedia('(pointer: coarse)').matches;
   const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -244,7 +261,7 @@
     g.globalAlpha = a; g.font = `italic ${fz}px Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK; g.fillText('your turn', W / 2, H * 0.5); const w = g.measureText('your turn').width;
     if (Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(W / 2 + w / 2 + 5, H * 0.5 - fz * .5, fz * .5, fz); } g.textAlign = 'left'; g.globalAlpha = 1; }
   // the first line takes as long as the model's own ending needs (typed, held, deleted, then "nothing"); everything after waits for it
-  const extraOf = ct => ct.story ? 0 : Math.max(0, finalDone(ct) + 0.9 - C.split), totalOf = ct => ct.story ? CS.split + 0.95 + LOGO_HOLD + 0.4 : C.total + extraOf(ct);
+  const extraOf = ct => ct.story ? 0 : Math.max(0, finalDone(ct) + 0.9 - C.split), totalOf = ct => ct.story ? (logoOf(ct) ? CS.split + logoOf(ct).L.duration + LOGO_TAIL : CS.split + 0.95 + LOGO_HOLD + 0.4) : C.total + extraOf(ct);
   // the overrun: lines pour out faster and faster, overlapping, shaking; then "run!!!!", a tear and a white flash, silence
   function drawOverrun(g, W, H, T, ct, P, RM, L) {
     const fz = L.ln.fz; g.textBaseline = 'middle';
@@ -315,6 +332,7 @@
     if (T >= CS.flash) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
       const wf = RM ? 0 : 1 - clamp((T - CS.flash - 0.08) / 0.37); if (wf > 0) { g.fillStyle = `rgba(255,255,255,${wf})`; g.fillRect(0, 0, W, H); }
       for (const s0 of STRIKES) bolt(g, W, H, T - s0, s0, RM, 1);
+      const lg = logoOf(ct); if (lg) { if (T >= CS.split) lg.L.drawAt(g, W, H, T - CS.split, { big: st.cr.big, font: "'Idle F1', monospace" }); return; }   // the A/B's logo: its own lightning, sound and ending
       const cutT = CS.split + 0.95; bolt(g, W, H, T - cutT + 0.05, 77, RM, 1);   // the one lightning: as the bar cuts Id|le
       if (T >= CS.split) drawSplit(g, W, H, T - (CS.split - C.split), P, RM, st); return; }
     const L = layout(W, H, P), ci = curveInfo(); g.save();
@@ -411,7 +429,9 @@
         v.gain.setValueAtTime(0.0001, t0 + CS.flash); o.start(t0); o2.start(t0); o.stop(t0 + CS.flash + .1); o2.stop(t0 + CS.flash + .1); nodes.push(o, o2); return; }
       v.gain.linearRampToValueAtTime(0.0001, t0 + C.final + 0.3); v.gain.setValueAtTime(0.0001, t0 + ex + C.turn - 0.1); v.gain.linearRampToValueAtTime(0.02, t0 + ex + C.turn + 0.6); v.gain.linearRampToValueAtTime(0.0001, t0 + ex + C.total);
       o.start(t0); o2.start(t0); o.stop(t0 + ex + C.total + .2); o2.stop(t0 + ex + C.total + .2); nodes.push(o, o2); };
-    return { out, nodes, tone, hum, fans: (ct, A0 = 0) => { if (ct.noFans) return null; const f = fanBed(ctx, out, t0 - bootOf(ct), ct, A0); if (f) nodes.push(...f.nodes); return f; },
+    // the A/B's logo: its rendered buffer, from film second `from` (joining mid-way after a pause or a keyframe)
+    const logo = (lg, at, off = 0) => { const b = lg.L.buffer(); if (!b || off >= b.duration) return null; const src = ctx.createBufferSource(); src.buffer = b; src.connect(out); src.start(at, Math.max(0, off)); nodes.push(src); return src; };
+    return { out, nodes, tone, hum, t0, logo, fans: (ct, A0 = 0) => { if (ct.noFans) return null; const f = fanBed(ctx, out, t0 - bootOf(ct), ct, A0); if (f) nodes.push(...f.nodes); return f; },
       tick: (at, e) => tone('square', 1400 + Math.random() * 900 - e * 40, at, 0.018 + e * 0.002, 0.03),
       note: at => { tone('sine', 65.4, at, 2.6, 0.12); tone('sine', 98, at + .05, 2.2, 0.05); },
       cut: at => { tone('square', 2400, at, 0.035, 0.09, 600); tone('sine', 180, at, 0.12, 0.08, 60); },
@@ -423,16 +443,18 @@
   function scheduleAll(S, ct, t0) {   // recordings: every timed sound of the film at once (offline)
     const ex = extraOf(ct);
     if (ct.story) { S.hum(0, true); S.fans(ct, 0); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e)); for (let t = CS.over; t < CS.tear; t += 0.03 + 0.12 * (1 - (t - CS.over) / (CS.tear - CS.over)) * Math.random()) S.tick(t0 + t, 12);
-      { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => B0.beat(S.ctx || S.out.context, S.out, t0 + t, i, beatK(t))); if (B0.purr) B0.purr(S.ctx || S.out.context, S.out, t0 + CS.split + 0.95 + PURR_GAP, PURR); } }
-      S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); S.thunder(t0 + CS.split + 0.95, 1); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
+      const lg = logoOf(ct); { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => B0.beat(S.ctx || S.out.context, S.out, t0 + t, i, beatK(t))); if (B0.purr && !lg) B0.purr(S.ctx || S.out.context, S.out, t0 + CS.split + 0.95 + PURR_GAP, PURR); } }
+      S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); if (lg) { S.logo(lg, t0 + CS.split); return; } S.thunder(t0 + CS.split + 0.95, 1); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
     S.note(t0 + C.final + 0.2); S.cut(t0 + ex + C.split + 0.95); S.thunder(t0 + ex + C.split + 0.95, 0.5); }
   function liveSound(S, ct, T0, T1, now) {   // live: sounds for what was drawn between film seconds T0 and T1 (ticks follow the tokens shown)
     const ex = extraOf(ct), cross = t => t > T0 && t <= T1;
     if (ct.story) { for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
       if (T1 > CS.over && T1 < CS.tear && Math.random() < 0.25 + 0.6 * (T1 - CS.over) / (CS.tear - CS.over)) S.tick(now, 12);
-      { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => { if (cross(t)) B0.beat(S.ctx, S.out, now, i, beatK(t)); }); if (B0.purr && cross(CS.split + 0.95 + PURR_GAP)) B0.purr(S.ctx, S.out, now, PURR); } }
-      STRIKES.forEach(x => { if (cross(x + 0.05)) S.thunder(now); }); if (cross(CS.split + 0.95)) S.thunder(now, 1);
-      const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); return; }
+      const lg = logoOf(ct); { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => { if (cross(t)) B0.beat(S.ctx, S.out, now, i, beatK(t)); }); if (B0.purr && !lg && cross(CS.split + 0.95 + PURR_GAP)) B0.purr(S.ctx, S.out, now, PURR); } }
+      STRIKES.forEach(x => { if (cross(x + 0.05)) S.thunder(now); }); if (cross(CS.flash)) S.crash(now);
+      // the logo's sound: on the audio clock at its film second (scheduled a little ahead), or joined mid-way (after a pause, or a keyframe inside it)
+      if (lg) { if (!S.logoSrc && T1 >= CS.split - 0.5 && T1 < CS.split + lg.L.duration) { const at = S.t0 + CS.split; S.logoSrc = S.logo(lg, Math.max(at, now), Math.max(0, now - at)) || 1; } return; }
+      if (cross(CS.split + 0.95)) S.thunder(now, 1); const d = CS.split - C.split; if (cross(d + C.split + 0.95)) S.cut(now); return; }
     for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
     if (cross(C.final + 0.2)) S.note(now); if (cross(ex + C.split + 0.95)) S.cut(now); if (cross(ex + C.split + 0.95)) S.thunder(now, 0.5); }
   async function renderAudio(ct) { const B = bootOf(ct), sr = 44100, oc = new OfflineAudioContext(2, Math.ceil(sr * (B + totalOf(ct) + 1)), sr), S = synth(oc, oc.destination, B); if (B) { const R = arrOf(ct); if (R) window.__termBoot.arrive.fireAll(oc, S.out, 0); window.__termBoot.fireAll(oc, S.out, R); } scheduleAll(S, ct, B);
@@ -487,7 +509,8 @@
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
     skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
     cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt, waiting: () => waiting, start: () => begin(), scene: () => ct ? sceneOf(elapsed()) : null };
-    Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent({ story: !!(opts.story || Q.has('story')) }); ct.boot = boot; ct.arrive = boot && wantArrive(opts, ct.story); start = performance.now(); window.__epoch0.last = ct;
+    const wantStory = !!(opts.story || Q.has('story')), arm = wantStory ? logoArm() : null;
+    Promise.all([loadBank(), loadLoss(), arm ? prepLogo(arm) : null]).then(([, , L]) => { ct = makeContent({ story: wantStory }); ct.boot = boot; if (arm) ct.logo = { arm, id: LOGO_ARMS[arm], L }; ct.arrive = boot && wantArrive(opts, ct.story); start = performance.now(); window.__epoch0.last = ct;
       if (ct.story && ct.arrive && window.__termBoot && window.__termBoot.title && opts.title !== false && !Q.has('notitle')) { waiting = true; titleT0 = performance.now(); el.dataset.title = '1'; hint.style.display = 'none'; }
       // a keyframe (idle-keys.js, staging/local: ?story&at=run): the film starts at that second, past the title card
       { const off = keyOffset(opts.at, ct); if (off != null) { waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now() - off * 1000; } }
@@ -495,6 +518,7 @@
       const loop = () => { if (done) return;
         if (waiting) { start = performance.now(); mark('title'); try { window.__termBoot.title(g, innerWidth, innerHeight, (performance.now() - titleT0) / 1000, P, RM); } catch (e) {} raf = requestAnimationFrame(loop); return; }
         const T = elapsed(); { const sc = sceneOf(T); if (sc !== scene) { scene = sc; mark(sc); } }
+        if (ct.logo && !ct.logo.shown && filmT(T) - B() >= CS.split) { ct.logo.shown = true; if (logoOf(ct)) mark('lg_shown:' + ct.logo.arm); }
         if (T >= total()) { frameAll(g, innerWidth, innerHeight, filmT(total() - 0.01), ct, st, P, RM); return finish(false); }
         frameAll(g, innerWidth, innerHeight, filmT(T), ct, st, P, RM);
         if (S && !RM) { const b = B(); try { if (b && soundT < b) preSound(S.ctx, S.out, ct, soundT, T, S.ctx.currentTime); liveSound(S, ct, soundT - b, T - b, S.ctx.currentTime); } catch (e) {} soundT = T; }
@@ -521,7 +545,7 @@
   // sizes for tests: the model's text, the subtitles, the pane titles (Nico: subtitles must not be smaller than the text on screen)
   function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [], sciY: H / 2,
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
-  window.__epoch0 = { play, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
+  window.__epoch0 = { play, logoArm, logoArms: LOGO_ARMS, prepLogo, logoOf, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, keyOffset, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();

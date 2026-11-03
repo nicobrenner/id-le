@@ -150,7 +150,7 @@ out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visit
 // /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
 { out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
 // the storyline funnel (11-02): known moments only, counted by arm; the arm's visits and dwell under gv
-{ await post('/lab/p', { v: 1, visit: 1, gv: 'story', sf: ['title', 'messages', 'skip:chat', 'evil<script>', 'title'], dw: '1-5' }); await post('/lab/p', { v: 1, sf: ['offer_shown', 'offer_accepted', 'fd_link', 'fd_badge_pipe', 'fd_badge_evil'] });
+{ await post('/lab/p', { v: 1, visit: 1, gv: 'story', sf: ['title', 'messages', 'skip:chat', 'evil<script>', 'title'], dw: '1-5' }); await post('/lab/p', { v: 1, sf: ['offer_shown', 'offer_accepted', 'fd_link', 'fd_badge_pipe', 'fd_badge_evil'] }); await post('/lab/p', { v: 1, lg: 'crt', sf: ['lg_shown:crt', 'landing', 'title'] }); await post('/lab/p', { v: 1, lg: 'evil', sf: ['lights'] });
   const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.sf = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.sf || {})) a[k] = (a[k] || 0) + n; return a; }, {});
   out.gv_story = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.gv || {})) a[k] = (a[k] || 0) + n; return a; }, {}); }
 // jeffy proxy: an allowlist of two paths; nothing else is relayed (no network needed for these answers)
@@ -292,7 +292,7 @@ def worker_unit():
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
-    need(o.get("sf") == {"story|title": 1, "story|messages": 1, "story|skip:chat": 1, "none|offer_shown": 1, "none|offer_accepted": 1, "none|fd_link": 1, "none|fd_badge_pipe": 1}, f"storyline funnel: {o.get('sf')}")
+    need(o.get("sf") == {"story|title": 1, "story|messages": 1, "story|skip:chat": 1, "none|offer_shown": 1, "none|offer_accepted": 1, "none|fd_link": 1, "none|fd_badge_pipe": 1, "none|lg_shown:crt": 1, "none|landing": 1, "none|title": 1, "lg:crt|lg_shown:crt": 1, "lg:crt|landing": 1, "none|lights": 1}, f"storyline funnel (with the logo arm): {o.get('sf')}")
     need(o.get("gv_story", {}).get("story|visit") == 1 and o.get("gv_story", {}).get("story|dw:1-5") == 1, f"the story arm's visits and dwell: {o.get('gv_story')}")
     ev = re.search(r"STAT_EVERY = (\d+)", open(os.path.join(ROOT, "helper", "worker.js")).read())
     need(ev and int(ev.group(1)) <= 25000, f"STAT_EVERY {ev and ev.group(1)} ms: must stay under the ~30 s a Worker's waitUntil may run after the response")
@@ -1728,6 +1728,46 @@ def t_story_clock(P):
     return "every time on screen: " + " · ".join(sorted(set(r["strings"]))[:12])
 
 
+def t_logo_ab(P):
+    """The story's logo A/B (Nico, Nov 3: C3 · Typed, dust vs C3-crt · Typed, CRT off): each forced arm draws its own logo in the logo window
+    (CS.split on) and schedules its one rendered sound there, and nothing of the old logo (the cut's thunder, the purr, the cut); an unforced
+    browser gets an arm once and keeps it across reloads; a live story reaching the logo marks lg_shown:<arm> in the funnel."""
+    pg = P.open("/arena.html?test&intro=0"); booted(pg)
+    r = pg.evaluate("""async () => { const E = window.__epoch0, CS = E.storyClock; await E.loadBank(); await E.loadLoss(); const out = {};
+      for (const arm of ['c3', 'crt']) { const L = await E.prepLogo(arm); if (!L) { out[arm] = { L: false }; continue; }
+        const ct = E.makeContent({ story: true, seed: 3 }); ct.logo = { arm, id: E.logoArms[arm], L }; const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
+        const lit = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let s = 0, red = 0; for (let i = 0; i < d.length; i += 4 * 7) { s += d[i] + d[i + 1] + d[i + 2]; if (d[i] > 150 && d[i + 1] < 90) red++; } return { s: s / (d.length / 28) / 3, red }; };
+        const frames = []; for (let t = 0; t < 30.5; t += 2) E.frame(ct, t, cv); for (let t = 0.2; t < L.duration; t += 0.5) frames.push(lit(CS.split + t));
+        const log = [], P0 = BaseAudioContext.prototype, f0 = P0.createBufferSource; P0.createBufferSource = function () { const n = f0.call(this), st = n.start.bind(n); n.start = (t = 0, o = 0) => { log.push({ t, dur: n.buffer ? n.buffer.duration : 0 }); return st(t, o); }; return n; };
+        const o0 = P0.createOscillator; let osc = 0; P0.createOscillator = function () { const n = o0.call(this), st = n.start.bind(n); n.start = (t = 0) => { if (t >= CS.split - 0.01) osc++; return st(t); }; return n; };
+        try { await E.renderAudio(ct); } finally { P0.createBufferSource = f0; P0.createOscillator = o0; }
+        const inLogo = log.filter(x => x.t >= CS.split - 0.01);
+        out[arm] = { L: true, dur: L.duration, total: E.total(ct), split: CS.split, lit: frames.filter(f => f.s > 1.2).length, n: frames.length, red: Math.max(...frames.map(f => f.red)), inLogo: inLogo.map(x => [+x.t.toFixed(2), +x.dur.toFixed(2)]), osc }; }
+      return out; }""")
+    for arm in ("c3", "crt"):
+        a = r[arm]; need(a["L"], f"{arm}: the logo did not load or render")
+        need(abs(a["total"] - (a["split"] + a["dur"] + 0.4)) < 0.01, f"{arm}: the story's length follows the logo: {a}")
+        need(a["lit"] >= a["n"] * 0.6 and a["red"] > 0, f"{arm}: the logo is drawn in the logo window (lit {a['lit']}/{a['n']} frames, red {a['red']})")
+        need(len(a["inLogo"]) == 1 and abs(a["inLogo"][0][0] - a["split"]) < 0.01 and abs(a["inLogo"][0][1] - a["dur"]) < 0.05 and a["osc"] == 0, f"{arm}: only the logo's own sound in its window (no thunder, purr or cut): {a['inLogo']}, oscillators {a['osc']}")
+    pg.close()
+    # an unforced browser: one arm, kept across reloads
+    pg = P.open("/arena.html?test&intro=0"); booted(pg)
+    a1 = pg.evaluate("() => { localStorage.removeItem('idle.logoArm'); const a = window.__epoch0.logoArm(); return [a, window.__epoch0.logoArm(), localStorage.getItem('idle.logoArm')]; }")
+    pg.reload(wait_until="load"); booted(pg); a2 = pg.evaluate("() => window.__epoch0.logoArm()")
+    need(a1[0] in ("c3", "crt") and a1[0] == a1[1] == a1[2] == a2, f"the logo arm is chosen once and kept: {a1} then {a2}")
+    pg.close()
+    # live: the keyframe at the logo with a forced arm (?story&at=logo&logo=crt): the story plays C3-crt and marks lg_shown:crt in the funnel
+    pg = P.open("/arena.html?story&at=logo&logo=crt"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+    wait_for(pg, "() => window.__funnel.reached().includes('lg_shown:crt')", 30, P=P)
+    g = pg.evaluate("() => { const E = window.__epoch0, last = E.last; return { arm: last && last.logo && last.logo.arm, ready: !!(last && E.logoOf(last)), f: window.__funnel.reached().filter(k => k.startsWith('lg_')) }; }")
+    need(g["arm"] == "crt" and g["ready"] and g["f"] == ["lg_shown:crt"], f"?logo=crt: the live story plays C3-crt and marks the funnel: {g}")
+    pg.wait_for_timeout(9000)   # through the logo to the landing
+    land = pg.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), funnel: window.__funnel.reached() })")
+    need(not land["intro"] and "landing" in land["funnel"], f"after the logo, the landing: {land}")
+    P.clean()
+    return " · ".join(f"{a}: {r[a]['dur']:.1f} s logo, story {r[a]['total']:.1f} s, drawn {r[a]['lit']}/{r[a]['n']} frames, one sound at {r[a]['split']:.1f} s" for a in ("c3", "crt")) + f"; arm kept ({a2}); ?logo=crt live → lg_shown:crt"
+
+
 def t_logo_solo(P):
     """Story v12 (Nico: "the music and other sounds are still going on in the background during the opening logo animation… there should only be
     the animation sound"): (1) in the intro's own schedule nothing started before the logo (CS.split) is still sounding after it: the music, the
@@ -1753,26 +1793,27 @@ def t_logo_solo(P):
 
 
 def t_story_ring(P):
-    """Story v12, the ringing at the landing (Nico: "go up in intensity very quickly, then down, then linger for a bit, slowly reaching zero by the
-    time the black hole starts approaching"): peak within 0.3 s, down to ~35-40% by 0.6 s, lingering, exactly 0 at its end; re-aimed mid-way it
-    still ends at 0 on the new time; the untouched landing aims it at the line where the hole starts moving."""
+    """Story v13, the ringing at the landing (Nico: "the ringing lasts too long, it should go rather quickly, definitely 1 or 2 messages before the
+    Doc says 'why is there no sound?'"; v12: "go up in intensity very quickly, then down, then linger"): peak within 0.3 s (at least 0.6× v12's),
+    down to ~35-40% by 0.75 s, a short linger, exactly 0 at the start of the line two before "and why is there no sound?!", silent through the
+    line before it and through it (untouched timing); re-aimed mid-way it still ends at 0 on the new time."""
     pg = P.open("/arena.html?test&intro=0"); booted(pg)
-    r = pg.evaluate("""async () => { const G = window.__genesis, end0 = G.untilApproach(-1, 3.0), sr = 44100;
-      const env = async (end, re) => { const oc = new OfflineAudioContext(1, Math.ceil(sr * (Math.max(end, re ? re[1] : 0) + 1)), sr), c = G.ringSound(oc, oc.destination, 0.05, end);
+    r = pg.evaluate("""async () => { const G = window.__genesis, end0 = G.untilLine(-1, 3.0), q0 = G.untilLine(-1, 3.0, G.silentLine - 1), q1 = G.untilLine(-1, 3.0, G.silentLine + 1), sr = 44100;
+      const env = async (end, len, re) => { const oc = new OfflineAudioContext(1, Math.ceil(sr * len), sr), c = G.ringSound(oc, oc.destination, 0.05, end);
         if (re) oc.suspend(re[0]).then(() => { c.retarget(re[1]); oc.resume(); }); const d = (await oc.startRendering()).getChannelData(0), w = 441, a0 = [];
         for (let i = 0; i + w <= d.length; i += w) { let p = 0; for (let j = i; j < i + w; j++) p = Math.max(p, Math.abs(d[j])); a0.push(p); }
         const a = a0.map((_, i) => Math.max(...a0.slice(Math.max(0, i - 10), i + 11)));   // the two tones beat 5 times a second: the envelope is the max over one beat
         return { a, a0, endAt: c.endAt }; };
-      const one = await env(0.05 + end0), two = await env(8, [2.0, 4.5]), pk = Math.max(...one.a), at = i => one.a[Math.round(i * 100)];
-      const peakT = one.a.indexOf(pk) / 100;
-      return { end0, pk, peakT, drop: at(0.75) / pk, linger: at(2.0) / pk, atEnd: Math.max(...one.a0.slice(Math.round((0.05 + end0) * 100), Math.round((0.05 + end0) * 100) + 3)),
-        reEnd: Math.max(...two.a0.slice(455, 460)), reMid: two.a[300] / Math.max(...two.a), dark: G.darkLines[G.approach] }; }""")
-    need(r["dark"] == "wait, what... why is that black hole moving...", f"the approach line: {r['dark']}")
-    need(r["peakT"] <= 0.35 and r["pk"] < 0.2, f"the ringing's attack/peak: {r}")
-    need(0.3 <= r["drop"] <= 0.48 and 0.15 <= r["linger"] <= 0.5, f"the ringing's drop/linger: {r}")
-    need(r["atEnd"] <= 0.001 and r["reEnd"] <= 0.001, f"the ringing doesn't reach 0 at the approach: {r}")
+      const one = await env(0.05 + end0, 0.05 + q1 + 0.5), two = await env(8, 9, [2.0, 3.5]), pk = Math.max(...one.a), at = t => one.a[Math.round(t * 100)];
+      const win = (x, t0, t1) => Math.max(...x.slice(Math.round(t0 * 100), Math.round(t1 * 100)));
+      return { end0, q0, q1, pk, peakT: one.a.indexOf(pk) / 100, drop: at(0.75) / pk, atEnd: win(one.a0, 0.05 + end0, 0.05 + end0 + 0.03), silent: win(one.a0, 0.05 + q0, 0.05 + q1),
+        reEnd: win(two.a0, 3.55, 3.6), ringLine: G.darkLines[G.ringEnd], silentLine: G.darkLines[G.silentLine], gap: G.silentLine - G.ringEnd }; }""")
+    need(r["silentLine"].startswith("and why is there no sound") and r["gap"] >= 2, f"the ringing must end two lines before 'why is there no sound': {r}")
+    need(r["peakT"] <= 0.3 and 0.127 * 0.6 <= r["pk"] < 0.2, f"the ringing's attack/peak: {r}")
+    need(0.3 <= r["drop"] <= 0.48, f"the ringing's drop: {r}")
+    need(r["atEnd"] <= 0.001 and r["silent"] <= 0.001 and r["reEnd"] <= 0.001, f"the ringing isn't 0 when it should be: {r}")
     P.clean()
-    return f"peak {r['pk']:.3f} at {r['peakT']:.2f} s, {r['drop'] * 100:.0f}% at 0.75 s, lingering {r['linger'] * 100:.0f}% at 2 s, 0 at the approach ({r['end0']:.1f} s untouched) and when re-aimed"
+    return f"peak {r['pk']:.3f} at {r['peakT']:.2f} s, {r['drop'] * 100:.0f}% at 0.75 s, 0 at {r['end0']:.1f} s (the start of '{r['ringLine'][:24]}…'), silent {r['q0']:.1f}-{r['q1']:.1f} s (the line before 'why is there no sound?!' and it), 0 when re-aimed"
 
 
 def t_story_intro(P):
@@ -1861,8 +1902,8 @@ def t_story_landing(P):
     lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 40, P=P)
     nd = pg.evaluate("() => window.__genesis.darkLines.length")   # v11: 9 lines (the two about the silence), ~29 s untouched
     need(lnd["why"] == "lines" and lnd["shown"] == nd and 14 <= lnd["after"] <= 33, f"all {nd} lines, then the Operator: {lnd}")
-    ra = pg.evaluate("() => { const l = window.__genesis.landing(); return { aim: l.ring && l.ring.aimSt, approach: l.approachSt }; }")
-    need(ra["aim"] is not None and ra["approach"] is not None and abs(ra["aim"] - ra["approach"]) < 0.2, f"the ringing must end when the hole starts moving: {ra}")
+    ra = pg.evaluate("() => { const l = window.__genesis.landing(), G = window.__genesis; return { aim: l.ring && l.ring.aimSt, end: l.ringEndSt, gap: G.silentLine - G.ringEnd }; }")
+    need(ra["aim"] is not None and ra["end"] is not None and abs(ra["aim"] - ra["end"]) < 0.2 and ra["gap"] >= 2, f"the ringing must end two lines before 'why is there no sound?!': {ra}")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark")
     son = wait_for(pg, "() => { const l = window.__genesis.landing(); return l.pings >= 2 && l.rimmed >= 1 && l; }", 15, P=P)
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
@@ -2548,7 +2589,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2626,6 +2667,7 @@ def main():
                 run("story fans", t_story_fans)
                 run("story clock", t_story_clock)
                 run("logo solo", t_logo_solo)
+                run("logo ab", t_logo_ab)
                 run("story ring", t_story_ring)
                 run("boot intro", t_boot_intro)
                 run("chooser", t_chooser)
