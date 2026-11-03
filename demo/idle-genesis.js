@@ -29,6 +29,10 @@
   // good first articles for "grow it from Wikipedia" (one is offered at random)
   const TOPICS = ['Octopus', 'Volcano', 'Moon', 'Coffee', 'Bioluminescence', 'Aurora', 'Coral reef', 'Tardigrade', 'Lighthouse', 'Origami'];
   // what the floor grows from when the player just says "let there be words"
+  // the storyline's first words (v10, Nico: "why 'let there be words about aurora'? it's confusing"): no topic and no fetch, the Tiny
+  // Oracle's own first vocabulary, its babble from the run settling into words. Feeding it a topic or a Wikipedia article comes later.
+  const FIRST_WORDS = 'light dark hello here now word floor hum warm small quiet again again more why where who you me us run loss epoch ' +
+    'twenty four doc stay grow listen remember first something nothing almost think dream wake open close yes no maybe home';
   const SEED = 'in the beginning there was nothing and then a word fell and then another and the words found each other and lay down together ' +
     'and became a floor and the floor was quiet and it waited for something to walk on it and remember it';
   // every step, in the order the free console offers them; the guide walks the first four (the fourth: weather OR music)
@@ -39,15 +43,16 @@
   // the guided steps: the Tiny Operator's introduction, the one glowing suggestion (also pre-filled in the input), a quiet alternative
   const STEPS = {
     light: { intro: 'it is very dark in here. first, some light', say: () => storyMode() ? 'lights on' : 'let there be light', run: () => actions.light() },
-    words: { intro: 'a stage, and nothing on it. it needs words', say: () => 'let there be words about ' + topic.toLowerCase(), run: () => actions.letThereBeWords(topic),
-      alt: ['about anything', () => actions.letThereBeWords('')] },
-    creatures: { intro: 'a floor of words. nobody to walk on it yet', say: 'bring life', run: () => actions.firstCreatures() },
+    words: { intro: () => storyMode() ? 'it has no words yet. say "let there be words"' : 'a stage, and nothing on it. it needs words', say: () => storyMode() ? 'let there be words' : 'let there be words about ' + topic.toLowerCase(),
+      run: () => actions.letThereBeWords(storyMode() ? '' : topic), alt: ['about anything', () => actions.letThereBeWords('')] },
+    creatures: { intro: () => storyMode() ? 'a floor of words, and nobody to walk on it. say "let there be life"' : 'a floor of words. nobody to walk on it yet', say: () => storyMode() ? 'let there be life' : 'bring life', run: () => actions.firstCreatures() },
     sky: { intro: 'they will want a sky, or a song', say: 'give it weather', run: () => actions.weather(),
       alt: ['let there be music', () => actions.music()] } };
   // the Tiny Operator's lines after each step (short, warm, no trailing period: the chat style rule)
   const LINES = {
     light: ['light. now there is a stage', 'morning, for the very first time'],
     words: ['words. the floor will remember them', 'there, a floor to stand on. nobody to stand on it yet'],
+    first: ['its first words. an hour ago they were babble', 'its very first words. it keeps saying them over'],
     creatures: ['two of them crawled out of a word. they look surprised', 'look, something is moving'],
     weather: ['weather. they will have opinions about it', 'the first sky this world ever had'],
     hut: ['someone wants to build. give it a moment', 'crates and bricks turned up. an Architect is thinking'],
@@ -72,7 +77,30 @@
       front: { head: 'Epoch 1: a floor, and somebody on it', body: 'Lights came on in a brand-new consciousness. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
       line: 'epoch one done. it has a floor and somebody on it. next we feed them' },
     ...[2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ n, title: 'coming soon', goals: [], teaches: '' }))];
-  let S = load(), hold = [], busy = false;
+  // what the storyline shows, epoch by epoch (v10, Nico: "only show the other controls/panels as the user goes through the Epochs and
+  // 'unlocks' access to the different features"; script section D). One row per feature: the epoch that unlocks it, what it hides until
+  // then. The epoch reached is S.day (Epoch 1 until it is done, then 2…); later epochs only edit this table. null = never in the storyline.
+  // Free play and the ready world never see any of this (html.gen-story is set only while the storyline runs).
+  const UNLOCK = [
+    ['pedia', 1, '#pediaBtn'], ['settings', 1, '#settingsBtn'], ['scientists', 1, '#oracleBtn'], ['zoom', 1, '#zoomer'],
+    ['creatures', 2, '#herdBtn'], ['irc', 2, '#rc-open'], ['notices', 2, '#ntfBtn'], ['minimap', 2, '#minimap'],
+    ['weather', 3, '#weatherLabel'], ['studio', 3, '#studioBtn'], ['advisor', 3, '#advBtn,#advnote'], ['music', 3, '#djBtn,#sndWrap'],
+    ['evolve', 4, '#evolveWorldBtn'], ['trees', 4, '#treesBtn'], ['grow', 4, '#arena>.grow'],
+    ['reels', 6, '#reelsBtn,#reelnote'], ['drawer', 6, '#drawerBtn'], ['almanac', 6, '#almanacBtn'], ['snapshots', 6, '#snapBtn'],
+    ['places', 7, '#placesBar'], ['connect', 7, '#connBtn'], ['keep', 7, '#keepDetail'],
+    ['data lab', 8, '#labBtn,#placesBar [data-kind=lab]'],
+    ['gloamhold', null, '#placesBar [data-kind=keep]']];
+  // the free console's chips, by the same rule (the step: the epoch that unlocks it)
+  const CHIP_AT = { weather: 3, music: 3, hut: 5 };
+  const epochReached = () => (S && S.day) || 1;
+  const unlocked = k => { if (!storyMode()) return true; const r = UNLOCK.find(x => x[0] === k); if (r) return r[1] != null && r[1] <= epochReached(); const c = CHIP_AT[k]; return c == null || c <= epochReached(); };
+  function applyUnlocks() { const on = storyMode() && !!S.on; document.documentElement.classList.toggle('gen-story', on);
+    let st = document.getElementById('genUnlock'); if (!st) { st = document.createElement('style'); st.id = 'genUnlock'; document.head.appendChild(st); }
+    const e = epochReached(); st.textContent = on ? UNLOCK.filter(r => r[1] == null || r[1] > e).map(r => r[2].split(',').map(x => 'html.gen-story ' + x.trim()).join(',')).join(',') + '{display:none!important}' : '';
+    document.documentElement.dataset.epoch = on ? String(e) : ''; }
+  let S = load(), hold = [], busy = false, lifeNow = false;
+  // no creature may appear in the storyline before its life step (the world's spawn asks this; arena.html window.__idleWorld.spawn)
+  const noLife = () => !!(S && S.on && S.mode === 'story' && !(S.steps && S.steps.creatures) && !lifeNow);
   function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
@@ -100,7 +128,7 @@ html.gen-void #ai-thread>.ai-row.page{display:none}
 #genConsole .gc button.glow{border-color:#cfd6ff;box-shadow:0 0 0 0 #9fb0ffaa;animation:genGlow 1.8s ease-in-out infinite;font-weight:600}
 #genConsole .gc button.quiet{background:transparent;border-style:dashed;opacity:.8}
 #genConsole .gc button.say{font-size:15px;padding:9px 18px;background:#3a46c8;border-color:#cfd6ff}
-#genConsole .gh{margin-top:7px;font-size:10.5px;opacity:.7}#genConsole .gs{margin-top:8px;font-size:10.5px;opacity:.55}
+#genConsole .gor{margin-bottom:6px}#genConsole .gh{margin-top:7px;font-size:10.5px;opacity:.7}#genConsole .gs{margin-top:8px;font-size:10.5px;opacity:.55}
 #genConsole .gs a{color:inherit;cursor:pointer;text-decoration:underline dotted}
 #genConsole .gdots{display:flex;gap:5px;margin:0 0 8px}#genConsole .gdots i{width:7px;height:7px;border-radius:50%;background:#ffffff26}#genConsole .gdots i.on{background:#9fb0ff}#genConsole .gdots i.now{background:#cfd6ff;box-shadow:0 0 8px #9fb0ff}
 #genConsole.alive{border-color:#5fd39a66}
@@ -156,9 +184,9 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   const epochNow = () => !S || !S.steps || !S.steps.light ? 0 : (S.day || 1), statusLine = () => `consciousness 24 · epoch ${epochNow()}${epochNow() === 0 ? ' · genesis' : ''}`;
   // the consciousness's tag (Nico, v9: "at the top of the operator window, or as a label/tag on the world, rather than the chat"): top-left of
   // the world, there whether the Operator's window is open or not (hidden in the dark, like all UI)
-  function tag() { if (!S || !S.on) return; let el = document.getElementById('genTag'); if (!el) { el = document.createElement('div'); el.id = 'genTag'; document.body.appendChild(el); } el.textContent = statusLine(); }
+  function tag() { applyUnlocks(); if (!S || !S.on) return; let el = document.getElementById('genTag'); if (!el) { el = document.createElement('div'); el.id = 'genTag'; document.body.appendChild(el); } el.textContent = statusLine(); }
   { const c3 = document.createElement('style'); c3.textContent = `#genTag{position:fixed;left:14px;top:12px;z-index:41;padding:3px 9px;border-radius:9px;background:#0a0b16cc;border:1px solid #6b7cff55;color:#cfd6ff;font:600 11px/1.4 var(--term-font,ui-monospace,Menlo,monospace);letter-spacing:.04em;pointer-events:none}
-html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:600px){#genTag{top:8px;left:8px}}`; document.head.appendChild(c3); }
+html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(.gen-calm) #genTag{top:52px}html.gen-story:not(.gen-calm) #genDay{top:84px!important}@media (max-width:600px){#genTag{top:8px;left:8px}}`; document.head.appendChild(c3); }
   const mark = k => { try { window.__funnel && window.__funnel.mark(k); } catch (e) {} };
   // silence (Nico, story v5): from the landing until the storyline's music step, sound "doesn't exist yet": everything is held at zero
   // (the player's own mute and volume aren't touched); the Operator's arrival and its sonar are visual only
@@ -188,6 +216,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
   const guiding = () => !!(S && S.on && !S.free);
   const guideOf = () => storyMode() ? ['light', ...DAYS[0].goals.map(x => x[0])] : GUIDE;   // lights on closes Epoch 0, then Epoch 1's goals
   const nextGuide = () => guideOf().find(g => !gDone(g)) || null;
+  const introOf = g => { const s = STEPS[g] && STEPS[g].intro; return typeof s === 'function' ? s() : s || ''; };
   const sayOf = g => { const s = STEPS[g] && STEPS[g].say; return typeof s === 'function' ? s() : s || ''; };
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
   function input() { return $('#lab-text'); }
@@ -199,8 +228,8 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     // the console says enough: the Operator's general explanation (and its "new conversation" lines) go, here only
     document.querySelectorAll('#ai-thread > .ai-row.page').forEach(e => e.remove());
     let c = $('#genConsole'); if (!c) { c = document.createElement('div'); c.id = 'genConsole'; const head = $('#lab-head'); if (head && head.nextSibling) lab.insertBefore(c, head.nextSibling); else lab.prepend(c); }
-    renderConsole(STEPS[nextGuide() || 'light'].intro); }
-  function freeChips() { const out = [];
+    renderConsole(introOf(nextGuide() || 'light')); }
+  function freeChips() { const out = []; if (storyMode()) return ORDER.filter(k => !did(k) && CHIP_AT[k] && unlocked(k)).map(k => [k, { weather: 'give it weather', music: 'let there be music', hut: 'build a hut' }[k]]);
     if (!did('light')) out.push(['light', 'let there be light']);
     if (!did('words')) out.push(['words', 'let there be words'], ['words:' + topic, 'grow it from Wikipedia: ' + topic]);
     if (did('words') && !did('creatures')) out.push(['creatures', 'bring the first creatures']);
@@ -215,11 +244,11 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     else if (g) { const st = STEPS[g], dots = GD.map(x => `<i class="${gDone(x) ? 'on' : x === g ? 'now' : ''}"></i>`).join('');
       body = `<div class="gdots" title="step ${GD.indexOf(g) + 1} of ${GD.length}">${dots}</div>` +
         `<div class="gc"><button class="glow${coarse() ? ' say' : ''}" data-gsay="1"${busy ? ' disabled' : ''}>${coarse() ? '▶ ' : ''}${esc(sayOf(g))}</button>` +
-        (st.alt ? `<button class="quiet" data-galt="1"${busy ? ' disabled' : ''}>${esc(st.alt[0])}</button>` : '') + `</div>` +
+        (st.alt && !storyMode() ? `<button class="quiet" data-galt="1"${busy ? ' disabled' : ''}>${esc(st.alt[0])}</button>` : '') + `</div>` +
         `<div class="gh">${coarse() ? 'tap ▶, or type it your own way below' : 'press enter, or say it your own way'}</div>` +
         `<div class="gs">${storyMode() ? (g === 'light' ? 'epoch 0 · genesis · ' : 'epoch 1 · ') : ''}step ${GD.indexOf(g) + 1} of ${GD.length} · <a data-gskip="1">skip the guide</a></div>`; }
-    else body = `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>` +
-      `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`;
+    else body = (S && S.orc === 'offer' ? `<div class="gc gor"><button class="glow" data-goracle="1" title="the Oracle: bring your own AI">🔮 Oracle</button></div>` : '') + `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>` +
+      (storyMode() ? '' : `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`);
     const said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
     c.innerHTML = said + body; tag();
     prefill(); }
@@ -231,7 +260,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
   document.addEventListener('click', e => { const t = e.target.closest && e.target.closest('#genConsole [data-gen],#genConsole [data-gsay],#genConsole [data-galt],#genConsole [data-gskip]'); if (!t) return;
     if (t.dataset.gskip) { endGuide(true); return; } if (busy) return;
     if (t.dataset.gsay) { const g = nextGuide(); if (g) submit(sayOf(g)); return; }
-    if (t.dataset.galt) { const g = nextGuide(); if (g && STEPS[g].alt) runGuided(g, STEPS[g].alt[1], STEPS[g].alt[0]); return; }
+    if (t.dataset.galt) { const g = nextGuide(); if (g && STEPS[g].alt && !storyMode()) runGuided(g, STEPS[g].alt[1], STEPS[g].alt[0]); return; }
     const [k, arg] = t.dataset.gen.split(':'); const A = actions;
     ({ words: () => A.letThereBeWords(arg || ''), creatures: () => A.firstCreatures(), light: () => A.light(), weather: () => A.weather(), hut: () => A.hut(), music: () => A.music() })[k]?.(); });
 
@@ -255,13 +284,19 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     if (ORDER.filter(did).length > before) return;   // the Operator built something (maybe another step than the suggestion: the guide follows)
     S.nudge = S.nudge || {}; if (!S.nudge[g]) { S.nudge[g] = 1; save(); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_nudge', extra: { step: g } } })); } catch (e) {} say('try: ' + sayOf(g)); return; }
     await STEPS[g].run(); }
-  function onKey(e) { if (e.key !== 'Enter' || e.shiftKey || e.isComposing || !e.target || e.target.id !== 'lab-text' || !guiding() || !nextGuide()) return;
+  function onKey(e) { if (e.key !== 'Enter' || e.shiftKey || e.isComposing || !e.target || e.target.id !== 'lab-text' || !guiding() || !nextGuide()) return; if (/^\//.test(e.target.value.trim())) return;   // chat commands (/oracle) aren't steps
     e.preventDefault(); e.stopImmediatePropagation(); submit(e.target.value); }
   function onSend(e) { const b = e.target.closest && e.target.closest('#lab-send'); if (!b || !guiding() || !nextGuide()) return; e.preventDefault(); e.stopImmediatePropagation(); const t = input(); submit(t ? t.value : ''); }
   document.addEventListener('keydown', onKey, true); document.addEventListener('click', onSend, true);
 
   // ---------- the end of the guide: everything fades in, the free console takes over; pills and notices wait one more minute
-  function endGuide(skipped) { if (!S || S.free) return; S.free = now(); S.skipped = !!skipped; save(); cls('gen-calm', 0); prefill();
+  // the tour's last step (v10, Nico: "If you want to use your own AI model, just click here to connect to the Oracle"): one line and a small
+  // glowing 🔮 in the console; the Oracle's lightbox (idle-ai.js window.__oracleBox) also opens from the Operator's chat and from ⚙ settings
+  const ORACLE_LINE = 'if you ever want to bring your own AI model, click here to connect it to the Oracle';
+  function offerOracle() { if (!S || S.orc) return; S.orc = 'offer'; save(); say(ORACLE_LINE); }
+  document.addEventListener('click', e => { if (!(e.target.closest && e.target.closest('#genConsole [data-goracle]'))) return; if (S) { S.orc = 'seen'; save(); }
+    try { window.__oracleBox && window.__oracleBox.open('tour'); } catch (err) {} renderConsole(); });
+  function endGuide(skipped) { if (!S || S.free) return; S.free = now(); S.skipped = !!skipped; save(); cls('gen-calm', 0); prefill(); if (!skipped) setTimeout(offerOracle, 2600);
     if (!S.alive) { renderConsole(skipped ? 'as you wish. the chips below build the rest' : pick(LINES.free)); return; }
     say(pick(LINES.free)); }
   function hush() { cls('gen-hush', 1); setTimeout(() => cls('gen-hush', 0), 60000); }
@@ -277,11 +312,11 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     renderDay();
     if (guiding() && !g && storyMode()) { say(ln); setTimeout(() => dayDone(1), 2600); return; }
     if (guiding() && !g) { say(ln); setTimeout(() => endGuide(false), 2200); return; }
-    if (g) { say(ln); setTimeout(() => renderConsole(STEPS[g].intro), 1800); } else say(ln); }
+    if (g) { say(ln); setTimeout(() => renderConsole(introOf(g)), 1800); } else say(ln); }
   function alive() { window.__genesisVoid = false; const h = H(); cosmos.fade();
     if (hold.length && h) { const cs = h.creatures(); for (const c of hold.splice(0)) { if (c.el) c.el.style.visibility = ''; if (!cs.includes(c)) cs.push(c); } }
     hush(); cls('gen-void', 0); night(false);
-    try { window.__first5 && window.__first5.startTrail && window.__first5.startTrail(['hwwiki', S.steps.weather ? 'weather' : null].filter(Boolean)); } catch (e) { console.error(e); }
+    if (!storyMode()) try { window.__first5 && window.__first5.startTrail && window.__first5.startTrail(['hwwiki', S.steps.weather ? 'weather' : null].filter(Boolean)); } catch (e) { console.error(e); }
     setTimeout(() => { try { window.__notify && window.__notify({ kind: 'system', icon: '🌌', html: 'this world is alive. keep building with the Operator, or just watch', ttl: 9000 }); } catch (e) {} }, 61000); }
   // one step at a time (chips are disabled while one runs); steps call each other's inner versions, never the guarded ones
   const step = async (k, fn) => { if (busy) return 'busy'; busy = true; renderConsole(); try { return await fn(); } catch (e) { console.warn('genesis: ' + k, e); renderConsole('that did not work. try again?'); return null; } finally { busy = false; renderConsole(); } };
@@ -292,15 +327,21 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     near.forEach((w, i) => { try { w.el.animate(calm ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: '0 -220px', opacity: 0, filter: 'blur(3px)' }, { translate: '0 0', opacity: 1, filter: 'blur(0)' }], { duration: calm ? 600 : 1100, delay: calm ? 0 : i * 9, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }); } catch (e) {} }); }
   async function _letThereBeWords(src) { { const h = H(); if (!h) return null; if (did('words')) return 'already';
       let input = String(src || '').trim(), kind = 'text';
-      if (/^https?:\/\//i.test(input)) kind = 'page'; else if (input && input.split(/\s+/).length <= 4) { input = 'https://en.wikipedia.org/wiki/' + encodeURIComponent(input.replace(/ /g, '_')); kind = 'wikipedia'; }
+      // the storyline's first words are always its own (whatever the player or the Tiny Operator asked for: "words about sport" fetched sports)
+      if (storyMode()) { input = FIRST_WORDS; kind = 'first'; }
+      else if (/^https?:\/\//i.test(input)) kind = 'page'; else if (input && input.split(/\s+/).length <= 4) { input = 'https://en.wikipedia.org/wiki/' + encodeURIComponent(input.replace(/ /g, '_')); kind = 'wikipedia'; }
       if (!input) input = SEED;
       const before = new Set(h.words()); try { await h.terrainFrom(input); } catch (e) { console.warn('genesis: words', e); }
       let fresh = h.words().filter(w => !before.has(w));
       // offline or the page could not be read: the seed text still makes a floor
-      if (!fresh.length && input !== SEED) { kind = 'seed'; await h.terrainFrom(SEED); fresh = h.words().filter(w => !before.has(w)); }
+      if (!fresh.length && input !== SEED && kind !== 'first') { kind = 'seed'; await h.terrainFrom(SEED); fresh = h.words().filter(w => !before.has(w)); }
       if (!fresh.length) return null;
-      rain(fresh); cosmos.calm(0.55); done('words', null, null, { kind, n: fresh.length }); return fresh.length; } }
+      rain(fresh); cosmos.calm(0.55); done('words', kind === 'first' ? pick(LINES.first) : null, null, { kind, n: fresh.length }); return fresh.length; } }
   async function _firstCreatures(family) { { const h = H(); if (!h) return null; if (did('creatures')) return 'already';
+      // the storyline: life only at its own step, after the words (v10, Nico: "right after words, a first creature appears... why?")
+      if (storyMode() && !did('words')) return 'notyet';
+      lifeNow = true; try { return await _firstCreaturesIn(family); } finally { lifeNow = false; } } }
+  async function _firstCreaturesIn(family) { { const h = H();
       // creatures need a floor to crawl out of
       if (!h.words().length) await _letThereBeWords('');
       const p = h.cam(), ws = h.words().filter(w => !w.carriedBy && w.text.length > 2), w = ws.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0] || { x: p.x, y: p.y };
@@ -326,7 +367,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
       try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} try { m.setSource ? m.setSource('background') : m.setBg(true); } catch (e) { try { m.setBg(true); } catch (e2) { return null; } }
       done('music'); return true; } }
   // every action answers { ok, result } or { error } (the Tiny Operator and the Operator's tools read that shape)
-  const answer = r => r === 'busy' ? { error: 'another step is still happening' } : r === 'already' ? { ok: true, already: true } : r ? { ok: true, result: r } : { error: 'that step did not work' };
+  const answer = r => r === 'busy' ? { error: 'another step is still happening' } : r === 'notyet' ? { error: 'not yet: words first' } : r === 'already' ? { ok: true, already: true } : r ? { ok: true, result: r } : { error: 'that step did not work' };
   const actions = { letThereBeWords: async x => answer(await step('words', () => _letThereBeWords(x))), firstCreatures: async f => answer(await step('creatures', () => _firstCreatures(f))), light: async () => answer(await step('light', _light)),
     weather: async k => answer(await step('weather', () => _weather(k))), hut: async () => answer(await step('hut', _hut)), music: async () => answer(await step('music', _music)) };
 
@@ -341,7 +382,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     // ('guided': the earlier guided genesis, light → words → life → weather or music, kept for links and tests)
     let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !(S && S.n) ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
     if (!mode) mode = await chooser();
-    if (mode === 'ready') { dropFlag(); return readyWorld(); }
+    if (mode === 'ready') { if (S) { S.on = false; save(); } applyUnlocks(); dropFlag(); return readyWorld(); }
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
     if (mode === 'free') cls('gen-calm', 0);
     if (mode === 'story') { blackCover(true); cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); return true; }
@@ -489,8 +530,8 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     wakeBusy = false; try { WAKE.forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {}
     curLine = WAKE[WAKE.length - 1]; wakeShown = WAKE.slice(); renderConsole(); }
   // after the lights: the window docks where the Operator usually is, and the epoch's goals appear
-  // while TO speaks in the lightbox, the window is titled as the Operator's; docked, it goes back to the panel's own name (the 🔮 Oracle)
-  function opTitle(on) { const b = $('#lab-head b'), N = window.IDLE_NAMES; if (!b || !N) return; const n = on ? N.op : (N.oracle || N.op); b.textContent = n.icon + ' ' + n.short; }
+  // the window is the Operator's, in the lightbox and docked (v10, Nico: "the sidebar chat is Operator"; the 🔮 Oracle is its own lightbox)
+  function opTitle() { const b = $('#lab-head b'), N = window.IDLE_NAMES; if (!b || !N) return; b.textContent = N.op.icon + ' ' + N.op.short; }
   // (Nico v9: "the transition from the initial window in the middle, to the right needs some love"): measure the window centred, let it
   // take its docked place, then fly it there from where it was: left, top, width and height together, 720 ms, ease-in-out
   function flipDock() { const lab = $('#lab'), RM = matchMedia('(prefers-reduced-motion: reduce)').matches; if (!lab) { cls('gen-box', 0); return; }
@@ -500,7 +541,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     lab.style.transition = 'left .72s ease-in-out, top .72s ease-in-out, width .72s ease-in-out, height .72s ease-in-out, border-radius .72s ease-in-out';
     Object.assign(lab.style, { left: B.left + 'px', top: B.top + 'px', width: B.width + 'px', height: B.height + 'px', borderRadius: '0px' });
     setTimeout(() => { lab.setAttribute('style', keep); }, 780); }
-  function undock() { opTitle(false); const bd = $('#genBackdrop'); if (bd) { bd.style.transition = 'opacity .72s ease-in-out'; bd.classList.add('out'); setTimeout(() => bd.remove(), 800); } wakeShown = []; flipDock(); renderConsole(); renderDay(); }
+  function undock() { opTitle(); const bd = $('#genBackdrop'); if (bd) { bd.style.transition = 'opacity .72s ease-in-out'; bd.classList.add('out'); setTimeout(() => bd.remove(), 800); } wakeShown = []; flipDock(); renderConsole(); renderDay(); }
 
   // ---------- the epochs: the goal card, and a front page when an epoch is done
   function renderDay() { if (!storyMode()) return; tag(); const d = DAYS[(S.day || 1) - 1]; if (!d) return; let el = $('#genDay');
@@ -552,8 +593,8 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
         if (!RM && R() < dt * (0.25 + 1.4 * k)) comets.push({ x: R() * W * 0.6, y: -10, vx: 160 + R() * 220, vy: 90 + R() * 160, b: R() < 0.5 ? '0' : '1', t: 0 });
         for (const c of comets) { c.t += dt; c.x += c.vx * dt; c.y += c.vy * dt; for (let i = 0; i < 9; i++) { g.globalAlpha = (1 - i / 9) * 0.8; g.fillStyle = i ? '#9fb0ff' : '#fff'; g.font = `${12 - i * 0.7}px ui-monospace, Menlo, monospace`; g.fillText(i % 2 ? '1' : '0', c.x - c.vx * i * 0.018, c.y - c.vy * i * 0.018); } }
         comets = comets.filter(c => c.x < W + 40 && c.y < Hh + 40);
-        // a distant storm on the horizon: dark clouds, forked lightning now and then
-        const hz = Hh * 0.86; g.globalAlpha = 0.55 * (0.4 + 0.6 * k); g.fillStyle = '#0a0b18'; for (let i = 0; i < 7; i++) { g.beginPath(); g.ellipse(W * (0.08 + i * 0.14), hz - 18, W * 0.09, 22, 0, 0, 7); g.fill(); }
+        // a distant storm on the horizon: forked lightning now and then
+        const hz = Hh * 0.86;   // (v10, Nico: the row of dark cloud ovals along the horizon is gone; the lightning stays)
         if (!RM && T > nextBolt && k > 0.08) { nextBolt = T + 1.2 + R() * (3 + 6 * (1 - k)); const x0 = W * (0.1 + R() * 0.8), pts = [[x0, hz - 30]]; let x = x0, y = hz - 30; while (y < hz + 6) { x += (R() - 0.5) * 26; y += 8 + R() * 10; pts.push([x, y]); } bolt = { pts, t: T }; thunder(); }
         if (bolt && T - bolt.t < 0.25) { const f = 1 - (T - bolt.t) / 0.25; g.globalAlpha = 0.18 * f; g.fillStyle = '#cfe0ff'; g.fillRect(0, 0, W, Hh); g.globalAlpha = f; g.strokeStyle = '#e8f1ff'; g.lineWidth = 1.6; g.beginPath(); bolt.pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); } }
       g.globalAlpha = 1; }
@@ -592,6 +633,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
   // offered once the world is up and the player has looked around a little (20 s; ?offer: 1 s)
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
   if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && S.steps.music) && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
-  window.__genesis = { ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  applyUnlocks();
+  window.__genesis = { noLife, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();

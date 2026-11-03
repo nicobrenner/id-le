@@ -660,7 +660,7 @@ def t_camera(P, phone=False):
 
 
 PANELS = [("herdBtn", "creatures"), ("studioBtn", "studio"), ("reelsBtn", "reels"), ("drawerBtn", "drawer"), ("advBtn", "advisor"), ("djBtn", "music deck"),
-          ("almanacBtn", "almanac"), ("treesBtn", "trees"), ("settingsBtn", "settings"), ("ntfBtn", "notices"), ("rc-open", "IRC"), ("lab-toggle", "Oracle"), ("labBtn", "data lab")]
+          ("almanacBtn", "almanac"), ("treesBtn", "trees"), ("settingsBtn", "settings"), ("ntfBtn", "notices"), ("rc-open", "IRC"), ("lab-toggle", "Operator"), ("labBtn", "data lab")]
 VISIBLE = """() => [...document.querySelectorAll('body *')].filter(e => { if (!e.id || e.offsetParent === null && getComputedStyle(e).position !== 'fixed') return false; const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
   const w = Math.min(r.right, innerWidth) - Math.max(r.left, 0), h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);   // on screen, not just laid out (side panels slide in)
   return w > 120 && h > 80 && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && cs.display !== 'none'; }).map(e => e.id)"""
@@ -686,8 +686,9 @@ def t_panels(P):
         pg.wait_for_timeout(300)
         need(len(P.errors) == e0, f"{name}: page error on close {P.errors[e0:e0 + 1]}")
     need(not missing, "buttons missing: " + ", ".join(missing))
+    need(not pg.evaluate("() => document.documentElement.classList.contains('gen-story') || !!(document.getElementById('genUnlock') || {}).textContent"), "outside the storyline nothing is locked")
     P.clean()
-    return f"{len(opened)} panels opened and closed"
+    return f"{len(opened)} panels opened and closed; nothing locked outside the storyline"
 
 
 def t_sound(P):
@@ -733,8 +734,8 @@ def t_haunted(P):
 
 def t_operator(P):
     """The 📟 Operator on a static site: the Tiny Operator (TO) is the default brain; its learned heads (arena_instr_v3.json) turn a few
-    requests into the game's own tools, pass creature commands to IRC, and leave chit-chat alone; 🧠 opens the options; the Operator
-    button never covers the panel's send row"""
+    requests into the game's own tools, pass creature commands to IRC, and leave chit-chat alone; the sidebar is only the Operator's chat
+    (v10: no brain bar, no 🧠, no "new"); 🔮 Oracle (footer link, /oracle, ⚙) opens the options in a lightbox; nothing covers the send row"""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     pg.wait_for_function("() => window.__oracle && window.__oracle.ready && window.__idleAI", timeout=90000)
     pg.click("#lab-toggle"); pg.wait_for_timeout(500)
@@ -746,12 +747,24 @@ def t_operator(P):
         got.append(f"{text!r}→{r['option']}/{r['acted']}")
         need(r["option"] == opt and r["acted"] == acted, f"{text!r}: expected {opt}/{acted}, got {r['option']}/{r['acted']} (p {r['p']:.2f})")
         if acted == "weather": need(pg.evaluate("() => window.__idleWorld.summary({ limit: 0 }).weather.kind") == "fog", "the weather did not turn to fog")
-    pg.click("#ai-smart-btn"); pg.wait_for_timeout(200)
-    need(pg.evaluate("() => getComputedStyle(document.querySelector('#ai-smart')).display") != "none", "🧠 panel did not open")
+    side = pg.evaluate("() => ({ inLab: ['#ai-bar', '#ai-smart', '#ai-set', '#ai-smart-btn', '#ai-new'].filter(s => document.querySelector('#lab ' + s)), newBtn: !!document.querySelector('#ai-new'), head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
+    need(not side["inLab"] and not side["newBtn"] and "Operator" in side["head"] and "Operator" in side["toggle"], f"the sidebar is the Operator's chat, nothing else (no brain bar, no 🧠, no 'new'): {side}")
+    opened = []
+    pg.click("#ai-oracle-link"); pg.wait_for_timeout(200)
+    vis = "() => { const b = document.querySelector('#oracleBox'); return !!b && !b.hidden && getComputedStyle(b).display !== 'none' && !!b.querySelector('#ai-brain') && getComputedStyle(b.querySelector('#ai-smart')).display !== 'none'; }"
+    if pg.evaluate(vis): opened.append("chat link")
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(150); need(not pg.evaluate(vis), "Esc should close the Oracle")
+    pg.fill("#lab-text", "/oracle"); pg.press("#lab-text", "Enter"); pg.wait_for_timeout(200)
+    if pg.evaluate(vis) and pg.evaluate("() => document.querySelector('#lab-text').value") == "": opened.append("/oracle")
+    pg.click("#oracleBox .ox"); pg.wait_for_timeout(150)
+    pg.click("#settingsBtn"); pg.wait_for_timeout(300); pg.click('#settings [data-k="oraclebox"]'); pg.wait_for_timeout(200)
+    if pg.evaluate(vis): opened.append("⚙ settings")
+    need(opened == ["chat link", "/oracle", "⚙ settings"], f"the Oracle lightbox should open from the chat link, /oracle and ⚙: {opened}")
+    pg.click("#oracleBox .ox"); pg.wait_for_timeout(150)
     top = pg.evaluate("() => { const r = document.querySelector('#lab-send').getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return e && e.id; }")
     need(top == "lab-send", f"something covers the Operator's send button: {top}")
     P.clean()
-    return "; ".join(got) + "; 🧠 opens; send row clear"
+    return "; ".join(got) + "; sidebar clean; 🔮 Oracle opens from " + ", ".join(opened) + "; send row clear"
 
 
 
@@ -1352,7 +1365,7 @@ def t_story(P):
     need("the consciousness you were training" in w["thread"] and "tumble there, Doc" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"] and "We have a lot of work" not in w["thread"], "the Tiny Operator's opening (v9, 5 lines) should be in the thread")
     son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
     nm = pg.evaluate("() => ({ head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
-    need("Operator" in nm["head"] and "Oracle" in nm["toggle"], f"the rename: TO's window reads Operator, the panel's button reads Oracle: {nm}")
+    need("Operator" in nm["head"] and "Operator" in nm["toggle"], f"v10: the window and its button read Operator: {nm}")
     pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
     line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
@@ -1360,14 +1373,36 @@ def t_story(P):
     fl = wait_for(pg, "() => window.__genesis.landing().flip && (() => { const f = window.__genesis.landing().flip, x = document.querySelector('#lab').getBoundingClientRect().left; return performance.now() - f.t0 > 250 && { ...f, mid: x }; })()", 10, P=P)
     need(min(fl["from"]["x"], fl["to"]["x"]) + 5 < fl["mid"] < max(fl["from"]["x"], fl["to"]["x"]) - 5, f"the Operator flies from the middle to its dock (mid-flight between): {fl}")
     wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
-    need("Oracle" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the panel should read 🔮 Oracle again")
+    need("Operator" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the window still reads 📟 Operator (v10)")
     gt1 = pg.evaluate("() => { const t = document.querySelector('#genTag'), r = t && t.getBoundingClientRect(); return t && { text: t.textContent, shown: getComputedStyle(t).display !== 'none', left: r.left, top: r.top }; }")
     need(gt1 and gt1["text"] == "consciousness 24 · epoch 1" and gt1["shown"] and gt1["left"] < 40 and gt1["top"] < 40, f"after the lights: the tag at the world's top-left: {gt1}")
     day = pg.inner_text("#genDay")
     need("EPOCH 1" in day and "first life" in day and "DAY" not in day, f"the Epoch 1 card: {day!r}")
-    for _ in range(2):
-        wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 30, P=P)
-        pg.click("#genConsole [data-gsay]"); pg.wait_for_timeout(2500)
+    # v10: the cosmos draws no cloud ovals (Nico: "the stretched laid out ovals… just remove them")
+    pg.evaluate("() => { window.__ell = 0; const f = CanvasRenderingContext2D.prototype.ellipse; CanvasRenderingContext2D.prototype.ellipse = function (...a) { if (this.canvas && this.canvas.id === 'genCosmos') window.__ell++; return f.apply(this, a); }; }")
+    pg.wait_for_timeout(1200); need(pg.evaluate("() => window.__ell") == 0, f"the cosmos still draws ovals: {pg.evaluate('() => window.__ell')}")
+    # v10: the Operator's handle is the 📟, not a creature; one conversation (no "new"); the sidebar is only the Operator's chat
+    hd = pg.evaluate("() => { const h = document.querySelector('#toHandle'); return { svg: !!h.querySelector('svg'), text: h.textContent, nw: !!document.querySelector('#ai-new'), bar: !!document.querySelector('#lab #ai-bar, #lab #ai-smart-btn') }; }")
+    need(not hd["svg"] and "📟" in hd["text"] and not hd["nw"] and not hd["bar"], f"no creature-like ghost, no 'new', no brain bar in the sidebar: {hd}")
+    # v10 words: "let there be words", no topic, nothing fetched; no creature until "let there be life"
+    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])') && window.__genesis.next() === 'words'", 30, P=P)
+    ws = pg.evaluate("() => ({ say: document.querySelector('#genConsole [data-gsay]').textContent, alt: !!document.querySelector('#genConsole [data-galt]'), pre: document.getElementById('lab-text').value })")
+    need(ws["say"] == "let there be words" and not ws["alt"] and ws["pre"] == "let there be words", f"v10: the words step is just 'let there be words': {ws}")
+    n_out = len(P.outside); pg.evaluate("() => { window.__fetches = 0; const f = window.fetch; window.fetch = function (u, ...a) { if (/lab.fetch|wikipedia/.test(String(u))) window.__fetches++; return f.call(this, u, ...a); }; }")
+    pg.evaluate("() => window.__genesis.say('let there be words about sport')")   # the player's own phrasing (Nico's case): still its own first words
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__genesis.state().steps.words", 10, P=P)
+    if not pg.evaluate("() => !!window.__genesis.state().steps.words"):   # the Tiny Operator didn't build it (one nudge): the glowing suggestion
+        wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 30, P=P); pg.click("#genConsole [data-gsay]")
+        wait_for(pg, "() => window.__genesis.state().steps.words", 30, P=P)
+    sp = pg.evaluate("() => ({ c: window.__arena.raw().filter(c => !c.lab).length, f: window.__fetches, kind: (window.__genHooks.words().map(w => w.text).join(' ').match(/sport/g) || []).length, next: window.__genesis.next() })")
+    need(sp["c"] == 0 and sp["f"] == 0 and sp["kind"] == 0 and sp["next"] == "creatures", f"after words: no creature, nothing fetched, no 'sport' words: {sp}")
+    sp2 = pg.evaluate("() => ({ spawn: window.__idleWorld.spawn('crawly'), first: null })")
+    need(sp2["spawn"] is None and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, f"the world's spawn must refuse before the life step: {sp2}")
+    pg.wait_for_timeout(3000)
+    need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "a creature appeared after the words, before 'let there be life'")
+    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 30, P=P)
+    lf = pg.evaluate("() => document.querySelector('#genConsole [data-gsay]').textContent"); need(lf == "let there be life", f"the life step: {lf!r}")
+    pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => !!document.querySelector('#genFront')", 30, P=P)
     front = pg.inner_text("#genFront")
     need("EPOCH 1" in front.upper() and "GAZETTE" in front.upper() and "EPOCH 2" in front.upper(), f"the Epoch 1 front page: {front[:160]!r}")
@@ -1377,9 +1412,22 @@ def t_story(P):
     need(all(k in pg.evaluate("() => window.__funnel.reached()") for k in ("landing", "operator", "lights", "e1words", "e1life", "e1done")), "the funnel should have every Epoch 0 → Epoch 1 moment")
     end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos() } }")
     need(end["days"] and "1" in end["days"] and end["day"] == 2 and end["free"] and end["alive"] and end["c"] >= 2, f"after Day 1: day 2 next, alive, free console: {end}")
+    # v10: the epochs unlock the UI; after Epoch 1 (Epoch 2 reached): creatures, IRC, notices; no data lab, no Gloamhold, no studio
+    def shown(sel): return pg.evaluate(f"() => {{ const e = document.querySelector({sel!r}); return !!e && getComputedStyle(e).display !== 'none'; }}")
+    un = pg.evaluate("() => window.__genesis.unlocks()")
+    need(un["story"] and un["epoch"] == 2 and "data lab" in un["hidden"] and "gloamhold" in un["hidden"] and "creatures" not in un["hidden"], f"the unlock map at Epoch 2: {un}")
+    need(shown("#herdBtn") and shown("#rc-open") and not shown("#labBtn") and not shown("#studioBtn") and not shown("#connBtn"), "Epoch 2: creatures and IRC shown; data lab, studio, connect hidden")
+    need(pg.evaluate("() => [...document.querySelectorAll('#placesBar [data-kind=keep], #placesBar [data-kind=lab]')].every(e => getComputedStyle(e).display === 'none')"), "Gloamhold and data lab places hidden in the storyline")
+    # v10: the tour's last step is the Oracle: a line and a glowing 🔮 that opens the Oracle's lightbox
+    wait_for(pg, "() => !!document.querySelector('#genConsole [data-goracle]')", 10, P=P)
+    need(pg.evaluate("() => document.querySelector('#ai-thread').innerText.includes(window.__genesis.oracleLine)"), "the Operator should say the Oracle line")
+    pg.click("#genConsole [data-goracle]"); pg.wait_for_timeout(300)
+    need(pg.evaluate("() => window.__oracleBox.isOpen() && !!document.querySelector('#oracleBox #ai-brain')"), "the tour's 🔮 should open the Oracle lightbox")
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+    need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-goracle]')"), "once opened, the tour's 🔮 goes (the chat's footer link stays)")
     stuck_check(pg, P, "storyline")
     P.clean()
-    return f"story intro, wake-up lightbox → 'lights on' → cosmos lit, docked Epoch 1 card; words, life → front page → Epoch 2 (soon); {end['c']} creatures"
+    return f"v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; story intro, wake-up lightbox → 'lights on' → cosmos lit, docked Epoch 1 card; words, life → front page → Epoch 2 (soon); {end['c']} creatures"
 
 
 def t_story_intro(P):
@@ -1492,7 +1540,7 @@ WAY_OUT = """() => { const vis = el => { if (!el) return false; const s = getCom
 def stuck_check(pg, P, where):
     pg.evaluate(CLOSE_ALL); pg.wait_for_timeout(900)
     w = pg.evaluate(WAY_OUT)
-    need(w["handle"] and w["onTop"], f"{where}: with everything closed the Operator's creature must be visible and on top: {w}")
+    need(w["handle"] and w["onTop"], f"{where}: with everything closed the Operator's 📟 must be visible and on top: {w}")
     pg.click("#toHandle")
     with contextlib.suppress(AssertionError): wait_for(pg, "() => +getComputedStyle(document.querySelector('#topbar')).opacity > 0.95", 4, P=P)   # the menus fade back in
     after = pg.evaluate("() => ({ lab: document.querySelector('#lab').classList.contains('open'), calm: document.documentElement.classList.contains('gen-calm'), top: getComputedStyle(document.querySelector('#topbar')).opacity })")
@@ -1501,16 +1549,16 @@ def stuck_check(pg, P, where):
 
 
 def t_never_stuck(P):
-    """Never stuck: in the guided start (menus hidden), close the Operator and every guided widget; the Operator's creature is on screen,
+    """Never stuck: in the guided start (menus hidden), close the Operator and every guided widget; the Operator's 📟 is on screen,
     on top of everything, and tapping it reopens the Operator and brings back the menus (⚙ included). With the window open it hides."""
     pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
     wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
     pg.wait_for_timeout(900)
-    need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the creature should hide while the Operator's window is open")
+    need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the 📟 should hide while the Operator's window is open")
     w, _ = stuck_check(pg, P, "guided start")
-    need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the creature should hide again once the window is open")
+    need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the 📟 should hide again once the window is open")
     P.clean()
-    return f"closed everything in the guided start (menus hidden: {w['calm']}, Operator button visible: {w['toggle']}) → the creature on top → tap → Operator open, menus back"
+    return f"closed everything in the guided start (menus hidden: {w['calm']}, Operator button visible: {w['toggle']}) → the 📟 on top → tap → Operator open, menus back"
 
 
 # the Founder gift (idle-founder.js): an early world or a gift link → Nico's letter → the creature creator → one Founder per browser

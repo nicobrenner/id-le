@@ -232,8 +232,8 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // panels you use WHILE looking at a creature card (the lab / AI chat, hover previews): clicking them keeps the card open
   const KEEP_CARD = '#lab,#lab-toggle,#mtip'; let keepCardUntil = 0;
   { const N = window.IDLE_NAMES; if (N) { const t = (id, s) => { const e = document.getElementById(id); if (e) e.textContent = s; };   // the chats' names come from idle-runtime.js (one place)
-    t('rc-title', N.irc.long); t('rc-open', N.irc.icon + ' ' + N.irc.short); const P_ = N.oracle || N.op; t('lab-toggle', P_.icon + ' ' + P_.short); const lh = document.querySelector('#lab-head b'); if (lh) lh.textContent = P_.icon + ' ' + P_.short;
-    const ro = document.getElementById('rc-open'), lt = document.getElementById('lab-toggle'); if (ro) ro.title = N.irc.long + ': ' + N.irc.sub; if (lt) lt.title = (N.oracle || N.op).short + ': ' + (N.oracle || N.op).sub; } }
+    t('rc-title', N.irc.long); t('rc-open', N.irc.icon + ' ' + N.irc.short); const P_ = N.op; t('lab-toggle', P_.icon + ' ' + P_.short); const lh = document.querySelector('#lab-head b'); if (lh) lh.textContent = P_.icon + ' ' + P_.short;   /* the sidebar chat is the Operator (Nico, v10); the 🔮 Oracle is a lightbox (idle-ai.js) */
+    const ro = document.getElementById('rc-open'), lt = document.getElementById('lab-toggle'); if (ro) ro.title = N.irc.long + ': ' + N.irc.sub; if (lt) lt.title = N.op.short + ': ' + N.op.sub; } }
   document.addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest(KEEP_CARD)) keepCardUntil = Date.now() + 800; }, true);
 (() => {
   function buildByteEncoder() {
@@ -2969,7 +2969,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function setKind(k) { window.__placeKind = k; document.documentElement.dataset.place = k; window.__traveling = k !== 'home'; $('#arena').classList.toggle('traveling', k !== 'home'); Keep.show(k === 'keep'); }
     setKind('home');
     function renderBar() { const el = $('#placesBar'); el.innerHTML = list.map(p => { const on = p.id === cur, st = on && P ? ` · ${P.stats.popped} pulled out` : '';
-        return `<span class="pchip${on ? ' on' : ''}" data-place="${p.id}" title="${p.kind === 'page' ? String(p.url).replace(/"/g, '') : p.kind === 'lab' ? 'a data lab started from ' + ((placeOf(p.parent) || {}).name || 'somewhere') : p.kind === 'keep' ? 'a keep in one bit: stone, torches, chains, bats and fog' : 'your world'}">${ICON[p.kind]} ${String(p.name).replace(/[<>&]/g, '').slice(0, 26)}${st}${p.id !== 'home' && p.kind !== 'keep' ? `<b data-forget="${p.id}" title="forget this place">×</b>` : ''}</span>`; }).join(''); }
+        return `<span class="pchip${on ? ' on' : ''}" data-place="${p.id}" data-kind="${p.kind}" title=""${p.kind === 'page' ? String(p.url).replace(/"/g, '') : p.kind === 'lab' ? 'a data lab started from ' + ((placeOf(p.parent) || {}).name || 'somewhere') : p.kind === 'keep' ? 'a keep in one bit: stone, torches, chains, bats and fog' : 'your world'}">${ICON[p.kind]} ${String(p.name).replace(/[<>&]/g, '').slice(0, 26)}${st}${p.id !== 'home' && p.kind !== 'keep' ? `<b data-forget="${p.id}" title="forget this place">×</b>` : ''}</span>`; }).join(''); }
     // ---- a page place
     let reT = 0; function reindexSoon() { clearTimeout(reT); reT = setTimeout(() => P && index(P), 400); }
     function position() { if (!P) return; P.host.style.left = MX + 'px'; P.host.style.top = MY + 'px'; }   // pages do not wrap: one copy, fixed
@@ -3362,7 +3362,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     function sayAs(n, text) { const c = find(n); if (!c) return null; const t = String(text || '').slice(0, 140); c.bub.textContent = t; c.bub.classList.add('on'); Sound.chirp(c, t); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub.classList.remove('on'), 3200); say(c.name, t, c.voiceKey === 'crawly' ? 'crawly' : 'tok'); Life.said(c, 'ai', t); logEvent('ai_say', { who: c.name }); return c.name; }
     function setWeather(kind, strength) { if (!WEATHERS.includes(kind)) return null; applyWorld({ ...world, weather: kind, wint: strength == null ? (world.wint ?? 0.35) : Math.max(0.1, Math.min(1, +strength)), id: 'world-' + Date.now().toString(36).slice(-4) }, 'studio'); try { Studio.render(); } catch (e) {} logEvent('ai_weather', { kind }); return WEATHER_NAMES[kind]; }
     const SPECIAL = ['namer', 'blursort', 'crawler', 'debug', 'designer', 'counter', 'math', 'sorter'];
-    function spawn(kind) { const n0 = creatures.length;
+    function spawn(kind) { const n0 = creatures.length; if (window.__genesis && window.__genesis.noLife && window.__genesis.noLife()) return null;   /* the storyline: no creature before its life step (idle-genesis.js) */
       if (kind === 'crawly' || kind === 'tok') release({ key: kind, genome: mutate(kind, 0.14) }); else if (SPECIAL.includes(kind)) spawnSpecial(kind); else return null;
       const c = creatures.length > n0 ? creatures[creatures.length - 1] : null; if (c) logEvent('ai_spawn', { kind, who: c.name }); return c ? c.name : null; }
     function rename(n, nn) { const c = find(n); if (!c || !nn) return null; giveName(c, String(nn).slice(0, 24), false); return c.name; }
