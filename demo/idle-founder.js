@@ -50,7 +50,8 @@
   function eligible() { const fs = hasWorld() ? firstSeen() : null;
     const links = testSite || LINKS_ON_PROD;
     return { world: !!(fs && fs < BEFORE && (testSite || WORLD_ON_PROD)), link: links && (!!PID || (Q.get('gift') === 'founder' && now() < UNTIL)), personal: links ? PID : null, expired: links && Q.get('gift') === 'founder' && now() >= UNTIL, firstSeen: fs }; }
-  const available = () => { if (claimed()) return false; const e = eligible(); return e.world || e.link || !!state().via; };
+  // never inside a storyline keyframe (idle-keys.js: a sandbox for watching the story)
+  const available = () => { if (claimed() || window.__storyKey) return false; const e = eligible(); return e.world || e.link || !!state().via; };
   const busy = () => !window.__restoredOrFresh || document.documentElement.classList.contains('booting') || !!document.querySelector('#idleIntro') || !!window.__genesisVoid || !!window.__traveling || !hooks();
 
   // ---------- badges: drawn on a canvas (in the world and in the creator), and as a small mark on the card ----------

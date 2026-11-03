@@ -448,6 +448,8 @@
     cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt, waiting: () => waiting, start: () => begin(), scene: () => ct ? sceneOf(elapsed()) : null };
     Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent({ story: !!(opts.story || Q.has('story')) }); ct.boot = boot; ct.arrive = boot && wantArrive(opts, ct.story); start = performance.now(); window.__epoch0.last = ct;
       if (ct.story && ct.arrive && window.__termBoot && window.__termBoot.title && opts.title !== false && !Q.has('notitle')) { waiting = true; titleT0 = performance.now(); el.dataset.title = '1'; hint.style.display = 'none'; }
+      // a keyframe (idle-keys.js, staging/local: ?story&at=run): the film starts at that second, past the title card
+      { const off = keyOffset(opts.at, ct); if (off != null) { waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now() - off * 1000; } }
       if (liveOK) fillLive(ct, () => elapsed() - B()).catch(() => {}); if (audioReady()) startSound(); syncSnd();
       const loop = () => { if (done) return;
         if (waiting) { start = performance.now(); mark('title'); try { window.__termBoot.title(g, innerWidth, innerHeight, (performance.now() - titleT0) / 1000, P, RM); } catch (e) {} raf = requestAnimationFrame(loop); return; }
@@ -458,6 +460,10 @@
         raf = requestAnimationFrame(loop); }; loop(); });
     try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'start', tone: 'epoch0', boot, reduced: RM } })); } catch (e) {}
     return promise; }
+  // the keyframes inside the intro (idle-keys.js): the second of the story's film each one starts at (null: not an intro keyframe)
+  function keyOffset(at, ct) { if (!at || !ct || !ct.story || at === 'title') return null; const TB = window.__termBoot, R = arrOf(ct), b = bootOf(ct);
+    const t = { computer: 0, labchat: R && TB ? TB.arrive.scenes.chat[0] : null, boot: R, run: b, crash: b + CS.panic - 0.6, logo: b + CS.split - 0.3 }[at];
+    return t == null ? null : Math.max(0, t); }
   // the boot plays on staging and local copies (where Nico tries things), or when asked for; never on id-le.com unless asked; ?noboot skips it
   const bootHost = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // arriving at the lab (v2) comes before the boot in the storyline and with ?intro=boot; ?noarrive leaves it out
@@ -476,5 +482,5 @@
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
   window.__epoch0 = { play, thunderBuf, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
-    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
+    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, keyOffset, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();

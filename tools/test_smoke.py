@@ -1424,7 +1424,7 @@ def t_story(P):
     need("EPOCH 0 COMPLETE" in front.upper() and "GAZETTE" in front.upper() and "ON TO EPOCH 1" in front.upper(), f"v11: the Epoch 0 complete front page: {front[:160]!r}")
     pg.click("#genFront button")
     wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('EPOCH 1')", 10, P=P)
-    wip = pg.inner_text("#genDay"); need("WORDS" in wip and "work in progress" in wip and "open source" in wip, f"Epoch 1's card (words, coming) should say Id|le is a work in progress: {wip!r}")
+    wip = pg.inner_text("#genDay"); need("WORDS" in wip and "work in progress" in wip, f"Epoch 1's card (words, coming) should say Id|le is a work in progress: {wip!r}")
     need(pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "after Genesis the tag reads epoch 1")
     need(all(k in pg.evaluate("() => window.__funnel.reached()") for k in ("landing", "operator", "lights", "e1words", "e1life", "e1done")), "the funnel should have every Epoch 0 → Epoch 1 moment")
     end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos() } }")
@@ -1445,6 +1445,92 @@ def t_story(P):
     stuck_check(pg, P, "storyline")
     P.clean()
     return f"v11: the dark's lines in order (no sound, is that a black…), silent lightning, Genesis = Epoch 0 (lights, words, life) → front page → Epoch 1 (soon); v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; {end['c']} creatures"
+
+
+def t_story_keys(P):
+    """Keyframes (idle-keys.js, staging/local; Nico: "markers or key frames to go to either with # or & parameters in the url"): every key
+    loads to its moment in time (the intro ones at their second of the film, the later ones with the state they need built), after one
+    key press (the sound's gate; the title card is its own); the player's real localStorage is never read or written; #keys shows the strip."""
+    pg = P.open("/privacy.html"); pg.evaluate("() => { localStorage.clear(); localStorage.setItem('arena.genomes', 'REAL'); localStorage.setItem('idle.genesis', 'REAL'); }"); pg.close()
+    def go(k, hashed):
+        pg = P.open(f"/arena.html?story#{k}" if hashed else f"/arena.html?at={k}")
+        if k != "title":
+            wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P)
+            need(pg.evaluate("() => /story/.test(location.search) && /fresh/.test(location.search) && location.hash === '#' + window.__storyKey.key"), f"{k}: the address should carry ?story&fresh#{k}")
+            pg.keyboard.press("k")
+        return pg
+    intro = {"computer": "messages", "labchat": "chat", "boot": "boot", "run": "run", "crash": "run", "logo": "crash"}
+    got = {}
+    for i, k in enumerate(["title", "computer", "labchat", "boot", "run", "crash", "logo", "dark", "operator", "lights", "words", "life", "epoch0done", "epoch1", "end"]):
+        t0 = time.time(); pg = go(k, i % 2 == 0)
+        if k == "title":
+            wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.waiting())", 40, P=P)
+        elif k in intro:
+            wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.last && window.__epoch0.time() > 0.2)", 40, P=P)
+            r = pg.evaluate("""k => { const E = window.__epoch0, ct = E.last; return { t: E.time(), off: E.keyOffset(k, ct), scene: E.scene(), waiting: E.waiting() }; }""", k)
+            need(not r["waiting"] and r["off"] is not None and r["off"] - 0.5 <= r["t"] <= r["off"] + 6 and r["scene"] == intro[k], f"{k}: the film should start at its second: {r}")
+            if k == "logo": wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark'", 20, P=P)
+        elif k == "dark":
+            wait_for(pg, "() => window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 25, P=P)
+            need(not pg.evaluate("() => !!document.querySelector('#idleIntro')"), "dark: no intro")
+        elif k == "operator":
+            wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && window.__genesis.landing().why === 'key'", 30, P=P)
+        elif k == "lights":
+            wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]') && window.__genesis.next() === 'light'", 30, P=P)
+            need(pg.evaluate("() => document.querySelectorAll('#genConsole .gw p').length") == 5, "lights: the Operator's five opening lines, already said")
+        elif k == "words":
+            wait_for(pg, "() => window.__genesis.next() === 'words' && !!document.querySelector('#genConsole [data-gsay]:not([disabled])') && !document.documentElement.classList.contains('gen-box')", 40, P=P)
+        elif k == "life":
+            wait_for(pg, "() => window.__genesis.next() === 'creatures' && !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 45, P=P)
+            need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0 and pg.evaluate("() => window.__genHooks.words().length") > 10, "life: words laid, nobody yet")
+        elif k == "epoch0done":
+            wait_for(pg, "() => !!document.querySelector('#genFront')", 50, P=P)
+            need("EPOCH 0 COMPLETE" in pg.inner_text("#genFront").upper() and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") >= 2, "epoch0done: the Gazette, with life")
+        elif k == "epoch1":
+            wait_for(pg, "() => { const d = document.querySelector('#genDay'); return !!d && d.innerText.includes('EPOCH 1') && !d.classList.contains('end'); }", 55, every=0.2, P=P)
+            need(not pg.evaluate("() => !!document.querySelector('#genFront')") and pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "epoch1: past the Gazette, the tag at epoch 1")
+        elif k == "end":
+            wait_for(pg, "() => !!document.querySelector('#genDay.end')", 55, P=P)
+        got[k] = round(time.time() - t0, 1)
+        need(not pg.evaluate("() => localStorage.getItem('arena.genomes') === 'REAL' || localStorage.getItem('idle.genesis') === 'REAL'"), f"{k}: the keyframe must not see the real localStorage")
+        if k != "end": pg.close()
+    # the end card (still open in pg): its three ways on
+    e = pg.evaluate("() => { const d = document.querySelector('#genDay.end'), r = d.getBoundingClientRect(), a = d.querySelector('[data-end=github]'); return { text: d.innerText, href: a && a.href, repo: window.IDLE_REPO, in: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, font: getComputedStyle(d.querySelector('.dt')).fontFamily, op: getComputedStyle(d.querySelector('.el')).fontFamily }; }")
+    need("WORK IN PROGRESS" in e["text"].upper() and "roadmap" in e["text"] and "GitHub" in e["text"] and "free-play" in e["text"] and e["in"], f"the end card: {e}")
+    need(e["href"] and e["href"].rstrip("/") == (e["repo"] or "").rstrip("/") and "F4" in e["font"] and "F3" in e["op"], f"the end card's GitHub link and fonts: {e}")
+    pg.evaluate("() => { window.__idle.cfg.helper = location.origin; }"); pg.click("#genDay [data-end=roadmap]")
+    wait_for(pg, "() => !!document.querySelector('#oracle [data-tab=road].on') && document.querySelectorAll('#oracle .it').length >= 1", 10, P=P)
+    need(not pg.evaluate("() => !!document.querySelector('#genDay.end')"), "the roadmap closes the end card to its corner")
+    pg.evaluate("() => window.__feedback.close()"); pg.click("#genDay [data-end=open]"); wait_for(pg, "() => !!document.querySelector('#genDay.end')", 5, P=P)
+    pg.evaluate("() => document.querySelector('#genDay [data-end=github]').addEventListener('click', e => e.preventDefault())"); pg.click("#genDay [data-end=github]")
+    pg.click("#genDay [data-end=free]"); pg.wait_for_timeout(600)
+    f = pg.evaluate("() => ({ mode: window.__genesis.mode(), un: window.__genesis.unlocks(), story: document.documentElement.classList.contains('gen-story'), day: !!document.querySelector('#genDay'), tag: !!document.querySelector('#genTag'), hushed: window.__audio.hushed(), lab: getComputedStyle(document.querySelector('#labBtn')).display, studio: getComputedStyle(document.querySelector('#studioBtn')).display, fun: window.__funnel.reached(), resume: window.__genesis.canResume(), thread: document.querySelector('#ai-thread').innerText })")
+    need(f["mode"] == "free" and not f["un"]["story"] and not f["un"]["hidden"] and not f["story"] and not f["day"] and not f["tag"] and not f["hushed"] and f["lab"] != "none" and f["studio"] != "none", f"free-play should open everything and leave the story: {f}")
+    need(all(x in f["fun"] for x in ("end_shown", "end_roadmap", "end_github", "end_free")) and f["resume"] and "it is your consciousness, Doc" in f["thread"], f"free-play: funnel moments, ⚙ can resume, the Operator's line: {f}")
+    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); need("Back to the storyline" in pg.evaluate("() => document.body.innerText"), "⚙ should offer the way back to the storyline")
+    pg.evaluate("() => window.__settings.close()"); pg.close()
+    # the real localStorage, untouched
+    pg = P.open("/privacy.html"); real = pg.evaluate("() => Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]))"); pg.close()
+    need(real == {"arena.genomes": "REAL", "idle.genesis": "REAL"}, f"keyframes wrote to the real localStorage: {sorted(real)[:8]}")
+    # the strip: #keys lists every keyframe; ` toggles it
+    pg = P.open("/arena.html?fresh#keys"); wait_for(pg, "() => !!document.querySelector('#keyStrip')", 20, P=P)
+    ks = pg.evaluate("() => [...document.querySelectorAll('#keyStrip a')].map(a => a.dataset.k)")
+    need(len(ks) == 15 and ks[0] == "title" and ks[-1] == "end", f"the strip: {ks}")
+    pg.keyboard.press("`"); pg.wait_for_timeout(200); need(not pg.evaluate("() => !!document.querySelector('#keyStrip')"), "` should hide the strip")
+    pg.close(); P.clean()
+    return "15 keyframes, seconds to reach each: " + ", ".join(f"{k} {v}" for k, v in got.items()) + "; real localStorage untouched; end card: roadmap, GitHub, free-play (all unlocked, ⚙ back to the story)"
+
+
+def t_story_end_phone(P):
+    """The end card at 375 px (?at=end): fits the screen, buttons tappable; a screenshot for the report."""
+    pg = P.open("/arena.html?story&at=end"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+    wait_for(pg, "() => !!document.querySelector('#genDay.end')", 60, P=P); pg.wait_for_timeout(500)
+    r = pg.evaluate("() => { const d = document.querySelector('#genDay.end'), b = d.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, bt: b.bottom, w: innerWidth, h: innerHeight, btn: [...d.querySelectorAll('.ea > *')].map(x => Math.round(x.getBoundingClientRect().height)), sw: document.documentElement.scrollWidth }; }")
+    need(r["l"] >= 0 and r["r"] <= r["w"] and r["t"] >= 0 and r["bt"] <= r["h"] and min(r["btn"]) >= 36 and r["sw"] <= r["w"], f"the end card at 375 px: {r}")
+    shot = os.environ.get("IDLE_SHOT_DIR")
+    if shot: pg.screenshot(path=os.path.join(shot, "end-card-375.png"))
+    P.clean()
+    return f"375×{r['h']}: card {round(r['r'] - r['l'])}×{round(r['bt'] - r['t'])} px, buttons {r['btn']} px tall"
 
 
 def t_story_migrate(P):
@@ -1950,6 +2036,10 @@ def t_prod_gates(P, root):
         pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
         g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
         need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
+    # keyframes (idle-keys.js) do nothing on id-le.com: no gate, no sandbox, no strip
+    pg = P.open("/arena.html?at=end#keys"); booted(pg)
+    k = pg.evaluate("() => ({ key: window.__storyKey || null, keys: !!window.__keys, gate: !!document.querySelector('#keyGate'), strip: !!document.querySelector('#keyStrip'), real: Object.getOwnPropertyDescriptor(window, 'localStorage') ? 'own' : 'proto' })")
+    need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
     return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)"
@@ -2128,7 +2218,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2145,7 +2235,7 @@ def main():
             try:
                 def run(name, fn, *args, **ctxkw):
                     if not want(name): return
-                    ctx = ch.new_context(viewport={"width": 1400, "height": 900}, **ctxkw); P = Page(ctx, base)
+                    ctx = ch.new_context(**{"viewport": {"width": 1400, "height": 900}, **ctxkw}); P = Page(ctx, base)
                     try: check(name, fn, P, *args)
                     finally: ctx.close()
                 run("fresh load", t_fresh_load)
@@ -2183,6 +2273,8 @@ def main():
                 run("genesis", t_genesis)
                 run("story", t_story)
                 run("story migrate", t_story_migrate)
+                run("story keys", t_story_keys)
+                run("story end phone", t_story_end_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story v6", t_story_v6)
                 run("title card", t_title_card)
                 run("hint phone", t_hint_phone)
