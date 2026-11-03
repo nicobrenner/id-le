@@ -181,6 +181,8 @@
     const p = { v: 1 }; let any = false; try { const gv = localStorage.getItem('idle.gv'); if (gv === 'story' || gv === 'current') p.gv = gv; } catch (e) {}   // the storyline A/B arm (idle-genesis.js), only while it runs
     // the storyline's funnel (idle-runtime.js __funnel): each moment once per browser (title … lights, Epoch 1, skips, the offer)
     try { const f = window.__funnel ? window.__funnel.reached().filter(k => !ahaSent['sf:' + k]).slice(0, 30) : []; if (f.length) { p.sf = f; any = true; } } catch (e) {}
+    // the story's logo A/B (idle-epoch0.js): the arm rides along once this browser has seen its logo, so the moments after it count per arm too
+    try { const R = window.__funnel ? window.__funnel.reached() : []; for (const a of ['c3', 'crt']) if (R.includes('lg_shown:' + a)) p.lg = a; } catch (e) {}
     if (!sent.visit) { p.visit = 1; p.v2 = 1; p.back = returning ? 1 : 0; p.dev = phone() ? 'phone' : 'desktop'; p.ios = window.__isIOS ? 1 : 0; p.safe = [0, 1, 2].includes(window.__safeLevel) ? window.__safeLevel : 0; p.ref = refHost(); const u = utm(); if (u) p.utm = u; any = true; }
     const fb = fpsBucket(); if (fb && !sent.fps) { p.fps = fb; any = true; }
     try { const w = window.__dlwalk && window.__dlwalk.state && window.__dlwalk.state(); if (w) { const ks = Object.keys(w.done || {}).concat(w.finished ? ['finished'] : w.skipped ? ['ended'] : []).filter(k => !ahaSent['dl:' + k]); if (ks.length) { p.dl = ks; any = true; } } } catch (e) {}

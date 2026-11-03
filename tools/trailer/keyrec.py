@@ -3,6 +3,7 @@ key at the gate and records the page for --secs seconds (video only: the browser
 
     python3 tools/trailer/keyrec.py --at dark --secs 40                 # → ~/Desktop/idle-trailers/key-dark.mp4
     python3 tools/trailer/keyrec.py --at end --secs 15 --phone          # 390x844
+    python3 tools/trailer/keyrec.py --at logo --secs 10 --logo crt      # the story's logo A/B: force an arm (c3 | crt)
     python3 tools/trailer/keyrec.py --list                              # the keyframes
 """
 import argparse, os, shutil, subprocess, sys, tempfile, time
@@ -15,7 +16,7 @@ KEYS = ["title", "computer", "labchat", "boot", "run", "crash", "logo", "dark", 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--at", choices=KEYS); ap.add_argument("--secs", type=float, default=30); ap.add_argument("--phone", action="store_true")
-    ap.add_argument("--out", default=""); ap.add_argument("--port", type=int, default=8839); ap.add_argument("--list", action="store_true")
+    ap.add_argument("--out", default=""); ap.add_argument("--port", type=int, default=8839); ap.add_argument("--list", action="store_true"); ap.add_argument("--logo", choices=["c3", "crt"])
     a = ap.parse_args()
     if a.list or not a.at:
         print("keyframes:", " ".join(KEYS)); return
@@ -33,7 +34,7 @@ def main():
         with sync_playwright() as p:
             b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
             ctx = b.new_context(viewport=vp, record_video_dir=vd, record_video_size=vp, is_mobile=a.phone, has_touch=a.phone)
-            pg = ctx.new_page(); pg.goto(f"http://localhost:{a.port}/arena.html?story&at={a.at}")
+            pg = ctx.new_page(); pg.goto(f"http://localhost:{a.port}/arena.html?story&at={a.at}" + (f"&logo={a.logo}" if a.logo else ""))
             if a.at != "title":
                 pg.wait_for_selector("#keyGate", timeout=60000); pg.keyboard.press("k")
             pg.wait_for_timeout(int(a.secs * 1000)); ctx.close(); b.close()

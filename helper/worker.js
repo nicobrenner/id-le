@@ -157,11 +157,12 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
+const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
   'rv_open_link', 'rv_open_lab', 'rv_open_end', 'rv_play', 'rv_sent', 'rv_already'];
+const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
@@ -185,7 +186,9 @@ function addStats(p) {
   if (F5STOP.includes(p.fl) && (p.fl0 === undefined || F5STOP.includes(p.fl0) && p.fl0 !== p.fl)) { bump(d.fl, p.fl); if (p.fl0 !== undefined) bump(d.fl, p.fl0, -1); }
   // the genesis A/B (idle-genesis.js; off until Nico switches it on): visits, time on screen and features per variant
   // the storyline's funnel: each moment once per browser, by arm (story | current | none)
-  if (Array.isArray(p.sf)) { const arm = p.gv === 'story' || p.gv === 'current' ? p.gv : 'none'; for (const k of new Set(p.sf.slice(0, 30))) if (SFSTEP.includes(k)) { d.sf = d.sf || {}; bump(d.sf, arm + '|' + k); } }
+  // the story's logo A/B (idle-epoch0.js, Nov 3): the moments from the logo on are also counted per logo arm ('lg:c3|lights'), so the two logos compare
+  if (Array.isArray(p.sf)) { const arm = p.gv === 'story' || p.gv === 'current' ? p.gv : 'none', lg = p.lg === 'c3' || p.lg === 'crt' ? p.lg : null;
+    for (const k of new Set(p.sf.slice(0, 30))) if (SFSTEP.includes(k)) { d.sf = d.sf || {}; bump(d.sf, arm + '|' + k); if (lg && LGSTEP.includes(k)) bump(d.sf, 'lg:' + lg + '|' + k); } }
   if (p.gv === 'genesis' || p.gv === 'starter' || p.gv === 'story' || p.gv === 'current') { d.gv = d.gv || {}; if (p.visit === 1) bump(d.gv, p.gv + '|visit');
     if (DWELL.includes(p.dw) && (p.dw0 === undefined || DWELL.indexOf(p.dw0) >= 0 && DWELL.indexOf(p.dw0) < DWELL.indexOf(p.dw))) { bump(d.gv, p.gv + '|dw:' + p.dw); if (p.dw0 !== undefined) bump(d.gv, p.gv + '|dw:' + p.dw0, -1); }
     if (Array.isArray(p.feat)) for (const f of p.feat.slice(0, 30)) if (FEATS.test(f)) bump(d.gv, p.gv + '|feat:' + f); }
