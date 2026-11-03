@@ -24,6 +24,11 @@
   const CK = (() => { let t = 9.5; return [...CMD].map((c, i) => (t += 0.11 + 0.03 * (((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1))); })();
   const K = { globe: 0.25, log: 2.35, login: 6.65, user: 6.85, pass: 7.7, last: 8.5, welcome: 8.75, shell: 9.05, cmd: 9.5, enter: CK[CK.length - 1] + 0.35 };
   K.split = K.enter + 0.7; const DUR = K.split + 1.15;
+  // the story's clock (story v12, Nico: "it says Mon 18:41… it should be more like 9:12am, and maybe a Fri"): Friday morning (Nov 8 2041),
+  // 9:12 AM as Doc sits down (intro second 0), running in real time with the scenes; ❤️'s "dinner at 7?" and the outro's 7:01 pm are tonight
+  const DAY = 'Fri', CLOCK0 = 9 * 3600 + 12 * 60;
+  const clockAt = s => { const t = CLOCK0 + Math.max(0, Math.floor(s)), h = Math.floor(t / 3600) % 24, m = Math.floor(t / 60) % 60; return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+  const bootClock = T => clockAt(ADUR + T);   // boot seconds → the same clock (the arrival came first; called only while drawing, after ADUR is set)
   // the boot log: [text, status, status colour, seconds it takes, shown on phones]
   const LOG = [
     ['LAB-BIOS 41.7 · observatory node 07', '', DIM, 0.24, 1],
@@ -81,8 +86,8 @@
     if (a <= 0) return; const y = H - p.statusH, fz = p.port ? 10 : 12; g.save(); g.globalAlpha = a; g.fillStyle = ACT; g.fillRect(0, y, W, p.statusH);
     g.font = `${fz}px ${MONO}`; g.textBaseline = 'middle'; g.fillStyle = '#071007';
     g.fillText(p.port ? `[p24] 0:${win}*` : `[project-24] 0:train${win === 'train' ? '*' : ''} 1:samples 2:gpu  3:${win === 'sh' ? 'sh*' : 'sh'}`, 8, y + p.statusH / 2 + 1);
-    const d = new Date(), hh = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); g.textAlign = 'right';
-    g.fillText(p.port ? `lab-07 ${hh}` : `"lab-node-07" ${hh} · uptime 00:00:${String(Math.floor(T)).padStart(2, '0')}`, W - 8, y + p.statusH / 2 + 1); g.restore(); }
+    const hh = `${DAY} ${bootClock(T)}`; g.textAlign = 'right';
+    g.fillText(p.port ? `lab-07 ${bootClock(T)}` : `"lab-node-07" ${hh} · uptime 00:00:${String(Math.floor(T)).padStart(2, '0')}`, W - 8, y + p.statusH / 2 + 1); g.restore(); }
   function frameOf(g, r, p, title, a, active) {   // one pane: its border, a title bar, its number
     if (a <= 0) return; g.save(); g.globalAlpha = a; g.strokeStyle = active ? ACT : BORDER; g.lineWidth = 1; g.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
     g.fillStyle = '#0b1419'; g.fillRect(r.x + 1, r.y + 1, r.w - 2, p.titleH); g.font = `700 ${p.tfz}px ${MONO}`; g.textBaseline = 'middle'; g.fillStyle = CY;
@@ -129,7 +134,7 @@
         const done = T >= t0 + l[3] * 0.6 || RM; lines.push({ txt: txt.length > width ? txt.slice(0, width - 1) + '…' : txt, st: l[1] && done ? l[1] : '', col: l[2], dots: !!l[1], width, os: l[5] === 'os' }); });
       if (T >= K.login) { lines.push({ txt: '' }); lines.push({ txt: 'lab-node-07 login: ' + typed(USER, K.user, 13, T, RM), cur: T < K.pass });
         if (T >= K.pass - 0.08) lines.push({ txt: 'password: ' + typed(PASS, K.pass + 0.1, 15, T, RM), cur: T < K.last });
-        if (T >= K.last) lines.push({ txt: port ? 'Last login: Sun Nov 1 23:58 · obs-deck' : 'Last login: Sun Nov  1 23:58:12 2041 from observation-deck', col: DIM });
+        if (T >= K.last) lines.push({ txt: port ? 'Last login: Thu Nov 7 23:58 · obs-deck' : 'Last login: Thu Nov  7 23:58:12 2041 from observation-deck', col: DIM });
         if (T >= K.welcome) lines.push({ txt: port ? 'welcome back, operator.' : 'welcome back, operator. 23 runs archived, 0 runs active.', col: TXT }); }
       const vis = lines.slice(-rowsMax); g.font = `${fz}px ${MONO}`; g.textBaseline = 'middle';
       vis.forEach((L, i) => { const y = pad + lh * (i + 0.5); g.fillStyle = L.col && !L.dots ? L.col : TXT; let x = pad;
@@ -266,7 +271,8 @@
   const CHANNELS = ['training-runs', 'experiments', 'evals', 'cluster-admin', 'random'];
   const BACKLOG = [['ops-bot', 'run 23: checkpoint archived · 412 GB'], ['evalbot', 'p23 final · loss 1.43 · 2 evals flagged "unusual"'], ['night-shift', 'anyone else see the thermals spike at 3am?'],
     ['ops-bot', 'breaker B7 reset (manual)'], ['night-shift', 'cluster is all yours today, doc']];
-  const BL = BACKLOG.map((b, i) => ({ who: b[0], text: b[1], at: CHAT + 0.4 + i * 0.36 }));
+  const BACKLOG_T = ['1:58 AM', '2:31 AM', '3:04 AM', '3:06 AM', '7:55 AM'];
+  const BL = BACKLOG.map((b, i) => ({ who: b[0], text: b[1], at: CHAT + 0.4 + i * 0.36, tm: BACKLOG_T[i] }));
   // the DM with Lester: his notification, then the scientist's lines and Lester's answers (Nico's lines; Lester's approved as final)
   const DMLINES = [
     { who: 'lester', text: 'hey doc, you in? 👋' },
@@ -297,7 +303,8 @@
   const sayFz = (W, P) => P ? 21 : Math.round(clamp(W / 42, 22, 32));
   const rr = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
   const SANS = IF.ui || 'system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
-  const hhmm = () => '18:4' + 1;
+  // each line's time (v12): the backlog is from last night (the thermals spike at 3am), the DM is now, on the story's clock
+  const hhmm = l => l.tm || clockAt(l.at);
   // a window: a rounded frame, a title bar with three plain grey dots and a title; returns the content rect
   function win(g, x, y, w, h, title, a = 1, sc = 1) {
     g.save(); g.globalAlpha *= a; g.translate(x + w / 2, y + h / 2); g.scale(sc, sc); g.translate(-(x + w / 2), -(y + h / 2));
@@ -317,7 +324,7 @@
     for (let k = items.length - 1; k >= 0; k--) { const m = items[k];
       if (m.dotsOnly) { const bw = fs * 3.2, bh = fs * 1.9; yb -= bh; g.fillStyle = '#2c2c2e'; rr(g, c.x + c.w * 0.05, yb, bw, bh, bh / 2); g.fill(); for (let d = 0; d < 3; d++) { g.fillStyle = `rgba(200,200,205,${0.35 + 0.6 * (RM ? 1 : Math.max(0, Math.sin(T * 7 - d * 0.9)))})`; g.beginPath(); g.arc(c.x + c.w * 0.05 + fs * (0.9 + d * 0.7), yb + bh / 2, fs * 0.2, 0, 7); g.fill(); } yb -= fs * 0.5; continue; }
       const u = RM ? 1 : ease(clamp((T - m.at) / 0.25)), tw = Math.max(...m.rows.map(rw => g.measureText(rw).width)), bw = tw + padX * 2, bh = m.rows.length * lh + padY * 2;
-      if (m.me && m === lastMe) { g.font = `${Math.round(fs * 0.7)}px ${SANS}`; g.fillStyle = '#8e8e93'; g.textAlign = 'right'; g.fillText(readNow ? 'Read 18:41' : 'Delivered', c.x + c.w * 0.95, yb - fs * 0.45); g.textAlign = 'left'; g.font = `${fs}px ${SANS}`; yb -= fs * 1.1; }
+      if (m.me && m === lastMe) { g.font = `${Math.round(fs * 0.7)}px ${SANS}`; g.fillStyle = '#8e8e93'; g.textAlign = 'right'; g.fillText(readNow ? `Read ${clockAt(T)}` : 'Delivered', c.x + c.w * 0.95, yb - fs * 0.45); g.textAlign = 'left'; g.font = `${fs}px ${SANS}`; yb -= fs * 1.1; }
       yb -= bh; const bx = m.me ? c.x + c.w * 0.95 - bw : c.x + c.w * 0.05, oy = (1 - u) * fs * 1.2; g.globalAlpha = A0 * u;
       g.fillStyle = m.me ? '#0a84ff' : '#2c2c2e'; rr(g, bx, yb + oy, bw, bh, Math.min(fs * 0.9, bh / 2)); g.fill(); g.fillStyle = m.me ? '#fff' : '#f2f2f7';
       m.rows.forEach((rw, j) => g.fillText(rw, bx + padX, yb + oy + padY + lh * (j + 0.5))); g.globalAlpha = A0; yb -= fs * (k > 0 && items[k - 1].me === m.me ? 0.25 : 0.6); }
@@ -339,13 +346,13 @@
     // the lines: monospace, a time, a nick in its colour, the text wrapped under it
     const lines = dm ? DM.filter(l => T >= l.at) : BL.filter(l => T >= l.at), mono = `${Math.round(fs * 0.92)}px ${MONO}`, rowsAll = []; g.font = mono;
     for (const l of lines) { const nick = l.who === 'scientist' ? 'doc' : l.who === 'lester' ? 'Lester' : l.who, u = RM ? 1 : clamp((T - l.at) / 0.2);
-      if (port) { rowsAll.push({ nickRow: true, nick, who: l.who, u }); wrapRows(g, l.text, mw - 28).forEach(r => rowsAll.push({ head: '', hw: 0, nick, who: l.who, r, u })); if (dm) rowsAll.push({ gap: true }); continue; }
-      const head = `${hhmm()}  <${nick}> `, hw = g.measureText(head).width, rows = wrapRows(g, l.text, mw - 28 - hw);
-      rows.forEach((r, j) => rowsAll.push({ head: j ? '' : head, hw, nick, who: l.who, r, u })); if (dm) rowsAll.push({ gap: true }); }
+      if (port) { rowsAll.push({ nickRow: true, nick, who: l.who, u, tm: hhmm(l) }); wrapRows(g, l.text, mw - 28).forEach(r => rowsAll.push({ head: '', hw: 0, nick, who: l.who, r, u })); if (dm) rowsAll.push({ gap: true }); continue; }
+      const head = `${hhmm(l)}  <${nick}> `, hw = g.measureText(head).width, rows = wrapRows(g, l.text, mw - 28 - hw);
+      rows.forEach((r, j) => rowsAll.push({ head: j ? '' : head, hw, nick, who: l.who, r, u, tm: hhmm(l) })); if (dm) rowsAll.push({ gap: true }); }
     const A0 = g.globalAlpha, inputH = fs * 2.6, top = c.y + fs * 2.4 + 6, maxRows = Math.floor((c.h - fs * 2.4 - inputH - 12) / lh), vis = rowsAll.slice(-maxRows);
     vis.forEach((rw, i) => { if (rw.gap) return; const y = top + lh * (i + 0.5); g.globalAlpha = A0 * rw.u;
-      if (rw.nickRow) { g.font = `700 ${Math.round(fs * 0.78)}px ${MONO}`; g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(rw.nick, mx + 14, y); g.fillStyle = '#56616d'; g.fillText(' ' + hhmm(), mx + 14 + g.measureText(rw.nick).width, y); g.font = mono; g.globalAlpha = A0; return; }
-      if (rw.head) { g.fillStyle = '#56616d'; g.fillText(hhmm(), mx + 14, y); g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(`<${rw.nick}>`, mx + 14 + g.measureText(hhmm() + '  ').width, y); }
+      if (rw.nickRow) { g.font = `700 ${Math.round(fs * 0.78)}px ${MONO}`; g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(rw.nick, mx + 14, y); g.fillStyle = '#56616d'; g.fillText(' ' + rw.tm, mx + 14 + g.measureText(rw.nick).width, y); g.font = mono; g.globalAlpha = A0; return; }
+      if (rw.head) { g.fillStyle = '#56616d'; g.fillText(rw.tm, mx + 14, y); g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(`<${rw.nick}>`, mx + 14 + g.measureText(rw.tm + '  ').width, y); }
       g.fillStyle = rw.who === 'scientist' ? '#f3e6d2' : '#dbe4ec'; g.fillText(rw.r, mx + 14 + rw.hw, y); g.globalAlpha = A0; });
     // "Lester is typing…" and the scientist's line being typed in the input
     const iy = c.y + c.h - inputH + 6; g.strokeStyle = '#2a333e'; rr(g, mx + 10, iy, mw - 20, inputH - 14, 8); g.stroke(); g.font = `${Math.round(fs * 0.9)}px ${MONO}`;
@@ -371,7 +378,7 @@
     const port = portOf(W, H, P), fs = port ? Math.round(clamp(W / 24, 14, 17)) : Math.round(clamp(W / 85, 13, 16));
     const wall = g.createLinearGradient(0, 0, W, H); wall.addColorStop(0, '#0b1018'); wall.addColorStop(1, '#141a26'); g.fillStyle = wall; g.fillRect(0, 0, W, H);
     g.save(); g.globalAlpha = 0.06; g.font = `700 ${Math.round(Math.min(W, H) * 0.16)}px Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#9fb4c8'; g.fillText('Id|le', W / 2, H * 0.5); g.restore();
-    g.fillStyle = '#0a0d12e8'; g.fillRect(0, 0, W, 24); g.font = `600 12px ${SANS}`; g.fillStyle = '#c9d2dc'; g.textBaseline = 'middle'; g.fillText('lab-07', 12, 12); g.textAlign = 'right'; g.fillText('Mon 18:41', W - 12, 12); g.textAlign = 'left';
+    g.fillStyle = '#0a0d12e8'; g.fillRect(0, 0, W, 24); g.font = `600 12px ${SANS}`; g.fillStyle = '#c9d2dc'; g.textBaseline = 'middle'; g.fillText('lab-07', 12, 12); g.textAlign = 'right'; g.fillText(`${DAY} ${clockAt(T)}`, W - 12, 12); g.textAlign = 'left';
     // the dock
     const apps = [['💬', 'messages', T < CLOSE - 2 && T < NOTE + 1.2], ['#', 'labchat', T >= NOTE && T < CLOSE], ['>_', 'terminal', T >= TERM - 0.2]], dw = apps.length * 54 + 16, dx = W / 2 - dw / 2, dy = H - 62;
     g.fillStyle = '#0f141bd9'; rr(g, dx, dy, dw, 52, 14); g.fill(); apps.forEach(([ic, nm, on], i) => { const x = dx + 16 + i * 54; g.fillStyle = '#1b222c'; rr(g, x, dy + 7, 38, 38, 9); g.fill(); g.font = `600 ${ic.length > 1 && ic !== '💬' ? 14 : 18}px ${ic === '💬' ? SANS : MONO}`; g.fillStyle = '#d6dde4'; g.textAlign = 'center'; g.fillText(ic, x + 19, dy + 27); g.textAlign = 'left'; if (on) { g.fillStyle = '#7ee3f5'; g.beginPath(); g.arc(x + 19, dy + 49, 2, 0, 7); g.fill(); } });
@@ -394,7 +401,7 @@
       g.font = `${Math.round(fs * 0.95)}px ${MONO}`; g.fillStyle = TXT; g.fillText('$ ', W / 2 - w / 2 + 14, H / 2 - h / 2 + 22); }
     overlay(g, W, H, 0.35);
     if (T < 0.5) { g.fillStyle = `rgba(0,0,0,${1 - T / 0.5})`; g.fillRect(0, 0, W, H); } }
-  // sound: the room (a quiet hum, rain on the window), the messages, the notification, the chat's ticks, his keys, the windows
+  // sound: the room (a quiet mains hum; v12: no rain, the datacenter's fans are the bed, idle-epoch0.js fanBed), the messages, the notification, the chat's ticks, his keys, the windows
   const AEV = (() => { const ev = [{ t: 0, k: 'room', d: ADUR }, { t: 0.4, k: 'pad', d: ADUR - 0.4 }]; for (let t = 0.6, i = 0; t < ADUR; t += 60 / IDLE_BPM, i++) ev.push({ t, k: 'beat', i });
     TH.forEach(m => ev.push({ t: m.at, k: m.me ? 'sent' : 'recv' })); ev.push({ t: NOTE, k: 'notify' });
     BL.forEach(b => ev.push({ t: b.at, k: 'tick' })); DM.forEach((l, i) => { if (i === 0) return; if (l.who === 'scientist') { for (let t = l.typeAt; t < l.at - 0.15; t += 0.07 + 0.03 * ((i * 7 + t * 13) % 1)) ev.push({ t, k: 'key' }); ev.push({ t: l.at, k: 'send' }); } else ev.push({ t: l.at, k: 'tick' }); });
@@ -405,7 +412,7 @@
       v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(vol, t0 + fadeIn); if (loop) { v.gain.setValueAtTime(vol, t0 + Math.max(fadeIn, dur - 0.4)); v.gain.linearRampToValueAtTime(0.0001, t0 + dur); } else v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       s.connect(fl); fl.connect(v); v.connect(dest); s.start(t0, Math.random() * 0.5); s.stop(t0 + dur + 0.05); };
     switch (e.k) {
-      case 'room': { nz(at, e.d, 0.012, 'lowpass', 420, 0.7, true, 0.5); nz(at, e.d, 0.018, 'highpass', 2600, 0.5, true, 0.8); const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sine'; o.frequency.value = 60; v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(0.015, at + 0.5); v.gain.setValueAtTime(0.015, at + Math.max(0.5, e.d - 0.5)); v.gain.linearRampToValueAtTime(0.0001, at + e.d); o.connect(v); v.connect(dest); o.start(at); o.stop(at + e.d + 0.05); break; }
+      case 'room': { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sine'; o.frequency.value = 60; v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(0.015, at + 0.5); v.gain.setValueAtTime(0.015, at + Math.max(0.5, e.d - 0.5)); v.gain.linearRampToValueAtTime(0.0001, at + e.d); o.connect(v); v.connect(dest); o.start(at); o.stop(at + e.d + 0.05); break; }
       case 'sent': nz(at, 0.22, 0.09, 'bandpass', 900, 1.4, false, 0.01, 3200); break;
       case 'recv': tone('sine', 1320, at, 0.09, 0.05); tone('sine', 1760, at + 0.09, 0.12, 0.05); break;
       case 'notify': tone('sine', 988, at, 0.12, 0.06); tone('sine', 1319, at + 0.12, 0.18, 0.06); break;
@@ -488,5 +495,5 @@
     const rb = T => T < 23.2 ? 84 + 26 * T / 23.2 : T < 26.6 ? 110 + 60 * (T - 23.2) / 3.4 : 170 + 90 * Math.min(1, (T - 26.6) / 3.15), sc = runFor / 29.75;
     for (let T = 0.2; T < 29.75; T += 60 / rb(T)) beat(ctx, dest, at + idleFor + T * sc, i++, Math.max(0, Math.min(1, 0.35 + 0.65 * (rb(T) - 84) / 176)));
     return idleFor + runFor; }
-  window.__termBoot = { purr, modem, music, pad, beat, idleBpm: IDLE_BPM, lastCmd: () => lastCmd, dur: DUR, draw, title: titleDraw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
+  window.__termBoot = { purr, modem, music, pad, beat, idleBpm: IDLE_BPM, lastCmd: () => lastCmd, dur: DUR, draw, title: titleDraw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length, day: DAY, clockAt, bootClock };
 })();
