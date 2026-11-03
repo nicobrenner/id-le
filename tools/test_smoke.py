@@ -1445,6 +1445,18 @@ def t_title_card(P):
     return f"waits at the title ({w['t']:.2f} s), a key starts the messages, Esc marks skip:messages"
 
 
+def t_hint_phone(P):
+    """On a 375×667 phone the intro's "hold to read" hint and skip › stay clear of the desktop's dock (drawn centred at the bottom, 178 px wide)."""
+    pg = P.open("/arena.html?story&test"); pg.set_viewport_size({"width": 375, "height": 667})
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+    pg.keyboard.press("Enter"); pg.wait_for_timeout(1200)
+    r = pg.evaluate("""() => { const W = innerWidth, H = innerHeight, dock = { l: W / 2 - 89, r: W / 2 + 89, t: H - 62, b: H - 10 }, hit = e => { const q = e.getBoundingClientRect(); return !(q.right <= dock.l || q.left >= dock.r || q.bottom <= dock.t || q.top >= dock.b); };
+      const h = document.querySelector('#idleIntro .hint'), k = document.querySelector('#idleIntro .skip'); return { hint: hit(h), skip: hit(k), hv: getComputedStyle(h).display !== 'none' }; }""")
+    need(not r["hint"] and not r["skip"] and r["hv"], f"the hint / skip overlap the dock at 375×667: {r}")
+    pg.keyboard.press("Escape"); P.clean()
+    return "hint and skip › clear of the dock at 375×667"
+
+
 def t_story_arms(P):
     """The storyline A/B (off by default): a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=current gets the
     starter world as now; a browser that already has a world keeps it, whatever its arm (returning players are never thrown into the story)."""
@@ -1664,7 +1676,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "title card", "story arms", "story offer", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "title card", "hint phone", "story arms", "story offer", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1719,6 +1731,7 @@ def main():
                 run("genesis", t_genesis)
                 run("story", t_story)
                 run("title card", t_title_card)
+                run("hint phone", t_hint_phone)
                 run("story arms", t_story_arms)
                 run("story offer", t_story_offer)
                 run("never stuck", t_never_stuck)
