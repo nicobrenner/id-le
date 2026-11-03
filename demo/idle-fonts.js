@@ -37,6 +37,7 @@
     `#lab[data-role=oracle] #ai-thread,#lab[data-role=oracle] #lab-text{font-family:var(--oracle-font)!important}`,
     // display: the Gazette front page, epoch cards, reel title cards
     `#genFront .mh,#genFront h3,#genDay .dt,#reel .tc .ti{font-family:var(--display-font)!important}`,
+    `#genDay .dt{font-size:14px}`,   // Datapulse is thin: the epoch card's title needs 14 px to read
     // Doc's lines in the dark and the chooser's title
     `#genIntro,#genChoose h2{font-family:var(--sub-font)!important}`,
   ].join('');
