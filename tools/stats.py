@@ -49,9 +49,21 @@ def engage2(tot):
         ("Favorites by family and body", sorted(((k.replace("fam:", "family ").replace("body:", "body "), n) for k, n in fav.items() if k[:4] in ("fam:", "body")), key=lambda r: -r[1]), None),
         ("First three features opened (path)", sorted(path.items(), key=lambda r: -r[1])[:12], None),
         ("Operator actions that ran (until Nov 2 the world's own evolve/disaster events and the Tiny Operator's tool logs were counted here too: those days' evolve and ai_* numbers are inflated)", sorted(opa.items(), key=lambda r: -r[1]), None),
-        ("Where rage clicks happened", sorted(rage.items(), key=lambda r: -r[1]), None),
+        ("Where rage clicks happened (in the creature card and the world: on what)", sorted(((rage_label(k), n) for k, n in rage.items()), key=lambda r: -r[1]), None),
     ]
     return lines, [g for g in groups if g[1]]
+
+RAGE_PART = {"hangry": "😤 hangry", "mutate": "mutate", "big": "×3", "revert": "revert", "keep": "♥ keep", "clone": "clone", "portrait": "🗄 portrait", "rest": "rest", "input": "the whisper box",
+             "name": "its name", "text": "the card's text", "head": "the card's header", "creature": "a creature", "word": "a word", "empty": "empty floor", "thing": "a thing (hut, chart, design)"}
+
+
+def rage_label(k):
+    """'whisper:keep' → 'creature card · ♥ keep', 'world:word' → 'world · a word' (before Nov 3 these were just 'whisper' and 'world')"""
+    if ":" in k:
+        a, b = k.split(":", 1)
+        return ("creature card" if a == "whisper" else a) + " · " + RAGE_PART.get(b, b)
+    return {"whisper": "creature card (no detail: before Nov 3)", "world": "world (no detail: before Nov 3)"}.get(k, k)
+
 
 GSTEP_NAMES = {"words": "words", "creatures": "first creatures", "light": "light", "weather": "weather", "hut": "a hut", "music": "music"}
 
