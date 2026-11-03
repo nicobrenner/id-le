@@ -25,6 +25,8 @@
   const AB = 'off';   // the A/B switch (stays OFF until Nico's go): 'on' gives NEW browsers the storyline or the current start 50/50 (stored in this browser only, as idle.gv: story | current)
   const KEY = 'idle.genesis', GV = 'idle.gv';
   const H = () => window.__genHooks, W = () => window.__idleWorld;
+  // a keyframe (idle-keys.js, staging/local only): which moment of the storyline to start at; null on id-le.com and in normal play
+  const SK = window.__storyKey || null, skAfter = k => !!(SK && SK.after(k));
   const coarse = () => matchMedia('(pointer: coarse)').matches;
   // good first articles for "grow it from Wikipedia" (one is offered at random)
   const TOPICS = ['Octopus', 'Volcano', 'Moon', 'Coffee', 'Bioluminescence', 'Aurora', 'Coral reef', 'Tardigrade', 'Lighthouse', 'Origami'];
@@ -101,7 +103,10 @@
   const unlocked = k => { if (!storyMode()) return true; const r = UNLOCK.find(x => x[0] === k); if (r) return r[1] != null && r[1] <= epochReached(); const c = CHIP_AT[k]; return c == null || c <= epochReached(); };
   function applyUnlocks() { const on = storyMode() && !!S.on; document.documentElement.classList.toggle('gen-story', on);
     let st = document.getElementById('genUnlock'); if (!st) { st = document.createElement('style'); st.id = 'genUnlock'; document.head.appendChild(st); }
-    const e = epochReached(); st.textContent = on ? UNLOCK.filter(r => r[1] == null || r[1] > e).map(r => r[2].split(',').map(x => 'html.gen-story ' + x.trim()).join(',')).join(',') + '{display:none!important}' : '';
+    // :not(#_) lifts the rule above the phone layout's own (idle-mobile.js forces '#topbar>#studioBtn' visible), and every button the
+    // phone's ☰ sheet copies (#mSheet [data-for=id]) follows its original (v12: a locked studio showed at Epoch 1 on phones)
+    const sel = x => { x = x.trim(); const id = /^#([\w-]+)$/.exec(x); return ['html.gen-story:not(#_) ' + x].concat(id ? [`html.gen-story:not(#_) #mSheet [data-for="${id[1]}"]`] : []); };
+    const e = epochReached(); st.textContent = on ? UNLOCK.filter(r => r[1] == null || r[1] > e).flatMap(r => r[2].split(',').flatMap(sel)).join(',') + '{display:none!important}' : '';
     document.documentElement.dataset.epoch = on ? String(e) : ''; }
   let S = load(), hold = [], busy = false, lifeNow = false;
   // no creature may appear in the storyline before its life step (the world's spawn asks this; arena.html window.__idleWorld.spawn)
@@ -194,7 +199,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   const epochNow = () => (S && S.day) || 0, statusLine = () => `consciousness 24 · epoch ${epochNow()}${epochNow() === 0 ? ' · genesis' : ''}`;
   // the consciousness's tag (Nico, v9: "at the top of the operator window, or as a label/tag on the world, rather than the chat"): top-left of
   // the world, there whether the Operator's window is open or not (hidden in the dark, like all UI)
-  function tag() { applyUnlocks(); if (!S || !S.on) return; let el = document.getElementById('genTag'); if (!el) { el = document.createElement('div'); el.id = 'genTag'; document.body.appendChild(el); } el.textContent = statusLine(); }
+  function tag() { applyUnlocks(); if (!S || !S.on || !storyMode()) { const t = document.getElementById('genTag'); if (t) t.remove(); return; } let el = document.getElementById('genTag'); if (!el) { el = document.createElement('div'); el.id = 'genTag'; document.body.appendChild(el); } el.textContent = statusLine(); }
   { const c3 = document.createElement('style'); c3.textContent = `#genTag{position:fixed;left:14px;top:12px;z-index:41;padding:3px 9px;border-radius:9px;background:#0a0b16cc;border:1px solid #6b7cff55;color:#cfd6ff;font:600 11px/1.4 var(--term-font,ui-monospace,Menlo,monospace);letter-spacing:.04em;pointer-events:none}
 html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(.gen-calm) #genTag{top:52px}html.gen-story:not(.gen-calm) #genDay{top:84px!important}@media (max-width:600px){#genTag{top:8px;left:8px}}`; document.head.appendChild(c3); }
   const mark = k => { try { window.__funnel && window.__funnel.mark(k); } catch (e) {} };
@@ -212,10 +217,10 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     try { const p = h.cam(); h.flyTo(p.x, p.y, innerWidth < 700 ? 0.8 : 1); } catch (e) {} }
 
   // ---------- the intro (idle-intro.js) or a short fallback line
-  async function intro() { if (Q.get('intro') === '0') return; const saveData = navigator.connection && navigator.connection.saveData;
+  async function intro() { if (Q.get('intro') === '0' || skAfter('logo')) return; const saveData = navigator.connection && navigator.connection.saveData;
     if (window.__intro && window.__intro.play && !saveData) {
       // Epoch 0 unless ?intro=storm|eerie|epic
-      try { await window.__intro.play(Q.get('intro') ? { tone: Q.get('intro'), story: storyMode() } : { story: storyMode() }); return; } catch (e) { console.warn('genesis: intro', e); } }
+      try { await window.__intro.play(Q.get('intro') ? { tone: Q.get('intro'), story: storyMode() } : { story: storyMode(), ...(SK ? { at: SK.key } : {}) }); return; } catch (e) { console.warn('genesis: intro', e); } }
     await new Promise(res => { const el = document.createElement('div'); el.id = 'genIntro'; el.textContent = 'in the beginning there was nothing'; document.body.appendChild(el);
       const end = () => { el.classList.add('out'); setTimeout(() => { el.remove(); res(); }, 1200); }; el.addEventListener('click', end, { once: true });
       setTimeout(end, matchMedia('(prefers-reduced-motion: reduce)').matches ? 1500 : 2600); }); }
@@ -374,12 +379,20 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
       if (!h.words().length) await _letThereBeWords(''); if (!did('creatures')) await _firstCreatures();
       if (!window.__build || !window.__build._seed) return null; window.__build._seed(); done('hut'); return true; } }
   async function _music() { { if (did('music')) return 'already'; const m = window.__music; if (!m) return null;
-      try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} try { m.setSource ? m.setSource('background') : m.setBg(true); } catch (e) { try { m.setBg(true); } catch (e2) { return null; } }
+      try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} try { m.setSource ? m.setSource('bg') : m.setBg(true); } catch (e) { try { m.setBg(true); } catch (e2) { return null; } }
       done('music'); return true; } }
   // every action answers { ok, result } or { error } (the Tiny Operator and the Operator's tools read that shape)
   const answer = r => r === 'busy' ? { error: 'another step is still happening' } : r === 'notyet' ? { error: 'not yet: words first' } : r === 'already' ? { ok: true, already: true } : r ? { ok: true, result: r } : { error: 'that step did not work' };
   const actions = { letThereBeWords: async x => answer(await step('words', () => _letThereBeWords(x))), firstCreatures: async f => answer(await step('creatures', () => _firstCreatures(f))), light: async () => answer(await step('light', _light)),
     weather: async k => answer(await step('weather', () => _weather(k))), hut: async () => answer(await step('hut', _hut)), music: async () => answer(await step('music', _music)) };
+
+  // ---------- keyframes (idle-keys.js): after the opening, build what the chosen moment needs, the way a player would, then stop there
+  const sleep = ms => new Promise(r => setTimeout(r, ms)), until = async (f, ms) => { for (let t = 0; t < ms && !f(); t += 100) await sleep(100); return f(); };
+  async function keyAdvance() { if (!skAfter('lights')) return;
+    await actions.light(); await until(() => !document.documentElement.classList.contains('gen-box'), 5000); await sleep(400);
+    if (!skAfter('words')) return; await actions.letThereBeWords(''); await sleep(1900);
+    if (!skAfter('life')) return; await actions.firstCreatures();
+    if (!skAfter('epoch0done')) return; const b = await until(() => $('#genFront button'), 8000); if (b) $('#genFront button').click(); }
 
   // ---------- stats (idle-stats.js): the steps reached and the seconds each took since the one before (or since the console opened)
   function stats() { if (!S || !S.on || !S.steps) return null; const t0 = S.tc || S.t0, ks = Object.keys(S.steps).sort((a, b) => S.steps[a] - S.steps[b]), out = {}; let prev = t0;
@@ -396,7 +409,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode, ev: 2 }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
     if (mode === 'free') cls('gen-calm', 0);
     // v12: in the story the game is hushed from the intro on (the intro plays past it, storyOut) and held until the music step
-    if (mode === 'story') { blackCover(true); silence(true); cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); return true; }
+    if (mode === 'story') { blackCover(true); silence(true); cosmos.start(); if (SK) await SK.ready; await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); await keyAdvance(); return true; }
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
   // the chooser: the storyline, the void with no guide, or a world that is already alive (the starter world)
   // on id-le.com the storyline isn't offered yet (it's still being written): the chooser shows the other two
@@ -512,6 +525,9 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
     car.connect(body); body.connect(lp); lp.connect(out); [car, mod, am].forEach(o => o.start(t)); return { out, stop: at => { try { out.gain.cancelScheduledValues(at); out.gain.setValueAtTime(out.gain.value, at); out.gain.linearRampToValueAtTime(0.0001, at + 0.08); [car, mod, am].forEach(o => o.stop(at + 0.12)); } catch (e) {} } }; }
   function rumble(on) { const A = window.__audio; try { if (!on) { if (rum) { rum.stop(rum.c.currentTime); rum = null; } return; } if (rum || !A || A.muted()) return; const c = A.ctx(); if (c.state !== 'running') return; rum = rumbleSound(c, bypass(c), c.currentTime + 0.02, 6); rum.c = c; } catch (e) {} }
   async function landing() { if (Q.has('nolanding')) { blackCover(false); land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
+    // keyframes past the Operator's arrival: the dark is there (for the sonar and the lights), without the lines or the arrival
+    if (skAfter('operator')) { for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
+      land = { phase: 'sonar', clicks: 0, t0: now(), shown: 0, pings: 0, why: 'key' }; nightStart(matchMedia('(prefers-reduced-motion: reduce)').matches); silence(true); blackCover(false); return; }
     // the night starts when the game's loading cover has gone (skipping the intro right away can land before it)
     for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; blackCover(true); nightStart(RM); mark('landing'); ringing(untilApproach(-1, 3.0)); setTimeout(() => silence(true), 2800); setTimeout(() => blackCover(false), 1500);
@@ -530,7 +546,9 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
       const onUp = e => { if (!downAt) return; const short = performance.now() - downAt < 280; downAt = 0; land.paused = false; if (!short) return; land.clicks++; ripple(e.clientX, e.clientY, RM);
         const L = land.line; if (L && (st.t - L.t0) * DCPS < L.text.length) L.t0 = st.t - L.text.length / DCPS; else next(); };   // a click: finish the line, or the next one
       skipB.addEventListener('click', e => { e.stopPropagation(); finish('skip'); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
-      document.addEventListener('pointerdown', onDown, true); document.addEventListener('pointerup', onUp, true); wait(3.0); });   // pitch black 1.5 s (the ringing), the hole comes up, then the first line
+      document.addEventListener('pointerdown', onDown, true); document.addEventListener('pointerup', onUp, true);
+      if (SK && SK.is('operator')) { setTimeout(() => blackCover(false), 300); finish('key'); return; }   // the keyframe: straight to the Operator's arrival
+      wait(3.0); });   // pitch black 1.5 s (the ringing), the hole comes up, then the first line
     land.phase = 'arriving'; st_calm(); try { await arrival(RM); } catch (e) { console.warn('genesis: arrival', e); } land.phase = 'sonar'; }
   const st_calm = () => { nightState.calm = 1; };
   function ripple(x, y, RM) {   // a click in the void: a faint ring (and a faint note, unless the storyline's silence holds)
@@ -558,7 +576,8 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
   async function wake() { const lab = $('#lab'); let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
     cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); opTitle(true); mark('operator'); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; let skip = false; const onTap = () => { skip = true; }; if (lab) lab.addEventListener('pointerdown', onTap);
-    for (const line of WAKE) { if (RM) { wakeShown.push(line); renderConsole(); await new Promise(r => setTimeout(r, 900)); continue; }
+    const fast = skAfter('operator');   // a later keyframe: the opening is already said
+    for (const line of WAKE) { if (RM || fast) { wakeShown.push(line); renderConsole(); if (!fast) await new Promise(r => setTimeout(r, 900)); continue; }
       for (let i = 1; i <= line.length; i += 2) { if (skip) break; wakeTyping = line.slice(0, i); renderConsole(); await new Promise(r => setTimeout(r, 26)); }
       wakeTyping = ''; wakeShown.push(line); renderConsole(); if (!skip) await new Promise(r => setTimeout(r, Math.min(1600, 500 + line.length * 18))); skip = false; }
     if (lab) lab.removeEventListener('pointerdown', onTap);
@@ -579,20 +598,59 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
   function undock() { opTitle(); const bd = $('#genBackdrop'); if (bd) { bd.style.transition = 'opacity .72s ease-in-out'; bd.classList.add('out'); setTimeout(() => bd.remove(), 800); } wakeShown = []; flipDock(); renderConsole(); renderDay(); }
 
   // ---------- the epochs: the goal card, and a front page when an epoch is done
-  function renderDay() { if (!storyMode()) return; tag(); const d = dayOf(S.day || 0); if (!d) return; let el = $('#genDay');
+  // the end of what's built (v12, Nico: "at the end of the current progres of the game to be very clear: WIP/check out the Roadmap ^^ join
+  // us on Github: ... / Free-play"): the first epoch that isn't built yet opens as a card in the middle (S.endOpen) with the three ways on;
+  // closed (×, the roadmap, GitHub) it is the small corner card, whose "what's next ›" opens it again. Free-play leaves the storyline.
+  const END = { head: 'work in progress', line: "that's as far as the story goes, for now. the scientists are building the next epochs, one at a time",
+    help: 'you can help: vote on what comes next, or build it with us', free: 'everything is open now. it is your consciousness, Doc' };
+  { const c4 = document.createElement('style'); c4.textContent = `html:root #genDay.end.end{left:50%!important;top:50%!important;bottom:auto!important;right:auto!important;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));min-width:0;max-width:none;max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box;padding:20px 22px 16px;z-index:2147482400;background:#0a0b16f7;box-shadow:0 24px 90px #000c,0 0 0 1px #6b7cff55}
+#genDay.end .eb{display:inline-block;font:700 10px/1 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.16em;text-transform:uppercase;color:#ffcf7a;border:1px solid #ffcf7a88;border-radius:4px;padding:4px 7px;margin-bottom:10px}
+#genDay.end .dt{font:700 22px/1.15 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.08em;color:#fff;opacity:1;margin-bottom:4px}
+#genDay.end .el{font:16px/1.45 var(--op-font,Georgia,serif);color:#fff;margin:8px 0}
+#genDay.end .ea{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+#genDay.end .ea>*{display:block;text-align:center;font:600 14px/1.2 var(--ui-font,system-ui);padding:10px 14px;border-radius:12px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;text-decoration:none;cursor:pointer}
+#genDay.end .ea>*:hover,#genDay.end .ea>*:focus-visible{background:#2a3180;outline:none}#genDay.end .ea [data-end=free]{background:#3a46c8;border-color:#cfd6ff}
+#genDay.end .en{margin-top:12px;font:11.5px/1.45 var(--ui-font,system-ui);opacity:.65}#genDay .wip a{cursor:pointer;text-decoration:underline dotted;color:#9fd8ff}
+@media (max-width:600px){#genDay.end{padding:16px 16px 12px}#genDay.end .dt{font-size:19px}#genDay.end .el{font-size:15px}}`; document.head.appendChild(c4); }
+  const builtNext = n => { const d = dayOf(n); return !!(d && d.goals && d.goals.length); };
+  function renderDay() { if (!storyMode()) { const g = $('#genDay'); if (g) g.remove(); return; } tag(); const d = dayOf(S.day || 0); if (!d) return; let el = $('#genDay');
     if (document.documentElement.classList.contains('gen-box')) { if (el) el.remove(); return; }
     if (!el) { el = document.createElement('div'); el.id = 'genDay'; document.body.appendChild(el); }
-    const ok = k => S.days && S.days[d.n] ? true : (d.n === 0 ? did(k) : false), soon = d.n > 0;
-    el.classList.toggle('soon', soon);
-    el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">EPOCH ${d.n} · ${esc(d.title.toUpperCase())}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
-      (soon ? `<div class="wip">The next epochs are coming. Id|le is a work in progress, and it's open source: <a href="${esc(window.IDLE_REPO || 'https://github.com/nicobrenner/id-le')}" target="_blank" rel="noopener">see how it's made</a>. Until then the consciousness is yours: keep playing.</div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
-    el.querySelector('.x').onclick = () => el.remove(); }
-  function dayDone(n) { const d = dayOf(n); if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; S.ev = 2; save(); if (n === 0) mark('e1done');   // funnel key kept: 'e1done' = Genesis (Epoch 0) done
+    const ok = k => S.days && S.days[d.n] ? true : (d.n === 0 ? did(k) : false), soon = d.n > 0 && !builtNext(d.n), end = soon && !!S.endOpen;
+    el.classList.toggle('soon', soon); el.classList.toggle('end', end); el.setAttribute('role', end ? 'dialog' : 'status');
+    const repo = esc(window.IDLE_REPO || 'https://github.com/nicobrenner/id-le'), title = `EPOCH ${d.n} · ${esc(d.title.toUpperCase())}`;
+    if (end) el.innerHTML = `<button class="x" title="close">×</button><div class="eb">${esc(END.head)}</div><div class="dt">${title}</div>
+<p class="el">${esc(END.line)}</p><p class="el">${esc(END.help)}</p>
+<div class="ea"><button data-end="roadmap">🗺 check out the roadmap</button><a data-end="github" href="${repo}" target="_blank" rel="noopener">⭐ join us on GitHub</a><button data-end="free">✦ free-play</button></div>
+<div class="en">free-play opens every part of Id|le now and keeps this consciousness as it is. when Epoch ${d.n} ships, ⚙ settings takes you back into the story.</div>`;
+    else el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">${title}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
+      (soon ? `<div class="wip">coming soon · Id|le is a work in progress · <a data-end="open">what's next ›</a></div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
+    el.querySelector('.x').onclick = () => { if (end) { S.endOpen = false; save(); renderDay(); } else el.remove(); };
+    el.querySelectorAll('[data-end]').forEach(b => b.addEventListener('click', e => endChoice(b.dataset.end, e))); }
+  function showEnd() { if (!storyMode() || !S || S.endOpen || builtNext(S.day || 0)) return; S.endOpen = true; S.endAt = S.endAt || now(); save(); mark('end_shown'); renderDay();
+    try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_end', extra: { epoch: S.day || 0 } } })); } catch (e) {} }
+  function endChoice(k, e) {
+    if (k === 'open') { S.endOpen = true; save(); renderDay(); return; }
+    if (k === 'roadmap') { mark('end_roadmap'); S.endOpen = false; save(); renderDay(); try { window.__feedback && window.__feedback.open('road'); } catch (er) {} return; }
+    if (k === 'github') { mark('end_github'); return; }   // the link opens in a new tab; the card stays
+    if (k === 'free') { mark('end_free'); freePlay(); } }
+  // free-play: every feature now, the same world; the storyline can be picked up again from ⚙ (resumeStory)
+  function freePlay() { if (!S) return; S.mode = 'free'; S.fp = now(); S.endOpen = false; S.free = S.free || now(); save(); silence(false); cls('gen-calm', 0); cls('gen-hush', 0);
+    const g = $('#genDay'); if (g) g.remove(); applyUnlocks(); tag(); say(END.free);
+    try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_free', extra: { epoch: S.day || 0 } } })); } catch (e) {} }
+  const canResume = () => !!(S && S.on && S.fp && S.mode === 'free' && storyLive());
+  function resumeStory() { if (!canResume()) return false; S.mode = 'story'; delete S.fp; save(); applyUnlocks(); renderDay(); renderConsole(); return true; }
+  // the story's silence ends with Genesis (manager, v12: "a story player must not stay silent once Epoch 0 is beaten"): the master comes
+  // back and the background music fades in under the Gazette's special edition, a small reward. Only the sound: the music panel (its
+  // controls) still waits for its epoch in UNLOCK. A player who muted Id|le stays muted (the master keeps the mute).
+  function reward() { silence(false); try { const m = window.__music; if (m && m.setBg) m.setBg(true); } catch (e) {} }
+  const genesisDone = () => !!(S && S.days && S.days[0]);
+  function dayDone(n) { const d = dayOf(n); if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; S.ev = 2; save(); if (n === 0) { mark('e1done'); reward(); }   // funnel key kept: 'e1done' = Genesis (Epoch 0) done
     try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'epoch ' + n + ' done', {}); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_day', extra: { day: n } } })); } catch (e) {}
     const el = document.createElement('div'); el.id = 'genFront';
     el.innerHTML = `<div class="np"><div class="mh">THE ID|LE GAZETTE</div><div class="md">consciousness 24 · epoch ${n} · special edition</div><div class="ec">EPOCH ${n} COMPLETE</div><h3>${esc(d.front.head)}</h3><div>${esc(d.front.body)}</div><div class="to"><b>TO:</b> ${esc(d.line)}</div><button>on to epoch ${n + 1} ›</button></div>`;
-    document.body.appendChild(el); el.querySelector('button').onclick = () => { el.remove(); say(d.line); renderDay(); endGuide(false); }; }
+    document.body.appendChild(el); el.querySelector('button').onclick = () => { el.remove(); say(d.line); renderDay(); endGuide(false); if (!builtNext(n + 1)) setTimeout(showEnd, skAfter('epoch1') ? 0 : 3800); }; }
 
   // ---------- the primordial universe (script section C): a canvas behind the floor; wild when the lights come on, calmer as it fills
   const cosmos = (() => { let bolts = 0, cv = null, g = null, raf = 0, on = false, lit = 0, litAt = 0, chaos = 1, alpha = 1, fadeAt = 0, parts = null, last = 0, bolt = null, nextBolt = 0, comets = [], P = false;
@@ -666,8 +724,8 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
 @media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px}}`; document.head.appendChild(css2); }
   // offered once the world is up and the player has looked around a little (20 s; ?offer: 1 s)
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
-  if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && S.steps.music) && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
+  if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && S.steps.music) && !genesisDone() && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   applyUnlocks();
   window.__genesis = { noLife, darkLines: DARK.slice(), approach: APPROACH, untilApproach, ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
-    steps: ORDER.slice(), guide: GUIDE.slice(), days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
+    steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
