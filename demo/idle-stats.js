@@ -152,7 +152,12 @@
   addEventListener('pointerdown', e => { const t = performance.now(); if (!firstAct) firstAct = t; taps.push([t, e.clientX, e.clientY]); while (taps.length && t - taps[0][0] > 600) taps.shift();
     if (taps.filter(c => Math.hypot(c[1] - e.clientX, c[2] - e.clientY) <= 24).length >= 3 && t - rageAt > 1000) { rageAt = t; taps.length = 0; inc(E2.rage, rageWhere(e.target, e.clientX, e.clientY)); E2.did.add('rage'); } }, true);
   addEventListener('keydown', () => { if (!firstAct) firstAct = performance.now(); }, true);
-  const leaveFlags = () => { const t = performance.now(); if (t < 5000) return; if (!firstAct) E2.did.add('no_interact'); else if (t - firstAct < 30000) E2.did.add('quick_exit'); };
+  // left without a click / soon after the first one (v2, 11-03): judged on time the page was actually on screen, so a tab opened in the
+  // background (or prerendered) and closed unseen isn't counted as someone who looked and left; the two flags exclude each other, and
+  // they use new keys (ni_seen, qe_seen) so the old ones (no_interact, quick_exit, which counted unseen tabs) stay comparable as they were
+  const seenMs = () => shown + (shownAt ? performance.now() - shownAt : 0);
+  const leaveFlags = () => { if (seenMs() < 5000 || E2.did.has('ni_seen') || E2.did.has('qe_seen')) return;
+    if (!firstAct) E2.did.add('ni_seen'); else if (performance.now() - firstAct < 30000) E2.did.add('qe_seen'); };
   const e2part = () => { const x = {}; for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'op']) if (Object.keys(E2[k]).length) x[k] = { ...E2[k] };
     const did = [...E2.did].filter(f => !E2sent.did.has(f)); if (did.length) x.did = did; return x; };
   let secSent = 0;   // visible seconds already added to the day's total
@@ -201,7 +206,7 @@
     return any ? p : null;
   }
   function send(why) {
-    if (!live()) return; if (why === 'hide' || why === 'leave') leaveFlags(); const p = payload(why !== 'peek'); if (!p) return; p.why = why;
+    if (!live()) return; if (!sent.visit && seenMs() < 1 && why !== 'open') return;   /* never seen: nothing to report */ if (why === 'hide' || why === 'leave') leaveFlags(); const p = payload(why !== 'peek'); if (!p) return; p.why = why;
     const body = JSON.stringify(p); let ok = false; try { ok = navigator.sendBeacon('/lab/p', new Blob([body], { type: 'application/json' })); } catch (e) {}
     if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = body.length < 60000; } catch (e) {}
     if (!ok) return;
@@ -212,8 +217,12 @@
   }
   // batches: a first one soon after the page opens (the visit itself, so leaving early still counts), then when the page is hidden
   // or closed, and at 3 and 15 minutes for tabs that stay open
-  const opened = () => setTimeout(() => send('open'), 3000);
+  // the first batch waits until the page has been on screen (a background tab or a prerendered page that is never looked at sends nothing:
+  // the server still counts its page view)
+  let openSent = false; const opened = () => { if (openSent) return; if (document.hidden || document.prerendering) return; openSent = true; setTimeout(() => send('open'), 3000); };
   if (document.readyState === 'complete') opened(); else addEventListener('load', opened, { once: true });
+  addEventListener('visibilitychange', () => { if (!document.hidden && document.readyState === 'complete') opened(); });
+  document.addEventListener('prerenderingchange', () => opened());
   addEventListener('visibilitychange', () => { if (document.hidden) send('hide'); });
   addEventListener('pagehide', () => send('leave'));
   setTimeout(() => send('3m'), 180000); setTimeout(() => send('15m'), 900000);
