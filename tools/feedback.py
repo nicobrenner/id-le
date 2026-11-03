@@ -19,7 +19,7 @@ Needs CLOUDFLARE_API_TOKEN in ~/.idle-ts/cf.env (never committed; never printed)
 import argparse, datetime as dt, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 API = "https://api.cloudflare.com/client/v4"
-KINDS = {"idea": "💡 idea", "bug": "🐞 bug", "loved": "💜 loved", "off": "🌀 felt off"}
+KINDS = {"idea": "💡 idea", "bug": "🐞 bug", "loved": "💜 loved", "off": "🌀 felt off", "review": "⭐ review"}
 # the starting roadmap: issue #20's "Next, in order", "Future" and "Seasonal", rewritten for players (no issue numbers, no internals)
 SEED = [
     ("genesis", "Start from nothing", "an intro where a tiny model learns to speak, then you build a universe with the Operator, day by day", "in progress"),
