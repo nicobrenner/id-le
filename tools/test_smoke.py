@@ -1826,26 +1826,27 @@ def t_logo_solo(P):
 
 
 def t_story_ring(P):
-    """Story v12, the ringing at the landing (Nico: "go up in intensity very quickly, then down, then linger for a bit, slowly reaching zero by the
-    time the black hole starts approaching"): peak within 0.3 s, down to ~35-40% by 0.6 s, lingering, exactly 0 at its end; re-aimed mid-way it
-    still ends at 0 on the new time; the untouched landing aims it at the line where the hole starts moving."""
+    """Story v13, the ringing at the landing (Nico: "the ringing lasts too long, it should go rather quickly, definitely 1 or 2 messages before the
+    Doc says 'why is there no sound?'"; v12: "go up in intensity very quickly, then down, then linger"): peak within 0.3 s (at least 0.6× v12's),
+    down to ~35-40% by 0.75 s, a short linger, exactly 0 at the start of the line two before "and why is there no sound?!", silent through the
+    line before it and through it (untouched timing); re-aimed mid-way it still ends at 0 on the new time."""
     pg = P.open("/arena.html?test&intro=0"); booted(pg)
-    r = pg.evaluate("""async () => { const G = window.__genesis, end0 = G.untilApproach(-1, 3.0), sr = 44100;
-      const env = async (end, re) => { const oc = new OfflineAudioContext(1, Math.ceil(sr * (Math.max(end, re ? re[1] : 0) + 1)), sr), c = G.ringSound(oc, oc.destination, 0.05, end);
+    r = pg.evaluate("""async () => { const G = window.__genesis, end0 = G.untilLine(-1, 3.0), q0 = G.untilLine(-1, 3.0, G.silentLine - 1), q1 = G.untilLine(-1, 3.0, G.silentLine + 1), sr = 44100;
+      const env = async (end, len, re) => { const oc = new OfflineAudioContext(1, Math.ceil(sr * len), sr), c = G.ringSound(oc, oc.destination, 0.05, end);
         if (re) oc.suspend(re[0]).then(() => { c.retarget(re[1]); oc.resume(); }); const d = (await oc.startRendering()).getChannelData(0), w = 441, a0 = [];
         for (let i = 0; i + w <= d.length; i += w) { let p = 0; for (let j = i; j < i + w; j++) p = Math.max(p, Math.abs(d[j])); a0.push(p); }
         const a = a0.map((_, i) => Math.max(...a0.slice(Math.max(0, i - 10), i + 11)));   // the two tones beat 5 times a second: the envelope is the max over one beat
         return { a, a0, endAt: c.endAt }; };
-      const one = await env(0.05 + end0), two = await env(8, [2.0, 4.5]), pk = Math.max(...one.a), at = i => one.a[Math.round(i * 100)];
-      const peakT = one.a.indexOf(pk) / 100;
-      return { end0, pk, peakT, drop: at(0.75) / pk, linger: at(2.0) / pk, atEnd: Math.max(...one.a0.slice(Math.round((0.05 + end0) * 100), Math.round((0.05 + end0) * 100) + 3)),
-        reEnd: Math.max(...two.a0.slice(455, 460)), reMid: two.a[300] / Math.max(...two.a), dark: G.darkLines[G.approach] }; }""")
-    need(r["dark"] == "wait, what... why is that black hole moving...", f"the approach line: {r['dark']}")
-    need(r["peakT"] <= 0.35 and r["pk"] < 0.2, f"the ringing's attack/peak: {r}")
-    need(0.3 <= r["drop"] <= 0.48 and 0.15 <= r["linger"] <= 0.5, f"the ringing's drop/linger: {r}")
-    need(r["atEnd"] <= 0.001 and r["reEnd"] <= 0.001, f"the ringing doesn't reach 0 at the approach: {r}")
+      const one = await env(0.05 + end0, 0.05 + q1 + 0.5), two = await env(8, 9, [2.0, 3.5]), pk = Math.max(...one.a), at = t => one.a[Math.round(t * 100)];
+      const win = (x, t0, t1) => Math.max(...x.slice(Math.round(t0 * 100), Math.round(t1 * 100)));
+      return { end0, q0, q1, pk, peakT: one.a.indexOf(pk) / 100, drop: at(0.75) / pk, atEnd: win(one.a0, 0.05 + end0, 0.05 + end0 + 0.03), silent: win(one.a0, 0.05 + q0, 0.05 + q1),
+        reEnd: win(two.a0, 3.55, 3.6), ringLine: G.darkLines[G.ringEnd], silentLine: G.darkLines[G.silentLine], gap: G.silentLine - G.ringEnd }; }""")
+    need(r["silentLine"].startswith("and why is there no sound") and r["gap"] >= 2, f"the ringing must end two lines before 'why is there no sound': {r}")
+    need(r["peakT"] <= 0.3 and 0.127 * 0.6 <= r["pk"] < 0.2, f"the ringing's attack/peak: {r}")
+    need(0.3 <= r["drop"] <= 0.48, f"the ringing's drop: {r}")
+    need(r["atEnd"] <= 0.001 and r["silent"] <= 0.001 and r["reEnd"] <= 0.001, f"the ringing isn't 0 when it should be: {r}")
     P.clean()
-    return f"peak {r['pk']:.3f} at {r['peakT']:.2f} s, {r['drop'] * 100:.0f}% at 0.75 s, lingering {r['linger'] * 100:.0f}% at 2 s, 0 at the approach ({r['end0']:.1f} s untouched) and when re-aimed"
+    return f"peak {r['pk']:.3f} at {r['peakT']:.2f} s, {r['drop'] * 100:.0f}% at 0.75 s, 0 at {r['end0']:.1f} s (the start of '{r['ringLine'][:24]}…'), silent {r['q0']:.1f}-{r['q1']:.1f} s (the line before 'why is there no sound?!' and it), 0 when re-aimed"
 
 
 def t_story_intro(P):
@@ -1934,8 +1935,8 @@ def t_story_landing(P):
     lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 40, P=P)
     nd = pg.evaluate("() => window.__genesis.darkLines.length")   # v11: 9 lines (the two about the silence), ~29 s untouched
     need(lnd["why"] == "lines" and lnd["shown"] == nd and 14 <= lnd["after"] <= 33, f"all {nd} lines, then the Operator: {lnd}")
-    ra = pg.evaluate("() => { const l = window.__genesis.landing(); return { aim: l.ring && l.ring.aimSt, approach: l.approachSt }; }")
-    need(ra["aim"] is not None and ra["approach"] is not None and abs(ra["aim"] - ra["approach"]) < 0.2, f"the ringing must end when the hole starts moving: {ra}")
+    ra = pg.evaluate("() => { const l = window.__genesis.landing(), G = window.__genesis; return { aim: l.ring && l.ring.aimSt, end: l.ringEndSt, gap: G.silentLine - G.ringEnd }; }")
+    need(ra["aim"] is not None and ra["end"] is not None and abs(ra["aim"] - ra["end"]) < 0.2 and ra["gap"] >= 2, f"the ringing must end two lines before 'why is there no sound?!': {ra}")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark")
     son = wait_for(pg, "() => { const l = window.__genesis.landing(); return l.pings >= 2 && l.rimmed >= 1 && l; }", 15, P=P)
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
