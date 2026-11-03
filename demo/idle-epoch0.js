@@ -40,7 +40,7 @@
   // "can we stop it?!", "run!!!!", a white flash and a tear, silence; then the cut (Idle → Id|le) and the halves crawl off into the dark.
   // No "in the beginning there was…" and no "your turn" here: the Tiny Operator takes over (idle-genesis.js, the waking up).
   const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 31.0, crawl: 34.9, end: 36.9 };
-  const LOGO_HOLD = 3.4, IDLE_BPM = 84, PURR = 4, PURR_GAP = 0.5;   // PURR: the signature purr's variant (1 warm FM, 2 saw + chime, 3 deep rumble, 4 b2's purr into noise: Nico's pick); it starts PURR_GAP s after the cut's thunder   // story v6: after the cut Id|le holds 3.2 s, its pipe cycling the rainbow at the engine's idle tempo; then black
+  const LOGO_HOLD = 5.2, IDLE_BPM = 84, PURR = 4, PURR_GAP = 2.0;   // v9 (Nico: "the sound of the logo starts too early, it merges with the thunder"): the purr waits 2 s, the logo holds until it ends   // PURR: the signature purr's variant (1 warm FM, 2 saw + chime, 3 deep rumble, 4 b2's purr into noise: Nico's pick); it starts PURR_GAP s after the cut's thunder   // story v6: after the cut Id|le holds 3.2 s, its pipe cycling the rainbow at the engine's idle tempo; then black
   const STRIKES = [];   // v7: no run-up of strikes; the one lightning is the cut's
   // the engine's tempo during the run (boot-script.md v6): idle 84 → 110 bpm while it learns, → 170 when it runs away, → 260 at the vortex
   const runBpm = T => T < CS.over ? 84 + 26 * T / CS.over : T < CS.spin ? 110 + 60 * (T - CS.over) / (CS.spin - CS.over) : 170 + 90 * Math.min(1, (T - CS.spin) / (CS.flash - CS.spin));
