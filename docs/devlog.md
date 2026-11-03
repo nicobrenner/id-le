@@ -6,6 +6,8 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-02
 
+**"haunted music" failing: the Mac's audio clock, not the code.** The check started failing around 1 am on Nov 3 on every commit, including dc04dc1, which had passed at 11:50 pm. In the headless page the AudioContext says "running" but its clock doesn't move (currentTime 0.01 for 6 s), so a gain ramp never gets anywhere: the Mac had no live audio output at that hour. Halloween's date window isn't involved (the check forces ?halloween), and neither are the storyline's hush (not on outside the story; the check now says so) nor the fonts. The check now measures the clock: when it moves, the background bus must be audible as before; when it's stalled, the level the background music is heading for must be (`_bgWant()` in idle-music.js).
+
 **Story v9 (staging): the purr after the thunder, the ringing back, a rumble, a tag, one smooth move.** Nico: "omg, the story is almost perfect".
 - **The purr waits** ("it merges with the thunder"): 2.0 s after the strike (was 0.5); the logo holds 5.2 s (was 3.4) so it ends on the logo. Story intro 37.5 s.
 - **The ringing at the landing** ("we are missing the ear-ringing sound"): it now goes around the storyline's hush (straight to the speakers at the player's volume, nothing if muted), wakes the audio context if needed, and is louder and lower (3400 + 3405 Hz, 0.055, ~2.6 s); the hush starts after it (2.8 s). The landing records whether it was tried and why not (`landing().ring`). Rendered: sounds/e-landing-ringing.wav.
