@@ -1350,8 +1350,14 @@ def t_story(P):
     need(not ui, f"nothing of the UI while it's dark (story v5): {ui}")
     need(pg.evaluate("() => window.__audio.hushed()"), "from the landing on, sound doesn't exist yet: the master must be hushed")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark: the first ones come with 'bring life'")
-    vw = pg.viewport_size; n0 = pg.evaluate("() => window.__genesis.landing().shown")
-    for k in range(4): pg.mouse.click(vw["width"] * (0.3 + 0.1 * k), vw["height"] * 0.3); pg.wait_for_timeout(200)
+    vw = pg.viewport_size; n0 = pg.evaluate("() => window.__genesis.landing().shown"); dark = pg.evaluate("() => window.__genesis.darkLines")
+    # v11 (Nico: "why there's no sound… in time for dinner… and why is there no sound?!… is that a black…"): the lines say it, in this order
+    ix = [next(i for i, l in enumerate(dark) if k in l) for k in ("in time for dinner", "why is there no sound", "is that a black…", "is that a black hole!!!", "why is that black hole moving", "today really isn't my luckyyyy")]
+    need(ix == sorted(ix) and len(set(ix)) == len(ix), f"the dark's lines out of order: {dark}")
+    seen = [pg.evaluate("() => window.__genesis.landing().line")]
+    for k in range(4): pg.mouse.click(vw["width"] * (0.3 + 0.1 * k), vw["height"] * 0.3); pg.wait_for_timeout(200); seen.append(pg.evaluate("() => window.__genesis.landing().line"))
+    seen = [l for i, l in enumerate(seen) if l and (i == 0 or l != seen[i - 1])]
+    need(seen == dark[dark.index(seen[0]):dark.index(seen[0]) + len(seen)], f"the dark's lines should play in order: {seen}")
     n1 = pg.evaluate("() => window.__genesis.landing().shown"); need(n1 > n0, f"clicks should move the lines on: {n0} → {n1}")
     pg.keyboard.press("Escape")
     wait_for(pg, "() => window.__genesis.landing().phase !== 'dark'", 3, P=P)
@@ -1372,6 +1378,8 @@ def t_story(P):
     son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
     nm = pg.evaluate("() => ({ head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
     need("Operator" in nm["head"] and "Operator" in nm["toggle"], f"v10: the window and its button read Operator: {nm}")
+    # v11 (Nico: "not sure about the 'storm' sounds"): the young universe's lightning makes no sound (no 48 Hz thunder oscillators)
+    pg.evaluate("() => { window.__th = 0; const f = AudioParam.prototype.setValueAtTime; AudioParam.prototype.setValueAtTime = function (v, t) { if (v === 48) window.__th++; return f.call(this, v, t); }; }")
     pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
     line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
@@ -1381,12 +1389,14 @@ def t_story(P):
     wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
     need("Operator" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the window still reads 📟 Operator (v10)")
     gt1 = pg.evaluate("() => { const t = document.querySelector('#genTag'), r = t && t.getBoundingClientRect(); return t && { text: t.textContent, shown: getComputedStyle(t).display !== 'none', left: r.left, top: r.top }; }")
-    need(gt1 and gt1["text"] == "consciousness 24 · epoch 1" and gt1["shown"] and gt1["left"] < 40 and gt1["top"] < 40, f"after the lights: the tag at the world's top-left: {gt1}")
+    need(gt1 and gt1["text"] == "consciousness 24 · epoch 0 · genesis" and gt1["shown"] and gt1["left"] < 40 and gt1["top"] < 40, f"after the lights: the tag at the world's top-left: {gt1}")
     day = pg.inner_text("#genDay")
-    need("EPOCH 1" in day and "first life" in day and "DAY" not in day, f"the Epoch 1 card: {day!r}")
+    need("EPOCH 0" in day and "GENESIS" in day and "lights on" in day and "first life" in day and "DAY" not in day, f"v11: the Epoch 0 · Genesis card: {day!r}")
     # v10: the cosmos draws no cloud ovals (Nico: "the stretched laid out ovals… just remove them")
     pg.evaluate("() => { window.__ell = 0; const f = CanvasRenderingContext2D.prototype.ellipse; CanvasRenderingContext2D.prototype.ellipse = function (...a) { if (this.canvas && this.canvas.id === 'genCosmos') window.__ell++; return f.apply(this, a); }; }")
-    pg.wait_for_timeout(1200); need(pg.evaluate("() => window.__ell") == 0, f"the cosmos still draws ovals: {pg.evaluate('() => window.__ell')}")
+    wait_for(pg, "() => window.__genesis.cosmos().bolts >= 1", 15, P=P); pg.wait_for_timeout(1300)   # a bolt, and the time its thunder used to take to start
+    need(pg.evaluate("() => window.__ell") == 0, f"the cosmos still draws ovals: {pg.evaluate('() => window.__ell')}")
+    need(pg.evaluate("() => window.__th") == 0, f"v11: the young universe's lightning still thunders: {pg.evaluate('() => window.__th')}")
     # v10: the Operator's handle is the 📟, not a creature; one conversation (no "new"); the sidebar is only the Operator's chat
     hd = pg.evaluate("() => { const h = document.querySelector('#toHandle'); return { svg: !!h.querySelector('svg'), text: h.textContent, nw: !!document.querySelector('#ai-new'), bar: !!document.querySelector('#lab #ai-bar, #lab #ai-smart-btn') }; }")
     need(not hd["svg"] and "📟" in hd["text"] and not hd["nw"] and not hd["bar"], f"no creature-like ghost, no 'new', no brain bar in the sidebar: {hd}")
@@ -1411,18 +1421,19 @@ def t_story(P):
     pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => !!document.querySelector('#genFront')", 30, P=P)
     front = pg.inner_text("#genFront")
-    need("EPOCH 1" in front.upper() and "GAZETTE" in front.upper() and "EPOCH 2" in front.upper(), f"the Epoch 1 front page: {front[:160]!r}")
+    need("EPOCH 0 COMPLETE" in front.upper() and "GAZETTE" in front.upper() and "ON TO EPOCH 1" in front.upper(), f"v11: the Epoch 0 complete front page: {front[:160]!r}")
     pg.click("#genFront button")
-    wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('EPOCH 2')", 10, P=P)
-    wip = pg.inner_text("#genDay"); need("work in progress" in wip and "open source" in wip, f"Epoch 2's card should say Id|le is a work in progress: {wip!r}")
+    wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('EPOCH 1')", 10, P=P)
+    wip = pg.inner_text("#genDay"); need("WORDS" in wip and "work in progress" in wip and "open source" in wip, f"Epoch 1's card (words, coming) should say Id|le is a work in progress: {wip!r}")
+    need(pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "after Genesis the tag reads epoch 1")
     need(all(k in pg.evaluate("() => window.__funnel.reached()") for k in ("landing", "operator", "lights", "e1words", "e1life", "e1done")), "the funnel should have every Epoch 0 → Epoch 1 moment")
     end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos() } }")
-    need(end["days"] and "1" in end["days"] and end["day"] == 2 and end["free"] and end["alive"] and end["c"] >= 2, f"after Day 1: day 2 next, alive, free console: {end}")
-    # v10: the epochs unlock the UI; after Epoch 1 (Epoch 2 reached): creatures, IRC, notices; no data lab, no Gloamhold, no studio
+    need(end["days"] and "0" in end["days"] and end["day"] == 1 and end["free"] and end["alive"] and end["c"] >= 2, f"after Genesis: Epoch 1 next, alive, free console: {end}")
+    # v10/v11: the epochs unlock the UI; after Epoch 0 (Epoch 1 reached): creatures, IRC, notices; no data lab, no Gloamhold, no studio
     def shown(sel): return pg.evaluate(f"() => {{ const e = document.querySelector({sel!r}); return !!e && getComputedStyle(e).display !== 'none'; }}")
     un = pg.evaluate("() => window.__genesis.unlocks()")
-    need(un["story"] and un["epoch"] == 2 and "data lab" in un["hidden"] and "gloamhold" in un["hidden"] and "creatures" not in un["hidden"], f"the unlock map at Epoch 2: {un}")
-    need(shown("#herdBtn") and shown("#rc-open") and not shown("#labBtn") and not shown("#studioBtn") and not shown("#connBtn"), "Epoch 2: creatures and IRC shown; data lab, studio, connect hidden")
+    need(un["story"] and un["epoch"] == 1 and "data lab" in un["hidden"] and "gloamhold" in un["hidden"] and "creatures" not in un["hidden"], f"the unlock map at Epoch 1: {un}")
+    need(shown("#herdBtn") and shown("#rc-open") and not shown("#labBtn") and not shown("#studioBtn") and not shown("#connBtn"), "Epoch 1: creatures and IRC shown; data lab, studio, connect hidden")
     need(pg.evaluate("() => [...document.querySelectorAll('#placesBar [data-kind=keep], #placesBar [data-kind=lab]')].every(e => getComputedStyle(e).display === 'none')"), "Gloamhold and data lab places hidden in the storyline")
     # v10: the tour's last step is the Oracle: a line and a glowing 🔮 that opens the Oracle's lightbox
     wait_for(pg, "() => !!document.querySelector('#genConsole [data-goracle]')", 10, P=P)
@@ -1433,7 +1444,28 @@ def t_story(P):
     need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-goracle]')"), "once opened, the tour's 🔮 goes (the chat's footer link stays)")
     stuck_check(pg, P, "storyline")
     P.clean()
-    return f"v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; story intro, wake-up lightbox → 'lights on' → cosmos lit, docked Epoch 1 card; words, life → front page → Epoch 2 (soon); {end['c']} creatures"
+    return f"v11: the dark's lines in order (no sound, is that a black…), silent lightning, Genesis = Epoch 0 (lights, words, life) → front page → Epoch 1 (soon); v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; {end['c']} creatures"
+
+
+def t_story_migrate(P):
+    """v11: Genesis became Epoch 0. A storyline save from v10 that finished the old Epoch 1 (words and life) reads as Epoch 0 done,
+    Epoch 1 reached; the old numbers are kept beside it (S.v10), nothing dropped; a second load doesn't shift it again."""
+    t0 = 1762000000000
+    old = {"on": True, "mode": "story", "n": 1, "t0": t0, "tc": t0 + 1000, "steps": {"light": t0 + 2000, "words": t0 + 3000, "creatures": t0 + 4000},
+           "alive": t0 + 4000, "days": {"1": t0 + 5000}, "day": 2, "free": t0 + 5000}
+    P.ctx.add_init_script("try { if (!sessionStorage.getItem('t_mig')) { localStorage.setItem('idle.genesis', %s); sessionStorage.setItem('t_mig', '1'); } } catch (e) {}" % json.dumps(json.dumps(old)))
+    pg = P.open("/arena.html?test"); booted(pg)
+    wait_for(pg, "() => !!(window.__genesis && window.__genesis.state())", 20, P=P)
+    s = pg.evaluate("() => ({ st: window.__genesis.state(), line: window.__genesis.statusLine(), un: window.__genesis.unlocks() })")
+    st = s["st"]
+    need(st.get("ev") == 2 and st.get("day") == 1 and list((st.get("days") or {}).keys()) == ["0"] and st["steps"] == old["steps"], f"the v10 save should read as Epoch 0 done: {st}")
+    need(st.get("v10") == {"day": 2, "days": {"1": t0 + 5000}} and st.get("alive") == old["alive"] and st.get("free") == old["free"], f"the old numbers kept, nothing dropped: {st}")
+    need(s["line"] == "consciousness 24 · epoch 1" and s["un"]["epoch"] == 1, f"the tag and the unlocks after the migration: {s['line']!r} {s['un']}")
+    pg.reload(wait_until="load"); booted(pg); wait_for(pg, "() => !!(window.__genesis && window.__genesis.state())", 20, P=P)
+    st2 = pg.evaluate("() => window.__genesis.state()")
+    need(st2.get("day") == 1 and list((st2.get("days") or {}).keys()) == ["0"], f"a second load must not shift it again: {st2}")
+    P.clean()
+    return f"v10 save (old Epoch 1 done, day 2) → Epoch 0 done, epoch {st2['day']} reached, v10 numbers kept, stable on reload"
 
 
 def t_story_intro(P):
@@ -1519,8 +1551,9 @@ def t_story_landing(P):
     need(say and abs(say["y"] - 0.5) < 0.01 and say["who"] == "doc", f"your lines should be in the middle of the screen: {say}")
     rg = pg.evaluate("() => ({ ring: window.__genesis.landing().ring, hushed: window.__audio.hushed() })")
     need(rg["ring"] and rg["ring"].get("tried") and not rg["ring"].get("err"), f"the ringing must be attempted at the landing: {rg}")
-    lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 35, P=P)
-    need(lnd["why"] == "lines" and lnd["shown"] == 7 and 12 <= lnd["after"] <= 28, f"all 7 lines, then the Operator: {lnd}")
+    lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 40, P=P)
+    nd = pg.evaluate("() => window.__genesis.darkLines.length")   # v11: 9 lines (the two about the silence), ~29 s untouched
+    need(lnd["why"] == "lines" and lnd["shown"] == nd and 14 <= lnd["after"] <= 33, f"all {nd} lines, then the Operator: {lnd}")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark")
     son = wait_for(pg, "() => { const l = window.__genesis.landing(); return l.pings >= 2 && l.rimmed >= 1 && l; }", 15, P=P)
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
@@ -1533,7 +1566,7 @@ def t_story_landing(P):
     pg.evaluate("() => window.__genesis.actions.music && window.__genesis.actions.music()"); pg.wait_for_timeout(500)
     need(not pg.evaluate("() => window.__audio.hushed()"), "the music step brings sound back")
     P.clean()
-    return f"the dark for {lnd['after']:.1f} s (7 lines, centred, no creatures), the Operator arrived, {son['pings']} pings outlined {son['rimmed']} letters; lights on lifted the dark"
+    return f"the dark for {lnd['after']:.1f} s ({nd} lines, centred, no creatures), the Operator arrived, {son['pings']} pings outlined {son['rimmed']} letters; lights on lifted the dark"
 
 
 # never stuck (Nico hit it in ?story): close every guided widget, then a way out must be on screen and must work
@@ -2081,7 +2114,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2135,6 +2168,7 @@ def main():
                 run("wikipedia world", t_wiki)
                 run("genesis", t_genesis)
                 run("story", t_story)
+                run("story migrate", t_story_migrate)
                 run("story v6", t_story_v6)
                 run("title card", t_title_card)
                 run("hint phone", t_hint_phone)
