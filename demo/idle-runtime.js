@@ -12,7 +12,10 @@ window.IDLE_REPO = 'https://github.com/nicobrenner/id-le';
 // the two chats' names, in one place (the Operator's name is provisional: change it here): IRC is where the world and its
 // creatures talk (and you talk to them); the 🔮 Oracle is the panel where you bring your own AI, which can change this world (even its code);
 // inside it the 📟 Operator (the Tiny Operator, TO) is the default: the Tiny Oracle running the world's tools. The data lab is a third thing.
-window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Relay Chat', sub: 'the world and its creatures talking' }, op: { icon: '📟', short: 'Operator', sub: 'the Tiny Operator (TO): the chat that runs the world' }, oracle: { icon: '🔮', short: 'Oracle', sub: 'bring your own AI: it can change this world, even its code' } };
+// the story-less space (Nico 11-03: "let's call it the playground (or if we want to be more AI-related, 'the gym', or 'the simulator')"):
+// one name, here; everything players see reads it from IDLE_NAMES.play. Internal mode keys ('free', 'ready') and stats keys don't change.
+const PLAYGROUND_NAME = 'the playground', PLAYGROUND_ICON = '🛝';
+window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Relay Chat', sub: 'the world and its creatures talking' }, op: { icon: '📟', short: 'Operator', sub: 'the Tiny Operator (TO): the chat that runs the world' }, oracle: { icon: '🔮', short: 'Oracle', sub: 'bring your own AI: it can change this world, even its code' }, play: { icon: PLAYGROUND_ICON, short: PLAYGROUND_NAME, sub: 'every feature, free play, your own worlds' } };
 // the storyline's funnel (Nico: "measuring/tracking the funnel"): each moment a browser reaches, once, with no time and no ID; which arm
 // of the story A/B it is in comes from idle.gv (idle-genesis.js). idle-stats.js sends the new ones (only when anonymous stats are on).
 window.__funnel = (() => { const K = 'idle.funnel'; let m = {}; try { m = JSON.parse(localStorage.getItem(K) || '{}') || {}; } catch (e) {}

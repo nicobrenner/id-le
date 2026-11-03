@@ -1526,11 +1526,26 @@ def t_story(P):
     need("Operator" in nm["head"] and "Operator" in nm["toggle"], f"v10: the window and its button read Operator: {nm}")
     # v11 (Nico: "not sure about the 'storm' sounds"): the young universe's lightning makes no sound (no 48 Hz thunder oscillators)
     pg.evaluate("() => { window.__th = 0; const f = AudioParam.prototype.setValueAtTime; AudioParam.prototype.setValueAtTime = function (v, t) { if (v === 48) window.__th++; return f.call(this, v, t); }; }")
+    # v13 (Nico: "there's a 'close' button at the top that doesn't do anything, just remove it… we also don't need this notice yet"): during Genesis no close, no Oracle caption
+    ch = pg.evaluate("() => ({ close: getComputedStyle(document.querySelector('#lab-close')).display, cap: [...document.querySelectorAll('#lab-form small, #ai-oracle-link')].map(e => getComputedStyle(e).display), quiet: window.__audio.hushed(), hum: window.__genesis.gsound.humOn() })")
+    need(ch["close"] == "none" and all(d == "none" for d in ch["cap"]) and ch["quiet"] and not ch["hum"], f"v13: during Genesis no close button, no Oracle caption, silence before the lights: {ch}")
     pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
     line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
     need("we can see something" in line, f"the lights-on reaction line: {line!r}")
-    fl = wait_for(pg, "() => window.__genesis.landing().flip && (() => { const f = window.__genesis.landing().flip, x = document.querySelector('#lab').getBoundingClientRect().left; return performance.now() - f.t0 > 250 && { ...f, mid: x }; })()", 10, P=P)
+    # v13 (Nico: "after sending lights on, the chat should disappear, there should be an animation of 'dawn til noon' of brightness, and then the
+    # operator window (not the sidebar), should appear again"): the window hidden through the dawn, the sky's brightness rising, the window back in the middle
+    lum = "() => { const c = document.querySelector('#genCosmos'), g = c.getContext('2d'), W = c.width, H = c.height; let s = 0, n = 0; for (let y = 0.05; y < 1; y += 0.15) for (let x = 0.05; x < 1; x += 0.15) { const d = g.getImageData(Math.floor(x * W), Math.floor(y * H), 1, 1).data; s += 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]; n++; } return s / n; }"
+    ramp = []
+    for k in range(9):
+        ramp.append(pg.evaluate("() => ({ op: +getComputedStyle(document.querySelector('#lab')).opacity, dawning: document.documentElement.classList.contains('gen-dawning'), hum: window.__genesis.gsound.humOn() })") | {"lum": pg.evaluate(lum)}); pg.wait_for_timeout(400)
+    lums = [r["lum"] for r in ramp if r["dawning"]]
+    need(len(lums) >= 6 and all(b >= a - 2 for a, b in zip(lums, lums[1:])) and lums[-1] - lums[0] > 40, f"v13: the dawn's brightness should rise steadily, night to noon: {[round(x) for x in lums]}")
+    need(all(r["op"] < 0.05 for r in ramp[2:6]) and all(r["hum"] for r in ramp), f"v13: the Operator's window hidden during the dawn, the hum on from the lights: {ramp}")
+    wait_for(pg, "() => !document.documentElement.classList.contains('gen-dawning') && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95 && document.documentElement.classList.contains('gen-box')", 8, P=P)
+    back = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
+    need("we can see something" in back, f"v13: the window comes back in the middle with 'Nice!!': {back!r}")
+    fl = wait_for(pg, "() => window.__genesis.landing().flip && (() => { const f = window.__genesis.landing().flip, x = document.querySelector('#lab').getBoundingClientRect().left; return performance.now() - f.t0 > 250 && { ...f, mid: x }; })()", 12, P=P)
     need(min(fl["from"]["x"], fl["to"]["x"]) + 5 < fl["mid"] < max(fl["from"]["x"], fl["to"]["x"]) - 5, f"the Operator flies from the middle to its dock (mid-flight between): {fl}")
     wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
     need("Operator" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the window still reads 📟 Operator (v10)")
@@ -1558,6 +1573,8 @@ def t_story(P):
         wait_for(pg, "() => window.__genesis.state().steps.words", 30, P=P)
     sp = pg.evaluate("() => ({ c: window.__arena.raw().filter(c => !c.lab).length, f: window.__fetches, kind: (window.__genHooks.words().map(w => w.text).join(' ').match(/sport/g) || []).length, next: window.__genesis.next() })")
     need(sp["c"] == 0 and sp["f"] == 0 and sp["kind"] == 0 and sp["next"] == "creatures", f"after words: no creature, nothing fetched, no 'sport' words: {sp}")
+    gs = pg.evaluate("() => ({ s: window.__genesis.gsound.state(), hum: window.__genesis.gsound.humOn(), hushed: window.__audio.hushed() })")
+    need(gs["s"]["ticks"] >= 8 and gs["hum"] and gs["hushed"], f"v13: the words tick in over the hum, the world still hushed: {gs}")
     sp2 = pg.evaluate("() => ({ spawn: window.__idleWorld.spawn('crawly'), first: null })")
     need(sp2["spawn"] is None and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, f"the world's spawn must refuse before the life step: {sp2}")
     pg.wait_for_timeout(3000)
@@ -1569,7 +1586,8 @@ def t_story(P):
     front = pg.inner_text("#genFront")
     need("EPOCH 0 COMPLETE" in front.upper() and "GAZETTE" in front.upper() and "ON TO EPOCH 1" in front.upper(), f"v11: the Epoch 0 complete front page: {front[:160]!r}")
     # v12: the silence ends with Genesis: sound back and the background music fading in under the special edition; its panel stays locked
-    snd = pg.evaluate("() => ({ hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display })")
+    snd = pg.evaluate("() => ({ hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display, gs: window.__genesis.gsound.state(), hum: window.__genesis.gsound.humOn(), bed: window.__snd.bedOn() })")
+    need(snd["bed"] and snd["gs"]["life"] and snd["gs"]["hum"].get("fadeAt") and not snd["hum"] and snd["gs"]["life"]["at"] <= (snd["gs"]["hum"]["fadeAt"] or 0) + 50, f"v13: at life the hum fades under the music and the world's ambience (the ocean): {snd}")
     need(not snd["hushed"] and snd["bg"] and snd["dj"] == "none", f"v12: at EPOCH 0 COMPLETE the music comes back (panel still locked): {snd}")
     pg.click("#genFront button")
     wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('EPOCH 1')", 10, P=P)
@@ -1593,7 +1611,7 @@ def t_story(P):
     need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-goracle]')"), "once opened, the tour's 🔮 goes (the chat's footer link stays)")
     stuck_check(pg, P, "storyline")
     P.clean()
-    return f"v11: the dark's lines in order (no sound, is that a black…), silent lightning, Genesis = Epoch 0 (lights, words, life) → front page → Epoch 1 (soon); v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; {end['c']} creatures"
+    return f"v13: the dawn (window hidden, brightness rising), hum → word chimes → music + ambience at life, no close or Oracle caption; v11: the dark's lines in order (no sound, is that a black…), silent lightning, Genesis = Epoch 0 (lights, words, life) → front page → Epoch 1 (soon); v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; {end['c']} creatures"
 
 
 def t_story_keys_logo(P):
@@ -1681,7 +1699,7 @@ def t_story_keys(P):
         if k != "end": pg.close()
     # the end card (still open in pg): its three ways on
     e = pg.evaluate("() => { const d = document.querySelector('#genDay.end'), r = d.getBoundingClientRect(), a = d.querySelector('[data-end=github]'); return { text: d.innerText, href: a && a.href, repo: window.IDLE_REPO, in: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, font: getComputedStyle(d.querySelector('.dt')).fontFamily, op: getComputedStyle(d.querySelector('.el')).fontFamily }; }")
-    need("WORK IN PROGRESS" in e["text"].upper() and "roadmap" in e["text"] and "GitHub" in e["text"] and "free-play" in e["text"] and e["in"], f"the end card: {e}")
+    need("WORK IN PROGRESS" in e["text"].upper() and "roadmap" in e["text"] and "GitHub" in e["text"] and "the playground" in e["text"] and "free-play" not in e["text"] and e["in"], f"the end card: {e}")
     need(e["href"] and e["href"].rstrip("/") == (e["repo"] or "").rstrip("/") and "F4" in e["font"] and "F3" in e["op"], f"the end card's GitHub link and fonts: {e}")
     pg.evaluate("() => { window.__idle.cfg.helper = location.origin; }"); pg.click("#genDay [data-end=roadmap]")
     wait_for(pg, "() => !!document.querySelector('#oracle [data-tab=road].on') && document.querySelectorAll('#oracle .it').length >= 1", 10, P=P)
@@ -1691,7 +1709,7 @@ def t_story_keys(P):
     pg.click("#genDay [data-end=free]"); pg.wait_for_timeout(600)
     f = pg.evaluate("() => ({ mode: window.__genesis.mode(), un: window.__genesis.unlocks(), story: document.documentElement.classList.contains('gen-story'), day: !!document.querySelector('#genDay'), tag: !!document.querySelector('#genTag'), hushed: window.__audio.hushed(), lab: getComputedStyle(document.querySelector('#labBtn')).display, studio: getComputedStyle(document.querySelector('#studioBtn')).display, fun: window.__funnel.reached(), resume: window.__genesis.canResume(), thread: document.querySelector('#ai-thread').innerText })")
     need(f["mode"] == "free" and not f["un"]["story"] and not f["un"]["hidden"] and not f["story"] and not f["day"] and not f["tag"] and not f["hushed"] and f["lab"] != "none" and f["studio"] != "none", f"free-play should open everything and leave the story: {f}")
-    need(all(x in f["fun"] for x in ("end_shown", "end_roadmap", "end_github", "end_free")) and f["resume"] and "it is your consciousness, Doc" in f["thread"], f"free-play: funnel moments, ⚙ can resume, the Operator's line: {f}")
+    need(all(x in f["fun"] for x in ("end_shown", "end_roadmap", "end_github", "end_free")) and f["resume"] and "welcome to the playground" in f["thread"], f"free-play: funnel moments, ⚙ can resume, the Operator's line: {f}")
     pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); need("Back to the storyline" in pg.evaluate("() => document.body.innerText"), "⚙ should offer the way back to the storyline")
     pg.evaluate("() => window.__settings.close()"); pg.close()
     # the real localStorage, untouched
@@ -2234,8 +2252,13 @@ def t_founder_off(P):
         r = pg.evaluate("() => { window.__settings.open(); const row = document.body.innerText.includes('Founder gift'); window.__settings.close(); return { off: window.__founder.off === true, letter: !!document.querySelector('#founderLetter,#founderOffer,#founderLab'), row, draw: typeof window.__founderDraw }; }")
         need(r["off"] and not r["letter"] and not r["row"] and r["draw"] == "undefined", f"?{q}: {r}"); pg.close()
     pg = P.open("/arena.html?gift=founder&test&founder_test"); booted(pg); wait_for(pg, "() => !!document.querySelector('#founderLetter')", 30, P=P); pg.close()
+    # v13 (Nico: "hide the pedia's Founders section while the gift is hidden? yes please"): not in the pedia either (?founder_test shows it)
+    for q, want_ in (("", False), ("?founder_test", True)):
+        pg = P.open("/pedia.html" + q); wait_for(pg, "() => !!document.getElementById('storyline')", 20, P=P)
+        f = pg.evaluate("() => ({ sec: !!document.getElementById('founders'), toc: [...document.querySelectorAll('a[href=\"#founders\"]')].length })")
+        need(f["sec"] == want_ and (f["toc"] > 0) == want_, f"the pedia's Founders section (pedia.html{q}): {f}"); pg.close()
     P.clean()
-    return "hidden: ?gift=founder, a personal link and an early world open nothing, no ⚙ row, no badge drawing; ?founder_test still opens the letter"
+    return "hidden: ?gift=founder, a personal link and an early world open nothing, no ⚙ row, no badge drawing, no pedia section; ?founder_test still opens the letter"
 
 
 def t_reviews_phone(P):
@@ -2522,7 +2545,9 @@ def t_prod_gates(P, root):
     pg.evaluate("() => { window.__genesis.newUniverse(); }")
     wait_for(pg, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 30, P=P)
     ms = pg.evaluate("() => [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m)")
-    need(ms == ["free", "ready"], f"chooser on production: {ms}")
+    need(sorted(ms) == ["free", "ready"], f"chooser on production: {ms}")
+    lbl = pg.evaluate("() => document.querySelector('#genChoose button[data-m=ready] b').textContent")
+    need("the playground" in lbl, f"v13: the playground in the chooser: {lbl!r}")
     pg.close()
     # gift links: nothing opens
     P.gifts["abcdefghijklmnopqrstuvwx"] = {"letter": "hi", "claimed": False}

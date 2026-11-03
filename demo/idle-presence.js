@@ -5,7 +5,7 @@
 // What one beat carries, all from fixed lists:
 //   id      a random id made when this page loaded, kept in this tab's memory only (never stored; a reload makes a new one)
 //   dev     phone, tablet or desktop
-//   mode    the storyline, free play, a ready world, or the plain world; in the storyline its arm, epoch and step
+//   mode    the storyline, the playground (from nothing: 'free'; a ready world: 'ready'), or the plain world; in the storyline its arm, epoch and step
 //   p       which panels are open (music, studio, the Operator, a creature card, ⚙…), at most 3
 //   cr      how many creatures the world has, as a bucket (0-12, 13-30, 31-60, 61-150, 151+)
 //   t       seconds since the page opened
