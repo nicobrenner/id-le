@@ -460,6 +460,82 @@ async function gift(req, env, path, ip) {
   await kv.put(key, JSON.stringify(g), { expirationTtl: ttl }); return json({ ok: true });
 }
 
+// ---------- presence, for the creator's live view (11-03) ----------
+// Each open game tab (idle-presence.js) says "here" about every 20 s while it is visible, and "bye" when it closes. A beat carries a
+// random id that lives in the tab's memory only (a new one each page load), plus coarse state from fixed lists: device, mode (storyline
+// arm, epoch and step; free; a ready world), panels open, a creature-count bucket, seconds since the page opened, first visit or not.
+// The country comes from Cloudflare (request.cf). No address, no User-Agent, no world content, no text: all of it is held in memory
+// by one Durable Object (Presence, deployed as its own small Worker: helper/presence/) and dropped 60 s after the last beat; nothing is
+// written to storage. Without the binding (local copies, tests) the table lives in this isolate's memory instead.
+// /live (demo/live.html) reads it with a secret key (env.LIVE_KEY, a wrangler secret); without the key the read answers 404.
+// Off on id-le.com until Nico's go: the page doesn't beat there (PRESENCE_ON_PROD in idle-presence.js), and the server takes beats
+// only on staging (IDLE_ENV=staging), when PRESENCE_ON=1, or without a STATS namespace (local).
+const PR = { dev: ['phone', 'tablet', 'desktop'], mode: ['story', 'free', 'ready', 'world'], arm: ['story', 'current', 'none'],
+  step: ['intro', 'dark', 'lights', 'words', 'life', 'genesis-done', 'epoch', 'end'],
+  panel: ['music', 'studio', 'lab', 'advisor', 'almanac', 'drawer', 'trees', 'reels', 'operator', 'creatures', 'irc', 'card', 'settings', 'feedback', 'oracle', 'review'],
+  cr: ['0-12', '13-30', '31-60', '61-150', '151+'] };
+const PR_TTL = 60e3, PR_MAX = 5000, PR_HIST = 60, PR_ID = /^[a-f0-9]{16}$/;
+export class PresenceTable {
+  constructor(now = () => Date.now()) { this.now = now; this.m = new Map(); this.hist = []; }
+  minute() { const m = Math.floor(this.now() / 60e3); let h = this.hist[this.hist.length - 1];
+    if (!h || h.m !== m) { h = { m, on: this.m.size, arr: 0, left: 0 }; this.hist.push(h); if (this.hist.length > PR_HIST) this.hist.shift(); } return h; }
+  sweep() { const t = this.now(); for (const [id, e] of this.m) if (t - e.last > PR_TTL) { this.m.delete(id); this.minute().left++; } }
+  // a beat: validated field by field against the fixed lists; anything else is dropped, never stored
+  beat(q, cc) {
+    this.sweep(); if (!q || typeof q !== 'object' || q.v !== 1 || !PR_ID.test(q.id || '')) return { ok: false, error: 'bad beat' };
+    const t = this.now(), h = this.minute();
+    if (q.bye === 1) { if (this.m.delete(q.id)) h.left++; h.on = Math.max(h.on, this.m.size); return { ok: true }; }
+    let e = this.m.get(q.id); if (!e) { if (this.m.size >= PR_MAX) return { ok: false, error: 'full' }; e = { since: t }; this.m.set(q.id, e); h.arr++; }
+    e.last = t; e.cc = typeof cc === 'string' && /^[A-Z0-9]{2}$/.test(cc) ? cc : 'XX';
+    e.dev = PR.dev.includes(q.dev) ? q.dev : 'desktop'; e.mode = PR.mode.includes(q.mode) ? q.mode : 'world'; e.arm = PR.arm.includes(q.arm) ? q.arm : 'none';
+    e.step = e.mode === 'story' && PR.step.includes(q.step) ? q.step : null; e.ep = e.mode === 'story' && Number.isInteger(q.ep) && q.ep >= 0 && q.ep <= 9 ? q.ep : null;
+    e.p = Array.isArray(q.p) ? [...new Set(q.p.filter(x => PR.panel.includes(x)))].slice(0, 3) : [];
+    e.cr = PR.cr.includes(q.cr) ? q.cr : null; e.t = Number.isFinite(q.t) && q.t >= 0 ? Math.min(Math.round(q.t), 24 * 3600) : 0; e.back = q.back === 1 ? 1 : 0;
+    h.on = Math.max(h.on, this.m.size); return { ok: true, next: 20 };
+  }
+  // the creator's view: everyone online now (a short alias of the tab id, never the id itself), totals and the last hour
+  view() {
+    this.sweep(); const t = this.now(), players = [], tot = { mode: {}, cc: {}, dev: {}, panel: {}, step: {} }, inc = (o, k) => { if (k != null) o[k] = (o[k] || 0) + 1; };
+    for (const [id, e] of this.m) { players.push({ a: id.slice(0, 6), since: Math.round((t - e.since) / 1000), t: e.t, cc: e.cc, dev: e.dev, mode: e.mode, arm: e.arm, step: e.step, ep: e.ep, p: e.p, cr: e.cr, back: e.back });
+      inc(tot.mode, e.mode); inc(tot.cc, e.cc); inc(tot.dev, e.dev); e.p.forEach(x => inc(tot.panel, x)); if (e.mode === 'story') inc(tot.step, e.step === 'epoch' ? 'epoch ' + e.ep : e.step); }
+    this.minute(); return { now: t, online: this.m.size, players, tot, hist: this.hist.map(h => ({ ...h })) };
+  }
+}
+// the Durable Object: one instance (idFromName('live')) holds the table in memory; it is never written to storage
+export class Presence {
+  constructor(state, env) { this.table = new PresenceTable(); }
+  async fetch(req) {
+    const u = new URL(req.url);
+    if (u.pathname === '/beat') { const q = await req.json().catch(() => null); return json(this.table.beat(q, req.headers.get('X-Country') || '')); }
+    if (u.pathname === '/view') return json(this.table.view());
+    return json({ error: 'unknown' }, 404);
+  }
+}
+const prMem = { table: null };
+const presenceOn = env => env.IDLE_ENV === 'staging' || env.PRESENCE_ON === '1' || !env.STATS;
+async function prCall(env, path, init) {   // the Durable Object when bound, else this isolate's own table (local copies and tests)
+  if (env.PRESENCE) { const stub = env.PRESENCE.get(env.PRESENCE.idFromName('live')); return stub.fetch('https://presence' + path, init); }
+  const T = prMem.table || (prMem.table = new PresenceTable());
+  if (path === '/beat') { let q = null; try { q = JSON.parse(init.body); } catch (e) {} return json(T.beat(q, init.headers['X-Country'])); }
+  return json(T.view());
+}
+async function liveKeyOk(req, env) {   // compares SHA-256 digests, so the comparison takes the same time whatever the key
+  const want = env.LIVE_KEY || '', got = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if (want.length < 24 || !got) return false;
+  const d = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))), a = await d(want), b = await d(got);
+  let x = 0; for (let i = 0; i < a.length; i++) x |= a[i] ^ b[i]; return x === 0;
+}
+async function presence(req, env, path) {
+  if (path === '/lab/live') { if (req.method !== 'GET' || !(await liveKeyOk(req, env))) return json({ error: 'unknown path' }, 404);
+    const r = await prCall(env, '/view', { method: 'GET' }); return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }
+  if (!presenceOn(env)) return new Response(null, { status: 204 });   // production, until Nico's go: beats are accepted and dropped
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+  const txt = await req.text(); if (txt.length > 600) return json({ error: 'too big' }, 413);
+  const cc = req.cf && typeof req.cf.country === 'string' ? req.cf.country : '';
+  const r = await prCall(env, '/beat', { method: 'POST', body: txt, headers: { 'Content-Type': 'application/json', 'X-Country': cc } });
+  return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json' } });
+}
+
 // ---------- Reviews (11-03): Nico asks players to score a few experiments (the logo animations, the fonts…) ----------
 // Nico: "Hey, this is Nico, the creator of Id|le, and would love your feedback on the logo animation… take a look here: link".
 // A review is { kind, title, items, note?, showTotals?, open? }: the two below are built in; tools/review.py writes review:<rid> (a new
@@ -538,8 +614,11 @@ export default {
     // background calls a page makes by itself (stats batches, world-link polls, notices) count in their own, larger budget, so they
     // never use up what the player's own actions (reading a page, its pictures) may do in a minute
     const bg = path === '/lab/stats' || path === '/lab/p' || path === '/worlds/state' || path === '/lab/notices';
+    // presence beats: one tab beats 3 times a minute; 30 a minute per address leaves room for a household or a classroom behind one address
+    if (path === '/lab/here') { const pk = ip + '|' + min + '|here', pn = (mem.hits.get(pk) || 0) + 1; mem.hits.set(pk, pn); if (mem.hits.size > 5000) mem.hits.clear(); if (pn > 30) return cors(env, req, json({ error: 'slow down' }, 429)); return cors(env, req, await presence(req, env, path)); }
     const k = ip + '|' + min + (bg ? '|bg' : ''), n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (bg ? 240 : (+env.RATE_PER_MIN || 60))) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
+    if (path === '/lab/live') return cors(env, req, await presence(req, env, path));   // the creator's live view: 404 without the key
     if (path === '/lab/oracle' || path === '/lab/roadmap' || path === '/lab/vote') return cors(env, req, await feedback(req, env, path, ip));
     if (path.startsWith('/lab/gift/')) return cors(env, req, await gift(req, env, path, ip));
     if (path === '/lab/reviews' || path.startsWith('/lab/review/')) return cors(env, req, await review(req, env, path, ip));

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Id|le live</title>
+<script src="idle-fonts.js"></script>
+<style>
+:root{--bg:#0b0c12;--surface:#14151c;--ink:#e9e7f2;--ink2:#b7b4c6;--muted:#7d7a8f;--line:#2a2b36;--grid:#20212b;
+  --s-story:#3987e5;--s-free:#d95926;--s-ready:#199e70;--s-world:#8d8a9c;--accent:#e0367a;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1.45 var(--ui-font,system-ui),system-ui,sans-serif}
+#app{display:grid;grid-template-columns:1fr 340px;height:100vh}
+#stage{position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 120%,#24203a 0%,#121320 55%,var(--bg) 100%)}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+#hud{position:absolute;left:18px;top:14px;pointer-events:none}
+#hud h1{margin:0;font:400 15px/1.2 var(--term-font,ui-monospace),ui-monospace,monospace;letter-spacing:.06em;color:var(--ink2)}
+#hud h1 b{color:var(--ink);font-weight:400}#hud h1 i{font-style:normal;color:var(--accent)}
+#big{font:400 56px/1 var(--display-font,var(--term-font,ui-monospace)),ui-monospace,monospace;margin:6px 0 0}
+#big small{font:13px var(--ui-font,system-ui);color:var(--muted);margin-left:8px}
+#ctl{position:absolute;right:14px;top:12px;display:flex;gap:6px}
+#ctl button,#key button{font:inherit;font-size:12px;color:var(--ink);background:#1d1e28;border:1px solid var(--line);border-radius:8px;padding:4px 10px;cursor:pointer}
+#ctl button[aria-pressed=true]{border-color:var(--ink2);background:#2a2b38}
+#legend{position:absolute;left:18px;bottom:14px;display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--ink2)}
+#legend span{display:inline-flex;align-items:center;gap:6px}#legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+#tip{position:absolute;pointer-events:none;background:#1b1c26f2;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;min-width:170px;display:none;box-shadow:0 8px 24px #0008}
+#tip b{display:block;font:400 12px var(--term-font,ui-monospace),monospace;color:var(--ink2);margin-bottom:4px}#tip div{display:flex;justify-content:space-between;gap:12px}#tip div span:first-child{color:var(--muted)}
+#side{background:var(--surface);border-left:1px solid var(--line);overflow:auto;padding:14px 16px 24px}
+#side h2{margin:18px 0 6px;font:400 11px/1.2 var(--term-font,ui-monospace),monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+#side h2:first-child{margin-top:2px}
+.spark{width:100%;height:64px;display:block}
+.bars{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center;font-size:12px}
+.bars .l{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}.bars .v{color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+.bars .t{height:8px;background:var(--grid);border-radius:4px;overflow:hidden}.bars .t i{display:block;height:100%;background:var(--s-story);border-radius:0 4px 4px 0;min-width:2px}
+.empty{color:var(--muted);font-size:12px}
+#status{font-size:11px;color:var(--muted);margin-top:18px}
+#key{position:fixed;inset:0;display:none;place-items:center;background:#000a;z-index:10}
+#key form{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;width:min(420px,calc(100vw - 32px))}
+#key h3{margin:0 0 6px;font:400 15px var(--term-font,ui-monospace),monospace}#key p{margin:0 0 12px;color:var(--ink2);font-size:12px}
+#key input{width:100%;font:13px var(--term-font,ui-monospace),monospace;background:#0e0f15;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:10px}
+#key .err{color:#e66767;font-size:12px;min-height:16px}
+@media (max-width:820px){#app{grid-template-columns:1fr;grid-template-rows:60vh auto;height:auto}#side{border-left:0;border-top:1px solid var(--line)}}
+</style></head>
+<body>
+<div id="app">
+  <div id="stage"><canvas id="cv" aria-label="players online now, one circle each"></canvas>
+    <div id="hud"><h1><b>Id<i>|</i>le</b> · live</h1><div id="big">–<small>online now</small></div></div>
+    <div id="ctl" role="group" aria-label="colour by"><button data-by="mode" aria-pressed="true">by mode</button><button data-by="cc" aria-pressed="false">by country</button></div>
+    <div id="legend"></div><div id="tip" role="tooltip"></div>
+  </div>
+  <aside id="side">
+    <h2>online, last hour</h2><canvas class="spark" id="spOn" aria-label="players online per minute, last hour"></canvas>
+    <h2>arrivals ↑ and leaves ↓ per minute</h2><canvas class="spark" id="spAL" aria-label="arrivals and leaves per minute, last hour"></canvas>
+    <h2>storyline now</h2><div class="bars" id="bStep"></div>
+    <h2>panels open</h2><div class="bars" id="bPanel"></div>
+    <h2>countries</h2><div class="bars" id="bCc"></div>
+    <h2>devices</h2><div class="bars" id="bDev"></div>
+    <h2>modes</h2><div class="bars" id="bMode"></div>
+    <div id="status">connecting…</div>
+  </aside>
+</div>
+<div id="key"><form><h3>Id|le live</h3><p>The live view needs the creator's key (kept in this browser after the first time).</p>
+  <input type="password" autocomplete="off" spellcheck="false" placeholder="paste the key" aria-label="key"><div class="err"></div><button type="submit">open</button></form></div>
+<script src="idle-live.js"></script>
+</body></html>

@@ -105,6 +105,19 @@ th{background:var(--box);font-weight:600}
 </ul>
 <p>The data lab only runs when you open it. Turning off the public helper in <b>⚙ settings</b> also turns this off.</p>
 
+<h2 id="presence">Who's playing right now (the live view)</h2>
+<p>So the maker can see, live, how many people are playing and where they are in the game, an open game tab says "I'm here" to <code>id-le.com/lab/here</code> about every 20 seconds while it is on screen, and "bye" when it is closed or hidden. It follows the same ⚙ switch as the anonymous stats, and it sends nothing if your browser sends <b>Global Privacy Control</b> or <b>Do Not Track</b>. Each "I'm here" carries only:</p>
+<ul>
+<li>a random number made when the page loaded, kept only in that tab's memory (never stored; a reload makes a new one), so two tabs count as two players</li>
+<li>phone, tablet or desktop</li>
+<li>how you're playing: the storyline (and, only while two beginnings are being tested, which one this browser got; the epoch and step reached), free play, a ready world or the plain world</li>
+<li>which panels are open (music, studio, the Operator, a creature card, ⚙…), at most three</li>
+<li>how many creatures your world has, as a range (0–12, 13–30, 31–60, 61–150, more)</li>
+<li>how many seconds ago the page was opened</li>
+<li>whether this browser had been here before (a yes/no, not an identifier)</li>
+</ul>
+<p>The server adds the country Cloudflare guesses from your address; the address itself is not kept. All of it is held <b>in memory only, for about a minute</b> after the last "I'm here", then dropped. It is never written to storage, never added to the daily totals and never linked to anything else. Only the maker can see the live view, with a private key. Never sent: words, messages, names, anything from your world, AI keys.</p>
+
 <h2 id="oracle">Tell the scientists and roadmap votes</h2>
 <p>When you use <b>🧪 Tell the scientists</b>, these are sent to id-le.com and kept in a private list for <b>180 days</b>:</p>
 <ul>
