@@ -362,6 +362,44 @@
     for (let i = 0; i < n; i++) { last = last * 0.985 + (Math.random() * 2 - 1) * 0.06; d[i] = last * Math.pow(1 - i / n, 1.6) * (i < 600 ? 3 : 1); pk = Math.max(pk, Math.abs(d[i])); }
     if (pk > 1) for (let i = 0; i < n; i++) d[i] /= pk;
     return { buffer: b, gain: 0.9 * v }; }
+  // the datacenter (story v12, Nico: "f8 is interesting… something a bit more intense… like being inside a datacenter with a lot of fans
+  // spinning… very light in the beginning, then ramp up on booting up the server, a little more as the experiment is running, and then the
+  // intensity should essentially follow the arch of the training loss (but inverted)"). All synthesized: six fans (a saw at the blade-pass
+  // rate, each at a slightly different speed so they beat and swirl, a slow wobble each), two bands of air noise, a low HVAC rumble, a faint
+  // hiss, now and then a disk head. One control k (0..1, a ConstantSource) drives speed, loudness (as k²) and brightness together, the way
+  // fans speed up under load. k over whole-intro seconds A: one quiet machine at Doc's desk, spinning up with the boot (the globe, the
+  // modem, the log), a little more at "run project 24", then the story's chart: the lower the loss (the higher its curve's y), the faster
+  // the fans; the flash spins them down to nothing in FAN_DOWN s, so the logo's thunder and purr are clean.
+  const FAN = { desk: 0.06, boot: 0.3, run: 0.4 }, FAN_DOWN = 0.35, FAN_R = [1, 1.07, 1.13, 0.94, 1.21, 0.97];
+  const smooth = u => { u = clamp(u); return u * u * (3 - 2 * u); };
+  function fanK(A, ct, arc = FAN) { const R = arrOf(ct), B = bootOf(ct), K = window.__termBoot && window.__termBoot.clock;
+    if (A < R) return arc.desk;
+    if (A < B && K) { const bt = A - R; if (bt < K.login) return arc.desk + (arc.boot - arc.desk) * smooth((bt - K.globe) / (K.login - K.globe));
+      return arc.boot + (arc.run - arc.boot) * smooth((bt - K.enter + 0.3) / (B - R - K.enter + 0.3)); }
+    const T = A - B; if (T < 0) return arc.run;
+    if (T >= CS.flash) { const u = clamp((T - CS.flash) / FAN_DOWN); return u >= 1 ? 0 : (1 - u) * (1 - u); }
+    const y = keyed(SKY, Math.max(T, C.curve)); return arc.run + (1 - arc.run) * Math.pow(clamp((y - SKY[0][1]) / (SKY[SKY.length - 1][1] - SKY[0][1])), 0.75); }
+  const fanNoiseOf = new WeakMap();
+  function fanBed(ctx, dest, w0, ct, A0 = 0, o = {}) {   // w0: ctx time of whole-intro second 0; plays from A0 to the flash's spin-down; o: { amp, arc } (previews)
+    const B = bootOf(ct), end = B + CS.flash + FAN_DOWN, at = A => w0 + A; if (A0 >= end) return null; const nodes = [], s0 = at(A0), s1 = at(end) + 0.05;
+    let nb = fanNoiseOf.get(ctx); if (!nb) { const n = ctx.sampleRate * 4 | 0; nb = ctx.createBuffer(1, n, ctx.sampleRate); const d = nb.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; fanNoiseOf.set(ctx, nb); }
+    const out = ctx.createGain(); out.gain.value = o.amp || 1; out.connect(dest); const kOf = A => fanK(A, ct, o.arc || FAN);
+    const k = ctx.createConstantSource(); k.offset.setValueAtTime(kOf(A0), s0); for (let A = A0 + 0.1; A < end + 0.1; A += 0.1) k.offset.linearRampToValueAtTime(kOf(Math.min(A, end)), at(Math.min(A, end)));
+    const k2 = ctx.createGain(); k2.gain.value = 0; k.connect(k2.gain); k.connect(k2);   // k²: loudness grows faster than speed
+    const drive = (param, base, slope, src = k) => { param.value = base; const g = ctx.createGain(); g.gain.value = slope; src.connect(g); g.connect(param); };
+    const noiseBand = (type, f, df, q, amp, damp) => { const sN = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), v = ctx.createGain(); sN.buffer = nb; sN.loop = true; fl.type = type; fl.Q.value = q; drive(fl.frequency, f, df); drive(v.gain, amp, damp, k2); sN.connect(fl); fl.connect(v); v.connect(out); sN.start(s0, Math.random() * 4); sN.stop(s1); nodes.push(sN); };
+    FAN_R.forEach((r, i) => { const o = ctx.createOscillator(), lp = ctx.createBiquadFilter(), v = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain(); o.type = 'sawtooth';
+      drive(o.frequency, 34 * r, 96 * r); lfo.frequency.value = 0.07 + 0.05 * i; lg.gain.value = 0.7 * r; lfo.connect(lg); lg.connect(o.frequency);   // blade-pass 34 → 130 Hz, a slow wobble
+      lp.type = 'lowpass'; lp.Q.value = 0.8; drive(lp.frequency, 160, 1300); drive(v.gain, 0.006, 0.04, k2); o.connect(lp); lp.connect(v); v.connect(out); o.start(s0); lfo.start(s0); o.stop(s1); lfo.stop(s1); nodes.push(o, lfo); });
+    noiseBand('bandpass', 280, 520, 0.9, 0.018, 0.2);    // the air the fans push
+    noiseBand('bandpass', 850, 1700, 1.1, 0.01, 0.12);   // its brighter edge
+    noiseBand('highpass', 5200, 2600, 0.5, 0.0025, 0.025);   // a faint hiss
+    { const sN = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), v = ctx.createGain(); sN.buffer = nb; sN.loop = true; lp.type = 'lowpass'; lp.frequency.value = 110; drive(v.gain, 0.06, 0.12); sN.connect(lp); lp.connect(v); v.connect(out); sN.start(s0, Math.random() * 4); sN.stop(s1); nodes.push(sN); }   // HVAC rumble
+    // now and then a disk head seeking, from the boot log on (a few quiet clicks)
+    { const K = window.__termBoot && window.__termBoot.clock, from = Math.max(A0, arrOf(ct) + (K ? K.log : 0)); let r = 9.7;
+      for (let A = from + 0.7; A < B + CS.flash; A += 0.6 + 1.6 * ((r = (r * 9301 + 49297) % 233280) / 233280)) for (let j = 0; j < 3; j++) { const t = at(A) + j * 0.035, sN = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), v = ctx.createGain(); sN.buffer = nb; bp.type = 'bandpass'; bp.frequency.value = 3600 + 300 * j; bp.Q.value = 3;
+        v.gain.setValueAtTime(0.05, t); v.gain.exponentialRampToValueAtTime(0.0001, t + 0.014); sN.connect(bp); bp.connect(v); v.connect(out); sN.start(t, Math.random() * 3); sN.stop(t + 0.03); nodes.push(sN); } }
+    k.start(s0); k.stop(s1); nodes.push(k); return { out, nodes, k, end }; }
   function synth(ctx, dest, t0) {   // t0: ctx time of film second 0
     const out = ctx.createGain(); out.gain.value = 0.9; out.connect(dest); const nodes = [];
     const tone = (type, f, at, dur, vol, f2) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, at); if (f2) o.frequency.exponentialRampToValueAtTime(f2, at + dur); v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(vol, at + Math.min(.01, dur / 4)); v.gain.exponentialRampToValueAtTime(0.0001, at + dur); o.connect(v); v.connect(out); o.start(at); o.stop(at + dur + .05); nodes.push(o); };
@@ -373,18 +411,18 @@
         v.gain.setValueAtTime(0.0001, t0 + CS.flash); o.start(t0); o2.start(t0); o.stop(t0 + CS.flash + .1); o2.stop(t0 + CS.flash + .1); nodes.push(o, o2); return; }
       v.gain.linearRampToValueAtTime(0.0001, t0 + C.final + 0.3); v.gain.setValueAtTime(0.0001, t0 + ex + C.turn - 0.1); v.gain.linearRampToValueAtTime(0.02, t0 + ex + C.turn + 0.6); v.gain.linearRampToValueAtTime(0.0001, t0 + ex + C.total);
       o.start(t0); o2.start(t0); o.stop(t0 + ex + C.total + .2); o2.stop(t0 + ex + C.total + .2); nodes.push(o, o2); };
-    return { out, nodes, tone, hum,
+    return { out, nodes, tone, hum, fans: (ct, A0 = 0) => { if (ct.noFans) return null; const f = fanBed(ctx, out, t0 - bootOf(ct), ct, A0); if (f) nodes.push(...f.nodes); return f; },
       tick: (at, e) => tone('square', 1400 + Math.random() * 900 - e * 40, at, 0.018 + e * 0.002, 0.03),
       note: at => { tone('sine', 65.4, at, 2.6, 0.12); tone('sine', 98, at + .05, 2.2, 0.05); },
       cut: at => { tone('square', 2400, at, 0.035, 0.09, 600); tone('sine', 180, at, 0.12, 0.08, 60); },
       thunder: (at, v = 1) => { const T = thunderBuf(ctx, v), src = ctx.createBufferSource(), v2 = ctx.createGain(); src.buffer = T.buffer; v2.gain.value = T.gain; src.connect(v2); v2.connect(out); src.start(at); nodes.push(src); },
       crash: at => { const n = Math.floor(ctx.sampleRate * 0.9), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5);
-        const src = ctx.createBufferSource(), v = ctx.createGain(); src.buffer = b; v.gain.value = 0.35; src.connect(v); v.connect(out); src.start(at); nodes.push(src); tone('sine', 50, at, 1.6, 0.25, 28); },
+        const src = ctx.createBufferSource(), v = ctx.createGain(); src.buffer = b; v.gain.value = 0.35; src.connect(v); v.connect(out); src.start(at); nodes.push(src); tone('sine', 50, at, Math.min(1.6, CS.split - CS.flash - 0.1), 0.25, 28); },
       skitter: (a, b) => { for (let t = a; t < b; t += 0.05 + Math.random() * 0.07) tone('triangle', 3000 + Math.random() * 1500, t, 0.012, 0.02); },
       stop: (fade = .4) => { try { out.gain.setTargetAtTime(0, ctx.currentTime, fade / 3); setTimeout(() => nodes.forEach(n => { try { n.stop(); } catch (e) {} }), fade * 1000 + 200); } catch (e) {} } }; }
   function scheduleAll(S, ct, t0) {   // recordings: every timed sound of the film at once (offline)
     const ex = extraOf(ct);
-    if (ct.story) { S.hum(0, true); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e)); for (let t = CS.over; t < CS.tear; t += 0.03 + 0.12 * (1 - (t - CS.over) / (CS.tear - CS.over)) * Math.random()) S.tick(t0 + t, 12);
+    if (ct.story) { S.hum(0, true); S.fans(ct, 0); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e)); for (let t = CS.over; t < CS.tear; t += 0.03 + 0.12 * (1 - (t - CS.over) / (CS.tear - CS.over)) * Math.random()) S.tick(t0 + t, 12);
       { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => B0.beat(S.ctx || S.out.context, S.out, t0 + t, i, beatK(t))); if (B0.purr) B0.purr(S.ctx || S.out.context, S.out, t0 + CS.split + 0.95 + PURR_GAP, PURR); } }
       S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); S.thunder(t0 + CS.split + 0.95, 1); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
     S.note(t0 + C.final + 0.2); S.cut(t0 + ex + C.split + 0.95); S.thunder(t0 + ex + C.split + 0.95, 0.5); }
@@ -417,6 +455,9 @@
     const hint = document.createElement('span'); hint.className = 'hint'; hint.textContent = 'hold to read ·'; el.appendChild(hint);
     const sndB = document.createElement('button'); sndB.className = 'ib snd'; sndB.textContent = '🔊 sound'; el.appendChild(sndB); document.body.appendChild(el);
     let ct = null, st = null, done = false, raf = 0, S = null, start = performance.now(), res; const promise = new Promise(r => res = r);
+    // the storyline (v12, Nico: "there should only be the animation sound, nothing else"): the game's own sounds (its music, the world) are hushed
+    // for the whole intro; the intro plays past the hush (storyOut). The genesis flow hushes first and keeps it until its music step; a replay restores it
+    const hushOwn = (() => { if (!(opts.story || Q.has('story'))) return false; try { const A = window.__audio; if (!A || !A.hush || A.hushed()) return false; A.hush(true); return true; } catch (e) { return false; } })();
     // hold to read: pointer/finger down (or Space) freezes the film's clock; release resumes. Only "skip ›" and Esc skip.
     let soundT = 0, pausedAt = 0, pausedMs = 0, waiting = false, titleT0 = 0, scene = null; const now = () => pausedAt || performance.now();
     const elapsed = () => (now() - start - pausedMs) / 1000, B = () => bootOf(ct), total = () => B() + (RM ? rmTotal(ct) : totalOf(ct));
@@ -426,7 +467,7 @@
     const size = () => { const dpr = Math.min(devicePixelRatio || 1, P ? 1.5 : 2); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0); st = newState(innerWidth, innerHeight, P); };
     size(); addEventListener('resize', size);
     const audioReady = () => { const A = window.__audio; try { return A && !A.muted() && A.ctx().state === 'running'; } catch (e) { return false; } };
-    const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - (elapsed() - B())); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); try { preBeds(ctx, S.out, ct, soundT, ctx.currentTime); } catch (e) {} syncSnd(); };
+    const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, ct.story && A.storyOut ? A.storyOut() : A.out(), ctx.currentTime - (elapsed() - B())); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); if (ct.story) try { S.fans(ct, soundT); } catch (e) {} try { preBeds(ctx, S.out, ct, soundT, ctx.currentTime); } catch (e) {} syncSnd(); };
     const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) ? 'none' : ''; };
     sndB.addEventListener('click', e => { e.stopPropagation(); const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
     const mark = k => { if (ct && ct.story && window.__funnel) window.__funnel.mark(k); };
@@ -435,7 +476,7 @@
     // the title card (story with the arrival): a key or a tap starts the desktop, and lets the sound start (a gesture unlocks audio)
     const begin = () => { if (!waiting || done) return; waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now(); pausedMs = 0; pausedAt = 0; el.classList.remove('paused');
       const A = window.__audio; try { if (A && !A.muted()) A.resume(); } catch (e) {} setTimeout(() => { if (audioReady()) startSound(); syncSnd(); }, 250); };
-    const finish = skipped => { if (done) return; if (skipped && ct) mark('skip:' + sceneOf(elapsed())); done = true; cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
+    const finish = skipped => { if (done) return; if (skipped && ct) mark('skip:' + sceneOf(elapsed())); done = true; if (hushOwn) setTimeout(() => { try { window.__audio.hush(false); } catch (e) {} }, skipped ? 300 : 800); cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
       const out = { tone: 'epoch0', story: !!(ct && ct.story), boot, arrive: !!(ct && ct.arrive), skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
       try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'end', ...out } })); } catch (e) {}
       if (opts.keep && !skipped) { cur = { promise, el, close: () => { el.classList.add('out'); setTimeout(() => el.remove(), 650); cur = null; } }; res(out); return; }
@@ -474,7 +515,7 @@
   // sizes for tests: the model's text, the subtitles, the pane titles (Nico: subtitles must not be smaller than the text on screen)
   function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [], sciY: H / 2,
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
-  window.__epoch0 = { play, thunderBuf, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
+  window.__epoch0 = { play, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();
