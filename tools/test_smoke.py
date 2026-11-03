@@ -1316,9 +1316,10 @@ def t_story(P):
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
     fs = pg.evaluate("() => { const l = document.querySelector('#genConsole .gw p, #genConsole .gl'), lab = document.querySelector('#lab'); return { fz: l ? getComputedStyle(l).fontSize : null, lh: l ? parseFloat(getComputedStyle(l).lineHeight) / parseFloat(getComputedStyle(l).fontSize) : 0, over: lab.scrollWidth - lab.clientWidth, fam: getComputedStyle(document.documentElement).getPropertyValue('--op-font').trim() }; }")
     need(fs["fz"] == "17px" and abs(fs["lh"] - 1.45) < 0.02 and fs["over"] <= 1 and fs["fam"], f"the Operator's words: 17 px, line-height 1.45, no overflow, family from --op-font: {fs}")
-    gt = pg.evaluate("() => (document.querySelector('#genConsole .gt') || {}).textContent || ''")
+    gt = pg.evaluate("() => (document.querySelector('#genTag') || {}).textContent || ''")
+    need(not pg.evaluate("() => !!document.querySelector('#genConsole .gt')"), "no status line inside the Operator's chat (v9: it's a tag on the world)")
     need(gt == "consciousness 24 · epoch 0 · genesis", f"the Operator's status line before the lights: {gt!r}")
-    need("new consciousness" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"], "the Tiny Operator's lines should be in the thread")
+    need("the consciousness you were training" in w["thread"] and "tumble there, Doc" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"] and "We have a lot of work" not in w["thread"], "the Tiny Operator's opening (v9, 5 lines) should be in the thread")
     son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
     nm = pg.evaluate("() => ({ head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
     need("Operator" in nm["head"] and "Oracle" in nm["toggle"], f"the rename: TO's window reads Operator, the panel's button reads Oracle: {nm}")
@@ -1326,9 +1327,12 @@ def t_story(P):
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
     line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
     need("we can see something" in line, f"the lights-on reaction line: {line!r}")
+    fl = wait_for(pg, "() => window.__genesis.landing().flip && (() => { const f = window.__genesis.landing().flip, x = document.querySelector('#lab').getBoundingClientRect().left; return performance.now() - f.t0 > 250 && { ...f, mid: x }; })()", 10, P=P)
+    need(min(fl["from"]["x"], fl["to"]["x"]) + 5 < fl["mid"] < max(fl["from"]["x"], fl["to"]["x"]) - 5, f"the Operator flies from the middle to its dock (mid-flight between): {fl}")
     wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
     need("Oracle" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the panel should read 🔮 Oracle again")
-    gt1 = pg.evaluate("() => (document.querySelector('#genConsole .gt') || {}).textContent || ''"); need(gt1 == "consciousness 24 · epoch 1", f"after the lights: {gt1!r}")
+    gt1 = pg.evaluate("() => { const t = document.querySelector('#genTag'), r = t && t.getBoundingClientRect(); return t && { text: t.textContent, shown: getComputedStyle(t).display !== 'none', left: r.left, top: r.top }; }")
+    need(gt1 and gt1["text"] == "consciousness 24 · epoch 1" and gt1["shown"] and gt1["left"] < 40 and gt1["top"] < 40, f"after the lights: the tag at the world's top-left: {gt1}")
     day = pg.inner_text("#genDay")
     need("EPOCH 1" in day and "first life" in day and "DAY" not in day, f"the Epoch 1 card: {day!r}")
     for _ in range(2):
@@ -1429,6 +1433,8 @@ def t_story_landing(P):
     pg.wait_for_timeout(1200)
     say = pg.evaluate("() => { const s = window.__termBoot.arrive.lastSay(); return s && { y: s.cy / s.H, who: s.who }; }")
     need(say and abs(say["y"] - 0.5) < 0.01 and say["who"] == "doc", f"your lines should be in the middle of the screen: {say}")
+    rg = pg.evaluate("() => ({ ring: window.__genesis.landing().ring, hushed: window.__audio.hushed() })")
+    need(rg["ring"] and rg["ring"].get("tried") and not rg["ring"].get("err"), f"the ringing must be attempted at the landing: {rg}")
     lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 35, P=P)
     need(lnd["why"] == "lines" and lnd["shown"] == 7 and 12 <= lnd["after"] <= 28, f"all 7 lines, then the Operator: {lnd}")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark")
@@ -1563,7 +1569,7 @@ def t_story_v6(P):
     wait_for(old, "() => !!(window.__genesis && window.__genesis.mode() === 'story')", 30, P=P)   # it went to ?story (which then drops its flag from the address)
     pg = P.open("/arena.html?fresh=1&test&nofirst5"); booted(pg)
     r = pg.evaluate("""async () => { const E = window.__epoch0; await E.loadBank(); await E.loadLoss(); const C = E.clock;
-      const L = t => E.logoAt(t), cut = C.split + 0.95, out = { on: [L(cut + 0.5).on, L(cut + 2.9).on, L(cut + 3.4).on], cols: [L(cut + 1.2).colour, L(cut + 2.2).colour, L(cut + 3.0).colour] };
+      const L = t => E.logoAt(t), cut = C.split + 0.95, out = { on: [L(cut + 0.5).on, L(cut + 5.0).on, L(cut + 5.5).on], cols: [L(cut + 1.2).colour, L(cut + 2.2).colour, L(cut + 3.0).colour] };
       const ct = E.makeContent({ seed: 2, story: true }); ct.boot = true; const B = window.__termBoot.dur, chk = (W, H, ph) => { const cv = document.createElement('canvas'); cv.width = W * (ph ? 2 : 1); cv.height = H * (ph ? 2 : 1);
         const res = []; for (const T of [24.5, 25.3, 26.1]) { E.frame(ct, B + T, cv, ph ? { phone: true, scale: 2 } : {}); const k = E.layoutCheck(); if (k.ref && k.band) res.push(!(k.band.y < k.ref.y + k.ref.h && k.band.y + k.band.h > k.ref.y)); } return res; };
       out.clear = { desktop: chk(1280, 720, false), phone: chk(390, 844, true) }; return out; }""")
