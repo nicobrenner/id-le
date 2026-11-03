@@ -356,6 +356,12 @@
   const newState = (W, H, P) => { const r = rng(7); let gl = 0, glT = -1; return { cr: crawlers(W, H, P), glitch: T => { if (T - glT > 0.09) { glT = T; gl = r() < 0.18; } return gl; } }; };
 
   // ---------- sound (window.__audio; optional: the intro works silent) ----------
+  // the logo's thunder: brown-ish noise with a hard crack in its first 600 samples. v11 (it peaked at ~1.5 before the master and clipped):
+  // same noise and envelope, but the buffer is scaled down whenever its peak is over 1, so the voice (gain 0.9 × v) peaks at ≤ 0.9
+  function thunderBuf(ctx, v = 1) { const n = Math.floor(ctx.sampleRate * 2.2), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0); let last = 0, pk = 0;
+    for (let i = 0; i < n; i++) { last = last * 0.985 + (Math.random() * 2 - 1) * 0.06; d[i] = last * Math.pow(1 - i / n, 1.6) * (i < 600 ? 3 : 1); pk = Math.max(pk, Math.abs(d[i])); }
+    if (pk > 1) for (let i = 0; i < n; i++) d[i] /= pk;
+    return { buffer: b, gain: 0.9 * v }; }
   function synth(ctx, dest, t0) {   // t0: ctx time of film second 0
     const out = ctx.createGain(); out.gain.value = 0.9; out.connect(dest); const nodes = [];
     const tone = (type, f, at, dur, vol, f2) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, at); if (f2) o.frequency.exponentialRampToValueAtTime(f2, at + dur); v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(vol, at + Math.min(.01, dur / 4)); v.gain.exponentialRampToValueAtTime(0.0001, at + dur); o.connect(v); v.connect(out); o.start(at); o.stop(at + dur + .05); nodes.push(o); };
@@ -371,8 +377,7 @@
       tick: (at, e) => tone('square', 1400 + Math.random() * 900 - e * 40, at, 0.018 + e * 0.002, 0.03),
       note: at => { tone('sine', 65.4, at, 2.6, 0.12); tone('sine', 98, at + .05, 2.2, 0.05); },
       cut: at => { tone('square', 2400, at, 0.035, 0.09, 600); tone('sine', 180, at, 0.12, 0.08, 60); },
-      thunder: (at, v = 1) => { const n = Math.floor(ctx.sampleRate * 2.2), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0); let last = 0; for (let i = 0; i < n; i++) { last = last * 0.985 + (Math.random() * 2 - 1) * 0.06; d[i] = last * Math.pow(1 - i / n, 1.6) * (i < 600 ? 3 : 1); }
-        const src = ctx.createBufferSource(), v2 = ctx.createGain(); src.buffer = b; v2.gain.value = 0.9 * v; src.connect(v2); v2.connect(out); src.start(at); nodes.push(src); },
+      thunder: (at, v = 1) => { const T = thunderBuf(ctx, v), src = ctx.createBufferSource(), v2 = ctx.createGain(); src.buffer = T.buffer; v2.gain.value = T.gain; src.connect(v2); v2.connect(out); src.start(at); nodes.push(src); },
       crash: at => { const n = Math.floor(ctx.sampleRate * 0.9), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5);
         const src = ctx.createBufferSource(), v = ctx.createGain(); src.buffer = b; v.gain.value = 0.35; src.connect(v); v.connect(out); src.start(at); nodes.push(src); tone('sine', 50, at, 1.6, 0.25, 28); },
       skitter: (a, b) => { for (let t = a; t < b; t += 0.05 + Math.random() * 0.07) tone('triangle', 3000 + Math.random() * 1500, t, 0.012, 0.02); },
@@ -469,7 +474,7 @@
   // sizes for tests: the model's text, the subtitles, the pane titles (Nico: subtitles must not be smaller than the text on screen)
   function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [], sciY: H / 2,
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
-  window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
+  window.__epoch0 = { play, thunderBuf, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();
