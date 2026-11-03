@@ -1289,6 +1289,10 @@ def t_story(P):
     w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.querySelector('#genConsole [data-gsay]').textContent, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
     need(w["mode"] == "story" and w["pre"] == "lights on" and "lights on" in w["say"], f"the waking up should end on 'lights on', pre-filled: {w}")
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
+    fs = pg.evaluate("() => { const l = document.querySelector('#genConsole .gw p, #genConsole .gl'), lab = document.querySelector('#lab'); return { fz: l ? getComputedStyle(l).fontSize : null, lh: l ? parseFloat(getComputedStyle(l).lineHeight) / parseFloat(getComputedStyle(l).fontSize) : 0, over: lab.scrollWidth - lab.clientWidth, fam: getComputedStyle(document.documentElement).getPropertyValue('--op-font').trim() }; }")
+    need(fs["fz"] == "17px" and abs(fs["lh"] - 1.45) < 0.02 and fs["over"] <= 1 and fs["fam"], f"the Operator's words: 17 px, line-height 1.45, no overflow, family from --op-font: {fs}")
+    gt = pg.evaluate("() => (document.querySelector('#genConsole .gt') || {}).textContent || ''")
+    need(gt == "consciousness 24 · epoch 0 · genesis", f"the Operator's status line before the lights: {gt!r}")
     need("new consciousness" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"], "the Tiny Operator's lines should be in the thread")
     son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
     nm = pg.evaluate("() => ({ head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
@@ -1299,6 +1303,7 @@ def t_story(P):
     need("we can see something" in line, f"the lights-on reaction line: {line!r}")
     wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
     need("Oracle" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the panel should read 🔮 Oracle again")
+    gt1 = pg.evaluate("() => (document.querySelector('#genConsole .gt') || {}).textContent || ''"); need(gt1 == "consciousness 24 · epoch 1", f"after the lights: {gt1!r}")
     day = pg.inner_text("#genDay")
     need("EPOCH 1" in day and "first life" in day and "DAY" not in day, f"the Epoch 1 card: {day!r}")
     for _ in range(2):
@@ -1324,19 +1329,19 @@ def t_story_intro(P):
     r = pg.evaluate("""async () => { const E = window.__epoch0; await E.loadBank(); await E.loadLoss(); const ct = E.makeContent({ story: true, seed: 3 }), cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
       const at = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let s = 0; for (let i = 0; i < d.length; i += 4 * 97) s += d[i] + d[i + 1] + d[i + 2]; return s / (d.length / (4 * 97)) / 3; };
       let legs = 0; const K = window.__critDraw, L0 = K && K.legs; if (K) K.legs = (...a) => { legs++; return L0.apply(K, a); };   // the title must draw no creature
-      const out = { total: E.total(ct), dark: at(3), sub: 0, flash: 0, black: 0, cut: 0 }; for (const T of [5, 10, 20, 24, 28]) out.sub = Math.max(out.sub, at(T)); out.flash = at(29.8); out.black = at(30.6); out.strike = at(30.78); out.cut = at(33.6); out.spin = at(29.6); for (let T = 32.4; T < 38.2; T += 0.25) at(T); out.legs = legs; if (K) K.legs = L0;
+      const out = { total: E.total(ct), dark: at(3), sub: 0, flash: 0, black: 0, cut: 0 }; for (const T of [5, 10, 20, 24, 28]) out.sub = Math.max(out.sub, at(T)); out.flash = at(29.8); out.black = at(30.6); out.strike = at(31.98); out.lateBlack = at(31.3); out.cut = at(33.6); out.spin = at(29.6); for (let T = 32.4; T < 38.2; T += 0.25) at(T); out.legs = legs; if (K) K.legs = L0;
       out.protosRun = [8.8, 18, 25.8].map(T => E.protos(T, true)).flat(); out.protosAfter = [29.9, 31, 33, 35, 37].map(T => E.protos(T, true)).flat().length;
       const ts = []; for (let T = 0.5; T <= 29.75; T += 0.05) ts.push([T, ...E.storyChart(T)]); const cross = v => (ts.find(p => p[2] >= v) || [null])[0]; out.refs = E.storyRefs().map(r => r.label);
       out.xMono = ts.every((p, i) => !i || p[1] >= ts[i - 1][1]); out.cross = [0.5, 0.66, 0.97].map(cross); out.below = ts[ts.length - 1][2]; const sp = i => Math.hypot(ts[i + 1][1] - ts[i][1], ts[i + 1][2] - ts[i][2]); out.accel = sp(ts.length - 3) / sp(5); return out; }""")
     need(30 < r["total"] < 42, f"the story intro should run ~37 s: {r}")
-    need(r["flash"] > 200 and r["black"] < 5 and r["strike"] > r["black"] + 3 and r["cut"] > r["black"], f"white flash, the dark with lightning strikes, then the cut: {r}")
+    need(r["flash"] > 200 and r["black"] < 5 and r["lateBlack"] < 5 and r["strike"] > r["black"] + 3 and r["cut"] > r["black"], f"white flash, black (no run-up of strikes), one lightning as Id|le is cut, then the logo: {r}")
     need(r["legs"] == 0, f"no creature in the Id|le title (Nico): the leg code drew {r['legs']} times from the cut on")
     need(set(r["protosRun"]) == {"log", "samples", "gpu"} and r["protosAfter"] == 0, f"tiny proto-creatures only during the run (log, samples, GPU), none after the crash: {r['protosRun']}, after {r['protosAfter']}")
     need(r["refs"] == ["Project 23 (previous run)", "genius level", "conscious"], f"the reference lines: {r['refs']}")
     c = r["cross"]; need(c[0] and abs(c[0] - 12.8) < 1.2 and c[1] and abs(c[1] - 20.0) < 1.2 and c[2] and 25 <= c[2] <= 26.6, f"the curve crosses Project 23 near 'it keeps learning' (12.8 s), genius near 'look at those losses' (20 s), conscious just before the vortex: {c}")
     need(r["xMono"] and r["below"] > 1.2 and r["accel"] > 4, f"it draws left to right, accelerates (×{r['accel']:.1f}) and ends below the floor: {r}")
     P.clean()
-    return f"{r['total']:.1f} s; flash {r['flash']:.0f}, black {r['black']:.1f}, a strike {r['strike']:.1f}, cut {r['cut']:.1f}; the curve crosses Project 23 at {r['cross'][0]:.1f} s, genius at {r['cross'][1]:.1f} s, conscious at {r['cross'][2]:.1f} s, ×{r['accel']:.0f} faster at the end"
+    return f"{r['total']:.1f} s; flash {r['flash']:.0f}, black {r['black']:.1f}, one strike at the cut {r['strike']:.1f}, logo {r['cut']:.1f}; the curve crosses Project 23 at {r['cross'][0]:.1f} s, genius at {r['cross'][1]:.1f} s, conscious at {r['cross'][2]:.1f} s, ×{r['accel']:.0f} faster at the end"
 
 
 def t_boot_intro(P):
