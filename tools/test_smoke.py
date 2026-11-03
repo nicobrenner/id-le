@@ -118,7 +118,7 @@ await post('/lab/stats', { v: 1, page: 'pedia', dw: '5-20', dw0: '1-5', ps: ['ha
 // engagement v2: fixed key lists, small positive integers, favorites by pattern, flags once, a path counted once in its last value
 await post('/lab/stats', { v: 1, x: { did: ['w_reel', 'w_dream', 'rage', 'p_music', 'w_reel', 'hacked'], ws: { reel: 40, dream: 12, mind: 7, evil: 5 }, pt: { music: 30, studio: 10, nope: 9 },
   ct: { reelplay: 2, reelend: 1, irc: 3, inbox: 1, op: 2, pedia: 1, bad: 4 }, opa: { weather: 1, ai_spawn: 1, rm_rf: 1 }, fav: { 'job:math': 3, 'fam:crawly': 1, 'name:Plotkin': 2, 'name:<script>': 1, 'secret:x': 1 },
-  rage: { studioBtn: 1, world: 2, 'body > div': 1 } }, path: 'card>studio', eg: { reels: '1-5', errs: '0' } });
+  rage: { studioBtn: 1, world: 2, 'whisper:keep': 1, 'world:creature': 1, 'whisper:evil': 1, 'body > div': 1 } }, path: 'card>studio', eg: { reels: '1-5', errs: '0' } });
 await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
 await post('/lab/stats', { v: 1, path: 'card>card', x: { ct: { op: 9999 } } });
 await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
@@ -286,7 +286,7 @@ def worker_unit():
     need(fav.get("job:math") == 3 and fav.get("fam:crawly") == 1 and fav.get("name:Plotkin") == 2, f"v2 favorites {dict(list(fav.items())[:6])}")
     need(not any(k.startswith("secret") or "<" in k for k in fav), f"a favorite outside the pattern was stored: {[k for k in fav if k.startswith('secret') or '<' in k]}")
     need(len(fav) <= 61 and fav.get("other", 0) >= 1, f"favorites must be capped (60 names + 'other'): {len(fav)} kept, other {fav.get('other')}")
-    need(x["rage"] == {"studioBtn": 1, "world": 2}, f"v2 rage clicks {x['rage']}")
+    need(x["rage"] == {"studioBtn": 1, "world": 2, "whisper:keep": 1, "world:creature": 1}, f"v2 rage clicks (with the card's and the world's sub-targets) {x['rage']}")
     need(x["path"] == {"card>studio>reels": 1}, f"v2 path {x['path']} (once per page load in its last value; repeats and 4-step paths dropped)")
     need(x.get("op") == {"out:acted": 3, "out:unsure": 1, "opt:light": 2, "cf:hi": 3, "fr:rephrase": 1, "mood:negative": 1, "mm:negative": 1, "gd:light": 1, "gt:light": 2, "gn:light": 1},
          f"Operator signals {x.get('op')} (only fixed keys and small positive integers)")
@@ -803,7 +803,7 @@ def t_stats_v2(P):
     need(x.get("pt", {}).get("studio", 0) >= 1 and "p_studio" in x.get("did", set()), f"studio time not reported: pt {x.get('pt')}, did {x.get('did')}")
     need(x.get("ws", {}).get("mind", 0) + x.get("ws", {}).get("dream", 0) >= 1, f"watching a mind not reported: ws {x.get('ws')}")
     need(any(k.startswith("job:") for k in x.get("fav", {})) and any(k.startswith("name:") for k in x.get("fav", {})), f"favorites: {x.get('fav')}")
-    need(x.get("rage", {}).get("world", 0) + sum(x.get("rage", {}).values()) >= 1 and "rage" in x.get("did", set()), f"rage click not reported: {x.get('rage')}")
+    need(any(k.startswith("world:") or k.startswith("whisper:") or k in ("other",) for k in x.get("rage", {})) and "rage" in x.get("did", set()) and "world" not in x.get("rage", {}), f"rage click not reported with its sub-target: {x.get('rage')}")
     need(x.get("ct", {}).get("reelplay") == 1 and x.get("ct", {}).get("reelend") == 1 and x.get("ct", {}).get("irc") == 1, f"counts: {x.get('ct')}")
     need(path.startswith("card") and "studio" in path, f"path {path!r} (card, then studio)")
     names = [k[5:] for k in x.get("fav", {}) if k.startswith("name:")]
