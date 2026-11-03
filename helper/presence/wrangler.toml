@@ -1,0 +1,17 @@
+# The Presence Durable Object for the creator's live view (/live). Nothing here is deployed until you run
+#   npx wrangler deploy -c helper/presence/wrangler.toml
+# Then, in the Pages project id-le (Settings → Bindings, or the API), add a Durable Object binding PRESENCE → class Presence in
+# script idle-presence, for the preview (staging) environment first. The table is kept in memory only: no storage is written.
+name = "idle-presence"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+[[durable_objects.bindings]]
+name = "PRESENCE"
+class_name = "Presence"
+
+# SQLite-backed classes are the ones the Workers Free plan allows; this one never touches its storage
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Presence"]
