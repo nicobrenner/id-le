@@ -77,6 +77,13 @@ def stamp_versions(out):
         if not f.endswith(".html"): continue
         path = os.path.join(out, f); html = open(path, encoding="utf-8").read()
         html = pat.sub(lambda m: f"{m.group(1)}{m.group(2)}?v={ver[m.group(3)]}{m.group(1)}", html)
+        # scripts the game loads itself (idle-logos.js for the story's logo and ⭐ reviews): their fingerprints, for the same fresh addresses.
+        # (Nov 3: idle-logos.js was loaded as ?v=<the page's build>, which a new idle-logos.js didn't change; browsers kept the old one for
+        # hours and the story's logo froze on black.) Added after the rewrite above, so the names in it stay plain.
+        tag = '<script src="idle-runtime.js?v='
+        if tag in html and "window.IDLE_V" not in html:
+            iv = json.dumps({k: v for k, v in sorted(ver.items()) if k.startswith("idle-")}, separators=(",", ":"))
+            html = html.replace(tag, f"<script>window.IDLE_V = {iv};</script>" + tag, 1)
         open(path, "w", encoding="utf-8").write(html)
 
 def main():

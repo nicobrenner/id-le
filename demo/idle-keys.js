@@ -22,6 +22,21 @@
   const idx = k => names.indexOf(k);
   let strip = hash === 'keys';
 
+  // the film's sounds are scheduled from its second 0, which a keyframe (or __epoch0.play({ at })) puts in the past: events already over
+  // are skipped (silent), sounds still going play on from now, and no time is ever negative (Web Audio throws on those). Installed once,
+  // only by a keyframe page or a mid-film play; staging and local copies only.
+  window.__audioPastShim = () => {
+      if (window.__audioPastShim.on) return; window.__audioPastShim.on = true;
+      try { const AP = AudioParam.prototype, clampT = t => (Number.isFinite(t) && t > 0 ? t : 0);
+        for (const m of ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime', 'cancelScheduledValues']) { const f = AP[m]; AP[m] = function (...a) { const i = m === 'cancelScheduledValues' ? 0 : 1; a[i] = clampT(a[i]); return f.apply(this, a); }; }
+        { const f = AP.setTargetAtTime; AP.setTargetAtTime = function (v, t, c) { return f.call(this, v, clampT(t), c); }; }
+        { const f = AP.setValueCurveAtTime; AP.setValueCurveAtTime = function (v, t, d) { return f.call(this, v, clampT(t), d); }; }
+        const SN = AudioScheduledSourceNode.prototype, st = SN.start, sp = SN.stop;
+        SN.start = function (when = 0, off, dur) { const now = this.context.currentTime; if (when < now - 0.05) { this.__late = now - when; when = now; if (this instanceof AudioBufferSourceNode) { off = (off || 0) + this.__late; if (this.buffer && !this.loop && off >= this.buffer.duration) { this.__over = true; off = 0; } } }
+          const r = off === undefined ? st.call(this, when) : dur === undefined ? st.call(this, when, off) : st.call(this, when, off, dur); if (this.__over) try { this.disconnect(); } catch (e) {} return r; };
+        SN.stop = function (when = 0) { const now = this.context.currentTime; if (this.__over || (this.__late && when < now)) { try { this.disconnect(); } catch (e) {} when = now; } return sp.call(this, Math.max(0, when)); };
+      } catch (e) { console.warn('keys: audio', e); }
+  };
   if (key) {
     // the sandbox: an in-memory localStorage for this page only (the player's real one is never read or written)
     const m = new Map(), api = {
@@ -33,17 +48,7 @@
     // the storyline and the test mode in the address (read by the game's modules as they load); the key stays in the hash
     try { const u = new URL(location.href); u.searchParams.set('story', ''); u.searchParams.set('fresh', ''); u.searchParams.delete('at');
       history.replaceState(null, '', u.pathname + u.search.replace(/=(?=&|$)/g, '') + '#' + key); } catch (e) {}
-    // the film's sounds are scheduled from its second 0, which a keyframe puts in the past: events already over are skipped (silent),
-    // sounds still going play on from now, and no time is ever negative (Web Audio throws on those). Keyframes only.
-    try { const AP = AudioParam.prototype, clampT = t => (Number.isFinite(t) && t > 0 ? t : 0);
-      for (const m of ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime', 'cancelScheduledValues']) { const f = AP[m]; AP[m] = function (...a) { const i = m === 'cancelScheduledValues' ? 0 : 1; a[i] = clampT(a[i]); return f.apply(this, a); }; }
-      { const f = AP.setTargetAtTime; AP.setTargetAtTime = function (v, t, c) { return f.call(this, v, clampT(t), c); }; }
-      { const f = AP.setValueCurveAtTime; AP.setValueCurveAtTime = function (v, t, d) { return f.call(this, v, clampT(t), d); }; }
-      const SN = AudioScheduledSourceNode.prototype, st = SN.start, sp = SN.stop;
-      SN.start = function (when = 0, off, dur) { const now = this.context.currentTime; if (when < now - 0.05) { this.__late = now - when; when = now; if (this instanceof AudioBufferSourceNode) { off = (off || 0) + this.__late; if (this.buffer && !this.loop && off >= this.buffer.duration) { this.__over = true; off = 0; } } }
-        const r = off === undefined ? st.call(this, when) : dur === undefined ? st.call(this, when, off) : st.call(this, when, off, dur); if (this.__over) try { this.disconnect(); } catch (e) {} return r; };
-      SN.stop = function (when = 0) { const now = this.context.currentTime; if (this.__over || (this.__late && when < now)) { try { this.disconnect(); } catch (e) {} when = now; } return sp.call(this, Math.max(0, when)); };
-    } catch (e) { console.warn('keys: audio', e); }
+    window.__audioPastShim();
     let go; const ready = new Promise(r => go = r);
     window.__storyKey = { key, keys: names.slice(), idx: idx(key), is: k => k === key, after: k => idx(key) > idx(k), atOrAfter: k => idx(key) >= idx(k), ready, started: false };
     // the gate: one key press or tap, so the browser lets the sound play (the title card is its own gate)
