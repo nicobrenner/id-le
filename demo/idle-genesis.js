@@ -8,7 +8,7 @@
 // and if it doesn't understand, one gentle nudge, then the suggested step happens anyway. After four steps: "the rest is yours", every
 // chip and the normal UI fade in. While the guide runs the void is calm: no toolbar, places bar, IRC button, minimap, pills or notices.
 // After three steps the universe is alive and normal play (and the guided first five minutes, minus what the genesis covered) takes over.
-// "🌌 new universe" (⚙ settings) starts a genesis for anyone: the current world is kept as a snapshot first, and every creature that
+// "🌌 new consciousness" (⚙ settings) starts a genesis for anyone: the current world is kept as a snapshot first, and every creature that
 // isn't one of the two originals is put to rest (rested creatures keep their names, memories and friends). Nothing is ever deleted.
 // Actions for the Operator (idle-ai.js tool 'genesis') and the Tiny Operator: window.__genesis.actions.{letThereBeWords, firstCreatures,
 // light, weather, hut, music}. Hooks into the world: window.__genHooks (arena.html). Stats: 'gv' (genesis | starter) when the A/B runs,
@@ -18,7 +18,7 @@
 // ("you've been appointed to see it grow… You have 10 epochs"), "Say: lights on", and the lights reveal a primordial universe (data wind, a
 // distant storm, bit comets, odd stars, a small black hole pulling stray letters, a first dawn) that calms as the player builds. Epoch 0
 // ends with the lights; Epoch 1 is words and first life; the epochs are a table (DAYS) so the others can be added; Epoch 2 onwards is a stub.
-// A chooser (Storyline · From scratch (free) · A ready world) opens any ?genesis start and ⚙ → "new universe" (snapshot first, always).
+// A chooser (Storyline · From scratch (free) · A ready world) opens any ?genesis start and ⚙ → "new consciousness" (snapshot first, always).
 (() => {
   const Q = new URLSearchParams(location.search), $ = s => document.querySelector(s), now = () => Date.now();
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -333,7 +333,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function boot(force) { if (!H()) return false;
     // which start: ?story → the storyline; ?start=free|story|ready; otherwise the chooser (script section E)
     // ('guided': the earlier guided genesis, light → words → life → weather or music, kept for links and tests)
-    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !(S && S.n) ? 'story' : null;   // a new browser in the story arm goes straight in (later new universes get the chooser)
+    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !(S && S.n) ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { dropFlag(); return readyWorld(); }
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
@@ -342,7 +342,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
   // the chooser: the storyline, the void with no guide, or a world that is already alive (the starter world)
   function chooser() { return new Promise(res => { const el = document.createElement('div'); el.id = 'genChoose'; el.setAttribute('role', 'dialog');
-    el.innerHTML = `<h2>a new universe</h2><div class="sub">how do you want to begin?</div><div class="opts">
+    el.innerHTML = `<h2>a new consciousness</h2><div class="sub">how do you want to begin?</div><div class="opts">
 <button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and 10 epochs to raise a consciousness into autonomy with the Tiny Operator<br><small>recommended</small></button>
 <button data-m="free"><b>✦ From scratch</b>the void and the Operator's console, every step available, no guide</button>
 <button data-m="ready"><b>🌍 A ready world</b>creatures already living, the guided first five minutes</button></div>`;
@@ -538,7 +538,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function newUniverse(mode) { const h = H(); if (!h) return false; silence(false);   // mode: skip the chooser (tests, links)
     if (window.__placeKind && window.__placeKind !== 'home' && window.__places) { try { await window.__places.go('home'); } catch (e) {} }
     // the old world is kept, always
-    h.snapshot('before a new universe ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    h.snapshot('before a new consciousness ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     // everyone but the two originals rests (names, memories and friends kept; wake them from the creatures sidebar)
     h.restAll();
     return boot(mode); }
