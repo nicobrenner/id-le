@@ -95,14 +95,14 @@
 
   // ---------- the window ----------
   const css = document.createElement('style'); css.textContent = `
-#trees{position:fixed;right:16px;top:56px;z-index:9996;display:none;width:min(620px,calc(100vw - 32px));max-height:80vh;overflow:auto;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px #0006;font:12px system-ui;box-sizing:border-box}
+#trees{position:fixed;right:16px;top:56px;z-index:9996;display:none;width:min(620px,calc(100vw - 32px));max-height:80vh;overflow:auto;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px #0006;font:12px var(--ui-font,system-ui);box-sizing:border-box}
 #trees.on{display:block}#trees .hd{display:flex;justify-content:space-between;align-items:center;margin:-8px -10px 4px;padding:8px 10px 6px;position:sticky;top:-8px;z-index:3;background:var(--floor);border-bottom:1px solid #8883;cursor:grab;user-select:none;touch-action:none}#trees.drag .hd{cursor:grabbing}
 #trees .hd b{font-size:13px}#trees button,#trees select{font:inherit;font-size:12px;padding:2px 8px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}#trees .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0}
 #trees .sub{opacity:.7;font-size:11px}#trees .cvw{position:relative;border:1px solid #8884;border-radius:8px;overflow:hidden;background:color-mix(in srgb,var(--floor) 92%,#8881);touch-action:none}#trees canvas{display:block;width:100%;height:340px;cursor:grab}
 #trees .tip{position:absolute;pointer-events:none;display:none;max-width:240px;background:var(--floor);border:1px solid #8886;border-radius:8px;padding:5px 7px;font-size:11px;line-height:1.4;box-shadow:0 4px 14px #0004;z-index:2}
 #trees h4{margin:8px 0 3px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}#trees .hl div{margin:2px 0;line-height:1.45}#trees .sel{border-left:3px solid #2b5cff;padding-left:6px;margin:6px 0}
 #trees .zoomb{position:absolute;right:6px;top:6px;display:flex;gap:3px}#trees .zoomb button{padding:0 7px;background:var(--floor)}
-#cfamily{font-size:11px;margin:0 2px 6px;max-width:350px;line-height:1.5}#cfamily:empty{display:none}#whisper:not(.ct-friends) #cfamily,#whisper.mind #cfamily{display:none}#cfamily button{font:11px system-ui;padding:0 7px;border:1px solid #8886;border-radius:9px;background:transparent;color:inherit;cursor:pointer}`;
+#cfamily{font-size:11px;margin:0 2px 6px;max-width:350px;line-height:1.5}#cfamily:empty{display:none}#whisper:not(.ct-friends) #cfamily,#whisper.mind #cfamily{display:none}#cfamily button{font:11px var(--ui-font,system-ui);padding:0 7px;border:1px solid #8886;border-radius:9px;background:transparent;color:inherit;cursor:pointer}`;
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'trees'; document.body.appendChild(el);
   const btn = document.createElement('button'); btn.id = 'treesBtn'; btn.title = 'family trees: who descends from whom, generation by generation'; btn.textContent = '🌳';

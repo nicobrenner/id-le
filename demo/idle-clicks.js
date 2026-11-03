@@ -12,12 +12,12 @@
   const css = document.createElement('style');
   css.textContent = `.ck-ripple{position:fixed;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:1.5px solid color-mix(in srgb,currentColor 55%,transparent);pointer-events:none;z-index:9;animation:ckrip .6s ease-out forwards;color:var(--ink,#444)}
 @keyframes ckrip{to{transform:scale(6);opacity:0}}
-.ck-tip{position:fixed;z-index:10003;max-width:240px;pointer-events:none;font:12px/1.35 system-ui;padding:5px 9px;border-radius:9px;background:var(--floor,#fff);color:var(--ink,#222);border:1px solid #8886;box-shadow:0 4px 14px #0003;opacity:0;transform:translateY(4px);transition:opacity .15s,transform .15s}
+.ck-tip{position:fixed;z-index:10003;max-width:240px;pointer-events:none;font:12px/1.35 var(--ui-font,system-ui);padding:5px 9px;border-radius:9px;background:var(--floor,#fff);color:var(--ink,#222);border:1px solid #8886;box-shadow:0 4px 14px #0003;opacity:0;transform:translateY(4px);transition:opacity .15s,transform .15s}
 .ck-tip.on{opacity:1;transform:none}.ck-tip b{font-weight:600}.ck-tip small{opacity:.65}
 .ck-wobble{animation:ckwob .45s ease-in-out}@keyframes ckwob{20%{rotate:-4deg}45%{rotate:3.5deg}70%{rotate:-2deg}100%{rotate:0deg}}
 .word.ck-wiggle{animation:ckwig .5s ease-in-out}@keyframes ckwig{20%{translate:0 -4px}40%{translate:0 1px;rotate:-6deg}60%{rotate:5deg}80%{rotate:-2deg}100%{translate:0 0;rotate:0deg}}
 .ck-ring{position:fixed;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;border:2px solid #2b5cff;box-shadow:0 0 0 0 #2b5cff66;pointer-events:none;z-index:9;animation:ckpulse 1.2s ease-out infinite}
-.ck-ring span{position:absolute;left:50%;top:100%;transform:translate(-50%,6px);white-space:nowrap;font:600 12px system-ui;color:#2b5cff;background:var(--floor,#fff);padding:1px 7px;border-radius:8px}
+.ck-ring span{position:absolute;left:50%;top:100%;transform:translate(-50%,6px);white-space:nowrap;font:600 12px var(--ui-font,system-ui);color:#2b5cff;background:var(--floor,#fff);padding:1px 7px;border-radius:8px}
 @keyframes ckpulse{0%{box-shadow:0 0 0 0 #2b5cff66}100%{box-shadow:0 0 0 18px #2b5cff00}}
 @media (prefers-reduced-motion:reduce){.ck-ripple,.ck-wobble,.word.ck-wiggle{animation:none}.ck-ring{animation:none}}`;
   document.head.appendChild(css);

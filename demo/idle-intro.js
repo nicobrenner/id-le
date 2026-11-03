@@ -387,7 +387,7 @@
   let cur = null;
   const css = document.createElement('style');
   css.textContent = `#idleIntro{position:fixed;inset:0;z-index:2147480000;background:#000;opacity:1;transition:opacity .6s;cursor:pointer;touch-action:none}#idleIntro canvas{position:absolute;inset:0;width:100%;height:100%}
-#idleIntro .ib{position:absolute;bottom:14px;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}
+#idleIntro .ib{position:absolute;bottom:14px;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}
 #idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro.out{opacity:0}`;
   (document.head || document.documentElement).appendChild(css);
   // 'epoch0' (Nico's pick, Nov 1) is the default: the Oracle learns to speak, drawn by idle-epoch0.js (live model output, so not a fixed film);

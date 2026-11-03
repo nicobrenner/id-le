@@ -72,7 +72,17 @@ def fontgen_round():
             need(not empty, f"{n} draws nothing for {empty}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    return f"{len(cands)} fonts, every character drawn"
+    try:
+        import check_glyphs   # needs Pillow: l stays one piece, D keeps a straight back, N its stems (Nico's round-1 screenshots)
+    except ImportError:
+        return f"{len(cands)} fonts, every character drawn (confusables skipped: no Pillow)"
+    bad = []
+    for f in sorted(os.listdir(os.path.join(ROOT, "demo", "fonts"))):
+        if f.endswith(".woff2"):
+            probs, _ = check_glyphs.check(os.path.join(ROOT, "demo", "fonts", f))
+            bad += [f"{f}: {x}" for x in probs]
+    need(not bad, "confusable glyphs in the shipped fonts: " + "; ".join(bad[:4]))
+    return f"{len(cands)} fonts, every character drawn; shipped fonts keep l/!, D/O, N apart"
 
 
 def js_syntax():
@@ -1495,6 +1505,52 @@ def t_title_card(P):
     return f"waits at the title ({w['t']:.2f} s), a key starts the messages, Esc marks skip:messages"
 
 
+FONT_LAYOUT_JS = """async () => { await document.fonts.ready;
+  const vis = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+  const over = [...document.querySelectorAll('button, .chip, .pchip, #lab-head, #genConsole .gl')].filter(vis).filter(e => e.scrollWidth - e.clientWidth > 1).map(e => (e.id || e.className || e.tagName) + (e.id ? '' : ':' + (e.textContent || '').replace(/\\d+/g, '#').trim().slice(0, 18)));
+  return { fam: getComputedStyle(document.body).fontFamily, f3: document.fonts.check('16px "Idle F3"'), page: document.documentElement.scrollWidth - innerWidth, over }; }"""
+
+
+def _font_layout(P, w, h, mobile):
+    """the same page with ?nofonts (the system fonts) and with Id|le's fonts: what overflows with the fonts that didn't before"""
+    res = {}
+    for q in ("nofonts&", ""):
+        pg = P.open(f"/arena.html?{q}test"); pg.set_viewport_size({"width": w, "height": h}); booted(pg)
+        with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 30)
+        pg.wait_for_timeout(1500)
+        res[q or "fonts"] = pg.evaluate(FONT_LAYOUT_JS); pg.close()
+    a, b = res["nofonts&"], res["fonts"]
+    need(b["fam"].startswith('"Idle F3"') and b["f3"], f"the UI isn't in Id|le's font: {b['fam'][:60]}, loaded={b['f3']}")
+    need(not a["fam"].startswith('"Idle'), f"?nofonts still uses Id|le's font: {a['fam'][:40]}")
+    new = sorted(set(b["over"]) - set(a["over"]))
+    need(b["page"] <= 1 and not new, f"{w}×{h}: overflow with the fonts: page {b['page']} px, newly clipped: {new[:6]}")
+    return f"{w}×{h}: UI in Idle F3, no new overflow ({len(b['over'])} clipped with fonts, {len(a['over'])} without)"
+
+
+def t_fonts(P):
+    """Id|le's own typefaces (idle-fonts.js): the UI is set in f3, each creature family speaks in its own voice, the Operator and the Oracle
+    get their faces, and nothing overflows that didn't overflow in the system fonts (desktop)."""
+    note = _font_layout(P, 1400, 900, False)
+    pg = P.open("/arena.html?test"); booted(pg)
+    r = pg.evaluate("""async () => { await document.fonts.ready; const F = window.IDLE_FONTS, out = {};
+      for (const k of Object.keys(F.fam)) { const b = document.createElement('div'); b.className = 'bubble'; b.dataset.f = k; document.body.appendChild(b); out[k] = getComputedStyle(b).fontFamily.split(',')[0]; b.remove(); }
+      const lab = document.getElementById('lab'), sel = document.getElementById('ai-brain');
+      return { fam: out, key: F.key({ g: { job: 'math' }, voiceKey: 'tok' }) + '/' + F.key({ g: { job: 'hoard' }, voiceKey: 'crawly' }), role: lab && lab.dataset.role, brain: sel && sel.value }; }""")
+    want_fam = {"tok": "F6", "crawly": "F5", "architect": "F2", "debug": "F1", "math": "F8", "classify": "F4", "designer": "F7"}
+    bad = {k: v for k, v in r["fam"].items() if want_fam[k] not in v}
+    need(not bad and r["key"] == "math/crawly", f"creature voices: {r}")
+    need(r["role"] == ("operator" if r["brain"] == "tiny" else "oracle"), f"the panel's role mark: {r}")
+    P.clean()
+    return note + "; 7 creature voices; panel marked " + str(r["role"])
+
+
+def t_fonts_phone(P):
+    """Id|le's fonts on a 390×844 phone: no new overflow in the bar, chips and panels."""
+    note = _font_layout(P, 390, 844, True)
+    P.clean()
+    return note
+
+
 def t_hint_phone(P):
     """On a 375×667 phone the intro's "hold to read" hint and skip › stay clear of the desktop's dock (drawn centred at the bottom, 178 px wide)."""
     pg = P.open("/arena.html?story&test"); pg.set_viewport_size({"width": 375, "height": 667})
@@ -1760,7 +1816,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1827,6 +1883,8 @@ def main():
                 run("genesis phone", t_genesis_phone, is_mobile=True, has_touch=True)
                 run("pedia desktop", t_pedia)
                 run("pedia halloween", t_pedia_halloween)
+                run("fonts", t_fonts)
+                run("fonts phone", t_fonts_phone, is_mobile=True, has_touch=True)
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()

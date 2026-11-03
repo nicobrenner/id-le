@@ -13,7 +13,9 @@
   const BG = '#06090b', TXT = '#b9c6cc', DIM = '#5d6b74', OK = '#7fd38a', AMB = '#f0b45a', RED = '#ff5d5d', CY = '#7ee3f5', MAG = '#e0367a', BORDER = '#22323c', ACT = '#4fae63';
   const IDLE_BPM = 84;   // the idle engine's tempo (story v6 music): the computer scenes and the logo's throb
   const MODEM = 'boot';   // where the modem handshake plays: 'boot' (under the spinning globe and the progress bar; Nico's option B) or 'logo' (not yet)
-  const MONO = 'ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace';
+  // Id|le's own fonts when loaded (idle-fonts.js): the terminal and labchat in f1, the messages and Doc's lines in f3
+  const IF = window.IDLE_FONTS || {};
+  const MONO = IF.term || 'ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace', SUBF = IF.sub || '"Helvetica Neue", Helvetica, Arial, system-ui, sans-serif';
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)), ease = u => u * u * (3 - 2 * u);
   const portOf = (W, H, P) => !!P || W < H * 1.1;
   // ---------- the script's clock (seconds) ----------
@@ -286,7 +288,7 @@
   let lastSay = null;
   // a line in the middle of the screen: big, typed, on a dim band, with who says it above (used where no window shows the words: the dark)
   function say(g, W, H, text, n, who, fz, a = 1, st = WHO.scientist) {
-    if (n <= 0 || a <= 0) return; g.save(); g.globalAlpha = a; const FONT = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.font = FONT; g.textBaseline = 'middle';
+    if (n <= 0 || a <= 0) return; g.save(); g.globalAlpha = a; const FONT = `italic 600 ${fz}px ${SUBF}`; g.font = FONT; g.textBaseline = 'middle';
     const rows = wrapRows(g, text, Math.min(W * 0.84, 900)), lh = fz * 1.3, y0 = H / 2 - (rows.length - 1) * lh / 2, bw = Math.min(W - 16, Math.max(...rows.map(r => g.measureText(r).width)) + fz * 1.8), bh = rows.length * lh + fz * 0.9, by = y0 - lh / 2 - fz * 0.45;
     g.fillStyle = '#000000a0'; g.fillRect(0, by - fz * 0.9, W, bh + fz * 1.8); g.fillStyle = '#0b0d12e6'; g.fillRect(W / 2 - bw / 2, by, bw, bh); g.fillStyle = st.bar; g.fillRect(W / 2 - bw / 2, by, 3, bh);
     if (who) { g.font = `600 ${Math.max(10, Math.round(fz * 0.42))}px ${MONO}`; g.fillStyle = st.lab; g.textAlign = 'left'; g.fillText(who.toUpperCase(), W / 2 - bw / 2 + 8, by - fz * 0.45); g.font = FONT; }
@@ -294,7 +296,7 @@
     lastSay = { cy: H / 2, H, who, fz }; g.restore(); }
   const sayFz = (W, P) => P ? 21 : Math.round(clamp(W / 42, 22, 32));
   const rr = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
-  const SANS = 'system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+  const SANS = IF.ui || 'system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
   const hhmm = () => '18:4' + 1;
   // a window: a rounded frame, a title bar with three plain grey dots and a title; returns the content rect
   function win(g, x, y, w, h, title, a = 1, sc = 1) {
@@ -326,14 +328,14 @@
   function labchat(g, c, T, fs, port, RM) {
     g.save(); g.beginPath(); g.rect(c.x, c.y, c.w, c.h); g.clip(); g.fillStyle = '#0c0f13'; g.fillRect(c.x, c.y, c.w, c.h);
     const dm = T >= DMT, side = port ? 0 : Math.min(190, c.w * 0.26), mx = c.x + side, mw = c.w - side, lh = fs * 1.45;
-    if (!port) { g.fillStyle = '#0f141a'; g.fillRect(c.x, c.y, side, c.h); g.font = `700 ${fs}px ${SANS}`; g.fillStyle = '#d6dde4'; g.fillText('lab-07', c.x + 14, c.y + fs * 1.4);
-      g.font = `${Math.round(fs * 0.9)}px ${SANS}`; CHANNELS.forEach((ch, i) => { const y = c.y + fs * 3.2 + i * lh, on = !dm && i === 0; if (on) { g.fillStyle = '#1d2733'; g.fillRect(c.x + 6, y - lh / 2, side - 12, lh); } g.fillStyle = on ? '#e9f1f7' : '#8a96a3'; g.fillText('# ' + ch, c.x + 14, y); });
-      const dy = c.y + fs * 3.2 + (CHANNELS.length + 0.9) * lh; g.fillStyle = '#5d6b78'; g.font = `600 ${Math.round(fs * 0.75)}px ${SANS}`; g.fillText('DIRECT', c.x + 14, dy);
-      const ly = dy + lh; if (dm) { g.fillStyle = '#1d2733'; g.fillRect(c.x + 6, ly - lh / 2, side - 12, lh); } g.font = `${Math.round(fs * 0.9)}px ${SANS}`; g.fillStyle = dm ? '#e9f1f7' : '#cfe9dc'; g.fillText('● Lester', c.x + 14, ly);
-      if (!dm && T >= NOTE) { g.fillStyle = '#e0367a'; g.beginPath(); g.arc(c.x + side - 22, ly, fs * 0.45, 0, 7); g.fill(); g.fillStyle = '#fff'; g.font = `700 ${Math.round(fs * 0.65)}px ${SANS}`; g.textAlign = 'center'; g.fillText('1', c.x + side - 22, ly + 1); g.textAlign = 'left'; } }
+    if (!port) { g.fillStyle = '#0f141a'; g.fillRect(c.x, c.y, side, c.h); g.font = `700 ${fs}px ${MONO}`; g.fillStyle = '#d6dde4'; g.fillText('lab-07', c.x + 14, c.y + fs * 1.4);
+      g.font = `${Math.round(fs * 0.9)}px ${MONO}`; CHANNELS.forEach((ch, i) => { const y = c.y + fs * 3.2 + i * lh, on = !dm && i === 0; if (on) { g.fillStyle = '#1d2733'; g.fillRect(c.x + 6, y - lh / 2, side - 12, lh); } g.fillStyle = on ? '#e9f1f7' : '#8a96a3'; g.fillText('# ' + ch, c.x + 14, y); });
+      const dy = c.y + fs * 3.2 + (CHANNELS.length + 0.9) * lh; g.fillStyle = '#5d6b78'; g.font = `600 ${Math.round(fs * 0.75)}px ${MONO}`; g.fillText('DIRECT', c.x + 14, dy);
+      const ly = dy + lh; if (dm) { g.fillStyle = '#1d2733'; g.fillRect(c.x + 6, ly - lh / 2, side - 12, lh); } g.font = `${Math.round(fs * 0.9)}px ${MONO}`; g.fillStyle = dm ? '#e9f1f7' : '#cfe9dc'; g.fillText('● Lester', c.x + 14, ly);
+      if (!dm && T >= NOTE) { g.fillStyle = '#e0367a'; g.beginPath(); g.arc(c.x + side - 22, ly, fs * 0.45, 0, 7); g.fill(); g.fillStyle = '#fff'; g.font = `700 ${Math.round(fs * 0.65)}px ${MONO}`; g.textAlign = 'center'; g.fillText('1', c.x + side - 22, ly + 1); g.textAlign = 'left'; } }
     // the header: the channel or the DM
-    g.fillStyle = '#121820'; g.fillRect(mx, c.y, mw, fs * 2.4); g.font = `700 ${fs}px ${SANS}`; g.fillStyle = '#e9f1f7'; g.fillText(dm ? '● Lester' : '# training-runs', mx + 14, c.y + fs * 1.2);
-    const hw0 = g.measureText(dm ? '● Lester' : '# training-runs').width; g.font = `${Math.round(fs * 0.8)}px ${SANS}`; g.fillStyle = '#6f7d8a'; if (mw > hw0 + 220) g.fillText(dm ? 'direct message' : 'runs, checkpoints, the cluster', mx + 14 + hw0 + 12, c.y + fs * 1.25);
+    g.fillStyle = '#121820'; g.fillRect(mx, c.y, mw, fs * 2.4); g.font = `700 ${fs}px ${MONO}`; g.fillStyle = '#e9f1f7'; g.fillText(dm ? '● Lester' : '# training-runs', mx + 14, c.y + fs * 1.2);
+    const hw0 = g.measureText(dm ? '● Lester' : '# training-runs').width; g.font = `${Math.round(fs * 0.8)}px ${MONO}`; g.fillStyle = '#6f7d8a'; if (mw > hw0 + 220) g.fillText(dm ? 'direct message' : 'runs, checkpoints, the cluster', mx + 14 + hw0 + 12, c.y + fs * 1.25);
     // the lines: monospace, a time, a nick in its colour, the text wrapped under it
     const lines = dm ? DM.filter(l => T >= l.at) : BL.filter(l => T >= l.at), mono = `${Math.round(fs * 0.92)}px ${MONO}`, rowsAll = []; g.font = mono;
     for (const l of lines) { const nick = l.who === 'scientist' ? 'doc' : l.who === 'lester' ? 'Lester' : l.who, u = RM ? 1 : clamp((T - l.at) / 0.2);
@@ -346,10 +348,10 @@
       if (rw.head) { g.fillStyle = '#56616d'; g.fillText(hhmm(), mx + 14, y); g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(`<${rw.nick}>`, mx + 14 + g.measureText(hhmm() + '  ').width, y); }
       g.fillStyle = rw.who === 'scientist' ? '#f3e6d2' : '#dbe4ec'; g.fillText(rw.r, mx + 14 + rw.hw, y); g.globalAlpha = A0; });
     // "Lester is typing…" and the scientist's line being typed in the input
-    const iy = c.y + c.h - inputH + 6; g.strokeStyle = '#2a333e'; rr(g, mx + 10, iy, mw - 20, inputH - 14, 8); g.stroke(); g.font = `${Math.round(fs * 0.9)}px ${SANS}`;
+    const iy = c.y + c.h - inputH + 6; g.strokeStyle = '#2a333e'; rr(g, mx + 10, iy, mw - 20, inputH - 14, 8); g.stroke(); g.font = `${Math.round(fs * 0.9)}px ${MONO}`;
     const typing = DM.find(l => T >= l.typeAt && T < l.at); if (dm && typing && typing.who === 'scientist') { const n = RM ? typing.text.length : Math.floor((T - typing.typeAt) * 62), s = typing.text.slice(0, n); g.fillStyle = '#f3e6d2'; const vis2 = s.length > 70 ? '…' + s.slice(-70) : s; g.fillText(vis2, mx + 20, iy + (inputH - 14) / 2); if (Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = '#cfd6dd'; g.fillRect(mx + 22 + g.measureText(vis2).width, iy + 6, 2, inputH - 26); } }
     else { g.fillStyle = '#56616d'; g.fillText(dm ? 'message Lester' : 'message #training-runs', mx + 20, iy + (inputH - 14) / 2); }
-    if (dm && typing && typing.who === 'lester') { g.font = `italic ${Math.round(fs * 0.78)}px ${SANS}`; g.fillStyle = '#6fd6a8'; g.fillText('Lester is typing…', mx + 14, iy - fs * 0.6); }
+    if (dm && typing && typing.who === 'lester') { g.font = `italic ${Math.round(fs * 0.78)}px ${MONO}`; g.fillStyle = '#6fd6a8'; g.fillText('Lester is typing…', mx + 14, iy - fs * 0.6); }
     g.restore(); }
   // where the windows are (desktop: messages on the left, labchat roughly centred; phones: both full-width sheets)
   function arrLayout(W, H, port) { if (port) return { port, msg: { x: 6, y: 30, w: W - 12, h: H - 100 }, chat: { x: 6, y: 30, w: W - 12, h: H - 100 } };
