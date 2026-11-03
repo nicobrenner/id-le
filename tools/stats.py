@@ -111,6 +111,29 @@ def call(path, tok, raw=False, body=None):
     return body if raw else json.loads(body)
 
 
+# the storyline's funnel (helper/worker.js 'sf': "arm|step" → browsers), in the order a player meets them
+SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done"]
+SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
+            "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 1: words", "e1life": "Epoch 1: life", "e1done": "Epoch 1 done"}
+
+
+def sf_split(sf):
+    """{'story|title': n, 'story|skip:chat': n, 'none|offer_shown': n, ...} → {arm: {'steps': {...}, 'skips': {...}, 'offer': {...}}}"""
+    out = {}
+    for k, n in (sf or {}).items():
+        if not n or "|" not in k:
+            continue
+        arm, step = k.split("|", 1)
+        o = out.setdefault(arm, {"steps": {}, "skips": {}, "offer": {}})
+        if step.startswith("skip:"):
+            o["skips"][step[5:]] = o["skips"].get(step[5:], 0) + n
+        elif step.startswith("offer_"):
+            o["offer"][step[6:]] = o["offer"].get(step[6:], 0) + n
+        else:
+            o["steps"][step] = o["steps"].get(step, 0) + n
+    return out
+
+
 def gv_split(gv):
     """The genesis A/B block (helper/worker.js 'gv'): {'genesis|visit': n, 'genesis|dw:<1': n, 'starter|feat:card': n, ...} → per variant."""
     out = {}
@@ -309,9 +332,20 @@ def main():
         if v:
             items = [(x, v.get(x, 0)) for x in DWELL] if k == "dw" else sorted(v.items(), key=lambda kv: -kv[1])
             print(f"\n{title}: " + ", ".join(f"{x} {n}" for x, n in items))
+    sfs = sf_split(tot.get("sf"))
+    if sfs:
+        print("\nstoryline funnel (browsers reaching each moment, by arm; % of the arm's first moment):")
+        for arm, o in sorted(sfs.items()):
+            st = o["steps"]; first = next((st[k] for k in SF_STEPS if st.get(k)), 0)
+            line = " → ".join(f"{SF_NAMES[k]} {st[k]}" + (f" ({100 * st[k] / first:.0f}%)" if first else "") for k in SF_STEPS if st.get(k))
+            print(f"  {arm:<8} {line or '-'}")
+            if o["skips"]:
+                print(f"           skipped at: " + ", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in sorted(o["skips"].items(), key=lambda kv: -kv[1])))
+            if o["offer"]:
+                print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
     gvs = gv_split(tot.get("gv"))
     if gvs:
-        print("\ngenesis A/B (idle-genesis.js, only while the switch is on):")
+        print("\nA/B arms (idle-genesis.js, only while the switch is on; time on screen = still there after 1 / 5 min):")
         for v, o in sorted(gvs.items()):
             dw = ", ".join(f"{x} {o['dw'].get(x, 0)}" for x in DWELL if o["dw"].get(x, 0) > 0) or "-"
             ft = ", ".join(f"{k} {n}" for k, n in sorted(o["feat"].items(), key=lambda kv: -kv[1])[:8]) or "-"
@@ -419,8 +453,14 @@ def dashboard(days, since, traffic, note):
                        f'<span class="val">{n}{pct}</span></div>')
         return "".join(out)
 
+    _sf = sf_split(tot.get("sf"))
+    sf_html = ("<section><h2>Storyline funnel</h2><p class=\"muted\">Browsers reaching each moment (once per browser), by arm.</p>" + "".join(
+        f'<p class="muted">{e(arm)}</p>' + bars([(SF_NAMES[k], o["steps"].get(k, 0)) for k in SF_STEPS], total=next((o["steps"][k] for k in SF_STEPS if o["steps"].get(k)), None))
+        + (f'<p class="muted">skipped at: {e(", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in o["skips"].items()))}</p>' if o["skips"] else "")
+        + (f'<p class="muted">storyline offer: shown {o["offer"].get("shown", 0)}, accepted {o["offer"].get("accepted", 0)}</p>' if o["offer"] else "")
+        for arm, o in sorted(_sf.items())) + "</section>") if _sf else ""
     _gv = gv_split(tot.get("gv"))
-    gv_html = ("<section><h2>Genesis A/B: time on screen by variant</h2>" + "".join(
+    gv_html = ("<section><h2>A/B arms: time on screen by arm</h2>" + "".join(
         f'<p class="muted">{e(v)}: {o["visits"]} visits</p>' + bars([(x, o["dw"].get(x, 0)) for x in DWELL], total=sum(o["dw"].values()) or None)
         for v, o in sorted(_gv.items())) + "</section>") if _gv else ""
     # visits per day: new and returning stacked (two series: legend, hover titles, table view)
@@ -547,7 +587,7 @@ ul{{padding-left:18px;margin:0}}code{{font-size:12px;word-break:break-word}}
 <section class="wide"><h2>Visits per day</h2><div class="legend"><span><i class="sw" style="background:var(--s1)"></i>new</span><span><i class="sw" style="background:var(--s2)"></i>returning</span></div>{visits_svg}
 <details><summary>table</summary><table><thead><tr><th>day</th><th>visits</th><th>new</th><th>returning</th><th>phone</th><th>iOS</th></tr></thead><tbody>{vrows}</tbody></table></details></section>
 <section><h2>Guided start: who reached each moment (of {new_visits} new browsers)</h2>{bars(funnel, total=new_visits or None)}<p class="muted">finished {f5.get("finished", 0)} · skipped {f5.get("skipped", 0)}</p></section>
-{gv_html}<section><h2>Guided start: where page loads stopped</h2>{bars([(k, fl.get(k, 0)) for k in ["none"] + STEPS + ["finished", "skipped"]], total=sum(fl.values()) or None, empty=later)}</section>
+{sf_html}{gv_html}<section><h2>Guided start: where page loads stopped</h2>{bars([(k, fl.get(k, 0)) for k in ["none"] + STEPS + ["finished", "skipped"]], total=sum(fl.values()) or None, empty=later)}</section>
 <section><h2>Came from</h2>{bars(sorted(ref.items(), key=lambda kv: -kv[1])[:15], total=sum(ref.values()) or None, empty=later)}{("<h2 style='margin-top:12px'>Campaign tags</h2>" + bars(sorted(utm.items(), key=lambda kv: -kv[1])[:10])) if utm else ""}</section>
 <section><h2>Genesis: browsers that reached each step (average seconds since the step before)</h2>{bars(gen_rows, total=(gs.get("light") or max(gs.values(), default=0)) or None, empty=later)}<p class="muted">guide finished {gs.get("guided", 0)} · skipped {gs.get("skipped", 0)}</p></section>
 <section><h2>Data lab walkthrough: browsers that reached each step</h2>{bars([(k, dl.get(k, 0)) for k in DLSTEPS], total=dl.get("what") or None, empty=later)}</section>

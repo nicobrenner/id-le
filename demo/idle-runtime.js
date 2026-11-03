@@ -13,6 +13,11 @@ window.IDLE_REPO = 'https://github.com/nicobrenner/id-le';
 // creatures talk (and you talk to them); the 🔮 Oracle is the panel where you bring your own AI, which can change this world (even its code);
 // inside it the 📟 Operator (the Tiny Operator, TO) is the default: the Tiny Oracle running the world's tools. The data lab is a third thing.
 window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Relay Chat', sub: 'the world and its creatures talking' }, op: { icon: '📟', short: 'Operator', sub: 'the Tiny Operator (TO): the chat that runs the world' }, oracle: { icon: '🔮', short: 'Oracle', sub: 'bring your own AI: it can change this world, even its code' } };
+// the storyline's funnel (Nico: "measuring/tracking the funnel"): each moment a browser reaches, once, with no time and no ID; which arm
+// of the story A/B it is in comes from idle.gv (idle-genesis.js). idle-stats.js sends the new ones (only when anonymous stats are on).
+window.__funnel = (() => { const K = 'idle.funnel'; let m = {}; try { m = JSON.parse(localStorage.getItem(K) || '{}') || {}; } catch (e) {}
+  return { mark: step => { if (!step || m[step]) return; m[step] = 1; try { localStorage.setItem(K, JSON.stringify(m)); } catch (e) {} try { dispatchEvent(new CustomEvent('idle:funnel', { detail: { step } })); } catch (e) {} },
+    reached: () => Object.keys(m), arm: () => { try { const v = localStorage.getItem('idle.gv'); return v === 'story' || v === 'current' ? v : null; } catch (e) { return null; } } }; })();
 (() => {
   // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) leaves its
   // record 'alive: false'. The next load starts safer: level 1 = the Oracle on one thread and light quality, level 2 = no Oracle.

@@ -12,6 +12,9 @@
 //   came from     the site name of the link that brought you (reddit.com, news.ycombinator.com…), never the full address;
 //                 "direct" when there was none; plus a campaign tag (utm_source) if the link had one
 //   time here     how long the page was on screen, as a bucket (<1, 1-5, 5-20, 20+ minutes); counted once per page load
+//   storyline     (11-02) which arm of the storyline test this browser is in (story or the current start; only while the test runs), and
+//                 the moments of the storyline it reached, once each: title, messages, chat, boot, run, crash, landing, Operator, lights on,
+//                 Epoch 1's words, life and end, where the intro or the landing was skipped, and the storyline offer shown / accepted
 //   stopped at    for a guided start still running: the last of its moments you reached when you left (or finished/skipped)
 //   lab walk      the data lab walkthrough's steps reached (what, travel, kinds, team, review, stats, where), finished or ended; once per browser
 //   engagement    when you leave: how many creatures the world has (a bucket: 0-12, 13-30, 31-60, 61-150, 151+), and as buckets
@@ -163,7 +166,9 @@
   const fpsBucket = () => { if (!fpsS.length) return null; const v = fpsS.slice().sort((a, b) => a - b)[fpsS.length >> 1]; return v < 20 ? '<20' : v < 40 ? '20-40' : v < 55 ? '40-55' : '55+'; };
 
   function payload(final) {
-    const p = { v: 1 }; let any = false; try { const gv = localStorage.getItem('idle.gv'); if (gv === 'genesis' || gv === 'starter') p.gv = gv; } catch (e) {}   // the genesis A/B (idle-genesis.js), only while it runs
+    const p = { v: 1 }; let any = false; try { const gv = localStorage.getItem('idle.gv'); if (gv === 'story' || gv === 'current') p.gv = gv; } catch (e) {}   // the storyline A/B arm (idle-genesis.js), only while it runs
+    // the storyline's funnel (idle-runtime.js __funnel): each moment once per browser (title … lights, Epoch 1, skips, the offer)
+    try { const f = window.__funnel ? window.__funnel.reached().filter(k => !ahaSent['sf:' + k]).slice(0, 30) : []; if (f.length) { p.sf = f; any = true; } } catch (e) {}
     if (!sent.visit) { p.visit = 1; p.v2 = 1; p.back = returning ? 1 : 0; p.dev = phone() ? 'phone' : 'desktop'; p.ios = window.__isIOS ? 1 : 0; p.safe = [0, 1, 2].includes(window.__safeLevel) ? window.__safeLevel : 0; p.ref = refHost(); const u = utm(); if (u) p.utm = u; any = true; }
     const fb = fpsBucket(); if (fb && !sent.fps) { p.fps = fb; any = true; }
     try { const w = window.__dlwalk && window.__dlwalk.state && window.__dlwalk.state(); if (w) { const ks = Object.keys(w.done || {}).concat(w.finished ? ['finished'] : w.skipped ? ['ended'] : []).filter(k => !ahaSent['dl:' + k]); if (ks.length) { p.dl = ks; any = true; } } } catch (e) {}
@@ -194,7 +199,7 @@
     if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = body.length < 60000; } catch (e) {}
     if (!ok) return;
     if (p.visit) sent.visit = true; if (p.fps) sent.fps = true; if (p.feat) sent.feats.push(...p.feat); if (p.err) sent.errs.push(...p.err);
-    if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dl) p.dl.forEach(k => { ahaSent['dl:' + k] = 1; }); if (p.gs) Object.keys(p.gs).forEach(k => { ahaSent['gs:' + k] = 1; }); if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; if (p.eg) Object.assign(sent.eng, p.eg); if (p.sec) secSent += p.sec;
+    if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dl) p.dl.forEach(k => { ahaSent['dl:' + k] = 1; }); if (p.gs) Object.keys(p.gs).forEach(k => { ahaSent['gs:' + k] = 1; }); if (p.sf) p.sf.forEach(k => { ahaSent['sf:' + k] = 1; }); if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; if (p.eg) Object.assign(sent.eng, p.eg); if (p.sec) secSent += p.sec;
     if (p.path) E2sent.path = p.path; if (p.x) { for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'op']) for (const [a, n] of Object.entries(p.x[k] || {})) { E2[k][a] -= n; if (E2[k][a] <= 0) delete E2[k][a]; } (p.x.did || []).forEach(f => E2sent.did.add(f)); }
     try { localStorage.setItem(SENT, JSON.stringify(ahaSent)); } catch (e) {}
   }

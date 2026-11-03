@@ -22,7 +22,7 @@
 (() => {
   const Q = new URLSearchParams(location.search), $ = s => document.querySelector(s), now = () => Date.now();
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const AB = 'off';   // the A/B switch: 'on' gives first-time visitors genesis or the starter world 50/50 (stored in this browser only, as idle.gv)
+  const AB = 'off';   // the A/B switch (stays OFF until Nico's go): 'on' gives NEW browsers the storyline or the current start 50/50 (stored in this browser only, as idle.gv: story | current)
   const KEY = 'idle.genesis', GV = 'idle.gv';
   const H = () => window.__genHooks, W = () => window.__idleWorld;
   const coarse = () => matchMedia('(pointer: coarse)').matches;
@@ -123,7 +123,7 @@ html.gen-box #lab :is(#ai-thread,#lab-thread,#ai-bar,#ai-set,#ai-smart-btn,#ai-s
 @media (max-width:600px){#genChoose button{width:100%}#genChoose .opts{flex-direction:column;width:100%}}
 #genDay{position:fixed;left:14px;top:14px;z-index:40;min-width:200px;max-width:min(300px,70vw);padding:10px 12px;border-radius:12px;background:#0a0b16e6;border:1px solid #6b7cff66;color:#cfd6ff;font:12px ui-monospace,Menlo,monospace;transition:opacity .8s}
 #genDay .dt{font-weight:700;letter-spacing:.08em;font-size:11px;opacity:.8;margin-bottom:6px}#genDay li{list-style:none;margin:3px 0}#genDay ul{margin:0;padding:0}#genDay li.ok{color:#8fe3b4}#genDay li.ok:before{content:'✓ '}#genDay li:not(.ok):before{content:'○ '}
-#genDay .dn{margin-top:6px;opacity:.6;font-size:10.5px}#genDay.soon li:before{content:'· '}#genDay .x{position:absolute;right:8px;top:6px;cursor:pointer;opacity:.6;background:none;border:0;color:inherit}
+#genDay .dn{margin-top:6px;opacity:.6;font-size:10.5px}#genDay .wip{margin-top:4px;font-size:11px;line-height:1.45;color:#cfd6ff}#genDay .wip a{color:#9fd8ff}#genDay.soon li:before{content:'· '}#genDay .x{position:absolute;right:8px;top:6px;cursor:pointer;opacity:.6;background:none;border:0;color:inherit}
 @media (max-width:600px){#genDay{top:auto;bottom:calc(72dvh + 8px);left:8px}}
 #genFront{position:fixed;inset:0;z-index:2147482500;display:flex;align-items:center;justify-content:center;background:#02030aa8;padding:16px}
 #genFront .np{max-width:520px;background:#f4ecd8;color:#1c1712;border-radius:6px;padding:20px 24px;box-shadow:0 30px 90px #000c;font:15px/1.5 Georgia,serif;transform:rotate(-1.2deg)}
@@ -139,10 +139,16 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function night(on) { window.__genDark = !!on; const a = $('#arena'); if (a) a.classList.toggle('gen-night', !!on); }
 
   // ---------- who gets a genesis
-  function variant() { if (Q.has('genesis')) return 'genesis'; if (AB !== 'on') return null; let v = null; try { v = localStorage.getItem(GV); } catch (e) {}
-    if (v !== 'genesis' && v !== 'starter') { v = Math.random() < 0.5 ? 'genesis' : 'starter'; try { localStorage.setItem(GV, v); } catch (e) {} } return v; }
+  // the arm: 'story' or 'current' (the starter world and its guided first five minutes). Only NEW browsers are split, only while AB is on;
+  // ?arm=story|current forces one (tests, links). A browser that already has a world keeps it, whatever its arm.
+  function variant(fresh0) { const f = Q.get('arm'); if (f === 'story' || f === 'current') { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
+    let v = null; try { v = localStorage.getItem(GV); } catch (e) {} if (v === 'story' || v === 'current') return v; if (AB !== 'on' || !fresh0) return null;
+    v = Math.random() < 0.5 ? 'story' : 'current'; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
   // called by the arena for a browser with no world of its own (fresh0), before the guided start would load the starter world
-  function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; return !!fresh0 && variant() === 'genesis'; }
+  function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; return !!fresh0 && variant(fresh0) === 'story'; }
+  // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
+  const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const mark = k => { try { window.__funnel && window.__funnel.mark(k); } catch (e) {} };
 
   // ---------- the void: no words, no creatures, a dark floor with a faint grid, and nothing else on screen but the console
   function toVoid() { const h = H(); if (!h) return; cls('gen-void', 1); cls('gen-calm', 1); cls('gen-lit', 0); night(true); window.__genesisVoid = true;
@@ -247,7 +253,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function hush() { cls('gen-hush', 1); setTimeout(() => cls('gen-hush', 0), 60000); }
 
   // ---------- the steps
-  function done(step, line, at, extra) { S = S || { on: true, steps: {}, t0: now(), n: 1 }; if (S.steps[step]) return; S.steps[step] = now(); save();
+  function done(step, line, at, extra) { S = S || { on: true, steps: {}, t0: now(), n: 1 }; if (S.steps[step]) return; S.steps[step] = now(); save(); if (storyMode() && (step === 'words' || step === 'creatures')) mark(step === 'words' ? 'e1words' : 'e1life');
     const h = H(), text = { words: 'the first words fell into the void', creatures: 'the first creatures crawled out of a word', light: 'the first light', weather: 'the first weather', hut: 'the first building blocks turned up', music: 'the first music' }[step];
     try { h && h.log('genesis', { step, text, at, ...(extra || {}) }); } catch (e) {}
     try { window.__almanac && window.__almanac.ev('genesis', text, {}); } catch (e) {}
@@ -296,7 +302,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function _light() { { const h = H(); if (!h) return null; if (did('light')) return 'already';
       cls('gen-lit', 1); const a = $('#arena'); if (a && !matchMedia('(prefers-reduced-motion: reduce)').matches) { const d = document.createElement('div'); d.id = 'genDawn'; a.appendChild(d); setTimeout(() => d.remove(), 3400); }
       const w = h.world(); h.applyWorld({ ...w, day: true, ...(S && S.feat && !(w.features || []).length ? { features: S.feat } : {}), id: 'world-' + now().toString(36).slice(-4) }, 'studio');
-      if (storyMode()) { cosmos.light(); wakeShown = []; nightEnd(); } done('light', storyMode() ? LIGHTS_ON : null); if (storyMode()) setTimeout(undock, 2600); return true; } }
+      if (storyMode()) { cosmos.light(); wakeShown = []; nightEnd(); mark('lights'); } done('light', storyMode() ? LIGHTS_ON : null); if (storyMode()) setTimeout(undock, 2600); return true; } }
   async function _weather(kind) { { if (did('weather')) return 'already'; const ks = (W() && W().weathers()) || [];
       const k = ks.includes(kind) ? kind : pick(ks.filter(x => x !== 'clear')) || 'rain'; const r = W() && W().setWeather(k); if (!r) return null; done('weather', null, null, { kind: k }); return r; } }
   async function _hut() { { if (did('hut')) return 'already'; const h = H(); if (!h) return null;
@@ -319,7 +325,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function boot(force) { if (!H()) return false;
     // which start: ?story → the storyline; ?start=free|story|ready; otherwise the chooser (script section E)
     // ('guided': the earlier guided genesis, light → words → life → weather or music, kept for links and tests)
-    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : null;
+    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !(S && S.n) ? 'story' : null;   // a new browser in the story arm goes straight in (later new universes get the chooser)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { dropFlag(); return readyWorld(); }
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag();
@@ -397,7 +403,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function landing() { if (Q.has('nolanding')) { land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
     // the night starts when the game's loading cover has gone (skipping the intro right away can land before it)
     for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
-    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; nightStart(RM);
+    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; nightStart(RM); mark('landing');
     const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
     document.body.appendChild(skipB);
     await new Promise(res => { let i = -1, timer = 0, downAt = 0, done = false;
@@ -405,7 +411,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
         land.line = { text, t0: st.t }; land.shown = i + 1; land.shake = i === DARK.length - 1; st.k = (i + 1) / DARK.length; wait(darkHold(text) + text.length / DCPS); };
       // the line's clock follows the night's (paused while held)
       const wait = d => { const end = st.t + d; const tick = () => { if (done) return; if (st.t >= end) next(); else timer = setTimeout(tick, 50); }; timer = setTimeout(tick, 50); };
-      const finish = why => { if (done) return; done = true; clearTimeout(timer); land.line = null; land.shake = false; land.why = why; land.after = (now() - land.t0) / 1000;
+      const finish = why => { if (done) return; done = true; if (why === 'skip') mark('skip:landing'); clearTimeout(timer); land.line = null; land.shake = false; land.why = why; land.after = (now() - land.t0) / 1000;
         removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); document.removeEventListener('pointerdown', onDown, true); document.removeEventListener('pointerup', onUp, true); skipB.remove(); res(); };
       const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish('skip'); } else if (e.key === ' ' && !e.repeat) { e.preventDefault(); land.paused = true; } };
       const onKeyUp = e => { if (e.key === ' ') land.paused = false; };
@@ -451,7 +457,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
 
   // ---------- the storyline's waking up: the Operator as a window in the middle (a lightbox), the Tiny Operator's lines typed one by one
   async function wake() { const lab = $('#lab'); let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
-    cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); opTitle(true); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
+    cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); opTitle(true); mark('operator'); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; let skip = false; const onTap = () => { skip = true; }; if (lab) lab.addEventListener('pointerdown', onTap);
     for (const line of WAKE) { if (RM) { wakeShown.push(line); renderConsole(); await new Promise(r => setTimeout(r, 900)); continue; }
       for (let i = 1; i <= line.length; i += 2) { if (skip) break; wakeTyping = line.slice(0, i); renderConsole(); await new Promise(r => setTimeout(r, 26)); }
@@ -471,9 +477,9 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     const ok = k => S.days && S.days[d.n] ? true : (d.n === 1 ? did(k) : false), soon = d.n > 1;
     el.classList.toggle('soon', soon);
     el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">EPOCH ${d.n} · ${esc(d.title.toUpperCase())}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
-      `<div class="dn">${soon ? 'the next epochs are coming soon' : esc('teaches: ' + d.teaches)}</div>`;
+      (soon ? `<div class="wip">The next epochs are coming. Id|le is a work in progress, and it's open source: <a href="${esc(window.IDLE_REPO || 'https://github.com/nicobrenner/id-le')}" target="_blank" rel="noopener">see how it's made</a>. Until then the universe is yours: keep playing.</div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
     el.querySelector('.x').onclick = () => el.remove(); }
-  function dayDone(n) { const d = DAYS[n - 1]; if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; save();
+  function dayDone(n) { const d = DAYS[n - 1]; if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; save(); if (n === 1) mark('e1done');
     try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'epoch ' + n + ' done', {}); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_day', extra: { day: n } } })); } catch (e) {}
     const el = document.createElement('div'); el.id = 'genFront';
@@ -537,6 +543,22 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // ?genesis on a browser that already has a world: a new universe (the world is kept as a snapshot first, its creatures rest)
   if (Q.has('genesis') || Q.has('story')) { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh && window.__restored && !window.__genesisVoid) { clearInterval(iv); newUniverse(); } else if (window.__genesisVoid || ++k > 120) clearInterval(iv); }, 500); }
 
-  window.__genesis = { landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant, boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  // ---------- the storyline offer: for browsers that didn't start in it (the other arm, returning players); shown once, remembered
+  const OFFER = 'idle.storyOffer';
+  function offer(now_) { if (!storyLive() && !Q.has('offer')) return false; if (Q.has('test') && !Q.has('offer')) return false;
+    let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false;
+    if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || $('#storyOffer')) return false;
+    const el = document.createElement('div'); el.id = 'storyOffer'; el.setAttribute('role', 'dialog');
+    el.innerHTML = `<button class="x" title="no thanks">×</button><b>✦ new: storyline mode</b><div>A training run that won't stop, a crash, and 10 epochs to raise a universe with the Tiny Operator. Your world is kept as a snapshot first.</div><button class="go">start the storyline</button>`;
+    document.body.appendChild(el); try { localStorage.setItem(OFFER, 'shown'); } catch (e) {} mark('offer_shown');
+    const close = v => { try { localStorage.setItem(OFFER, v); } catch (e) {} el.classList.add('out'); setTimeout(() => el.remove(), 400); };
+    el.querySelector('.x').onclick = () => close('dismissed'); el.querySelector('.go').onclick = () => { close('accepted'); mark('offer_accepted'); newUniverse('story'); };
+    return true; }
+  { const css2 = document.createElement('style'); css2.textContent = `#storyOffer{position:fixed;left:14px;bottom:14px;z-index:60;max-width:min(330px,calc(100vw - 28px));padding:12px 14px 12px;border-radius:12px;background:#0a0b16f0;border:1px solid #6b7cff88;color:#cfd6ff;font:12.5px/1.45 system-ui;box-shadow:0 10px 40px #0008;transition:opacity .4s}
+#storyOffer b{display:block;margin-bottom:4px;color:#e9ecff}#storyOffer .go{margin-top:8px;font:600 12px system-ui;padding:5px 12px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff33;color:#e9ecff;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
+@media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px}}`; document.head.appendChild(css2); }
+  // offered once the world is up and the player has looked around a little (20 s; ?offer: 1 s)
+  { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
+  window.__genesis = { offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
