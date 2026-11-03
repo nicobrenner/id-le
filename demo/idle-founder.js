@@ -12,6 +12,7 @@
   const FOUNDER_BEFORE = '2026-11-10T08:00:00Z';    // PLACEHOLDER: the storyline's launch on id-le.com; worlds older than this are Founders
   const FOUNDING_UNTIL = '2026-11-24T08:00:00Z';    // PLACEHOLDER: gift links work until then (about two weeks after the launch)
   const WORLD_ON_PROD = false;                      // the early-world gift on id-le.com: switch on at the launch (links work everywhere)
+  const LINKS_ON_PROD = false;                      // gift links (general and personal) on id-le.com: off until the launch (the letter is a draft)
   const LETTER_DRAFT = true;                        // the letter below is a draft: Nico rewrites it
   const LETTER = ["Hi! I'm Nico, I make Id|le.",
     "You were here before the story began, back when it was a few creatures eating words, and that means a lot. Thank you!! 🙏",
@@ -47,7 +48,8 @@
   // a personal gift link (?gift=<id>, made with tools/gift.py) carries a letter Nico wrote for one person; ?gift=founder is the general one
   const PID = /^[a-z2-7]{20,40}$/.test(Q.get('gift') || '') ? Q.get('gift') : null;
   function eligible() { const fs = hasWorld() ? firstSeen() : null;
-    return { world: !!(fs && fs < BEFORE && (testSite || WORLD_ON_PROD || Q.has('founder'))), link: !!PID || (Q.get('gift') === 'founder' && now() < UNTIL), personal: PID, expired: Q.get('gift') === 'founder' && now() >= UNTIL, firstSeen: fs }; }
+    const links = testSite || LINKS_ON_PROD;
+    return { world: !!(fs && fs < BEFORE && (testSite || WORLD_ON_PROD)), link: links && (!!PID || (Q.get('gift') === 'founder' && now() < UNTIL)), personal: links ? PID : null, expired: links && Q.get('gift') === 'founder' && now() >= UNTIL, firstSeen: fs }; }
   const available = () => { if (claimed()) return false; const e = eligible(); return e.world || e.link || !!state().via; };
   const busy = () => !window.__restoredOrFresh || document.documentElement.classList.contains('booting') || !!document.querySelector('#idleIntro') || !!window.__genesisVoid || !!window.__traveling || !hooks();
 

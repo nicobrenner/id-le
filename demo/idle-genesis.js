@@ -347,9 +347,10 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     if (mode === 'story') { blackCover(true); cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); return true; }
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
   // the chooser: the storyline, the void with no guide, or a world that is already alive (the starter world)
+  // on id-le.com the storyline isn't offered yet (it's still being written): the chooser shows the other two
   function chooser() { return new Promise(res => { const el = document.createElement('div'); el.id = 'genChoose'; el.setAttribute('role', 'dialog');
     el.innerHTML = `<h2>a new consciousness</h2><div class="sub">how do you want to begin?</div><div class="opts">
-<button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and 10 epochs to raise a consciousness into autonomy with the Tiny Operator<br><small>recommended</small></button>
+${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and 10 epochs to raise a consciousness into autonomy with the Tiny Operator<br><small>recommended</small></button>` : ''}
 <button data-m="free"><b>✦ From scratch</b>the void and the Operator's console, every step available, no guide</button>
 <button data-m="ready"><b>🌍 A ready world</b>creatures already living, the guided first five minutes</button></div>`;
     document.body.appendChild(el); const end = m => { el.classList.add('out'); setTimeout(() => el.remove(), 600); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_choose', extra: { mode: m } } })); } catch (e) {} res(m); };
