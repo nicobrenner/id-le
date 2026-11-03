@@ -405,6 +405,10 @@ def build(out):
     r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_static.py"), "--out", out], capture_output=True, text=True)
     need(r.returncode == 0, r.stderr[-600:])
     need(os.path.exists(os.path.join(out, "index.html")) or os.path.exists(os.path.join(out, "arena.html")), "no page in the build")
+    # scripts the game loads itself carry their own fingerprint (Nov 3: a stale idle-logos.js froze the story's logo on black)
+    import hashlib
+    page = open(os.path.join(out, "arena.html"), encoding="utf-8").read(); m = re.search(r"window\.IDLE_V = (\{.*?\});", page)
+    need(m and json.loads(m.group(1)).get("idle-logos.js") == hashlib.sha256(open(os.path.join(out, "idle-logos.js"), "rb").read()).hexdigest()[:8], "the page should name idle-logos.js's fingerprint (window.IDLE_V)")
 
 
 SLOW = {}   # path prefix -> seconds the test server waits before answering (t_fresh_slow)
@@ -412,6 +416,9 @@ SLOW = {}   # path prefix -> seconds the test server waits before answering (t_f
 
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
+    def translate_path(self, path):   # /arena serves arena.html, as Cloudflare Pages does
+        p = super().translate_path(path)
+        return p + ".html" if not os.path.exists(p) and os.path.isfile(p + ".html") else p
     def do_GET(self):
         for pre, sec in list(SLOW.items()):
             if self.path.startswith(pre): time.sleep(sec)
@@ -1516,13 +1523,49 @@ def t_story(P):
     return f"v11: the dark's lines in order (no sound, is that a black…), silent lightning, Genesis = Epoch 0 (lights, words, life) → front page → Epoch 1 (soon); v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; {end['c']} creatures"
 
 
+def t_story_keys_logo(P):
+    """The logo keyframe, every way in (Nov 3, Nico: "https://staging.id-le.com/arena?logo=c3&fresh=#logo ... after pressing: black...
+    nothing no movement, no sound, no animation, no logo"): the pretty address with only a hash, ?at=, ?story#logo; each plays its arm's logo
+    (lit frames, the film's clock moving, the sound on), then lands. And a stale idle-logos.js (an older copy without the host API, as a
+    browser cache kept it) must not freeze the film: the old logo plays and it lands."""
+    LIT = """() => { const c = document.querySelector('#idleIntro canvas'); if (!c) return -1; const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 53) if (d[i] + d[i + 1] + d[i + 2] > 150) n++; return n; }"""
+    out = []
+    for url, arm in (("/arena?logo=c3&fresh=#logo", "c3"), ("/arena.html?at=logo&logo=crt", "crt"), ("/arena.html?story&logo=c3#logo", "c3"), ("/arena?fresh=&logo=crt#logo", "crt")):
+        pg = P.open(url); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+        wait_for(pg, f"() => window.__funnel.reached().includes('lg_shown:{arm}')", 30, P=P)
+        t0 = pg.evaluate("() => window.__epoch0.time()"); lit = []
+        for _ in range(8): pg.wait_for_timeout(450); lit.append(pg.evaluate(LIT))
+        r = pg.evaluate("() => ({ t: window.__epoch0.time(), snd: window.__epoch0.sounding(), ready: !!window.__epoch0.logoOf(window.__epoch0.last), arm: window.__epoch0.last.logo.arm })")
+        need(r["arm"] == arm and r["ready"] and r["t"] > t0 + 2 and max(lit) > 20 and r["snd"], f"{url}: the logo should play (lit {lit}, clock {t0:.1f} → {r['t']:.1f}, sound {r['snd']}): {r}")
+        wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark'", 25, P=P)
+        out.append(f"{url} ({arm}, lit ≤{max(lit)})"); pg.close()
+    # a stale module (the version before the host API, as a 4-hour browser cache can keep it): the old logo, and on to the landing
+    old = subprocess.run(["git", "show", "61a04f2:demo/idle-logos.js"], cwd=ROOT, capture_output=True, text=True).stdout
+    need("byId" in old and "drawAt" not in old, "the stale module for the test")
+    P.ctx.route("**/idle-logos.js*", lambda route: route.fulfill(status=200, content_type="application/javascript", body=old))
+    try:
+        pg = P.open("/arena?logo=c3&fresh=#logo"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+        wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.last && window.__epoch0.time() > 0.2)", 30, P=P)
+        t0 = pg.evaluate("() => window.__epoch0.time()"); lit = []
+        for _ in range(8): pg.wait_for_timeout(450); lit.append(pg.evaluate(LIT))
+        r = pg.evaluate("() => ({ t: window.__epoch0.time(), logo: !!window.__epoch0.logoOf(window.__epoch0.last), stale: !!(window.IdleLogos && !window.IdleLogos.byId('c3-typed-dust').drawAt) })")
+        need(r["stale"] and not r["logo"] and r["t"] > t0 + 2 and max(lit) > 20, f"a stale idle-logos.js: the old logo should play, not black: lit {lit}, {r}")
+        wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark'", 25, P=P); pg.close()
+    finally:
+        P.ctx.unroute("**/idle-logos.js*")
+    P.clean()
+    return " · ".join(out) + "; a stale idle-logos.js → the old logo, then the landing"
+
+
 def t_story_keys(P):
     """Keyframes (idle-keys.js, staging/local; Nico: "markers or key frames to go to either with # or & parameters in the url"): every key
     loads to its moment in time (the intro ones at their second of the film, the later ones with the state they need built), after one
     key press (the sound's gate; the title card is its own); the player's real localStorage is never read or written; #keys shows the strip."""
     pg = P.open("/privacy.html"); pg.evaluate("() => { localStorage.clear(); localStorage.setItem('arena.genomes', 'REAL'); localStorage.setItem('idle.genesis', 'REAL'); }"); pg.close()
-    def go(k, hashed):
-        pg = P.open(f"/arena.html?story#{k}" if hashed else f"/arena.html?at={k}")
+    # three ways in (Nov 3: Nico's "/arena?logo=c3&fresh=#logo" stayed black): ?story#key, ?at=key, and the bare pretty address with only a hash
+    FORMS = {"hash": "/arena.html?story#{k}", "at": "/arena.html?at={k}", "bare": "/arena?fresh=#{k}"}
+    def go(k, form):
+        pg = P.open(FORMS[form].format(k=k))
         if k != "title":
             wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P)
             need(pg.evaluate("() => /story/.test(location.search) && /fresh/.test(location.search) && location.hash === '#' + window.__storyKey.key"), f"{k}: the address should carry ?story&fresh#{k}")
@@ -1531,7 +1574,7 @@ def t_story_keys(P):
     intro = {"computer": "messages", "labchat": "chat", "boot": "boot", "run": "run", "crash": "run", "logo": "crash"}
     got = {}
     for i, k in enumerate(["title", "computer", "labchat", "boot", "run", "crash", "logo", "dark", "operator", "lights", "words", "life", "epoch0done", "epoch1", "end"]):
-        t0 = time.time(); pg = go(k, i % 2 == 0)
+        t0 = time.time(); pg = go(k, ("hash", "at", "bare")[i % 3])
         if k == "title":
             wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.waiting())", 40, P=P)
         elif k in intro:
@@ -1729,6 +1772,21 @@ def t_logo_ab(P):
         need(abs(a["total"] - (a["split"] + a["dur"] + 0.4)) < 0.01, f"{arm}: the story's length follows the logo: {a}")
         need(a["lit"] >= a["n"] * 0.6 and a["red"] > 0, f"{arm}: the logo is drawn in the logo window (lit {a['lit']}/{a['n']} frames, red {a['red']})")
         need(len(a["inLogo"]) == 1 and abs(a["inLogo"][0][0] - a["split"]) < 0.01 and abs(a["inLogo"][0][1] - a["dur"]) < 0.05 and a["osc"] == 0, f"{arm}: only the logo's own sound in its window (no thunder, purr or cut): {a['inLogo']}, oscillators {a['osc']}")
+    # the scope (Nov 3, Nico: "the sideways distortion on the | looked almost like a block... peaking continuously"): over the brrr, the trace's
+    # width in the game's own frame (E.frame at Retina scale, the arm's logo) follows the logo lab's card (560×230 at its own size), r > 0.9,
+    # and sits at its widest in at most 30% of the frames
+    sc = pg.evaluate("""async () => { const E = window.__epoch0, CS = E.storyClock, L = await E.prepLogo('c3'), M = window.IdleLogos.byId('c3-typed-dust'); await document.fonts.load("100px 'Idle F1'");
+      const ct = E.makeContent({ story: true, seed: 3 }); ct.logo = { arm: 'c3', id: 'c3-typed-dust', L };
+      const width = (g, cvw, cvh, cx, cy, B, k) => { const x0 = Math.round((cx - B * .45) * k), y0 = Math.round((cy - B * .75) * k), w = Math.round(B * .9 * k), h = Math.round(B * 1.2 * k), d = g.getImageData(x0, y0, w, h).data; let mn = 1e9, mx = -1;
+        for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, a = Math.max(d[i], d[i + 1], d[i + 2]), b = Math.min(d[i], d[i + 1], d[i + 2]); if (a - b > 90 && a > 120) { if (x < mn) mn = x; if (x > mx) mx = x; } } return mx > mn ? (mx - mn) / k / B : 0; };
+      const gc = document.createElement('canvas'); gc.width = 2560; gc.height = 1440; const gg = gc.getContext('2d'), pc = document.createElement('canvas'); pc.width = 560; pc.height = 230; const pg2 = pc.getContext('2d');
+      for (let T = 0; T < CS.split; T += 3) E.frame(ct, T, gc, { scale: 2 });
+      const game = [], prev = [], B = Math.max(72, Math.min(150, 1280 / 9));
+      for (let t = 3.6; t < 5.0; t += 0.02) { E.frame(ct, CS.split + t, gc, { scale: 2 }); game.push(width(gg, 1280, 720, 640, 360, B, 2));
+        pg2.setTransform(1, 0, 0, 1, 0, 0); pg2.fillStyle = '#000'; pg2.fillRect(0, 0, 560, 230); M.drawAt(pg2, 560, 230, t, {}); prev.push(width(pg2, 560, 230, 280, 115, 112, 1)); }
+      const mean = a => a.reduce((x, y) => x + y, 0) / a.length, ma = mean(game), mb = mean(prev); let n = 0, da = 0, db = 0; for (let i = 0; i < game.length; i++) { n += (game[i] - ma) * (prev[i] - mb); da += (game[i] - ma) ** 2; db += (prev[i] - mb) ** 2; }
+      const top = Math.max(...game), atTop = game.filter(x => x >= 0.95 * top).length / game.length; return { r: n / Math.sqrt(da * db), atTop, top, mg: ma, mp: mb, n: game.length }; }""")
+    need(sc["r"] > 0.9 and sc["atTop"] <= 0.3, f"the scope in the game should follow the logo lab's card (r > 0.9) and not sit at its widest (≤ 30% of frames): {sc}")
     pg.close()
     # an unforced browser: one arm, kept across reloads
     pg = P.open("/arena.html?test&intro=0"); booted(pg)
@@ -1745,7 +1803,7 @@ def t_logo_ab(P):
     land = pg.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), funnel: window.__funnel.reached() })")
     need(not land["intro"] and "landing" in land["funnel"], f"after the logo, the landing: {land}")
     P.clean()
-    return " · ".join(f"{a}: {r[a]['dur']:.1f} s logo, story {r[a]['total']:.1f} s, drawn {r[a]['lit']}/{r[a]['n']} frames, one sound at {r[a]['split']:.1f} s" for a in ("c3", "crt")) + f"; arm kept ({a2}); ?logo=crt live → lg_shown:crt"
+    return " · ".join(f"{a}: {r[a]['dur']:.1f} s logo, story {r[a]['total']:.1f} s, drawn {r[a]['lit']}/{r[a]['n']} frames, one sound at {r[a]['split']:.1f} s" for a in ("c3", "crt")) + f"; the scope vs the lab's card r={sc['r']:.3f}, widest in {sc['atTop'] * 100:.0f}% of {sc['n']} frames; arm kept ({a2}); ?logo=crt live → lg_shown:crt"
 
 
 def t_logo_solo(P):
@@ -2500,7 +2558,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2577,6 +2635,7 @@ def main():
                 run("story clock", t_story_clock)
                 run("logo solo", t_logo_solo)
                 run("logo ab", t_logo_ab)
+                run("story keys logo", t_story_keys_logo)
                 run("story ring", t_story_ring)
                 run("boot intro", t_boot_intro)
                 run("chooser", t_chooser)

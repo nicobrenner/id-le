@@ -69,13 +69,15 @@
     let a = null; try { a = localStorage.getItem('idle.logoArm'); } catch (e) {} if (LOGO_ARMS[a]) return a;
     a = Math.random() < 0.5 ? 'c3' : 'crt'; try { localStorage.setItem('idle.logoArm', a); } catch (e) {} return a; }
   let logosP = null;
-  const loadLogos = () => window.IdleLogos ? Promise.resolve(window.IdleLogos) : logosP || (logosP = new Promise((res, rej) => { const s = document.createElement('script'), v = (window.IDLE_CFG && window.IDLE_CFG.build) || '';
+  const loadLogos = () => window.IdleLogos ? Promise.resolve(window.IdleLogos) : logosP || (logosP = new Promise((res, rej) => { const s = document.createElement('script'), v = (window.IDLE_V && window.IDLE_V['idle-logos.js']) || (window.IDLE_CFG && window.IDLE_CFG.build) || '';   // the file's own fingerprint (build_static), so a new version is never served from cache
     s.src = 'idle-logos.js' + (v ? '?v=' + encodeURIComponent(v) : ''); s.onload = () => window.IdleLogos ? res(window.IdleLogos) : rej(new Error('no IdleLogos')); s.onerror = () => { logosP = null; rej(new Error('idle-logos.js did not load')); }; document.head.appendChild(s); }));
   // the arm's logo, loaded and its sound rendered (null on failure or after `wait` ms: the old logo plays)
   function prepLogo(arm, wait = 6000) { const id = LOGO_ARMS[arm]; if (!id) return Promise.resolve(null);
-    const p = loadLogos().then(M => { const L = M.byId(id); return L ? L.prepare().then(() => L) : null; }).catch(() => null);
+    const p = loadLogos().then(M => { const L = M.byId(id); return L && canHost(L) ? L.prepare().then(() => L) : null; }).catch(() => null);
     return Promise.race([p, new Promise(r => setTimeout(() => r(null), wait))]); }
-  const logoOf = ct => ct && ct.story && ct.logo && ct.logo.L && ct.logo.L.ready() ? ct.logo : null;   // the new logo plays in this film
+  // a module old enough not to have the host API (an older idle-logos.js from a cache) is never used: the old logo plays instead
+  const canHost = L => !!L && typeof L.drawAt === 'function' && typeof L.ready === 'function' && typeof L.buffer === 'function';
+  const logoOf = ct => ct && ct.story && ct.logo && !ct.logo.broken && canHost(ct.logo.L) && ct.logo.L.ready() ? ct.logo : null;   // the new logo plays in this film
   const LOGO_TAIL = 0.4;   // black after the logo's last frame, before the landing
   const phone = () => matchMedia('(max-width: 600px)').matches || matchMedia('(pointer: coarse)').matches;
   const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -328,11 +330,19 @@
     const r = rng((seed * 1000) | 0); g.save(); g.fillStyle = `rgba(200,215,255,${0.22 * f})`; g.fillRect(0, 0, W, H); g.strokeStyle = `rgba(235,242,255,${f})`; g.shadowColor = '#9fb4ff'; g.shadowBlur = 18 * f; g.lineWidth = 2;
     let x = W * (0.2 + 0.6 * r()), y = 0; g.beginPath(); g.moveTo(x, y); const pts = []; while (y < H * (0.55 + 0.3 * r())) { y += H * (0.04 + 0.05 * r()); x += (r() - 0.5) * W * 0.06; g.lineTo(x, y); pts.push([x, y]); } g.stroke();
     const [bx, by] = pts[(pts.length / 2) | 0] || [x, y]; g.lineWidth = 1; g.beginPath(); g.moveTo(bx, by); let cx = bx, cy = by; for (let i = 0; i < 4; i++) { cy += H * 0.04; cx += (r() - 0.3) * W * 0.05; g.lineTo(cx, cy); } g.stroke(); g.restore(); }
+  // the logo is drawn at one canvas pixel per CSS pixel, then scaled up to the screen, as the logo lab's page shows it (Nov 3, Nico: "the sideways
+  // distortion on the | looked almost like a block"): at full Retina density the trace's zigzag came out hard-edged and its glow (shadowBlur
+  // counts device pixels) half as wide, so the same trace read as a solid bar; at CSS density it is the soft scope of the previews
+  let lgBuf = null;
+  function drawLogo(g, W, H, t, lg, st) { const w = Math.max(1, Math.round(W)), h = Math.max(1, Math.round(H));
+    if (!lgBuf || lgBuf.width !== w || lgBuf.height !== h) { lgBuf = document.createElement('canvas'); lgBuf.width = w; lgBuf.height = h; }
+    const o = lgBuf.getContext('2d'); o.setTransform(1, 0, 0, 1, 0, 0); o.fillStyle = '#000'; o.fillRect(0, 0, w, h); lg.L.drawAt(o, w, h, t, { big: st.cr.big, font: "'Idle F1', monospace" });
+    g.save(); g.imageSmoothingEnabled = true; g.drawImage(lgBuf, 0, 0, W, H); g.restore(); }
   function frameStory(g, W, H, T, ct, st, P, RM) {
     if (T >= CS.flash) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
       const wf = RM ? 0 : 1 - clamp((T - CS.flash - 0.08) / 0.37); if (wf > 0) { g.fillStyle = `rgba(255,255,255,${wf})`; g.fillRect(0, 0, W, H); }
       for (const s0 of STRIKES) bolt(g, W, H, T - s0, s0, RM, 1);
-      const lg = logoOf(ct); if (lg) { if (T >= CS.split) lg.L.drawAt(g, W, H, T - CS.split, { big: st.cr.big, font: "'Idle F1', monospace" }); return; }   // the A/B's logo: its own lightning, sound and ending
+      const lg = logoOf(ct); if (lg) { if (T >= CS.split) drawLogo(g, W, H, T - CS.split, lg, st); return; }   // the A/B's logo: its own lightning, sound and ending
       const cutT = CS.split + 0.95; bolt(g, W, H, T - cutT + 0.05, 77, RM, 1);   // the one lightning: as the bar cuts Id|le
       if (T >= CS.split) drawSplit(g, W, H, T - (CS.split - C.split), P, RM, st); return; }
     const L = layout(W, H, P), ci = curveInfo(); g.save();
@@ -470,13 +480,13 @@
 #idleIntro .hint{position:absolute;bottom:20px;right:88px;font:12px var(--ui-font,system-ui);color:#7f8a95;pointer-events:none;user-select:none}#idleIntro.paused .hint{color:#7ee3f5}@media (max-width:420px){#idleIntro .hint{right:14px;bottom:50px}}
 #idleIntro .ib{position:absolute;bottom:14px;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
   function play(opts = {}) {
-    if (cur) return cur.promise; css(); const P = phone(), RM = reduce(), safe = (window.__safeLevel | 0) > 0, liveOK = !P && !safe && !Q.has('intro_bank'), boot = wantBoot(opts);
+    if (cur) return cur.promise; css(); if (opts.at && window.__audioPastShim) window.__audioPastShim(); /* a mid-film start schedules sounds in the past (idle-keys.js) */ const P = phone(), RM = reduce(), safe = (window.__safeLevel | 0) > 0, liveOK = !P && !safe && !Q.has('intro_bank'), boot = wantBoot(opts);
     const el = document.createElement('div'); el.id = 'idleIntro'; el.dataset.tone = 'epoch0'; el.dataset.boot = boot ? '1' : '0'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)');
     const cv = document.createElement('canvas'); el.appendChild(cv); const g = cv.getContext('2d');
     const skipB = document.createElement('button'); skipB.className = 'ib skip'; skipB.textContent = 'skip ›'; el.appendChild(skipB);
     const hint = document.createElement('span'); hint.className = 'hint'; hint.textContent = 'hold to read ·'; el.appendChild(hint);
     const sndB = document.createElement('button'); sndB.className = 'ib snd'; sndB.textContent = '🔊 sound'; el.appendChild(sndB); document.body.appendChild(el);
-    let ct = null, st = null, done = false, raf = 0, S = null, start = performance.now(), res; const promise = new Promise(r => res = r);
+    let frameErr = 0, lastTry = 0, ct = null, st = null, done = false, raf = 0, S = null, start = performance.now(), res; const promise = new Promise(r => res = r);
     // the storyline (v12, Nico: "there should only be the animation sound, nothing else"): the game's own sounds (its music, the world) are hushed
     // for the whole intro; the intro plays past the hush (storyOut). The genesis flow hushes first and keeps it until its music step; a replay restores it
     const hushOwn = (() => { if (!(opts.story || Q.has('story'))) return false; try { const A = window.__audio; if (!A || !A.hush || A.hushed()) return false; A.hush(true); return true; } catch (e) { return false; } })();
@@ -508,7 +518,7 @@
     el.addEventListener('pointerdown', e => { if (e.target === sndB || e.target === skipB) return; e.preventDefault(); if (waiting) { begin(); return; } pause(); });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
     skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
-    cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt, waiting: () => waiting, start: () => begin(), scene: () => ct ? sceneOf(elapsed()) : null };
+    cur = { promise, el, close: () => finish(true), time: () => elapsed(), sounding: () => !!S, paused: () => !!pausedAt, waiting: () => waiting, start: () => begin(), scene: () => ct ? sceneOf(elapsed()) : null };
     const wantStory = !!(opts.story || Q.has('story')), arm = wantStory ? logoArm() : null;
     Promise.all([loadBank(), loadLoss(), arm ? prepLogo(arm) : null]).then(([, , L]) => { ct = makeContent({ story: wantStory }); ct.boot = boot; if (arm) ct.logo = { arm, id: LOGO_ARMS[arm], L }; ct.arrive = boot && wantArrive(opts, ct.story); start = performance.now(); window.__epoch0.last = ct;
       if (ct.story && ct.arrive && window.__termBoot && window.__termBoot.title && opts.title !== false && !Q.has('notitle')) { waiting = true; titleT0 = performance.now(); el.dataset.title = '1'; hint.style.display = 'none'; }
@@ -520,7 +530,10 @@
         const T = elapsed(); { const sc = sceneOf(T); if (sc !== scene) { scene = sc; mark(sc); } }
         if (ct.logo && !ct.logo.shown && filmT(T) - B() >= CS.split) { ct.logo.shown = true; if (logoOf(ct)) mark('lg_shown:' + ct.logo.arm); }
         if (T >= total()) { frameAll(g, innerWidth, innerHeight, filmT(total() - 0.01), ct, st, P, RM); return finish(false); }
-        frameAll(g, innerWidth, innerHeight, filmT(T), ct, st, P, RM);
+        // one bad frame must never freeze the intro on black (Nov 3: a stale idle-logos.js threw on every frame): the logo steps aside, the film goes on
+        try { frameAll(g, innerWidth, innerHeight, filmT(T), ct, st, P, RM); } catch (e) { if (ct.logo && !ct.logo.broken) { ct.logo.broken = true; console.warn('intro: the logo failed, the old one plays', e); } else if (!frameErr) { frameErr = 1; console.warn('intro: a frame failed', e); } }
+        // the sound starts as soon as the audio is allowed (a keyframe's key press resumes it a moment after the film has started)
+        if (!S && !RM && !pausedAt && T - lastTry > 0.5) { lastTry = T; if (audioReady()) startSound(); }
         if (S && !RM) { const b = B(); try { if (b && soundT < b) preSound(S.ctx, S.out, ct, soundT, T, S.ctx.currentTime); liveSound(S, ct, soundT - b, T - b, S.ctx.currentTime); } catch (e) {} soundT = T; }
         raf = requestAnimationFrame(loop); }; loop(); });
     try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'start', tone: 'epoch0', boot, reduced: RM } })); } catch (e) {}
@@ -545,7 +558,7 @@
   // sizes for tests: the model's text, the subtitles, the pane titles (Nico: subtitles must not be smaller than the text on screen)
   function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [], sciY: H / 2,
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
-  window.__epoch0 = { play, logoArm, logoArms: LOGO_ARMS, prepLogo, logoOf, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
+  window.__epoch0 = { play, sounding: () => !!(cur && cur.sounding && cur.sounding()), logoArm, logoArms: LOGO_ARMS, prepLogo, logoOf, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, keyOffset, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();

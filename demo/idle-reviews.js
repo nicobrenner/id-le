@@ -44,7 +44,7 @@
   const PLUGINS = {
     logos: {
       load() { if (window.IdleLogos) return Promise.resolve(); return PLUGINS.logos._p || (PLUGINS.logos._p = new Promise((res, rej) => { const s = document.createElement('script');
-        const v = (window.IDLE_CFG && window.IDLE_CFG.build) || ''; s.src = 'idle-logos.js' + (v ? '?v=' + encodeURIComponent(v) : ''); s.onload = () => res(); s.onerror = () => { PLUGINS.logos._p = null; rej(new Error('the logos could not load')); }; document.head.appendChild(s); })); },
+        const v = (window.IDLE_V && window.IDLE_V['idle-logos.js']) || (window.IDLE_CFG && window.IDLE_CFG.build) || ''; s.src = 'idle-logos.js' + (v ? '?v=' + encodeURIComponent(v) : ''); s.onload = () => res(); s.onerror = () => { PLUGINS.logos._p = null; rej(new Error('the logos could not load')); }; document.head.appendChild(s); })); },
       get: id => window.IdleLogos && window.IdleLogos.list.find(x => x.id === id),
       ok(id) { return !!this.get(id); },
       label(id) { const L = this.get(id); return L ? L.name.replace(/\s*\(round \d\)$/, '') : id; },

@@ -4,9 +4,50 @@ key at the gate and records the page for --secs seconds (video only: the browser
     python3 tools/trailer/keyrec.py --at dark --secs 40                 # → ~/Desktop/idle-trailers/key-dark.mp4
     python3 tools/trailer/keyrec.py --at end --secs 15 --phone          # 390x844
     python3 tools/trailer/keyrec.py --at logo --secs 10 --logo crt      # the story's logo A/B: force an arm (c3 | crt)
+    python3 tools/trailer/keyrec.py --at logo --secs 12 --logo c3 --audio --sync   # with the page's own sound, and a sync check
     python3 tools/trailer/keyrec.py --list                              # the keyframes
+--audio: the page's master output (window.__audio.storyOut(), everything the game plays) is recorded in the page with MediaRecorder from
+the key press on; at that instant a small white square flashes in the top-left corner for ~0.12 s, which ffmpeg finds in the video to place
+the sound (±1 frame). --sync (logo keyframe): reports the crack's time in the sound against the frame where the pipe first shows.
 """
-import argparse, os, shutil, subprocess, sys, tempfile, time
+import argparse, base64, os, shutil, subprocess, sys, tempfile, time
+
+# --audio: tap the master output into a MediaRecorder; a corner marker flashes at its start (the video's clock for the sound)
+REC_START = """() => { const A = window.__audio, ctx = A.ctx(), d = ctx.createMediaStreamDestination(); A.storyOut().connect(d);
+  const mt = ['audio/webm;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported(t)), rec = new MediaRecorder(d.stream, mt ? { mimeType: mt } : {}), ch = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) ch.push(e.data); }; window.__keyrec = { rec, ch };
+  const m = document.createElement('div'); m.style.cssText = 'position:fixed;left:0;top:0;width:10px;height:10px;background:#fff;z-index:2147483647;pointer-events:none';
+  rec.start(); document.body.appendChild(m); setTimeout(() => m.remove(), 120); }"""
+REC_STOP = """() => new Promise(res => { const R = window.__keyrec; R.rec.onstop = () => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1]); fr.readAsDataURL(new Blob(R.ch, { type: R.rec.mimeType || 'audio/webm' })); }; R.rec.stop(); })"""
+
+
+def frame_means(video, crop):
+    """per frame: (time, mean luma) of a crop (w:h:x:y), via ffmpeg's signalstats"""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", video, "-vf", f"crop={crop},signalstats,metadata=print:key=lavfi.signalstats.YAVG", "-f", "null", "-"], capture_output=True, text=True)
+    out, t = [], None
+    for ln in r.stderr.splitlines():
+        if "pts_time:" in ln: t = float(ln.split("pts_time:")[1].split()[0])
+        elif "YAVG=" in ln and t is not None: out.append((t, float(ln.split("YAVG=")[1])))
+    return out
+
+
+def marker_time(video):
+    for t, y in frame_means(video, "8:8:1:1"):
+        if y > 150: return t
+    raise SystemExit("keyrec: the sound's marker was not found in the video")
+
+
+def sync_report(mp4):
+    """the logo: the crack (the loudest sudden onset in the sound) against the frame the pipe comes down on (the lightning's flash)"""
+    import wave, struct
+    wav = mp4 + ".wav"; subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mp4, "-ac", "1", "-ar", "8000", wav], check=True)
+    w = wave.open(wav); n = w.getnframes(); x = struct.unpack(f"<{n}h", w.readframes(n)); w.close(); os.remove(wav)
+    hop = 40; env = [max(abs(v) for v in x[i:i + hop]) for i in range(0, n - hop, hop)]   # 5 ms
+    jumps = [(env[i] - max(env[max(0, i - 10):i] or [0]), i) for i in range(1, len(env))]
+    crack = max(jumps)[1] * hop / 8000
+    # the picture: the | key comes down as the lightning, so the pipe's drop is the frame whose brightness jumps the most (the bolt's flash)
+    fm = frame_means(mp4, "iw:ih:0:0"); pipe = max(((fm[i][1] - fm[i - 1][1], fm[i][0]) for i in range(1, len(fm))), default=(0, None))[1]
+    return f"sync: the crack at {crack:.3f} s, the pipe's drop (the flash) at {pipe if pipe is None else round(pipe, 3)} s → {'?' if pipe is None else f'{(pipe - crack) * 1000:+.0f} ms'}"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LOCK = "/private/tmp/claude-501/idle-browser.lock"
@@ -16,7 +57,7 @@ KEYS = ["title", "computer", "labchat", "boot", "run", "crash", "logo", "dark", 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--at", choices=KEYS); ap.add_argument("--secs", type=float, default=30); ap.add_argument("--phone", action="store_true")
-    ap.add_argument("--out", default=""); ap.add_argument("--port", type=int, default=8839); ap.add_argument("--list", action="store_true"); ap.add_argument("--logo", choices=["c3", "crt"])
+    ap.add_argument("--out", default=""); ap.add_argument("--port", type=int, default=8839); ap.add_argument("--list", action="store_true"); ap.add_argument("--logo", choices=["c3", "crt"]); ap.add_argument("--audio", action="store_true"); ap.add_argument("--sync", action="store_true")
     a = ap.parse_args()
     if a.list or not a.at:
         print("keyframes:", " ".join(KEYS)); return
@@ -37,10 +78,20 @@ def main():
             pg = ctx.new_page(); pg.goto(f"http://localhost:{a.port}/arena.html?story&at={a.at}" + (f"&logo={a.logo}" if a.logo else ""))
             if a.at != "title":
                 pg.wait_for_selector("#keyGate", timeout=60000); pg.keyboard.press("k")
-            pg.wait_for_timeout(int(a.secs * 1000)); ctx.close(); b.close()
+            if a.audio: pg.evaluate(REC_START)
+            pg.wait_for_timeout(int(a.secs * 1000))
+            aud = pg.evaluate(REC_STOP) if a.audio else None
+            ctx.close(); b.close()
         webm = next(os.path.join(vd, f) for f in os.listdir(vd) if f.endswith(".webm"))
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        if out.endswith(".mp4") and shutil.which("ffmpeg"):
+        if aud:
+            awebm = os.path.join(vd, "sound.webm"); open(awebm, "wb").write(base64.b64decode(aud))
+            t0 = marker_time(webm); print(f"sound placed at {t0:.3f} s (the marker's first frame)")
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-itsoffset", f"{t0:.3f}", "-i", awebm, "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out if out.endswith(".mp4") else os.path.splitext(out)[0] + ".mp4"], check=True)
+            out = out if out.endswith(".mp4") else os.path.splitext(out)[0] + ".mp4"
+            if a.sync: print(sync_report(out))
+        elif out.endswith(".mp4") and shutil.which("ffmpeg"):
             subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], check=True)
         else:
             out = os.path.splitext(out)[0] + ".webm"; shutil.copy(webm, out)
