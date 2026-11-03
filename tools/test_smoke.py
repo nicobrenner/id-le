@@ -1323,10 +1323,14 @@ def t_story_intro(P):
     pg = P.open("/arena.html?fresh=1&test&nofirst5"); booted(pg)
     r = pg.evaluate("""async () => { const E = window.__epoch0; await E.loadBank(); await E.loadLoss(); const ct = E.makeContent({ story: true, seed: 3 }), cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
       const at = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let s = 0; for (let i = 0; i < d.length; i += 4 * 97) s += d[i] + d[i + 1] + d[i + 2]; return s / (d.length / (4 * 97)) / 3; };
-      const out = { total: E.total(ct), dark: at(3), sub: 0, flash: 0, black: 0, cut: 0 }; for (const T of [5, 10, 20, 24, 28]) out.sub = Math.max(out.sub, at(T)); out.flash = at(29.8); out.black = at(30.6); out.strike = at(30.78); out.cut = at(33.6); out.spin = at(29.6);
+      let legs = 0; const K = window.__critDraw, L0 = K && K.legs; if (K) K.legs = (...a) => { legs++; return L0.apply(K, a); };   // the title must draw no creature
+      const out = { total: E.total(ct), dark: at(3), sub: 0, flash: 0, black: 0, cut: 0 }; for (const T of [5, 10, 20, 24, 28]) out.sub = Math.max(out.sub, at(T)); out.flash = at(29.8); out.black = at(30.6); out.strike = at(30.78); out.cut = at(33.6); out.spin = at(29.6); for (let T = 32.4; T < 38.2; T += 0.25) at(T); out.legs = legs; if (K) K.legs = L0;
+      out.protosRun = [8.8, 18, 25.8].map(T => E.protos(T, true)).flat(); out.protosAfter = [29.9, 31, 33, 35, 37].map(T => E.protos(T, true)).flat().length;
       const sh = E.curveShape(true), pl = E.curveShape(false); out.endX = sh[sh.length - 1][0]; out.plainEnd = pl[pl.length - 1][0]; out.mono = sh.every((p, i) => !i || p[0] >= sh[i - 1][0]); return out; }""")
     need(30 < r["total"] < 42, f"the story intro should run ~37 s: {r}")
     need(r["flash"] > 200 and r["black"] < 5 and r["strike"] > r["black"] + 3 and r["cut"] > r["black"], f"white flash, the dark with lightning strikes, then the cut: {r}")
+    need(r["legs"] == 0, f"no creature in the Id|le title (Nico): the leg code drew {r['legs']} times from the cut on")
+    need(set(r["protosRun"]) == {"log", "samples", "gpu"} and r["protosAfter"] == 0, f"tiny proto-creatures only during the run (log, samples, GPU), none after the crash: {r['protosRun']}, after {r['protosAfter']}")
     need(0.45 <= r["endX"] <= 0.55 and r["plainEnd"] == 1 and r["mono"], f"the story's curve ends mid-pane (the dive starts there), the plain one spans the pane: {r}")
     P.clean()
     return f"{r['total']:.1f} s; flash {r['flash']:.0f}, black {r['black']:.1f}, a strike {r['strike']:.1f}, cut {r['cut']:.1f}; the curve ends at {r['endX']:.2f} of the width, the dive from there"

@@ -189,22 +189,15 @@
       g.fillStyle = INK; g.globalAlpha = 1 - clamp((T - (S - 0.35)) / 0.35); g.fillText(s, W / 2, cy); const w = g.measureText(s).width;
       if (!done || Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(W / 2 + w / 2 + 4, cy - fz * 0.5, fz * 0.5, fz); } g.textAlign = 'left'; g.globalAlpha = 1; }
   }
-  // Id and le grow legs: creatures drawn with the game's own leg code (idle-critdraw.js), their bodies are the two halves of the word
-  function crawlers(W, H, P) { const big = P ? 64 : clamp(W / 9, 72, 150);
-    const mk = (hue, foot, dir) => ({ g: { legs: 8, l1: big * .26, l2: big * .32, bodyL: big * .55, bodyW: big * .42, step: big * .2, hue, footHue: foot, fidget: .8, speed: 1 }, size: 1, x: 0, y: 0, vx: 0, vy: 0, heading: dir > 0 ? 0 : Math.PI, state: 'idle', nextFidget: 0, dir, legs: null });
-    return { big, a: mk(262, 330, -1), b: mk(42, 200, 1) }; }
+  // the cut (Nico: "don't add the creatures to the id|le title!!! do the one with the red line, no creatures… it kinda ruins a bit the moment
+  // of nothingness"): the word, the tokenizer's red bar falling and cutting it, a flash of lightning, then the word fades into the dark. No legs.
+  function crawlers(W, H, P) { return { big: P ? 64 : clamp(W / 9, 72, 150) }; }
   function drawSplit(g, W, H, T, P, RM, st) {
-    if (T < C.split) return; const K = window.__critDraw, big = st.cr.big, cy = H * 0.5;
+    if (T < C.split) return; const big = st.cr.big, cy = H * 0.5;
     const ap = clamp((T - C.split) / 0.4), cutT = C.split + 0.95, cut = T >= cutT || RM, gap = cut ? (RM ? big * .32 : big * .32 * ease(clamp((T - cutT) / 0.35))) : 0;
-    g.font = `${big}px Georgia, 'Times New Roman', serif`; g.textBaseline = 'alphabetic'; const wId = g.measureText('Id').width, wle = g.measureText('le').width, base = cy + big * .32;
-    const crawl = RM ? 0 : clamp((T - C.crawl) / (C.turn - C.crawl)), legA = RM ? 1 : ease(clamp((T - (C.crawl - 0.5)) / 0.7)), out = ease(crawl) * W * 0.32, fadeOut = 1 - clamp((T - (C.turn - 0.6)) / 0.9);   // a walk the legs can keep up with, then into the dark
-    const xA = W / 2 - gap / 2 - wId - out, xB = W / 2 + gap / 2 + out;
-    const tw = !RM && T > C.crawl - 0.6 && T < C.crawl + 0.4 ? Math.sin(T * 70) * big * .015 : 0;   // the halves twitch
-    // legs first (behind the letters)
-    if (K && K.legs && K.buildLegs && legA > 0.02 && !RM || (K && RM)) { for (const [c, x, w] of [[st.cr.a, xA, wId], [st.cr.b, xB, wle]]) { c.x = x + w / 2 + tw; c.y = cy; c.vx = crawl > 0 ? c.dir * 0.9 : 0; c.vy = 0;   // a walking speed for the leg code (feet lead by it), not the screen speed
-        c.size = 0.3 + 0.7 * legA; K.sizeUp(c); if (!c.legs) K.buildLegs(c); try { K.stepLegs(c, T * 1000); } catch (e) {}
-        g.save(); g.globalAlpha = fadeOut; try { K.legs(g, c); } catch (e) {} g.restore(); } }
-    g.globalAlpha = ap * fadeOut; g.fillStyle = INK; g.fillText('Id', xA + tw, base); g.fillText('le', xB - tw, base);
+    g.font = `${big}px Georgia, 'Times New Roman', serif`; g.textBaseline = 'alphabetic'; const wId = g.measureText('Id').width, base = cy + big * .32;
+    const fadeOut = 1 - clamp((T - C.crawl) / (C.turn - C.crawl - 0.2)), xA = W / 2 - gap / 2 - wId, xB = W / 2 + gap / 2;   // after the cut the halves hold, then go dark
+    g.globalAlpha = ap * fadeOut; g.fillStyle = INK; g.fillText('Id', xA, base); g.fillText('le', xB, base);
     // the tokenizer's bar: falls, cuts, glows magenta, fades
     const fallT = clamp((T - (C.split + 0.55)) / 0.4), barY = -big + (base - big * .85 + big) * ease(fallT), barA = (1 - clamp((T - (cutT + 0.9)) / 0.6)) * (RM ? 1 : (T > C.split + 0.5 ? 1 : 0));
     if (barA > 0 && T < C.crawl + 0.4) { g.globalAlpha = barA * fadeOut; g.fillStyle = MAG; g.shadowColor = MAG; g.shadowBlur = cut ? 18 : 6; g.fillRect(W / 2 - big * .035, cut ? base - big * .85 : barY, big * .07, big * .98); g.shadowBlur = 0; }
@@ -249,6 +242,17 @@
     shown.forEach((t, k) => { const w = g.measureText(rows[k]).width; g.fillText(t, W / 2 - w / 2 + sh, y0 + k * lh + sh); });
     g.restore(); }
   // inside the boot's panes: the frame around the run (titles, the training log, the GPUs, the status bar), drawn first each frame
+  // a hint before there's anything (Nico: "maybe you can show tiny proto-creatures in part of the software… as a sort of 'preview'"): during the
+  // run, a tiny thing with little legs scuttles across the training log, between the model's lines, and along the GPU strip just before the
+  // vortex, and is gone. Easy to miss. Never after the crash: from the cut to "bring life" there is nothing.
+  const PROTOS = [{ t0: 8.4, d: 1.7, pane: 'log' }, { t0: 17.6, d: 1.4, pane: 'samples' }, { t0: 25.5, d: 0.9, pane: 'gpu', story: true }];
+  const protosAt = (T, isStory) => PROTOS.filter(p => (isStory || !p.story) && T >= p.t0 && T < p.t0 + p.d && T < (isStory ? CS.flash : C.final));
+  function drawProtos(g, T, L, RM) { if (RM) return; const ps = L.panes;
+    for (const p of protosAt(T, story)) { const r = ps[p.pane], u = (T - p.t0) / p.d, hop = Math.floor(u * 9) % 2 ? 0 : -1.5;   // stop-and-go, like something small
+      const x = r.x + 14 + (r.w - 28) * (u < 0.5 ? ease(u * 2) * 0.55 : 0.55 + ease((u - 0.5) * 2) * 0.45), y = p.pane === 'samples' ? entryY(L, 2) - L.ln.fz * 0.55 : p.pane === 'gpu' ? r.y + ps.titleH + 4 : r.y + r.h * 0.62;
+      const a = Math.min(1, u * 8, (1 - u) * 8) * 0.8, sz = L.port ? 3.2 : 4; g.save(); g.globalAlpha = a; g.strokeStyle = '#9fe0c8'; g.fillStyle = '#9fe0c8'; g.lineWidth = 1;
+      for (let k = 0; k < 6; k++) { const side = k % 2 ? 1 : -1, lx = x + (Math.floor(k / 2) - 1) * sz * 0.8, sw = Math.sin(T * 40 + k * 2) * sz * 0.5; g.beginPath(); g.moveTo(lx, y + hop); g.lineTo(lx + sw, y + hop + side * sz * 1.1); g.stroke(); }
+      g.beginPath(); g.ellipse(x, y + hop, sz * 1.3, sz * 0.8, 0, 0, 7); g.fill(); g.restore(); } }
   function termChrome(g, W, H, T, P, RM, L, ci, a, cap) {
     const over = story ? clamp((T - CS.over) / (CS.flash - CS.over)) : 0, lossAt = t => ci.all[Math.min(ci.N, Math.round(dotK(ci, Math.max(0, t))))] + 0.02 * Math.sin(t * 17);
     window.__termBoot.chrome(g, W, H, T, P, RM, { a, prog: clamp(T / C.stack), over, overT: story ? Math.max(0, T - CS.over) : 0, overStart: CS.over, lossAt, cap }); }
@@ -283,7 +287,7 @@
     if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = L.ln.fz; g.fillStyle = CUR; g.fillRect(L.ln.x, entryY(L, 0) + fz * 0.4, fz * .55, fz * 1.05); } }
     else drawBabble(g, W, H, Math.min(T, CS.flash), ct, P, RM, st, L, ci);
     if (T >= CS.over) drawOverrun(g, W, H, T, ct, P, RM, L);
-    drawCurve(g, W, H, T, P, 0, L, ci, RM); if (L.term) window.__termBoot.overlay(g, W, H, 0.6); drawSub(g, W, H, T, P, RM, L); g.restore();
+    drawCurve(g, W, H, T, P, 0, L, ci, RM); if (L.term) { drawProtos(g, T, L, RM); window.__termBoot.overlay(g, W, H, 0.6); } drawSub(g, W, H, T, P, RM, L); g.restore();
     if (!RM && T >= CS.spin && T < CS.flash) vortex(g, (T - CS.spin) / (CS.flash - CS.spin));   // everything twirls into a vortex, then the flash
     if (T >= CS.flash) { g.globalAlpha = RM ? clamp((T - CS.flash) / 0.45) : 1 - clamp((T - CS.flash - 0.08) / 0.37); g.fillStyle = RM ? '#000' : '#fff'; g.fillRect(0, 0, W, H); g.globalAlpha = 1; } }
   function frameAt(g, W, H, T, ct, st, P, RM) {
@@ -299,8 +303,8 @@
       g.fillText(cap.text, P ? 14 : 28, H - (P ? 44 : 28)); g.globalAlpha = 1; }
     if (T < C.babble) { if (Math.floor(T * 2.4) % 2 === 0) { const fz = L.ln.fz; g.fillStyle = CUR; g.fillRect(L.ln.x, entryY(L, 0) + fz * 0.4, fz * .55, fz * 1.05); } }
     else if (T < C.final) drawBabble(g, W, H, T, ct, P, RM, st, L, ci);
-    drawCurve(g, W, H, T, P, S, L, ci, RM); if (L.term && fade > 0) window.__termBoot.overlay(g, W, H, 0.6 * fade); drawSub(g, W, H, T, P, RM, L);
-    drawWords(g, W, H, T, ct, P, S); if (T >= S) { drawSplit(g, W, H, Tl, P, RM, st); drawTurn(g, W, H, Tl, P); } }
+    drawCurve(g, W, H, T, P, S, L, ci, RM); if (L.term && fade > 0) { drawProtos(g, T, L, RM); window.__termBoot.overlay(g, W, H, 0.6 * fade); } drawSub(g, W, H, T, P, RM, L);
+    drawWords(g, W, H, T, ct, P, S); if (T >= S) { bolt(g, W, H, Tl - (C.split + 0.95) + 0.05, 77, RM, 0.6); drawSplit(g, W, H, Tl, P, RM, st); drawTurn(g, W, H, Tl, P); } }
   // the whole intro: the boot (if any), then the run; A: seconds since the start
   const arrOf = ct => ct && ct.boot && ct.arrive && window.__termBoot ? window.__termBoot.arrive.dur : 0;
   const bootOf = ct => ct && ct.boot && window.__termBoot ? arrOf(ct) + window.__termBoot.dur : 0;   // everything before the run: the arrival, then the boot
@@ -336,16 +340,16 @@
   function scheduleAll(S, ct, t0) {   // recordings: every timed sound of the film at once (offline)
     const ex = extraOf(ct);
     if (ct.story) { S.hum(0, true); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e)); for (let t = CS.over; t < CS.tear; t += 0.03 + 0.12 * (1 - (t - CS.over) / (CS.tear - CS.over)) * Math.random()) S.tick(t0 + t, 12);
-      S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); S.thunder(t0 + CS.split + 0.95, 0.5); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); S.skitter(t0 + d + C.crawl + 0.2, t0 + d + C.turn - 0.3); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
-    S.note(t0 + C.final + 0.2); S.cut(t0 + ex + C.split + 0.95); S.skitter(t0 + ex + C.crawl + 0.2, t0 + ex + C.turn - 0.3); }
+      S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); S.thunder(t0 + CS.split + 0.95, 0.5); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
+    S.note(t0 + C.final + 0.2); S.cut(t0 + ex + C.split + 0.95); S.thunder(t0 + ex + C.split + 0.95, 0.5); }
   function liveSound(S, ct, T0, T1, now) {   // live: sounds for what was drawn between film seconds T0 and T1 (ticks follow the tokens shown)
     const ex = extraOf(ct), cross = t => t > T0 && t <= T1;
     if (ct.story) { for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
       if (T1 > CS.over && T1 < CS.tear && Math.random() < 0.25 + 0.6 * (T1 - CS.over) / (CS.tear - CS.over)) S.tick(now, 12);
       STRIKES.forEach(x => { if (cross(x + 0.05)) S.thunder(now); }); if (cross(CS.split + 0.95)) S.thunder(now, 0.5);
-      const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); if (cross(d + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); return; }
+      const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); return; }
     for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
-    if (cross(C.final + 0.2)) S.note(now); if (cross(ex + C.split + 0.95)) S.cut(now); if (cross(ex + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); }
+    if (cross(C.final + 0.2)) S.note(now); if (cross(ex + C.split + 0.95)) S.cut(now); if (cross(ex + C.split + 0.95)) S.thunder(now, 0.5); }
   async function renderAudio(ct) { const B = bootOf(ct), sr = 44100, oc = new OfflineAudioContext(2, Math.ceil(sr * (B + totalOf(ct) + 1)), sr), S = synth(oc, oc.destination, B); if (B) { const R = arrOf(ct); if (R) window.__termBoot.arrive.fireAll(oc, S.out, 0); window.__termBoot.fireAll(oc, S.out, R); } scheduleAll(S, ct, B);
     const buf = await oc.startRendering(), n = buf.length, L = buf.getChannelData(0), R = buf.getChannelData(1), dv = new DataView(new ArrayBuffer(44 + n * 4)); const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
     w(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 4, true);
@@ -425,5 +429,5 @@
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
   window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
-    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
+    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();
