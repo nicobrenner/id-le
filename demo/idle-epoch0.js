@@ -138,7 +138,29 @@
   function dotK(ci, T) { if (T < C.babble) return 0; const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1), u = ease(clamp((T - C.babble - i * C.slot) / 0.7));
     const k0 = i ? ci.ks[i - 1] : 0; return k0 + (ci.ks[i] - k0) * u; }
   function entryY(L, i) { return L.ln.y + i * L.ln.eh; }
+  // the story's chart (Nico: "make the chart slowly appear pixel by pixel, and then accelerate at the end, reaching exponential velocity…
+  // rather than super specific dots… dotted lines with labels like 'previous run'… 'genius level'… a 'conscious' somewhere at almost 0"):
+  // a stylized curve (not the real numbers: those are in the plain Epoch 0) that draws itself, slowly, then faster, then dives through the
+  // floor; it crosses Project 23 around "wait… it keeps learning!!", genius level around "look at those losses…", conscious just before the vortex.
+  // x and y are 0..1 inside the chart (y 1 = its floor; past 1 is below it), keyed by film second
+  const SKX = [[0.5, 0.02], [12.8, 0.3], [20, 0.52], [23.2, 0.63], [26.3, 0.78], [CS.flash, 0.97]], SKY = [[0.5, 0.05], [5, 0.3], [12.8, 0.5], [20, 0.66], [23.2, 0.73], [26.3, 0.97], [CS.flash, 1.9]];
+  const REFS = [[0.5, 'Project 23 (previous run)'], [0.66, 'genius level'], [0.97, 'conscious']];
+  const keyed = (K, T) => { if (T <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (T <= K[i][0]) { const [t0, v0] = K[i - 1], [t1, v1] = K[i], u = (T - t0) / (t1 - t0); return v0 + (v1 - v0) * (i === K.length - 1 ? u * u : u * u * (3 - 2 * u) * 0.35 + u * 0.65); } return K[K.length - 1][1]; };
+  const storyPt = T => [keyed(SKX, T), keyed(SKY, T)];
+  function drawStoryCurve(g, W, H, T, L, RM) {
+    const a = clamp((T - C.curve) / 0.6) * (1 - clamp((T - CS.flash) / 0.1)); if (a <= 0) return; const { x, y, w, h } = L.cv, px = u => x + 10 + (w - 20) * u, py = v => y + 8 + (h - 16) * v, fz = L.port ? 10 : 11;
+    g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h); g.font = `${fz}px ui-monospace, Menlo, monospace`; g.textBaseline = 'alphabetic';
+    if (!L.term) { g.fillStyle = DIM; g.fillText('training loss', x + 8, y - 8); } g.fillStyle = DIM; g.textAlign = 'right'; g.fillText('epochs → (stylized)', x + w - 8, y + h + 16); g.textAlign = 'left';
+    // the reference lines: dotted, labelled at the right; the one the curve has just passed glows a little
+    for (const [v, lab] of REFS) { const yy = py(v), passed = keyed(SKY, T) >= v; g.setLineDash([2, 4]); g.strokeStyle = passed ? '#7ee3f566' : '#3a4a56'; g.beginPath(); g.moveTo(x + 4, yy); g.lineTo(x + w - 4, yy); g.stroke(); g.setLineDash([]);
+      g.fillStyle = passed ? '#9fdcea' : '#6b7d89'; g.textAlign = 'right'; g.fillText(lab, x + w - 6, yy - 4); g.textAlign = 'left'; }
+    // the curve so far, drawn in small steps: cyan, then magenta once it runs away
+    const tEnd = Math.min(T, CS.flash), step = RM ? 0.25 : 0.04; let prev = null;
+    for (let t = C.curve; t <= tEnd + 1e-6; t += step) { const [u, v] = storyPt(t), X = px(u), Y = py(v); if (prev) { g.strokeStyle = t > CS.over ? MAG : CUR; g.lineWidth = 2; g.shadowColor = g.strokeStyle; g.shadowBlur = t > CS.over ? 10 : 4; g.beginPath(); g.moveTo(prev[0], prev[1]); g.lineTo(X, Y); g.stroke(); } prev = [X, Y]; }
+    if (prev && !RM) { g.shadowBlur = 12; g.shadowColor = T > CS.over ? MAG : CUR; g.fillStyle = 'rgba(232,251,255,0.7)'; g.fillRect(prev[0] - 1, prev[1] - 1, 2, 2); }   // the pen, not a marker
+    g.restore(); }
   function drawCurve(g, W, H, T, P, S, L, ci, RM) {
+    if (story) return drawStoryCurve(g, W, H, T, L, RM);
     const a = clamp((T - C.curve) / 0.6) * (story ? 1 - clamp((T - CS.flash) / 0.1) : 1 - clamp((T - (C.final - 0.4)) / 0.4)); if (a <= 0) return;
     const { x, y, w, h } = L.cv, kd = RM ? ci.ks[clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1)] : dotK(ci, T), kn = Math.floor(kd);
     g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h);
@@ -179,7 +201,7 @@
       if (back === 0 && T < (story ? CS.over : C.stack) && Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(L.ln.x + g.measureText(last).width + 3, ly - f * 0.55, f * 0.55, f * 1.05); }
       // the leader: a glow from the curve's point to the line as it is born; in the finale, every line keeps a thin one
       // (phones: the curve sits above the lines, so only the birth glow, drawn to the line's label; no finale leaders crossing the text)
-      const born = T - (C.babble + i * C.slot), la = RM ? 0 : Math.max(back === 0 ? clamp(1 - (born - 0.6) / (L.port ? 0.6 : 1.2)) * clamp(born / 0.25) : 0, L.port ? 0 : stack * 0.45) * fade;
+      const born = T - (C.babble + i * C.slot), la = RM || story ? 0 : Math.max(back === 0 ? clamp(1 - (born - 0.6) / (L.port ? 0.6 : 1.2)) * clamp(born / 0.25) : 0, L.port ? 0 : stack * 0.45) * fade;
       if (la > 0.01 && T >= C.curve) { const [px, py] = ptXY(ci, L, ci.ks[i]); g.globalAlpha = la; g.strokeStyle = CUR; g.lineWidth = back === 0 && stack < 0.5 ? 1.5 : 1;
         g.shadowColor = CUR; g.shadowBlur = back === 0 ? 8 : 0; g.beginPath(); g.moveTo(px, py); if (L.port) g.lineTo(L.ln.x - 6, y - fz * 0.3); else g.lineTo(L.ln.x - 10, y - fz * 0.25); g.stroke(); g.shadowBlur = 0; } }
     g.globalAlpha = 1; g.textBaseline = 'alphabetic'; }
@@ -429,5 +451,5 @@
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
   window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
-    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
+    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();
