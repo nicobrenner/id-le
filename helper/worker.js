@@ -148,6 +148,7 @@ X.op = [].concat(['acted', 'unsure', 'nudged', 'chat', 'error'].map(k => 'out:' 
   ['bring', 'chop', 'come', 'fetch', 'greet', 'hand', 'hide', 'sleep', 'none', 'creature', 'disaster', 'evolve', 'look', 'rave_off', 'rave_on', 'rename', 'spawn', 'weather', 'words', 'first_creatures', 'light', 'music'].map(k => 'opt:' + k),
   ['words', 'creatures', 'light', 'weather', 'hut', 'music'].flatMap(k => ['gt:' + k, 'gn:' + k, 'gd:' + k]));
 X.did.push('op_miss', 'op_rephrase', 'op_abandon');
+X.did.push('ni_seen', 'qe_seen');   // v2 of left-without-clicking / left-soon-after (11-03): only page loads that were on screen ≥ 5 s (idle-stats.js)
 const FAV = /^(job|fam|body):[a-z_]{1,16}$|^name:[A-Za-z][A-Za-z|' -]{0,19}$/, PATHSEGS = ['advisor', 'music', 'reels', 'drawer', 'trees', 'almanac', 'studio', 'creatures', 'notices', 'pedia', 'datalab',
   'connect', 'snapshot', 'evolve', 'chat', 'roomchat', 'settings', 'sound', 'more', 'collection', 'add', 'card'];
 const okPath = v => typeof v === 'string' && v.length <= 80 && v.split('>').length <= 3 && v.split('>').every(x => PATHSEGS.includes(x)) && new Set(v.split('>')).size === v.split('>').length;

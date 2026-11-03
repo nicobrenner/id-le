@@ -131,7 +131,7 @@ await post('/lab/stats', { v: 1, page: 'pedia', dw: '5-20', dw0: '1-5', ps: ['ha
 await post('/lab/stats', { v: 1, x: { did: ['w_reel', 'w_dream', 'rage', 'p_music', 'w_reel', 'hacked'], ws: { reel: 40, dream: 12, mind: 7, evil: 5 }, pt: { music: 30, studio: 10, nope: 9 },
   ct: { reelplay: 2, reelend: 1, irc: 3, inbox: 1, op: 2, pedia: 1, bad: 4 }, opa: { weather: 1, ai_spawn: 1, rm_rf: 1 }, fav: { 'job:math': 3, 'fam:crawly': 1, 'name:Plotkin': 2, 'name:<script>': 1, 'secret:x': 1 },
   rage: { studioBtn: 1, world: 2, 'whisper:keep': 1, 'world:creature': 1, 'whisper:evil': 1, 'body > div': 1 } }, path: 'card>studio', eg: { reels: '1-5', errs: '0' } });
-await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
+await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit', 'ni_seen'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
 await post('/lab/stats', { v: 1, path: 'card>card', x: { ct: { op: 9999 } } });
 await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
 // the Operator (11-01): only fixed keys, small positive integers; text-like keys and junk dropped; op flags once
@@ -314,7 +314,7 @@ def worker_unit():
     need(pd["clips"] == 3 and pd["ref"] == {"news.ycombinator.com": 1}, f"pedia clips {pd['clips']}, ref {pd['ref']}")
     need("x is null @pedia-draw.js:3:9" in o["err_all"], "a pedia error was not kept")
     x = {k: {a: n for a, n in v.items() if n} for k, v in o["x"].items()}
-    need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1, "op_miss": 1, "op_rephrase": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
+    need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1, "ni_seen": 1, "op_miss": 1, "op_rephrase": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
     need(x["ws"] == {"reel": 40, "dream": 12, "mind": 7}, f"v2 watch seconds {x['ws']} (negative, fractional, absurd and unknown dropped)")
     need(x["pt"] == {"music": 30, "studio": 10}, f"v2 panel seconds {x['pt']}")
     need(x["ct"] == {"reelplay": 2, "reelend": 1, "irc": 3, "inbox": 1, "op": 2, "pedia": 1}, f"v2 counts {x['ct']} (an absurd count must be dropped)")
@@ -890,6 +890,42 @@ def t_stats_v2(P):
     need(all(n in starter or n == "other" for n in names), f"a name outside the starter world was sent: {names}")
     P.clean()
     return f"card {name}: pt {x.get('pt')}, ws {x.get('ws')}, path {path}, rage {x.get('rage')}, {len(x.get('fav', {}))} favorite keys"
+
+
+def t_stats_seen(P):
+    """left without clicking only counts tabs that were on screen (11-03): a page loaded hidden (a background tab, a prerender) sends
+    nothing until it is seen and is never 'left without clicking'; seen ≥ 5 s without a click → ni_seen; a click then leaving within 30 s
+    → qe_seen (never both). Also: canvas roundRect is polyfilled where it is missing (old Safari: 'g.roundRect is not a function')"""
+    HID = """window.__vis = 'hidden'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
+      get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
+    flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
+    def sent(): return [json.loads(b) for b in P.stats]
+    def did(): return set().union(*[set((q.get("x") or {}).get("did") or []) for q in sent()]) if P.stats else set()
+    # 1. loaded in the background, closed unseen: nothing at all
+    pg = P.ctx.new_page(); pg.on("pageerror", lambda e: P.errors.append(str(e)[:200])); pg.add_init_script(HID + " delete CanvasRenderingContext2D.prototype.roundRect;")
+    pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg); pg.wait_for_timeout(6500)
+    need(pg.evaluate("() => window.__settings.statsLive()"), "?statstest must make stats live")
+    rr = pg.evaluate("""() => { const c = document.createElement('canvas').getContext('2d'); c.beginPath(); c.roundRect(10, 10, 80, 40, 12);
+      return { has: typeof c.roundRect === 'function', inside: c.isPointInPath(50, 30), corner: c.isPointInPath(11, 11), edge: c.isPointInPath(50, 11) }; }""")
+    need(rr["has"] and rr["inside"] and not rr["corner"] and rr["edge"], f"roundRect polyfill: {rr}")
+    pg.evaluate("() => window.__stats._send('leave')"); pg.wait_for_timeout(300)
+    need(not P.stats, f"a page never on screen sent {len(P.stats)} reports: {sent()[:1]}")
+    # 2. now it is seen: the visit goes out; on screen 6 s with no click, then hidden → ni_seen (and no old-style flag reliance)
+    flip(pg, "visible"); pg.wait_for_timeout(6500); flip(pg, "hidden"); pg.wait_for_timeout(400)
+    s1 = sent(); need(s1 and s1[0].get("visit") == 1 and s1[0].get("why") == "open", f"first report once seen: {s1[:1]}")
+    need("ni_seen" in did() and "qe_seen" not in did(), f"seen 6 s, no click: did {did()}")
+    pg.close(); P.stats.clear()
+    # 3. seen, a click, hidden within 30 s → qe_seen, not ni_seen; a page seen < 5 s gets neither
+    pg = P.ctx.new_page(); pg.on("pageerror", lambda e: P.errors.append(str(e)[:200])); pg.add_init_script(HID)
+    pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg); flip(pg, "visible"); pg.wait_for_timeout(6000)
+    pg.mouse.click(300, 300); pg.wait_for_timeout(800); flip(pg, "hidden"); pg.wait_for_timeout(400)
+    need("qe_seen" in did() and "ni_seen" not in did(), f"a click, then gone: did {did()}")
+    pg.close(); P.stats.clear()
+    pg = P.ctx.new_page(); pg.add_init_script(HID); pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg)
+    flip(pg, "visible"); pg.wait_for_timeout(3600); flip(pg, "hidden"); pg.wait_for_timeout(400)
+    need(not ({"ni_seen", "qe_seen"} & did()), f"on screen < 5 s: did {did()}")
+    pg.close(); P.clean()
+    return "unseen tab: nothing sent; seen 6 s no click → ni_seen; click then hidden → qe_seen; < 5 s → neither; roundRect polyfilled"
 
 
 def t_op_actions(P):
@@ -2424,7 +2460,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "reviews", "reviews phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2453,6 +2489,7 @@ def main():
                 run("haunted music", t_haunted)
                 run("stats", t_stats)
                 run("stats v2", t_stats_v2)
+                run("stats seen", t_stats_seen)
                 run("op stats", t_op_stats)
                 run("op actions", t_op_actions)
                 run("pedia stats", t_pedia_stats)

@@ -40,7 +40,10 @@ def engage2(tot):
         lines.append(f"{pc(n)} of visits {what} ({n}), {avg(ws.get(key, 0), n)} on average")
     lines.append(f"reels played {ct.get('reelplay', 0)}, watched to the end {ct.get('reelend', 0)}; dreams opened from the creatures list {ct.get('dream', 0)}")
     lines.append(f"messages: IRC {ct.get('irc', 0)} (from {did.get('irc_msg', 0)} visits), @inbox {ct.get('inbox', 0)}, Operator {ct.get('op', 0)} (from {did.get('op_msg', 0)} visits); pedia links {ct.get('pedia', 0)}")
-    lines.append(f"frustration: {pc(did.get('rage', 0))} of visits rage-clicked ({did.get('rage', 0)}); {did.get('quick_exit', 0)} left within 30 s of their first click; {did.get('no_interact', 0)} left without clicking")
+    lines.append(f"frustration: {pc(did.get('rage', 0))} of visits rage-clicked ({did.get('rage', 0)}); {did.get('quick_exit', 0)} left within 30 s of their first click; {did.get('no_interact', 0)} left without clicking"
+                 " (these two also count tabs that were never on screen: background tabs, prerendered pages)")
+    if did.get('ni_seen') or did.get('qe_seen'):   # from Nov 3's fix on: only page loads that were on screen at least 5 s
+        lines.append(f"  on screen ≥ 5 s (from the Nov 3 fix on): {did.get('ni_seen', 0)} left without clicking, {did.get('qe_seen', 0)} left within 30 s of their first click")
     panels = sorted(((PANELS[k], did.get("p_" + k, 0), pt.get(k, 0)) for k in PANELS if did.get("p_" + k)), key=lambda r: -r[2])
     groups = [
         ("Average seconds with each panel open (visits that opened it, in brackets)", [(f"{lab} ({n})", round(secs / n)) for lab, n, secs in panels], None),
