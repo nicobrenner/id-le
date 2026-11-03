@@ -103,7 +103,10 @@
   const unlocked = k => { if (!storyMode()) return true; const r = UNLOCK.find(x => x[0] === k); if (r) return r[1] != null && r[1] <= epochReached(); const c = CHIP_AT[k]; return c == null || c <= epochReached(); };
   function applyUnlocks() { const on = storyMode() && !!S.on; document.documentElement.classList.toggle('gen-story', on);
     let st = document.getElementById('genUnlock'); if (!st) { st = document.createElement('style'); st.id = 'genUnlock'; document.head.appendChild(st); }
-    const e = epochReached(); st.textContent = on ? UNLOCK.filter(r => r[1] == null || r[1] > e).map(r => r[2].split(',').map(x => 'html.gen-story ' + x.trim()).join(',')).join(',') + '{display:none!important}' : '';
+    // :not(#_) lifts the rule above the phone layout's own (idle-mobile.js forces '#topbar>#studioBtn' visible), and every button the
+    // phone's ☰ sheet copies (#mSheet [data-for=id]) follows its original (v12: a locked studio showed at Epoch 1 on phones)
+    const sel = x => { x = x.trim(); const id = /^#([\w-]+)$/.exec(x); return ['html.gen-story:not(#_) ' + x].concat(id ? [`html.gen-story:not(#_) #mSheet [data-for="${id[1]}"]`] : []); };
+    const e = epochReached(); st.textContent = on ? UNLOCK.filter(r => r[1] == null || r[1] > e).flatMap(r => r[2].split(',').flatMap(sel)).join(',') + '{display:none!important}' : '';
     document.documentElement.dataset.epoch = on ? String(e) : ''; }
   let S = load(), hold = [], busy = false, lifeNow = false;
   // no creature may appear in the storyline before its life step (the world's spawn asks this; arena.html window.__idleWorld.spawn)
@@ -376,7 +379,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
       if (!h.words().length) await _letThereBeWords(''); if (!did('creatures')) await _firstCreatures();
       if (!window.__build || !window.__build._seed) return null; window.__build._seed(); done('hut'); return true; } }
   async function _music() { { if (did('music')) return 'already'; const m = window.__music; if (!m) return null;
-      try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} try { m.setSource ? m.setSource('background') : m.setBg(true); } catch (e) { try { m.setBg(true); } catch (e2) { return null; } }
+      try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} try { m.setSource ? m.setSource('bg') : m.setBg(true); } catch (e) { try { m.setBg(true); } catch (e2) { return null; } }
       done('music'); return true; } }
   // every action answers { ok, result } or { error } (the Tiny Operator and the Operator's tools read that shape)
   const answer = r => r === 'busy' ? { error: 'another step is still happening' } : r === 'notyet' ? { error: 'not yet: words first' } : r === 'already' ? { ok: true, already: true } : r ? { ok: true, result: r } : { error: 'that step did not work' };
@@ -616,7 +619,12 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_free', extra: { epoch: S.day || 0 } } })); } catch (e) {} }
   const canResume = () => !!(S && S.on && S.fp && S.mode === 'free' && storyLive());
   function resumeStory() { if (!canResume()) return false; S.mode = 'story'; delete S.fp; save(); applyUnlocks(); renderDay(); renderConsole(); return true; }
-  function dayDone(n) { const d = dayOf(n); if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; S.ev = 2; save(); if (n === 0) mark('e1done');   // funnel key kept: 'e1done' = Genesis (Epoch 0) done
+  // the story's silence ends with Genesis (manager, v12: "a story player must not stay silent once Epoch 0 is beaten"): the master comes
+  // back and the background music fades in under the Gazette's special edition, a small reward. Only the sound: the music panel (its
+  // controls) still waits for its epoch in UNLOCK. A player who muted Id|le stays muted (the master keeps the mute).
+  function reward() { silence(false); try { const m = window.__music; if (m && m.setBg) m.setBg(true); } catch (e) {} }
+  const genesisDone = () => !!(S && S.days && S.days[0]);
+  function dayDone(n) { const d = dayOf(n); if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; S.ev = 2; save(); if (n === 0) { mark('e1done'); reward(); }   // funnel key kept: 'e1done' = Genesis (Epoch 0) done
     try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'epoch ' + n + ' done', {}); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_day', extra: { day: n } } })); } catch (e) {}
     const el = document.createElement('div'); el.id = 'genFront';
@@ -695,7 +703,7 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
 @media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px}}`; document.head.appendChild(css2); }
   // offered once the world is up and the player has looked around a little (20 s; ?offer: 1 s)
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
-  if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && S.steps.music) && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
+  if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && S.steps.music) && !genesisDone() && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   applyUnlocks();
   window.__genesis = { noLife, darkLines: DARK.slice(), unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };

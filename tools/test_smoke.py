@@ -1422,6 +1422,9 @@ def t_story(P):
     wait_for(pg, "() => !!document.querySelector('#genFront')", 30, P=P)
     front = pg.inner_text("#genFront")
     need("EPOCH 0 COMPLETE" in front.upper() and "GAZETTE" in front.upper() and "ON TO EPOCH 1" in front.upper(), f"v11: the Epoch 0 complete front page: {front[:160]!r}")
+    # v12: the silence ends with Genesis: sound back and the background music fading in under the special edition; its panel stays locked
+    snd = pg.evaluate("() => ({ hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display })")
+    need(not snd["hushed"] and snd["bg"] and snd["dj"] == "none", f"v12: at EPOCH 0 COMPLETE the music comes back (panel still locked): {snd}")
     pg.click("#genFront button")
     wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('EPOCH 1')", 10, P=P)
     wip = pg.inner_text("#genDay"); need("WORDS" in wip and "work in progress" in wip, f"Epoch 1's card (words, coming) should say Id|le is a work in progress: {wip!r}")
@@ -1527,10 +1530,17 @@ def t_story_end_phone(P):
     wait_for(pg, "() => !!document.querySelector('#genDay.end')", 60, P=P); pg.wait_for_timeout(500)
     r = pg.evaluate("() => { const d = document.querySelector('#genDay.end'), b = d.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, bt: b.bottom, w: innerWidth, h: innerHeight, btn: [...d.querySelectorAll('.ea > *')].map(x => Math.round(x.getBoundingClientRect().height)), sw: document.documentElement.scrollWidth }; }")
     need(r["l"] >= 0 and r["r"] <= r["w"] and r["t"] >= 0 and r["bt"] <= r["h"] and min(r["btn"]) >= 36 and r["sw"] <= r["w"], f"the end card at 375 px: {r}")
+    # v12: nothing locked at Epoch 1 shows on a phone: not on the top bar (idle-mobile.js forces some buttons visible), not in the ☰ sheet
+    lk = pg.evaluate("""() => { const u = window.__genesis.unlocks(), T = window.__genesis.unlockTable(), vis = e => !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0;
+      const bar = T.filter(r => u.hidden.includes(r[0])).flatMap(r => r[2].split(',').map(x => x.trim())).filter(x => [...document.querySelectorAll(x)].some(vis));
+      const m = document.querySelector('#mMore'); if (m) m.click(); const ids = T.filter(r => u.hidden.includes(r[0])).flatMap(r => r[2].split(',').map(x => x.trim())).filter(x => /^#[\\w-]+$/.test(x)).map(x => x.slice(1));
+      const sheet = [...document.querySelectorAll('#mSheet [data-for]')].filter(b => ids.includes(b.dataset.for) && vis(b)).map(b => b.dataset.for); if (m) m.click(); return { epoch: u.epoch, bar, sheet, n: u.hidden.length }; }""")
+    need(lk["epoch"] == 1 and lk["n"] > 5 and not lk["bar"] and not lk["sheet"], f"v12: locked controls visible at Epoch 1 on a 375 px phone: {lk}")
+    pg.click("#genDay [data-end=open]") if pg.evaluate("() => !document.querySelector('#genDay.end')") else None
     shot = os.environ.get("IDLE_SHOT_DIR")
     if shot: pg.screenshot(path=os.path.join(shot, "end-card-375.png"))
     P.clean()
-    return f"375×{r['h']}: card {round(r['r'] - r['l'])}×{round(r['bt'] - r['t'])} px, buttons {r['btn']} px tall"
+    return f"375×{r['h']}: card {round(r['r'] - r['l'])}×{round(r['bt'] - r['t'])} px, buttons {r['btn']} px tall; none of the {lk['n']} locked controls on the bar or in ☰"
 
 
 def t_story_migrate(P):
@@ -1550,6 +1560,7 @@ def t_story_migrate(P):
     pg.reload(wait_until="load"); booted(pg); wait_for(pg, "() => !!(window.__genesis && window.__genesis.state())", 20, P=P)
     st2 = pg.evaluate("() => window.__genesis.state()")
     need(st2.get("day") == 1 and list((st2.get("days") or {}).keys()) == ["0"], f"a second load must not shift it again: {st2}")
+    pg.wait_for_timeout(2500); need(not pg.evaluate("() => window.__audio.hushed()"), "v12: the story's silence must not outlive Genesis after a reload or a migration")
     P.clean()
     return f"v10 save (old Epoch 1 done, day 2) → Epoch 0 done, epoch {st2['day']} reached, v10 numbers kept, stable on reload"
 
