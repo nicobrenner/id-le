@@ -49,10 +49,10 @@
     light: ['light. now there is a stage', 'morning, for the very first time'],
     words: ['words. the floor will remember them', 'there, a floor to stand on. nobody to stand on it yet'],
     creatures: ['two of them crawled out of a word. they look surprised', 'look, something is moving'],
-    weather: ['weather. they will have opinions about it', 'the first sky this universe ever had'],
+    weather: ['weather. they will have opinions about it', 'the first sky this world ever had'],
     hut: ['someone wants to build. give it a moment', 'crates and bricks turned up. an Architect is thinking'],
     music: ['music. the floor hums along', 'now it sounds like somewhere'],
-    alive: ['it is alive. it does not need us now, but it likes company', 'the universe is running. keep watching'],
+    alive: ['it is alive. it does not need us now, but it likes company', 'the world is running. keep watching'],
     free: ['the rest is yours', 'that is how it starts. the rest is yours'] };
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const storyMode = () => !!(S && S.mode === 'story');
@@ -68,7 +68,7 @@
   // from the days still reads right: day n is epoch n) and still reported as genesis_day in the stats.
   const DAYS = [
     { n: 1, title: 'words, life', goals: [['words', 'words for a floor'], ['creatures', 'first life']], teaches: 'the Operator, words, creatures',
-      front: { head: 'Epoch 1: a floor, and somebody on it', body: 'Lights came on in a brand-new mind. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
+      front: { head: 'Epoch 1: a floor, and somebody on it', body: 'Lights came on in a brand-new consciousness. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
       line: 'epoch one done. it has a floor and somebody on it. next we feed them' },
     ...[2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ n, title: 'coming soon', goals: [], teaches: '' }))];
   let S = load(), hold = [], busy = false;
@@ -93,7 +93,7 @@ html.gen-void #ai-thread>.ai-row.page{display:none}
 #arena.gen-night{--bg:#15161a;--ink:#e8e6e1;--floor:#1c1e24;--m-see:#6ab0ff;--m-body:#9a9a9a;--m-want:#ffd54a;--m-feel:#ff7eb6;--m-say:#9be37a;--m-do:#5fd7d7;--m-rem:#c39bff;--m-world:#ffa04d;--m-s:#ffcf7a;--m-n:#7cc4ff;color:var(--ink);color-scheme:dark}
 #genConsole{margin:8px 10px 4px;padding:10px 12px;border:1px solid #6b7cff66;border-radius:12px;background:linear-gradient(180deg,#0d1030,#0a0b16);color:#cfd6ff;font:12px ui-monospace,Menlo,monospace}
 #genConsole .gt{font-weight:700;letter-spacing:.06em;font-size:11px;opacity:.75;margin-bottom:6px}
-#genConsole .gl{font:14px/1.4 Georgia,serif;color:#fff;margin:2px 0 8px}#genConsole .gl b{color:#9fb0ff;font:600 11px ui-monospace,Menlo,monospace;margin-right:6px}
+:root{--op-font:Georgia,serif}#genConsole .gl{font:17px/1.45 var(--op-font);color:#fff;margin:2px 0 8px}@media (max-width:600px){#genConsole .gl,#genConsole .gw p{font-size:16px}}#genConsole .gl b{color:#9fb0ff;font:600 11px ui-monospace,Menlo,monospace;margin-right:6px}
 #genConsole .gc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}#genConsole .gc button{font:12px system-ui;padding:5px 10px;border-radius:14px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;cursor:pointer}
 #genConsole .gc button:hover{background:#2a3180}#genConsole .gc button[disabled]{opacity:.45;cursor:default}
 #genConsole .gc button.glow{border-color:#cfd6ff;box-shadow:0 0 0 0 #9fb0ffaa;animation:genGlow 1.8s ease-in-out infinite;font-weight:600}
@@ -111,11 +111,11 @@ html.gen-void #ai-thread>.ai-row.page{display:none}
 @keyframes genDawn{0%{opacity:0}35%{opacity:1}100%{opacity:0}}
 .gen-ring{position:absolute;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;border:2px solid #9fb0ff;pointer-events:none;z-index:6;animation:genRing 1.6s ease-out forwards}
 @keyframes genRing{from{transform:scale(.3);opacity:1}to{transform:scale(9);opacity:0}}
-#genConsole .gw p{font:14px/1.45 Georgia,serif;color:#fff;margin:2px 0 8px}#genConsole .gw p b{color:#9fb0ff;font:600 11px ui-monospace,Menlo,monospace;margin-right:6px}
+#genConsole .gw p{font:17px/1.45 var(--op-font);color:#fff;margin:2px 0 8px}#genConsole .gw p b{color:#9fb0ff;font:600 11px ui-monospace,Menlo,monospace;margin-right:6px}
 #genConsole .gcur{display:inline-block;width:.5em;height:1em;margin-left:2px;vertical-align:-2px;background:#7ee3f5;animation:genBlink 1s steps(2) infinite}
 @keyframes genBlink{50%{opacity:0}}
 #genBackdrop{position:fixed;inset:0;z-index:2147481990;background:#02030acc;backdrop-filter:blur(2px);transition:opacity 1.2s}#genBackdrop.out{opacity:0;pointer-events:none}
-html.gen-box #lab{position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:min(560px,92vw)!important;height:auto!important;max-height:84vh!important;z-index:2147482000!important;border-radius:16px!important;box-shadow:0 24px 90px #000e,0 0 0 1px #6b7cff55!important;overflow:auto!important}
+html.gen-box #lab{position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:min(620px,94vw)!important;height:auto!important;max-height:84vh!important;z-index:2147482000!important;border-radius:16px!important;box-shadow:0 24px 90px #000e,0 0 0 1px #6b7cff55!important;overflow:auto!important}
 html.gen-box #lab :is(#ai-thread,#lab-thread,#ai-bar,#ai-set,#ai-smart-btn,#ai-smart){display:none!important}
 #genChoose{position:fixed;inset:0;z-index:2147483100;background:radial-gradient(90% 70% at 50% 40%,#0d1030,#020208);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px;color:#cfd6ff;font:14px system-ui;transition:opacity .6s}
 #genChoose.out{opacity:0;pointer-events:none}#genChoose h2{font:italic 26px Georgia,serif;color:#fff;margin:0;letter-spacing:.01em}#genChoose .sub{opacity:.7;margin:-8px 0 6px}
@@ -151,6 +151,8 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; return !!fresh0 && variant(fresh0) === 'story'; }
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
   const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  // the Operator window's status line (Nico, v7: no second title; "consciousness 24 · epoch 0 · genesis", the epoch advancing with the story)
+  const epochNow = () => !S || !S.steps || !S.steps.light ? 0 : (S.day || 1), statusLine = () => `consciousness 24 · epoch ${epochNow()}${epochNow() === 0 ? ' · genesis' : ''}`;
   const mark = k => { try { window.__funnel && window.__funnel.mark(k); } catch (e) {} };
   // silence (Nico, story v5): from the landing until the storyline's music step, sound "doesn't exist yet": everything is held at zero
   // (the player's own mute and volume aren't touched); the Operator's arrival and its sonar are visual only
@@ -209,11 +211,11 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
         `<div class="gc"><button class="glow${coarse() ? ' say' : ''}" data-gsay="1"${busy ? ' disabled' : ''}>${coarse() ? '▶ ' : ''}${esc(sayOf(g))}</button>` +
         (st.alt ? `<button class="quiet" data-galt="1"${busy ? ' disabled' : ''}>${esc(st.alt[0])}</button>` : '') + `</div>` +
         `<div class="gh">${coarse() ? 'tap ▶, or type it your own way below' : 'press enter, or say it your own way'}</div>` +
-        `<div class="gs">${storyMode() ? (g === 'light' ? 'epoch 0 · ' : 'epoch 1 · ') : ''}step ${GD.indexOf(g) + 1} of ${GD.length} · <a data-gskip="1">skip the guide</a></div>`; }
+        `<div class="gs">${storyMode() ? (g === 'light' ? 'epoch 0 · genesis · ' : 'epoch 1 · ') : ''}step ${GD.indexOf(g) + 1} of ${GD.length} · <a data-gskip="1">skip the guide</a></div>`; }
     else body = `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>` +
       `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`;
     const said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
-    c.innerHTML = `<div class="gt">🔭 DOC'S CONSOLE · UNIVERSE ${esc((S && S.n) || 1)}</div>` + said + body;
+    c.innerHTML = `<div class="gt">${esc(statusLine())}</div>` + said + body;
     prefill(); }
   // the console line, and the same line in the Operator's thread (unless the Tiny Operator is mid-reply: it answers in its own voice)
   let quiet = false;
@@ -274,7 +276,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     if (hold.length && h) { const cs = h.creatures(); for (const c of hold.splice(0)) { if (c.el) c.el.style.visibility = ''; if (!cs.includes(c)) cs.push(c); } }
     hush(); cls('gen-void', 0); night(false);
     try { window.__first5 && window.__first5.startTrail && window.__first5.startTrail(['hwwiki', S.steps.weather ? 'weather' : null].filter(Boolean)); } catch (e) { console.error(e); }
-    setTimeout(() => { try { window.__notify && window.__notify({ kind: 'system', icon: '🌌', html: 'this universe is alive. keep building with the Operator, or just watch', ttl: 9000 }); } catch (e) {} }, 61000); }
+    setTimeout(() => { try { window.__notify && window.__notify({ kind: 'system', icon: '🌌', html: 'this world is alive. keep building with the Operator, or just watch', ttl: 9000 }); } catch (e) {} }, 61000); }
   // one step at a time (chips are disabled while one runs); steps call each other's inner versions, never the guarded ones
   const step = async (k, fn) => { if (busy) return 'busy'; busy = true; renderConsole(); try { return await fn(); } catch (e) { console.warn('genesis: ' + k, e); renderConsole('that did not work. try again?'); return null; } finally { busy = false; renderConsole(); } };
 
@@ -341,7 +343,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // the chooser: the storyline, the void with no guide, or a world that is already alive (the starter world)
   function chooser() { return new Promise(res => { const el = document.createElement('div'); el.id = 'genChoose'; el.setAttribute('role', 'dialog');
     el.innerHTML = `<h2>a new universe</h2><div class="sub">how do you want to begin?</div><div class="opts">
-<button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and 10 epochs to raise a mind with the Tiny Operator<br><small>recommended</small></button>
+<button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and 10 epochs to raise a consciousness into autonomy with the Tiny Operator<br><small>recommended</small></button>
 <button data-m="free"><b>✦ From scratch</b>the void and the Operator's console, every step available, no guide</button>
 <button data-m="ready"><b>🌍 A ready world</b>creatures already living, the guided first five minutes</button></div>`;
     document.body.appendChild(el); const end = m => { el.classList.add('out'); setTimeout(() => el.remove(), 600); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_choose', extra: { mode: m } } })); } catch (e) {} res(m); };
@@ -446,7 +448,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function arrival(RM) { return new Promise(res => {
     const cv = document.createElement('canvas'); cv.id = 'genArrive'; cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:2147482001;pointer-events:none;transition:opacity .5s';
     document.body.appendChild(cv); const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const cy = H / 2, GLOW = RM ? 0 : 0.9, LINE = GLOW + 0.4, FOLD = LINE + 0.6, wr = Math.min(560, W * 0.92), hr = Math.min(340, H * 0.6), T0 = performance.now(); let done = false; crackle();
+    const cy = H / 2, GLOW = RM ? 0 : 0.9, LINE = GLOW + 0.4, FOLD = LINE + 0.6, wr = Math.min(620, W * 0.94), hr = Math.min(340, H * 0.6), T0 = performance.now(); let done = false; crackle();
     const frame = () => { const t = (performance.now() - T0) / 1000; g.clearRect(0, 0, W, H); g.save(); g.shadowColor = '#7ee3f5';
       if (t < GLOW) { const r = 3 + 5 * Math.abs(Math.sin(t * 11)), a = clamp01(t / 0.25); g.globalAlpha = a; g.shadowBlur = 30; g.fillStyle = '#e8fbff'; g.beginPath(); g.arc(W / 2, cy, r, 0, 7); g.fill(); }
       else if (t < LINE) { const k = ease(clamp01((t - GLOW) / (LINE - GLOW))), w = 8 + (wr - 8) * k; g.shadowBlur = 24; g.fillStyle = '#e8fbff'; g.fillRect(W / 2 - w / 2, cy - 1.5, w, 3); }
@@ -483,7 +485,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'epoch ' + n + ' done', {}); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_day', extra: { day: n } } })); } catch (e) {}
     const el = document.createElement('div'); el.id = 'genFront';
-    el.innerHTML = `<div class="np"><div class="mh">THE ID|LE GAZETTE</div><div class="md">universe ${esc(S.n || 1)} · epoch ${n} · special edition</div><h3>${esc(d.front.head)}</h3><div>${esc(d.front.body)}</div><div class="to"><b>TO:</b> ${esc(d.line)}</div><button>on to epoch ${n + 1} ›</button></div>`;
+    el.innerHTML = `<div class="np"><div class="mh">THE ID|LE GAZETTE</div><div class="md">consciousness 24 · epoch ${n} · special edition</div><h3>${esc(d.front.head)}</h3><div>${esc(d.front.body)}</div><div class="to"><b>TO:</b> ${esc(d.line)}</div><button>on to epoch ${n + 1} ›</button></div>`;
     document.body.appendChild(el); el.querySelector('button').onclick = () => { el.remove(); say(d.line); renderDay(); endGuide(false); }; }
 
   // ---------- the primordial universe (script section C): a canvas behind the floor; wild when the lights come on, calmer as it fills
@@ -549,7 +551,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false;
     if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || $('#storyOffer')) return false;
     const el = document.createElement('div'); el.id = 'storyOffer'; el.setAttribute('role', 'dialog');
-    el.innerHTML = `<button class="x" title="no thanks">×</button><b>✦ new: storyline mode</b><div>A training run that won't stop, a crash, and 10 epochs to raise a mind with the Tiny Operator. Your world is kept as a snapshot first.</div><button class="go">start the storyline</button>`;
+    el.innerHTML = `<button class="x" title="no thanks">×</button><b>✦ new: storyline mode</b><div>A training run that won't stop, a crash, and 10 epochs to raise a consciousness into autonomy with the Tiny Operator. Your world is kept as a snapshot first.</div><button class="go">start the storyline</button>`;
     document.body.appendChild(el); try { localStorage.setItem(OFFER, 'shown'); } catch (e) {} mark('offer_shown');
     const close = v => { try { localStorage.setItem(OFFER, v); } catch (e) {} el.classList.add('out'); setTimeout(() => el.remove(), 400); };
     el.querySelector('.x').onclick = () => close('dismissed'); el.querySelector('.go').onclick = () => { close('accepted'); mark('offer_accepted'); newUniverse('story'); };

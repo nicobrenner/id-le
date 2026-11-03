@@ -35,7 +35,7 @@
     ['torch 4.1.0+cu152', 'OK', OK, 0.22, 1],
     ['graph cache: 2,113 kernels', 'warm', OK, 0.18, 0],
     ['tokenizer: byte-pair, 8k vocab', 'OK', OK, 0.2, 1],
-    ['/lab/minds: 23 minds archived', 'mounted', OK, 0.24, 1],
+    ['/lab/runs: 23 runs archived', 'mounted', OK, 0.24, 1],
     ['thermals: 31 °C', 'OK', OK, 0.16, 0],
     ['safety interlock', 'BYPASSED', AMB, 0.62, 1],
     ['oracle-trainer.service', 'ready', CY, 0.2, 1]];
@@ -67,8 +67,8 @@
     g.save(); g.globalAlpha = a; if (ovScan) { g.fillStyle = ovScan; g.fillRect(0, 0, W, H); } g.fillStyle = ovVig; g.fillRect(0, 0, W, H); g.restore(); }
   // the agnoster-style prompt: coloured segments joined by arrow tips
   function prompt(g, x, y, fz, port) {
-    const segs = port ? [['operator', '#2b2b2b', '#e6e6e6'], ['~/minds', '#2f6fb5', '#eef4ff'], ['⎇ main', '#4f9a4a', '#0b120b']]
-      : [['operator@lab-07', '#2b2b2b', '#e6e6e6'], ['~/minds', '#2f6fb5', '#eef4ff'], ['⎇ main ✔', '#4f9a4a', '#0b120b']];
+    const segs = port ? [['operator', '#2b2b2b', '#e6e6e6'], ['~/consciousness', '#2f6fb5', '#eef4ff'], ['⎇ main', '#4f9a4a', '#0b120b']]
+      : [['operator@lab-07', '#2b2b2b', '#e6e6e6'], ['~/consciousness', '#2f6fb5', '#eef4ff'], ['⎇ main ✔', '#4f9a4a', '#0b120b']];
     const h = fz * 1.35, tip = h * 0.42, pad = fz * 0.55; g.font = `${fz}px ${MONO}`; g.textBaseline = 'middle'; let cx = x;
     segs.forEach(([s, bg, fg], i) => { const w = g.measureText(s).width + pad * 2 + (i ? tip : 0);
       g.fillStyle = bg; g.fillRect(cx, y - h / 2, w, h); g.fillStyle = fg; g.fillText(s, cx + pad + (i ? tip : 0), y + 1);
@@ -128,7 +128,7 @@
       if (T >= K.login) { lines.push({ txt: '' }); lines.push({ txt: 'lab-node-07 login: ' + typed(USER, K.user, 13, T, RM), cur: T < K.pass });
         if (T >= K.pass - 0.08) lines.push({ txt: 'password: ' + typed(PASS, K.pass + 0.1, 15, T, RM), cur: T < K.last });
         if (T >= K.last) lines.push({ txt: port ? 'Last login: Sun Nov 1 23:58 · obs-deck' : 'Last login: Sun Nov  1 23:58:12 2041 from observation-deck', col: DIM });
-        if (T >= K.welcome) lines.push({ txt: port ? 'welcome back, operator.' : 'welcome back, operator. 23 minds archived, 0 running.', col: TXT }); }
+        if (T >= K.welcome) lines.push({ txt: port ? 'welcome back, operator.' : 'welcome back, operator. 23 runs archived, 0 runs active.', col: TXT }); }
       const vis = lines.slice(-rowsMax); g.font = `${fz}px ${MONO}`; g.textBaseline = 'middle';
       vis.forEach((L, i) => { const y = pad + lh * (i + 0.5); g.fillStyle = L.col && !L.dots ? L.col : TXT; let x = pad;
         if (L.os) { g.save(); g.font = `700 ${Math.round(fz * 1.25)}px ${MONO}`; g.shadowColor = CY; g.shadowBlur = 14; g.fillStyle = '#e9f6ff'; g.fillText(L.txt, x, y); g.restore(); return; }   // the OS's name, bright
@@ -147,7 +147,7 @@
     overlay(g, W, H); }
   // the shell's lines (the prompt, the command and its output; in the film, the training log follows)
   function shellLines(T, RM, port) {
-    const out = [{ txt: port ? '[session project-24]' : '[session project-24 · 4 panes · zero minds running]', col: DIM }];
+    const out = [{ txt: port ? '[session project-24]' : '[session project-24 · 4 panes · 0 runs active]', col: DIM }];
     if (T >= K.cmd - 0.4) { if (port) out.push({ prompt: true, cmd: null }, { txt: '❯ ' + cmdTyped(T, RM), col: '#f2f2f2', cur: T < K.enter, cmd2: true }); else out.push({ prompt: true, cmd: cmdTyped(T, RM), cur: T < K.enter }); }
     (port ? SHELL_OUT_P : SHELL_OUT).forEach(([t0, s]) => { if (T >= t0) out.push({ txt: s, col: CY }); });
     return out; }
@@ -171,7 +171,7 @@
     const n = Math.floor(Math.max(0, Tf) * 7 + (red ? o.overT * o.overT * 14 : 0)), extra = [], rowsMax = 14;
     for (let i = Math.max(0, n - rowsMax); i < n; i++) { const tt = i / 7, runaway = red && i >= Math.floor(o.overStart * 7), l = runaway ? o.lossAt(o.overStart) - (i - o.overStart * 7) * 0.02 : o.lossAt(tt), step = (i + 1) * 50;
       const util = Math.round(clamp(30 + 68 * Math.min(1, tt / 22) + Math.sin(i * 1.7) * 2, 0, 99));
-      extra.push(i % 23 === 22 && !runaway ? { txt: `ckpt  minds/p24/step${step}.pt  saved`, col: DIM }
+      extra.push(i % 23 === 22 && !runaway ? { txt: `ckpt  runs/p24/step${step}.pt  saved`, col: DIM }
         : { txt: p.port ? `step ${step} loss ${l.toFixed(3)} ${runaway ? 100 : util}%` : `step ${String(step).padStart(6)}  loss ${l.toFixed(3)}  lr 3.0e-4  ${(1.1 + 0.3 * Math.sin(i)).toFixed(2)}M tok/s  gpu ${runaway ? 100 : util}%`, col: runaway ? (l < 0 ? RED : AMB) : '#8fa3ad' }); }
     if (o.over > 0.35) extra.push({ txt: p.port ? 'WARN loss below floor' : 'WARN loss below the chart floor · stop requested · ignored', col: RED });
     g.save(); g.globalAlpha = a; shellText(g, p.log, p, DUR + 2, true, extra, p.pfz); g.restore();
@@ -418,6 +418,7 @@
   // loads"): a warm low tone, amplitude-modulated like an engine idling (the pipe's throb), opening up, then a soft chime as the pipe settles.
   // Three variants to choose from by ear (boot-script.md v6); returns its length in seconds.
   function purr(ctx, dest, at, variant = 1) {
+    if (variant === 4) return purrNoise(ctx, dest, at);
     const out = ctx.createGain(); out.gain.value = 1; out.connect(dest); const D = variant === 3 ? 3.0 : 2.6;
     const car = ctx.createOscillator(), mod = ctx.createOscillator(), modG = ctx.createGain(), am = ctx.createOscillator(), amG = ctx.createGain(), body = ctx.createGain(), lp = ctx.createBiquadFilter();
     car.type = variant === 2 ? 'sawtooth' : 'triangle'; car.frequency.setValueAtTime(variant === 3 ? 46 : 58, at); car.frequency.linearRampToValueAtTime(variant === 3 ? 55 : 70, at + D * 0.7);
@@ -431,6 +432,23 @@
     const chimeAt = at + D * 0.62, notes = variant === 2 ? [523.25, 659.25, 784, 1046.5] : variant === 3 ? [392, 587.33] : [659.25, 987.77];
     notes.forEach((f, k) => { const t = chimeAt + k * (variant === 2 ? 0.09 : 0.14); for (const [m, g0] of [[1, 0.05], [2.76, 0.012], [5.4, 0.005]]) { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sine'; o.frequency.value = f * m; v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(g0, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0001, t + 1.4 / m + 0.3); o.connect(v); v.connect(out); o.start(t); o.stop(t + 1.8); } });
     return D + 0.6; }
+  // variant 4 (Nico, v7: "I really like the b2 first part, but not the bell at the end… maybe it could end in white noise… like ppbbrrrrtttsssss"):
+  // b2's saw purr (the brr, 1.4 s), then a rattle (t-t-t: band-passed clicks slowing down, 0.55 s), then noise hissing away (the sssss, 0.9 s); ~2.85 s
+  function purrNoise(ctx, dest, at) {
+    const out = ctx.createGain(); out.gain.value = 1; out.connect(dest); const B = 1.4;
+    const car = ctx.createOscillator(), mod = ctx.createOscillator(), modG = ctx.createGain(), am = ctx.createOscillator(), amG = ctx.createGain(), body = ctx.createGain(), lp = ctx.createBiquadFilter(), env = ctx.createGain();
+    car.type = 'sawtooth'; car.frequency.setValueAtTime(58, at); car.frequency.linearRampToValueAtTime(70, at + B); mod.frequency.value = 87; modG.gain.setValueAtTime(18, at); modG.gain.linearRampToValueAtTime(35, at + B); mod.connect(modG); modG.connect(car.frequency);
+    am.frequency.setValueAtTime(26, at); am.frequency.linearRampToValueAtTime(16, at + B); amG.gain.value = 0.5; am.connect(amG); amG.connect(body.gain); body.gain.setValueAtTime(0.5, at);
+    lp.type = 'lowpass'; lp.frequency.setValueAtTime(220, at); lp.frequency.linearRampToValueAtTime(1400, at + B * 0.8);
+    env.gain.setValueAtTime(0, at); env.gain.linearRampToValueAtTime(0.16, at + 0.2); env.gain.setValueAtTime(0.16, at + B - 0.25); env.gain.exponentialRampToValueAtTime(0.0001, at + B + 0.1);
+    car.connect(body); body.connect(lp); lp.connect(env); env.connect(out); for (const o of [car, mod, am]) { o.start(at); o.stop(at + B + 0.15); }
+    // the rattle: clicks of filtered noise, each a little later than the last
+    let t = at + B - 0.15; for (let k = 0; k < 9; k++) { const s = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noise(ctx); bp.type = 'bandpass'; bp.frequency.value = 1500 + k * 220; bp.Q.value = 3;
+      v.gain.setValueAtTime(0.14 * (1 - k / 12), t); v.gain.exponentialRampToValueAtTime(0.0001, t + 0.035); s.connect(bp); bp.connect(v); v.connect(out); s.start(t, Math.random() * 0.5); s.stop(t + 0.05); t += 0.045 + k * 0.009; }
+    // the hiss: white noise through a high-pass that closes, fading away
+    { const s = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noise(ctx); s.loop = true; hp.type = 'highpass'; hp.frequency.setValueAtTime(2500, t - 0.1); hp.frequency.exponentialRampToValueAtTime(7000, t + 0.9);
+      v.gain.setValueAtTime(0.0001, t - 0.1); v.gain.linearRampToValueAtTime(0.09, t + 0.02); v.gain.exponentialRampToValueAtTime(0.0001, t + 0.9); s.connect(hp); hp.connect(v); v.connect(out); s.start(t - 0.1); s.stop(t + 0.95); t += 0.9; }
+    return t - at; }
   // a modem connecting (Nico: "simulate part of a modem connecting to the internet… or use it for the computer boot"): our own condensed handshake:
   // dial tone, DTMF digits, the answer tone with its phase flips, the screech of training (two-tone bursts, chirps, noise), then hiss cut to silence
   function modem(ctx, dest, at) {
