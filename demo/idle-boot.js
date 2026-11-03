@@ -254,11 +254,12 @@
     { me: true, text: "yes!! important day at the lab today, we're going to attempt a post PROJECT 23 run 🧪" },
     { me: true, text: "I'm excited… but a bit concerned too 😬" },
     { me: false, text: "it'll be fine ❤️ dinner at 7?" },
-    { me: true, text: "yes, I'm sure everything will be fine… ok, arriving now, see you later 😘" },
+    { me: true, text: "you're right, sometimes I worry too much 😅 - ok, gotta go", afterNote: true },
     { me: false, text: 'good luck!! 🍀' }];
   // when each message lands: hers after typing dots, his after a short pause; then enough time to read it
-  const TH = (() => { let t = 1.1; return THREAD.map(m => { const dots = m.me ? 0 : 0.8, at = t + dots; t = at + Math.max(1.2, m.text.length * 0.031); return { ...m, dots: at - dots, at }; }); })();
-  const NOTE = TH[TH.length - 1].at + 1.3, CHAT = NOTE + 1.9;   // the notification slides in and stays a beat before the chat opens
+  // Lester's notification slides in after "dinner at 7?"; Doc answers her a beat later; then Doc closes the messages and labchat is there
+  let NOTE = 0; const TH = (() => { let t = 1.1; return THREAD.map(m => { if (m.afterNote) { NOTE = t; t += 1.6; } const dots = m.me ? 0 : 0.8, at = t + dots; t = at + Math.max(1.2, m.text.length * 0.031); return { ...m, dots: at - dots, at }; }); })();
+  const CLOSEM = TH[TH.length - 1].at + 1.4, CHAT = CLOSEM + 0.05, BOLT = CLOSEM + 0.12, BOLT_D = 0.5;   // the messages close; labchat, centred, is underneath; a tiny creature bolts
   // the team chat: a few believable recent lines in #training-runs (bots and handles, no real people; no training text)
   const CHANNELS = ['training-runs', 'experiments', 'evals', 'cluster-admin', 'random'];
   const BACKLOG = [['ops-bot', 'run 23: checkpoint archived · 412 GB'], ['evalbot', 'p23 final · loss 1.43 · 2 evals flagged "unusual"'], ['night-shift', 'anyone else see the thermals spike at 3am?'],
@@ -307,7 +308,7 @@
     g.save(); g.beginPath(); g.rect(c.x, c.y, c.w, c.h); g.clip(); g.fillStyle = '#000'; g.fillRect(c.x, c.y, c.w, c.h);
     const ay = c.y + fs * 2.2; g.fillStyle = '#3a3a3e'; g.beginPath(); g.arc(c.x + c.w / 2, ay, fs * 1.3, 0, 7); g.fill(); g.font = `${Math.round(fs * 1.2)}px ${SANS}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('❤️', c.x + c.w / 2, ay + 1);
     g.font = `${Math.round(fs * 0.75)}px ${SANS}`; g.fillStyle = '#c9c9ce'; g.fillText('❤️ ›', c.x + c.w / 2, ay + fs * 2.0); g.fillStyle = '#26262a'; g.fillRect(c.x, ay + fs * 2.7, c.w, 1); g.textAlign = 'left';
-    g.font = `${fs}px ${SANS}`; const maxW = c.w * 0.7, padX = fs * 0.65, padY = fs * 0.45, lh = fs * 1.25, items = [];
+    g.font = `${fs}px ${SANS}`; const maxW = c.w * 0.7, padX = fs * 0.65, padY = fs * 0.45, lh = fs * 1.25, items = [], A0 = g.globalAlpha;
     TH.forEach((m, i) => { if (T >= m.at) items.push({ ...m, i, rows: wrapRows(g, m.text, maxW) }); else if (!m.me && T >= m.dots) items.push({ dotsOnly: true, i }); });
     const lastMe = [...items].reverse().find(m => m.me), readNow = lastMe && TH.slice(lastMe.i + 1).some(m => !m.me && T >= m.dots);
     g.save(); g.beginPath(); g.rect(c.x, ay + fs * 2.75, c.w, c.h); g.clip(); let yb = c.y + c.h - fs * 3.0;
@@ -315,9 +316,9 @@
       if (m.dotsOnly) { const bw = fs * 3.2, bh = fs * 1.9; yb -= bh; g.fillStyle = '#2c2c2e'; rr(g, c.x + c.w * 0.05, yb, bw, bh, bh / 2); g.fill(); for (let d = 0; d < 3; d++) { g.fillStyle = `rgba(200,200,205,${0.35 + 0.6 * (RM ? 1 : Math.max(0, Math.sin(T * 7 - d * 0.9)))})`; g.beginPath(); g.arc(c.x + c.w * 0.05 + fs * (0.9 + d * 0.7), yb + bh / 2, fs * 0.2, 0, 7); g.fill(); } yb -= fs * 0.5; continue; }
       const u = RM ? 1 : ease(clamp((T - m.at) / 0.25)), tw = Math.max(...m.rows.map(rw => g.measureText(rw).width)), bw = tw + padX * 2, bh = m.rows.length * lh + padY * 2;
       if (m.me && m === lastMe) { g.font = `${Math.round(fs * 0.7)}px ${SANS}`; g.fillStyle = '#8e8e93'; g.textAlign = 'right'; g.fillText(readNow ? 'Read 18:41' : 'Delivered', c.x + c.w * 0.95, yb - fs * 0.45); g.textAlign = 'left'; g.font = `${fs}px ${SANS}`; yb -= fs * 1.1; }
-      yb -= bh; const bx = m.me ? c.x + c.w * 0.95 - bw : c.x + c.w * 0.05, oy = (1 - u) * fs * 1.2; g.globalAlpha = u;
+      yb -= bh; const bx = m.me ? c.x + c.w * 0.95 - bw : c.x + c.w * 0.05, oy = (1 - u) * fs * 1.2; g.globalAlpha = A0 * u;
       g.fillStyle = m.me ? '#0a84ff' : '#2c2c2e'; rr(g, bx, yb + oy, bw, bh, Math.min(fs * 0.9, bh / 2)); g.fill(); g.fillStyle = m.me ? '#fff' : '#f2f2f7';
-      m.rows.forEach((rw, j) => g.fillText(rw, bx + padX, yb + oy + padY + lh * (j + 0.5))); g.globalAlpha = 1; yb -= fs * (k > 0 && items[k - 1].me === m.me ? 0.25 : 0.6); }
+      m.rows.forEach((rw, j) => g.fillText(rw, bx + padX, yb + oy + padY + lh * (j + 0.5))); g.globalAlpha = A0; yb -= fs * (k > 0 && items[k - 1].me === m.me ? 0.25 : 0.6); }
     g.restore(); const iy = c.y + c.h - fs * 2.3; g.strokeStyle = '#3a3a3e'; g.lineWidth = 1; rr(g, c.x + c.w * 0.05, iy, c.w * 0.9, fs * 1.7, fs * 0.85); g.stroke(); g.fillStyle = '#6b6b70'; g.font = `${Math.round(fs * 0.85)}px ${SANS}`; g.fillText('message', c.x + c.w * 0.08, iy + fs * 0.85);
     g.restore(); }
   // labchat: channels on the left (on phones a top bar), IRC-ish lines, an input; the backlog in #training-runs, then the DM with Lester
@@ -339,17 +340,30 @@
       if (port) { rowsAll.push({ nickRow: true, nick, who: l.who, u }); wrapRows(g, l.text, mw - 28).forEach(r => rowsAll.push({ head: '', hw: 0, nick, who: l.who, r, u })); if (dm) rowsAll.push({ gap: true }); continue; }
       const head = `${hhmm()}  <${nick}> `, hw = g.measureText(head).width, rows = wrapRows(g, l.text, mw - 28 - hw);
       rows.forEach((r, j) => rowsAll.push({ head: j ? '' : head, hw, nick, who: l.who, r, u })); if (dm) rowsAll.push({ gap: true }); }
-    const inputH = fs * 2.6, top = c.y + fs * 2.4 + 6, maxRows = Math.floor((c.h - fs * 2.4 - inputH - 12) / lh), vis = rowsAll.slice(-maxRows);
-    vis.forEach((rw, i) => { if (rw.gap) return; const y = top + lh * (i + 0.5); g.globalAlpha = rw.u;
-      if (rw.nickRow) { g.font = `700 ${Math.round(fs * 0.78)}px ${MONO}`; g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(rw.nick, mx + 14, y); g.fillStyle = '#56616d'; g.fillText(' ' + hhmm(), mx + 14 + g.measureText(rw.nick).width, y); g.font = mono; g.globalAlpha = 1; return; }
+    const A0 = g.globalAlpha, inputH = fs * 2.6, top = c.y + fs * 2.4 + 6, maxRows = Math.floor((c.h - fs * 2.4 - inputH - 12) / lh), vis = rowsAll.slice(-maxRows);
+    vis.forEach((rw, i) => { if (rw.gap) return; const y = top + lh * (i + 0.5); g.globalAlpha = A0 * rw.u;
+      if (rw.nickRow) { g.font = `700 ${Math.round(fs * 0.78)}px ${MONO}`; g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(rw.nick, mx + 14, y); g.fillStyle = '#56616d'; g.fillText(' ' + hhmm(), mx + 14 + g.measureText(rw.nick).width, y); g.font = mono; g.globalAlpha = A0; return; }
       if (rw.head) { g.fillStyle = '#56616d'; g.fillText(hhmm(), mx + 14, y); g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(`<${rw.nick}>`, mx + 14 + g.measureText(hhmm() + '  ').width, y); }
-      g.fillStyle = rw.who === 'scientist' ? '#f3e6d2' : '#dbe4ec'; g.fillText(rw.r, mx + 14 + rw.hw, y); g.globalAlpha = 1; });
+      g.fillStyle = rw.who === 'scientist' ? '#f3e6d2' : '#dbe4ec'; g.fillText(rw.r, mx + 14 + rw.hw, y); g.globalAlpha = A0; });
     // "Lester is typing…" and the scientist's line being typed in the input
     const iy = c.y + c.h - inputH + 6; g.strokeStyle = '#2a333e'; rr(g, mx + 10, iy, mw - 20, inputH - 14, 8); g.stroke(); g.font = `${Math.round(fs * 0.9)}px ${SANS}`;
     const typing = DM.find(l => T >= l.typeAt && T < l.at); if (dm && typing && typing.who === 'scientist') { const n = RM ? typing.text.length : Math.floor((T - typing.typeAt) * 62), s = typing.text.slice(0, n); g.fillStyle = '#f3e6d2'; const vis2 = s.length > 70 ? '…' + s.slice(-70) : s; g.fillText(vis2, mx + 20, iy + (inputH - 14) / 2); if (Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = '#cfd6dd'; g.fillRect(mx + 22 + g.measureText(vis2).width, iy + 6, 2, inputH - 26); } }
     else { g.fillStyle = '#56616d'; g.fillText(dm ? 'message Lester' : 'message #training-runs', mx + 20, iy + (inputH - 14) / 2); }
     if (dm && typing && typing.who === 'lester') { g.font = `italic ${Math.round(fs * 0.78)}px ${SANS}`; g.fillStyle = '#6fd6a8'; g.fillText('Lester is typing…', mx + 14, iy - fs * 0.6); }
     g.restore(); }
+  // where the windows are (desktop: messages on the left, labchat roughly centred; phones: both full-width sheets)
+  function arrLayout(W, H, port) { if (port) return { port, msg: { x: 6, y: 30, w: W - 12, h: H - 100 }, chat: { x: 6, y: 30, w: W - 12, h: H - 100 } };
+    const mw = Math.min(420, W * 0.34), mh = Math.min(H - 130, 620), cw = Math.min(820, W * 0.6), ch = Math.min(H - 120, 600); return { port, msg: { x: W * 0.06, y: 40, w: mw, h: mh }, chat: { x: (W - cw) / 2, y: 52, w: cw, h: ch } }; }
+  // the tiny proto-creature that was under the messages window (Nico: "like an insect/spider scurrying after you lift a rock"): a fast zig-zag
+  // to cover behind labchat's edge, ~0.5 s. Desktop: from where the messages were to labchat's left edge; phones: from the bottom edge up under the panel
+  function critterPath(L) { const { msg, chat } = L;
+    if (L.port) { const x0 = chat.x + chat.w * 0.55, y0 = chat.y + chat.h + 40; return { x0, y0, x1: x0 - 24, y1: chat.y + chat.h - 26 }; }
+    const x0 = msg.x + msg.w * 0.35, y0 = msg.y + msg.h * 0.62; return { x0, y0, x1: chat.x + 26, y1: y0 - 18 }; }
+  function critterAt(T, L, RM) { if (RM || T < BOLT || T > BOLT + BOLT_D + 0.1) return null; const u = clamp((T - BOLT) / BOLT_D), p = critterPath(L), e = 1 - Math.pow(1 - u, 2.2);
+    const zz = Math.sin(u * Math.PI * 5) * (1 - u) * 14; let x = p.x0 + (p.x1 - p.x0) * e, y = p.y0 + (p.y1 - p.y0) * e; if (L.port) x += zz; else y += zz; return { x, y, u, dir: Math.atan2(p.y1 - p.y0, p.x1 - p.x0) }; }
+  function critter(g, c, T) { g.save(); g.translate(c.x, c.y); g.rotate(c.dir); g.scale(1.5, 1.5); g.fillStyle = '#c9d7c0'; g.strokeStyle = '#c9d7c0'; g.lineWidth = 1;
+    for (let k = 0; k < 6; k++) { const side = k % 2 ? 1 : -1, lx = (Math.floor(k / 2) - 1) * 3, sw = Math.sin(T * 70 + k * 2) * 2.5; g.beginPath(); g.moveTo(lx, 0); g.lineTo(lx + sw, side * 5); g.stroke(); }
+    g.beginPath(); g.ellipse(0, 0, 4.5, 2.6, 0, 0, 7); g.fill(); g.restore(); }
   // the desktop: a dark wallpaper, a thin top bar, a dock with three apps (messages, labchat, terminal); windows open and close on it
   function arriveDraw(g, W, H, T, P, RM) {
     const port = portOf(W, H, P), fs = port ? Math.round(clamp(W / 24, 14, 17)) : Math.round(clamp(W / 85, 13, 16));
@@ -359,16 +373,18 @@
     // the dock
     const apps = [['💬', 'messages', T < CLOSE - 2 && T < NOTE + 1.2], ['#', 'labchat', T >= NOTE && T < CLOSE], ['>_', 'terminal', T >= TERM - 0.2]], dw = apps.length * 54 + 16, dx = W / 2 - dw / 2, dy = H - 62;
     g.fillStyle = '#0f141bd9'; rr(g, dx, dy, dw, 52, 14); g.fill(); apps.forEach(([ic, nm, on], i) => { const x = dx + 16 + i * 54; g.fillStyle = '#1b222c'; rr(g, x, dy + 7, 38, 38, 9); g.fill(); g.font = `600 ${ic.length > 1 && ic !== '💬' ? 14 : 18}px ${ic === '💬' ? SANS : MONO}`; g.fillStyle = '#d6dde4'; g.textAlign = 'center'; g.fillText(ic, x + 19, dy + 27); g.textAlign = 'left'; if (on) { g.fillStyle = '#7ee3f5'; g.beginPath(); g.arc(x + 19, dy + 49, 2, 0, 7); g.fill(); } });
-    if (port) { // phones: one window at a time, the full screen
-      if (T < CHAT + 0.45) { const a = clamp((T - 0.2) / 0.3); const c = win(g, 6, 30, W - 12, H - 100, 'messages', a); thread(g, c, T, fs, RM); c.done(); }
-      if (T >= CHAT && T < CLOSE + 0.3) { const u = RM ? 1 : ease(clamp((T - CHAT) / 0.45)), a = (1 - clamp((T - CLOSE) / 0.3)); const c = win(g, 6, 30 + (1 - u) * H, W - 12, H - 100, 'labchat', a); labchat(g, c, T, fs, true, RM); c.done(); } }
-    else { // desktop: messages on the left, labchat over it on the right
-      const mw = Math.min(420, W * 0.34), mh = Math.min(H - 130, 620), ma = clamp((T - 0.2) / 0.3) * (1 - clamp((T - CLOSE) / 0.4) * 0.6);
-      if (ma > 0) { const c = win(g, W * 0.06, 40, mw, mh, 'messages · ❤️', ma); thread(g, c, T, fs, RM); c.done(); }
-      if (T >= CHAT && T < CLOSE + 0.35) { const u = RM ? 1 : ease(clamp((T - CHAT) / 0.3)), out = clamp((T - CLOSE) / 0.35), cw = Math.min(820, W * 0.6), ch = Math.min(H - 120, 600);
-        const c = win(g, W - cw - W * 0.05, 52, cw, ch, 'labchat · lab-07', u * (1 - out), (0.94 + 0.06 * u) * (1 - 0.2 * out)); labchat(g, c, T, fs, false, RM); c.done(); } }
+    const L = arrLayout(W, H, port), cr = critterAt(T, L, RM);
+    if (port) { // phones: the messages sheet slides down and away, labchat is the panel underneath; the creature darts up from the bottom edge
+      if (T >= CHAT - 0.4 && T < CLOSE + 0.3) { const a = clamp((T - CHAT + 0.4) / 0.3) * (1 - clamp((T - CLOSE) / 0.3)); const c = win(g, L.chat.x, L.chat.y, L.chat.w, L.chat.h, 'labchat', a); labchat(g, c, T, fs, true, RM); c.done(); }
+      if (T < CLOSEM + 0.45) { const u = RM ? (T >= CLOSEM ? 1 : 0) : ease(clamp((T - CLOSEM) / 0.4)); const c = win(g, L.msg.x, L.msg.y + u * H, L.msg.w, L.msg.h, 'messages', clamp((T - 0.2) / 0.3)); thread(g, c, T, fs, RM); c.done(); } }
+    else { // desktop: labchat waits, roughly centred, under the messages; the messages close (shrink and fade) and a creature that was under them runs for cover behind labchat
+      if (T >= CHAT - 0.6 && T < CLOSE + 0.35) { const u = RM ? 1 : ease(clamp((T - (CHAT - 0.6)) / 0.3)), out = clamp((T - CLOSE) / 0.35);
+        const c = win(g, L.chat.x, L.chat.y, L.chat.w, L.chat.h, 'labchat · lab-07', u * (1 - out), (0.94 + 0.06 * u) * (1 - 0.2 * out)); labchat(g, c, T, fs, false, RM); c.done(); }
+      const k = RM ? (T >= CLOSEM ? 1 : 0) : ease(clamp((T - CLOSEM) / 0.35)), ma = clamp((T - 0.2) / 0.3) * (1 - k);
+      if (ma > 0) { const c = win(g, L.msg.x, L.msg.y, L.msg.w, L.msg.h, 'messages · ❤️', ma, 1 - 0.12 * k); thread(g, c, T, fs, RM); c.done(); } }
+    if (cr) { const r = L.chat; g.save(); g.beginPath(); g.rect(0, 0, W, H); g.rect(r.x + r.w, r.y, -r.w, r.h); g.clip('evenodd'); critter(g, cr, T); g.restore(); }   // behind labchat = clipped by it
     // the notification from Lester
-    if (T >= NOTE && T < CHAT + 0.4) { const sl = RM ? 1 : ease(clamp((T - NOTE) / 0.45)), a = Math.min(1, sl * 1.4) * (1 - clamp((T - CHAT) / 0.4)), nw = Math.min(port ? W - 24 : 330, W - 24), nx = port ? 12 : W - nw - 12, ny = 34 - (1 - sl) * 90, tap = T > CHAT - 0.45;
+    if (T >= NOTE && T < CLOSEM) { const sl = RM ? 1 : ease(clamp((T - NOTE) / 0.45)), a = Math.min(1, sl * 1.4) * (1 - clamp((T - (CLOSEM - 0.6)) / 0.5)), nw = Math.min(port ? W - 24 : 330, W - 24), nx = port ? 12 : W - nw - 12, ny = 34 - (1 - sl) * 90, tap = false;
       g.save(); g.globalAlpha = a; g.shadowColor = '#000'; g.shadowBlur = 20; g.fillStyle = tap ? '#22303dee' : '#18202aee'; rr(g, nx, ny, nw, 62, 12); g.fill(); g.shadowBlur = 0; g.strokeStyle = tap ? '#7ee3f5' : '#2e3a47'; g.lineWidth = tap ? 1.5 : 1; rr(g, nx, ny, nw, 62, 12); g.stroke();
       g.font = `700 12px ${SANS}`; g.fillStyle = '#6fd6a8'; g.fillText('labchat · Lester', nx + 14, ny + 18); g.font = `13px ${SANS}`; g.fillStyle = '#e1e8ee'; g.fillText(DMLINES[0].text, nx + 14, ny + 40); g.restore(); }
     // the terminal opens: a window that grows to the whole screen, then the boot takes over
@@ -378,9 +394,9 @@
     if (T < 0.5) { g.fillStyle = `rgba(0,0,0,${1 - T / 0.5})`; g.fillRect(0, 0, W, H); } }
   // sound: the room (a quiet hum, rain on the window), the messages, the notification, the chat's ticks, his keys, the windows
   const AEV = (() => { const ev = [{ t: 0, k: 'room', d: ADUR }, { t: 0.4, k: 'pad', d: ADUR - 0.4 }]; for (let t = 0.6, i = 0; t < ADUR; t += 60 / IDLE_BPM, i++) ev.push({ t, k: 'beat', i });
-    TH.forEach(m => ev.push({ t: m.at, k: m.me ? 'sent' : 'recv' })); ev.push({ t: NOTE, k: 'notify' }, { t: CHAT, k: 'win' });
+    TH.forEach(m => ev.push({ t: m.at, k: m.me ? 'sent' : 'recv' })); ev.push({ t: NOTE, k: 'notify' });
     BL.forEach(b => ev.push({ t: b.at, k: 'tick' })); DM.forEach((l, i) => { if (i === 0) return; if (l.who === 'scientist') { for (let t = l.typeAt; t < l.at - 0.15; t += 0.07 + 0.03 * ((i * 7 + t * 13) % 1)) ev.push({ t, k: 'key' }); ev.push({ t: l.at, k: 'send' }); } else ev.push({ t: l.at, k: 'tick' }); });
-    ev.push({ t: CLOSE, k: 'win' }, { t: TERM, k: 'win' }); return ev.sort((a, b) => a.t - b.t); })();
+    ev.push({ t: CLOSEM, k: 'win' }, { t: BOLT, k: 'scuttle' }, { t: CLOSE, k: 'win' }, { t: TERM, k: 'win' }); return ev.sort((a, b) => a.t - b.t); })();
   function asound(ctx, dest, e, at) {
     const tone = (type, f, t0, dur, vol, f2) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur); v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(vol, t0 + Math.min(.01, dur / 4)); v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(v); v.connect(dest); o.start(t0); o.stop(t0 + dur + .05); };
     const nz = (t0, dur, vol, type, f, q = 1, loop = false, fadeIn = 0.01, f2) => { const s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noise(ctx); s.loop = loop; fl.type = type; fl.frequency.setValueAtTime(f, t0); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t0 + dur); fl.Q.value = q;
@@ -396,11 +412,13 @@
       case 'send': nz(at, 0.06, 0.12, 'bandpass', 1300, 1.2); break;
       case 'win': nz(at, 0.25, 0.04, 'bandpass', 600, 0.8, false, 0.01, 1800); break;
       case 'pad': pad(ctx, dest, at, e.d, e.from || 0, 0.009); break;
+      case 'scuttle': for (let k = 0; k < 9; k++) nz(at + k * 0.045, 0.02, 0.035, 'bandpass', 3200 + 400 * (k % 3), 2.5); break;   // tiny feet, quiet
       case 'beat': beat(ctx, dest, at, e.i, 0.2); break; } }
   const afire = (ctx, dest, T0, T1, at) => { for (const e of AEV) if (e.t > T0 && e.t <= T1) { try { asound(ctx, dest, e, at); } catch (er) {} } };
   const afireAll = (ctx, dest, t0) => { for (const e of AEV) { try { asound(ctx, dest, e, t0 + e.t); } catch (er) {} } };
   const abeds = (ctx, dest, T, at) => { for (const e of AEV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { asound(ctx, dest, { ...e, d: e.t + e.d - T, from: T - e.t }, at); } catch (er) {} } };
   const arrive = { dur: ADUR, draw: arriveDraw, fire: afire, fireAll: afireAll, beds: abeds, lines: [], thread: TH.map(m => ({ at: m.at, me: m.me, text: m.text })),
+    critter: (W, H, P) => { const L = arrLayout(W, H, portOf(W, H, P)), p = critterPath(L); return { end: { x: p.x1, y: p.y1 }, start: { x: p.x0, y: p.y0 }, chat: L.chat, msg: L.msg, at: BOLT, d: BOLT_D }; }, closeMsgs: CLOSEM,
     chat: { note: NOTE, open: CHAT, dm: DMT, close: CLOSE, backlog: BL.map(b => ({ who: b.who, at: b.at })), dm_lines: DM.map(l => ({ who: l.who, at: l.at, text: l.text })), channels: CHANNELS.slice() },
     scenes: { messages: [0, CHAT], chat: [CHAT, CLOSE], terminal: [TERM, ADUR] }, beat: BT, sayFz, events: AEV.length, lastSay: () => lastSay };
 

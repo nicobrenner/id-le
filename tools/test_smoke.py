@@ -1236,7 +1236,7 @@ def t_pedia(P, phone=False):
 def t_genesis(P):
     """The guided genesis (?genesis&intro=0): a calm, dark void with the Operator open and "let there be light" pre-filled; words made
     out of order are still visible; enter on the pre-filled phrase builds the step; the glowing suggestion too; after four guided steps
-    the guide ends and the normal UI fades in; a new universe keeps a snapshot; stats() reports the steps."""
+    the guide ends and the normal UI fades in; a new consciousness keeps a snapshot; stats() reports the steps."""
     pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
     wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
     st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), calm: document.documentElement.classList.contains('gen-calm'), lit: document.documentElement.classList.contains('gen-lit'), next: window.__genesis.next(), pre: (document.getElementById('lab-text') || {}).value, g: window.__genesis.state(), ab: window.__genesis.ab })"
@@ -1277,9 +1277,10 @@ def t_genesis(P):
     pg.evaluate("() => window.__genesis.newUniverse('guided')")
     wait_for(pg, "() => window.__genesis.state().n === 2 && document.documentElement.classList.contains('gen-void') && window.__genesis.next() === 'light'", 20, P=P)
     n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
-    need(n1 == n0 + 1, f"a new universe must keep the old world as a snapshot first ({n0} → {n1})")
+    need(pg.evaluate("() => [...document.querySelectorAll('#settings .row b, #genChoose h2')].map(e => e.textContent).join('|')").count('universe') == 0, "no 'universe' left in ⚙ or the chooser")
+    need(n1 == n0 + 1, f"a new consciousness must keep the old world as a snapshot first ({n0} → {n1})")
     P.clean()
-    return f"calm void, light pre-filled; words out of order visible (lum {ink['lum']:.0f}); enter → light, ▶ → life (alive), enter → weather → guide ends; steps {end['stats']['steps']}; new universe kept a snapshot ({n0}→{n1})"
+    return f"calm void, light pre-filled; words out of order visible (lum {ink['lum']:.0f}); enter → light, ▶ → life (alive), enter → weather → guide ends; steps {end['stats']['steps']}; new consciousness kept a snapshot ({n0}→{n1})"
 
 
 def t_story(P):
@@ -1384,7 +1385,8 @@ def t_boot_intro(P):
       const lester = C.dm_lines.filter(l => l.who === 'lester').map(l => l.text), doc = C.dm_lines.filter(l => l.who === 'scientist').length, arrLit = [2, (C.open + C.dm) / 2, (C.dm + C.close) / 2].map(litA);
       const pb = E.makeContent({ seed: 4 }); pb.boot = true; const pc = document.createElement('canvas'); pc.width = 750; pc.height = 1334; E.frame(pb, B.clock.enter - 0.05, pc, { phone: true, scale: 2 }); const cmdX = B.lastCmd() ? B.lastCmd().x : null;
       return { dur: B.dur, total: E.total(ct), plain: E.total(E.makeContent({ seed: 4 })), lit, m, ev: B.events, want: [E.wantBoot({}), E.wantBoot({ boot: false }), E.wantBoot({ tone: 'boot' })],
-        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), order, cmdX, thread: AR.thread.length, lester, doc, chans: C.channels, backlog: C.backlog.length, arrLit, aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
+        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), order, cmdX, thread: AR.thread.length, texts: AR.thread.map(m => m.text), noteMid: AR.thread[3].at < C.note && C.note < AR.thread[4].at && AR.closeMsgs > AR.thread[5].at,
+        crit: [[1280, 720, false], [390, 844, true]].map(([w, h, ph]) => { const c = AR.critter(w, h, ph), inR = (p, r) => p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h; return { endHidden: inR(c.end, c.chat), startOut: !inR(c.start, c.chat), d: c.d }; }), lester, doc, chans: C.channels, backlog: C.backlog.length, arrLit, aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
     need(10 <= r["dur"] <= 16, f"the boot should take 10-16 s: {r['dur']}"); need(abs(r["total"] - r["plain"] - r["dur"]) < 0.01, f"the run should follow the boot: {r}")
     need(all(v > 8 for v in r["lit"].values()), f"every stage of the boot should draw something: {r['lit']}")
     titles = r["m"][0]["titles"]
@@ -1394,6 +1396,8 @@ def t_boot_intro(P):
     # arriving at the lab (story v4): his computer: the messages thread, Lester's notification, labchat (channels, a backlog, the DM), then the terminal
     need(abs(r["stotal"] - r["splain"] - r["dur"] - r["arr"]) < 0.01, f"story: arrival + boot + run: {r['stotal']} vs {r['splain']} + {r['dur']} + {r['arr']}")
     need(r["warr"] == [True, False], f"the arrival plays in the story only (or ?intro=boot): {r['warr']}")
+    need(r["noteMid"] and not any("arriving now" in t for t in r["texts"]) and "you're right, sometimes I worry too much 😅 - ok, gotta go" in r["texts"], f"v8 thread: Lester's notification after 'dinner at 7?', Doc's new reply, then Doc closes the messages: {r['texts']}")
+    need(all(c["endHidden"] and c["startOut"] and 0.4 <= c["d"] <= 0.6 for c in r["crit"]), f"the tiny creature bolts from where the messages were and hides behind labchat (desktop, phone): {r['crit']}")
     need(r["order"] and r["thread"] == 6 and r["doc"] == 3 and r["lester"][1:] == ["anytime, doc. 23 was… something", "I'll keep a hand on the breaker this time", "good luck, doc"], f"messages, then labchat and the DM with Lester, then the terminal: {r}")
     need({"training-runs", "experiments", "evals", "cluster-admin", "random"} <= set(r["chans"]) and r["backlog"] >= 3, f"labchat's channels and a backlog: {r['chans']}")
     need(all(n > 8 for n in r["arrLit"]) and 33 <= r["arr"] <= 46, f"the desktop draws in every part, ~40 s: {r['arrLit']}, {r['arr']}")
