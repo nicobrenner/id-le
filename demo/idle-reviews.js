@@ -6,8 +6,8 @@
 //   link (?review=logos), or by itself after 2 minutes in the game (never during the intro or the storyline's Genesis). Every word of it
 //   lives in TEXT, for Nico to rewrite.
 // - The team: joined in this browser (its key ties it, so it can be claimed later); the server keeps only a hashed key, when it joined, and
-//   how many review batches it sent. Vesting with a cliff, kindly: "in the loop (vesting)" until 14 days have passed and 3 reviews were
-//   sent, then "in the loop ✓" for good (which also opens the Founder creature creator, idle-founder.js; the Founder gift itself is unchanged). If the founding period ends before the cliff, the pending
+//   how many review batches it sent. Vesting with a cliff, kindly: "in the loop (vesting)" until 14 days have passed and 2 reviews were
+//   sent, then "in the loop ✓" for good (and, if they want, their name on the team's list). If the founding period ends before the cliff, the pending
 //   status lapses; nothing already vested is ever taken away. Contributions (each swipe and pick) grow a level.
 // - A review: one item at a time, big, in the logo lab's own look (the frame, the sound's waveform with its marks). ✕ nah, ✓ like, ★ love
 //   by swiping, buttons or ←/→/↑; ▶ replays (space); a note if you like. Items come least-rated and least-certain first (the server says how
@@ -25,10 +25,13 @@
   let NOW_OFF = 0; const now = () => Date.now() + NOW_OFF;   // tests move the clock (the cliff, "not now" a day later)
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // the cliff: 14 days and 2 reviews for now (only two reviews exist: the logo and the fonts); 3 once a third one ships
+  const CLIFF_DAYS = 14, CLIFF_REVIEWS = 2, LEVELS = [0, 6, 18, 40, 80, 150];
+
   // ---------- the words (DRAFT: Nico rewrites any of it) ----------
   // the team: Humans in the Loop (Nico, 11-03: "I like Humans in the Loop"). Every word about it is made from this one line.
   // name: the team ("one of the Humans in the Loop"); member: the status before (vesting) / ✓; id: the server's key (keep it if it's ever renamed)
-  const TEAM = { id: 'loop', name: 'Humans in the Loop', member: 'in the loop' };   // e.g. { id: 'loop', name: 'Founders', member: 'Founder' }, { name: 'Reviewers', member: 'Reviewer' }, { name: 'Early Adopters', member: 'Early Adopter' }
+  const TEAM = { id: 'loop', name: 'Humans in the Loop', short: 'HITL', member: 'in the loop' };   // short: for tight spaces like ⚙ (Nico: "Humans in the Loop/HITL 👩🏻‍💻👨🏿‍💻")   // another name later: change name/short/member here (keep the id), e.g. { name: 'Reviewers', short: 'the Reviewers', member: 'Reviewer' }
   const DRAFT_END = 'to be the logo that opens the story, for everyone who plays after you 🙌';   // DRAFT: Nico's message stopped at "…the default logo animation for the story that"
   const TEXT = {
     operator: 'I have a message from Nico:',
@@ -42,14 +45,16 @@
     notNow: 'no problem. maybe another time ✌️',
     // the pledge, after "I'm in" (DRAFT)
     pledge: { title: `🌱 you're one of the ${TEAM.name} now`, ask: 'what we’ll ask: a few quick reviews now and then (a minute or two: swipe, pick, a word if you like)',
-      get: `what you get: a say in what ships, a 🌱 ${TEAM.member} badge, and after your cliff, the Founder creature creator`,
-      cliff: `the cliff: 14 days and 3 reviews. until then you’re ${TEAM.member} (vesting); after it, ${TEAM.member} ✓ for good` },
+      // DRAFT
+      get: `what you get: a say in what ships, a 🌱 ${TEAM.member} badge, and your name on the ${TEAM.name} list when you're vested (if you want it)`,
+      cliff: `the cliff: ${CLIFF_DAYS} days and ${CLIFF_REVIEWS} reviews. until then you’re ${TEAM.member} (vesting); after it, ${TEAM.member} ✓ for good` },
     another: rv => `Nico has another one for the ${TEAM.name}: ${rv.title}`, open: 'open ›', later: 'later',
     publicAsk: rv => [[`the ${TEAM.name} narrowed ${rv.title} down to ${rv.n}`, 'help pick the winner?']], publicYes: 'sure ›',
     vested: `you're vested: ${TEAM.member} ✓. thank you for sticking around 🌱`,
     thanks: 'thank you!! Nico reads every one 🧪',
+    short: TEAM.short,
   };
-  const CLIFF_DAYS = 14, CLIFF_REVIEWS = 3, LEVELS = [0, 6, 18, 40, 80, 150];
+
   const INVITE_AFTER = 120e3, ASK_AGAIN_AFTER = 24 * 3600e3;
 
   // ---------- the browser key (idle.bkey): random, made here, sent only with reviews and the team join; the server keeps a hash ----------
@@ -235,8 +240,8 @@
     const top = `<div class="top"><b>⭐ ${esc((c && c.title) || cur.rid)}</b><span class="prog">${c ? `${Math.min(done + 1, total)} / ${total}` : ''}</span>${ts ? `<span class="tm" title="${esc(ts.detail)}">🌱 ${esc(ts.label)}</span>` : '<span class="tm"></span>'}<button class="x" data-a="close" title="close (esc)">✕</button></div>`;
     if (cur.view === 'msg') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><p>${esc(cur.msg)}</p></div></div></div>`; return; }
     if (cur.view === 'check') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>${cur.judged} judged ✓</h3><p>${done} of ${total} so far. thank you!</p><div class="btns"><button data-a="more">keep going</button><button class="alt" data-a="done">done</button></div></div></div></div>`; return; }
-    if (cur.view === 'end') { const st = teamStatus(), gift = st && st.vested && window.__founder && window.__founder.available && window.__founder.available();
-      el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>thank you!!</h3><p>${esc(TEXT.thanks)}</p>${st ? `<p>🌱 ${esc(st.label)} · ${esc(st.detail)}</p>` : ''}<div class="btns">${gift ? '<button data-a="gift">🎁 open your Founder gift</button>' : ''}<button ${gift ? 'class="alt" ' : ''}data-a="close">back to my world</button></div></div></div></div>`; return; }
+    if (cur.view === 'end') { const st = teamStatus();
+      el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>thank you!!</h3><p>${esc(TEXT.thanks)}</p>${st ? `<p>🌱 ${esc(st.label)} · ${esc(st.detail)}</p>` : ''}<div class="btns"><button data-a="close">back to my world</button></div></div></div></div>`; return; }
     if (cur.view === 'h2h') { const [a, b] = cur.pair; el.innerHTML = `<div class="box">${top}<div class="h2q">which one?</div><div class="deck h2h"><section class="card" data-item="${esc(a)}"></section><section class="card" data-item="${esc(b)}"></section></div>
 <div class="notebar"><button data-a="skiph2h">can’t choose</button></div></div>`;
       cur.h2 = [...el.querySelectorAll('.h2h .card')].map(cd => { const m = cur.P.mount(cd.dataset.item, cd); const pk = document.createElement('button'); pk.className = 'pick'; pk.dataset.pick = cd.dataset.item; pk.textContent = 'this one'; cd.appendChild(pk); return m; }); return; }
@@ -288,7 +293,6 @@
     if (a === 'close') return close(); if (a === 'more') { mark('rv_more'); cur.view = 'card'; return paint(); } if (a === 'done') return finish();
     if (a === 'note') { cur.note = true; const id = cur.queue[cur.i]; const nb = el.querySelector('.notebar'); if (nb) { nb.innerHTML = `<textarea maxlength="300" data-note placeholder="what would you change? (optional)">${esc(cur.pending.notes[id] || '')}</textarea>`; const t = nb.querySelector('textarea'); setTimeout(() => t.focus(), 30); } return; }
     if (a === 'skiph2h') { cur.h2hDone = true; (cur.h2 || []).forEach(m => { try { m.stop(); } catch (er) {} }); cur.h2 = null; return finish(); }
-    if (a === 'gift') { close(); try { window.__founder.open(); } catch (er) {} return; }
     if (b.dataset.pick) return pick(b.dataset.pick);
     if (act === 'replay') { const cd = b.closest('.card'); if (cd && cd.__moved) { cd.__moved = false; return; } if (cur.view === 'h2h' && cd) { const k = [...el.querySelectorAll('.h2h .card')].indexOf(cd); (cur.h2 || []).forEach((m, j) => { if (j !== k) m.stop(); }); cur.h2[k] && cur.h2[k].play(); return; } if (cur.live) cur.live.play(); return; }
     if (act) judge(act); });

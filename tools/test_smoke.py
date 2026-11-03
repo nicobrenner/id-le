@@ -1973,13 +1973,13 @@ def t_founder(P):
     """Founder by an early world: a world, then (a launch date in the past) no offer; with the real dates the offer, Nico's letter, the
     creator (experiments, undo, the family tree, a name, a badge), release; a snapshot first, nothing lost, the badge on the card, a
     Founder can't be removed, it survives a reload and goes into snapshots, and a gift link later doesn't give a second one."""
-    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg = P.open("/arena.html?fresh=1&test&founder_test"); booted(pg)
     with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 30)
     wait_for(pg, FD_AUTOSAVED, 40, P=P); pg.close()
-    pg = P.open("/arena.html?founder&founder_before=2020-01-01&test"); booted(pg); pg.wait_for_timeout(3500)
+    pg = P.open("/arena.html?founder&founder_before=2020-01-01&test&founder_test"); booted(pg); pg.wait_for_timeout(3500)
     no = pg.evaluate("() => ({ offer: !!document.querySelector('#founderOffer'), e: window.__founder.eligible(), avail: window.__founder.available() })")
     need(not no["offer"] and not no["e"]["world"] and not no["avail"], f"a world newer than the launch is not a Founder: {no}"); pg.close()
-    pg = P.open("/arena.html?founder&test"); booted(pg)
+    pg = P.open("/arena.html?founder&test&founder_test"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderOffer')", 20, P=P)
     before = pg.evaluate("() => ({ names: window.__arena.raw().map(c => c.name), snaps: JSON.parse(localStorage.getItem('arena.snaps') || '[]').length })")
     pg.click("#founderOffer .go"); wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 5, P=P)
@@ -2002,7 +2002,7 @@ def t_founder(P):
     pg.evaluate("() => window.__genHooks.snapshot('founder test')")
     need(pg.evaluate("() => { const s = JSON.parse(localStorage.getItem('arena.snaps') || '[]').pop(); return (s.residents || []).some(r => r.genome && r.genome.founder && r.name === 'Nibbet Prime'); }"), "a new snapshot should carry the Founder")
     wait_for(pg, FD_IN_SAVE, 30, P=P); pg.close()
-    pg = P.open("/arena.html?gift=founder&test"); booted(pg); pg.wait_for_timeout(3500)
+    pg = P.open("/arena.html?gift=founder&test&founder_test"); booted(pg); pg.wait_for_timeout(3500)
     again = pg.evaluate(FD_ONE); dup = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), lab: !!document.querySelector('#founderLab'), avail: window.__founder.available(), n: window.__arena.raw().filter(c => c.g.founder).length, toast: document.body.innerText.includes('You already have your Founder') })")
     need(again and again["name"] == "Nibbet Prime" and again["badge"] == "seed", f"the Founder survives a reload: {again}")
     need(not dup["letter"] and not dup["lab"] and not dup["avail"] and dup["n"] == 1 and dup["toast"], f"one Founder per browser, even with a gift link: {dup}")
@@ -2097,22 +2097,34 @@ def t_reviews(P):
 
 
 def t_reviews_cliff(P):
-    """Vesting with a cliff: 'Founder (vesting)' until 14 days and 3 reviews (fake clock), then 'Founder ✓' for good (still after the
-    founding period), which opens the Founder creator (idle-founder.js eligible().team); a member who doesn't reach the cliff before the
-    founding period ends is 'lapsed'."""
+    """Vesting with a cliff: 'in the loop (vesting)' until 14 days and 2 reviews (fake clock), then 'in the loop ✓' for good (still after
+    the founding period; no Founder gift: it's hidden); a member who doesn't reach the cliff before the founding period ends is 'lapsed'."""
     pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()")
     s0 = pg.evaluate("() => window.__reviews.team.status()")
     pg.evaluate("() => { const t = window.__reviews.test; t.done('logos'); t.done('fonts'); }"); s1 = pg.evaluate("() => window.__reviews.team.status()")
     pg.evaluate("() => { window.__reviews.test.done('x3'); window.__reviews.test.shift(10 * 864e5); }"); s2 = pg.evaluate("() => window.__reviews.team.status()")
-    pg.evaluate("() => window.__reviews.test.shift(5 * 864e5)"); s3 = pg.evaluate("() => ({ s: window.__reviews.team.status(), team: window.__founder.eligible().team, avail: window.__founder.available() })")
+    pg.evaluate("() => window.__reviews.test.shift(5 * 864e5)"); s3 = pg.evaluate("() => ({ s: window.__reviews.team.status(), off: window.__founder.off === true, avail: window.__founder.available() })")
     pg.evaluate("() => window.__reviews.test.shift(90 * 864e5)"); s4 = pg.evaluate("() => window.__reviews.team.status()")
-    need(s0["state"] == "vesting" and s1["state"] == "vesting" and s2["state"] == "vesting" and s3["s"]["state"] == "vested" and s3["s"]["label"] == "in the loop ✓" and s3["team"] and s3["avail"] and s4["state"] == "vested",
+    need(s0["state"] == "vesting" and s1["state"] == "vesting" and s2["state"] == "vesting" and s3["s"]["state"] == "vested" and s3["s"]["label"] == "in the loop ✓" and s3["off"] and not s3["avail"] and s4["state"] == "vested",
          f"the cliff: {s0['state']} → {s1['state']} → {s2['state']} → {s3} → {s4['state']}")
     pg.close(); P.clean()
-    pg = _rv_page(P); pg.evaluate("() => { localStorage.removeItem('idle.team'); localStorage.removeItem('idle.reviews'); window.__reviews.join(); window.__reviews.test.shift(40 * 864e5); }"); s5 = pg.evaluate("() => ({ s: window.__reviews.team.status(), team: window.__founder.eligible().team })")
-    need(s5["s"]["state"] == "lapsed" and not s5["team"], f"lapsed: {s5}")
+    pg = _rv_page(P); pg.evaluate("() => { localStorage.removeItem('idle.team'); localStorage.removeItem('idle.reviews'); window.__reviews.join(); window.__reviews.test.shift(40 * 864e5); }"); s5 = pg.evaluate("() => ({ s: window.__reviews.team.status() })")
+    need(s5["s"]["state"] == "lapsed", f"lapsed: {s5}")
     pg.close(); P.clean()
-    return "vesting (0, 2, 3 reviews by day 10) → in the loop ✓ at day 15 (Founder creator open) → still ✓ after the founding period; no cliff before it ends → lapsed"
+    return "vesting (2 reviews at day 0, still at day 10) → in the loop ✓ at day 15 (no Founder gift) → still ✓ after the founding period; no cliff before it ends → lapsed"
+
+
+def t_founder_off(P):
+    """The Founder gift is hidden everywhere (FOUNDER_ON = false), staging and local included: ?gift=founder and a personal link open
+    nothing, an early world gets no offer, no ⚙ row, a Founder creature's badge isn't drawn; ?founder_test still runs it (the founder tests)."""
+    P.gifts["abcdefghijklmnopqrstuvwx"] = {"letter": "hi", "claimed": False}
+    for q in ("gift=founder&test", "gift=abcdefghijklmnopqrstuvwx&test", "founder&founder_before=2030-01-01&test"):
+        pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(5000)
+        r = pg.evaluate("() => { window.__settings.open(); const row = document.body.innerText.includes('Founder gift'); window.__settings.close(); return { off: window.__founder.off === true, letter: !!document.querySelector('#founderLetter,#founderOffer,#founderLab'), row, draw: typeof window.__founderDraw }; }")
+        need(r["off"] and not r["letter"] and not r["row"] and r["draw"] == "undefined", f"?{q}: {r}"); pg.close()
+    pg = P.open("/arena.html?gift=founder&test&founder_test"); booted(pg); wait_for(pg, "() => !!document.querySelector('#founderLetter')", 30, P=P); pg.close()
+    P.clean()
+    return "hidden: ?gift=founder, a personal link and an early world open nothing, no ⚙ row, no badge drawing; ?founder_test still opens the letter"
 
 
 def t_reviews_phone(P):
@@ -2128,11 +2140,11 @@ def t_reviews_phone(P):
 
 def t_founder_link(P):
     """Founder by a gift link (a brand-new browser): the letter right away; an expired link shows a note and no letter"""
-    pg = P.open("/arena.html?gift=founder&founder_now=2027-06-01&test")
+    pg = P.open("/arena.html?gift=founder&founder_now=2027-06-01&test&founder_test")
     with contextlib.suppress(AssertionError): wait_for(pg, "() => document.body.innerText.includes('has expired')", 40, P=P)
     ex = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), note: document.body.innerText.includes('has expired'), e: window.__founder.eligible() })")
     need(not ex["letter"] and ex["note"] and ex["e"]["expired"], f"an expired link: {ex}"); pg.close()
-    pg = P.open("/arena.html?gift=founder&test"); booted(pg)
+    pg = P.open("/arena.html?gift=founder&test&founder_test"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
     need(pg.evaluate("() => window.__funnel.reached().includes('fd_link') && window.__founder.eligible().link"), "the link should be counted")
     P.clean()
@@ -2142,13 +2154,13 @@ def t_founder_personal(P):
     """a personal gift link: Nico's own letter (not the general draft), opened once (one claim), read again in the same browser, then the
     creator; in another browser the same link says it was already opened; an unknown link says it isn't valid"""
     gid = "abcdefghijklmnopqrstuvwx"; P.gifts[gid] = {"letter": "Hi Sam!\n\nThanks for the bug report on Halloween night.\nThis one is for you.", "claimed": False}
-    pg = P.open(f"/arena.html?gift={gid}&test"); booted(pg)
+    pg = P.open(f"/arena.html?gift={gid}&test&founder_test"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
     lt = pg.evaluate("() => ({ text: document.querySelector('#founderLetter .paper').innerText, draft: !!document.querySelector('#founderLetter .draft'), personal: document.querySelector('#founderLetter').dataset.personal, f: window.__funnel.reached() })")
     need("Hi Sam!" in lt["text"] and "Halloween night" in lt["text"] and "— Nico" in lt["text"] and not lt["draft"] and lt["personal"] == "1", f"the personal letter: {lt}")
     need("fd_personal" in lt["f"] and P.gifts[gid]["claims"] == 1, f"opened once: claims {P.gifts[gid].get('claims')}, funnel {lt['f']}")
     pg.click("#founderLetter .later"); pg.close()
-    pg = P.open(f"/arena.html?gift={gid}&test"); booted(pg)
+    pg = P.open(f"/arena.html?gift={gid}&test&founder_test"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
     need("Hi Sam!" in pg.evaluate("() => document.querySelector('#founderLetter .paper').innerText") and P.gifts[gid]["claims"] == 1, "the same browser reads it again, with no second claim")
     pg.click("#founderLetter .open"); wait_for(pg, "() => !!document.querySelector('#founderLab canvas.prev')", 5, P=P)
@@ -2157,10 +2169,10 @@ def t_founder_personal(P):
     P.clean(); pg.close()
     ctx2 = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); P2 = Page(ctx2, P.base); P2.gifts = P.gifts
     try:
-        pg2 = P2.open(f"/arena.html?gift={gid}&test")
+        pg2 = P2.open(f"/arena.html?gift={gid}&test&founder_test")
         wait_for(pg2, "() => document.body.innerText.includes('already opened')", 40, P=P2)
         need(not pg2.evaluate("() => !!document.querySelector('#founderLetter')"), "another browser must not see the letter")
-        pg2.close(); pg3 = P2.open("/arena.html?gift=zzzzzzzzzzzzzzzzzzzzzzzz&test")
+        pg2.close(); pg3 = P2.open("/arena.html?gift=zzzzzzzzzzzzzzzzzzzzzzzz&test&founder_test")
         wait_for(pg3, "() => document.body.innerText.includes(\"isn't valid\")", 40, P=P2)
         P2.clean()
     finally:
@@ -2194,7 +2206,7 @@ def gift_tool_unit():
 
 def t_founder_phone(P):
     """the creator on a 390×844 phone: no sideways scroll, the release button on screen, the whole flow works"""
-    pg = P.open("/arena.html?gift=founder&test"); pg.set_viewport_size({"width": 390, "height": 844}); booted(pg)
+    pg = P.open("/arena.html?gift=founder&test&founder_test"); pg.set_viewport_size({"width": 390, "height": 844}); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
     lw = pg.evaluate("() => { const r = document.querySelector('#founderLetter .paper').getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth }; }")
     need(lw["l"] >= 0 and lw["r"] <= lw["w"] + 1, f"the letter fits: {lw}")
@@ -2658,6 +2670,7 @@ def main():
                 run("reviews invite", t_reviews_invite)
                 run("reviews", t_reviews, viewport={"width": 1280, "height": 800})
                 run("reviews cliff", t_reviews_cliff)
+                run("founder off", t_founder_off)
                 run("reviews phone", t_reviews_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("founder personal", t_founder_personal)
                 run("founder phone", t_founder_phone, is_mobile=True, has_touch=True)
