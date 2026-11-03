@@ -54,10 +54,10 @@
     words: ['words. the floor will remember them', 'there, a floor to stand on. nobody to stand on it yet'],
     first: ['its first words. an hour ago they were babble', 'its very first words. it keeps saying them over'],
     creatures: ['two of them crawled out of a word. they look surprised', 'look, something is moving'],
-    weather: ['weather. they will have opinions about it', 'the first sky this world ever had'],
+    weather: ['weather. they will have opinions about it', 'the first sky this consciousness ever had'],
     hut: ['someone wants to build. give it a moment', 'crates and bricks turned up. an Architect is thinking'],
     music: ['music. the floor hums along', 'now it sounds like somewhere'],
-    alive: ['it is alive. it does not need us now, but it likes company', 'the world is running. keep watching'],
+    alive: ['it is alive. it does not need us now, but it likes company', 'the consciousness is running. keep watching'],
     free: ['the rest is yours', 'that is how it starts. the rest is yours'] };
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const storyMode = () => !!(S && S.mode === 'story');
@@ -69,30 +69,35 @@
     "it's fragile. you have 10 epochs to help it grow until it can live on its own, or it fades",
     'first things first: the lights. say "lights on"'];
   const LIGHTS_ON = 'Nice!! we can see something now at least';
-  // the epochs (Nico, story v3: "10 epochs, not 6–7 days"): Epoch 0 is the intro, the dark landing and lights on; Epoch 1 (what was Day 1)
-  // is words and first life; Epochs 2–9 are coming soon (their content is being written). Kept in S.day / S.days by number (saved state
-  // from the days still reads right: day n is epoch n) and still reported as genesis_day in the stats.
+  // the epochs (Nico, story v3: "10 epochs, not 6–7 days"; v11: "should it be Epoch0 that they first beat? and they move on to Epoch1"):
+  // Epoch 0 · Genesis is the intro, the dark landing, lights on, words and first life, and it is the player's first win (its Gazette);
+  // Epoch 1 · Words (tokens, a vocabulary: storyline-script.md section D) and Epochs 2–9 are coming soon. S.day is the epoch reached
+  // (0 until Genesis is done), S.days[n] when epoch n was done. Saves from before v11 counted Genesis's words and life as "Epoch 1":
+  // load() shifts them down by one (S.ev = 2), so a save that finished the old Epoch 1 has Epoch 0 done.
   const DAYS = [
-    { n: 1, title: 'words, life', goals: [['words', 'words for a floor'], ['creatures', 'first life']], teaches: 'the Operator, words, creatures',
-      front: { head: 'Epoch 1: a floor, and somebody on it', body: 'Lights came on in a brand-new consciousness. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
-      line: 'epoch one done. it has a floor and somebody on it. next we feed them' },
+    { n: 0, title: 'genesis', goals: [['light', 'lights on'], ['words', 'words for a floor'], ['creatures', 'first life']], teaches: 'the Operator, light, words, creatures',
+      front: { head: 'Epoch 0: lights, a floor, and somebody on it', body: 'Lights came on in a brand-new consciousness. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
+      line: 'epoch zero done. it has light, a floor and somebody on it. next: words' },
+    { n: 1, title: 'words', goals: [], teaches: '' },
     ...[2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ n, title: 'coming soon', goals: [], teaches: '' }))];
+  const dayOf = n => DAYS.find(d => d.n === n);
   // what the storyline shows, epoch by epoch (v10, Nico: "only show the other controls/panels as the user goes through the Epochs and
   // 'unlocks' access to the different features"; script section D). One row per feature: the epoch that unlocks it, what it hides until
-  // then. The epoch reached is S.day (Epoch 1 until it is done, then 2…); later epochs only edit this table. null = never in the storyline.
+  // then. The epoch reached is S.day (Epoch 0 until Genesis is done, then 1…); later epochs only edit this table. null = never in the storyline.
+  // (v11: Genesis became Epoch 0, so every row moved down one: the player gets the same tools at the same moment as in v10)
   // Free play and the ready world never see any of this (html.gen-story is set only while the storyline runs).
   const UNLOCK = [
-    ['pedia', 1, '#pediaBtn'], ['settings', 1, '#settingsBtn'], ['scientists', 1, '#oracleBtn'], ['zoom', 1, '#zoomer'],
-    ['creatures', 2, '#herdBtn'], ['irc', 2, '#rc-open'], ['notices', 2, '#ntfBtn'], ['minimap', 2, '#minimap'],
-    ['weather', 3, '#weatherLabel'], ['studio', 3, '#studioBtn'], ['advisor', 3, '#advBtn,#advnote'], ['music', 3, '#djBtn,#sndWrap'],
-    ['evolve', 4, '#evolveWorldBtn'], ['trees', 4, '#treesBtn'], ['grow', 4, '#arena>.grow'],
-    ['reels', 6, '#reelsBtn,#reelnote'], ['drawer', 6, '#drawerBtn'], ['almanac', 6, '#almanacBtn'], ['snapshots', 6, '#snapBtn'],
-    ['places', 7, '#placesBar'], ['connect', 7, '#connBtn'], ['keep', 7, '#keepDetail'],
-    ['data lab', 8, '#labBtn,#placesBar [data-kind=lab]'],
+    ['pedia', 0, '#pediaBtn'], ['settings', 0, '#settingsBtn'], ['scientists', 0, '#oracleBtn'], ['zoom', 0, '#zoomer'],
+    ['creatures', 1, '#herdBtn'], ['irc', 1, '#rc-open'], ['notices', 1, '#ntfBtn'], ['minimap', 1, '#minimap'],
+    ['weather', 2, '#weatherLabel'], ['studio', 2, '#studioBtn'], ['advisor', 2, '#advBtn,#advnote'], ['music', 2, '#djBtn,#sndWrap'],
+    ['evolve', 3, '#evolveWorldBtn'], ['trees', 3, '#treesBtn'], ['grow', 3, '#arena>.grow'],
+    ['reels', 5, '#reelsBtn,#reelnote'], ['drawer', 5, '#drawerBtn'], ['almanac', 5, '#almanacBtn'], ['snapshots', 5, '#snapBtn'],
+    ['places', 6, '#placesBar'], ['connect', 6, '#connBtn'], ['keep', 6, '#keepDetail'],
+    ['data lab', 7, '#labBtn,#placesBar [data-kind=lab]'],
     ['gloamhold', null, '#placesBar [data-kind=keep]']];
   // the free console's chips, by the same rule (the step: the epoch that unlocks it)
-  const CHIP_AT = { weather: 3, music: 3, hut: 5 };
-  const epochReached = () => (S && S.day) || 1;
+  const CHIP_AT = { weather: 2, music: 2, hut: 4 };
+  const epochReached = () => (S && S.day) || 0;
   const unlocked = k => { if (!storyMode()) return true; const r = UNLOCK.find(x => x[0] === k); if (r) return r[1] != null && r[1] <= epochReached(); const c = CHIP_AT[k]; return c == null || c <= epochReached(); };
   function applyUnlocks() { const on = storyMode() && !!S.on; document.documentElement.classList.toggle('gen-story', on);
     let st = document.getElementById('genUnlock'); if (!st) { st = document.createElement('style'); st.id = 'genUnlock'; document.head.appendChild(st); }
@@ -101,7 +106,12 @@
   let S = load(), hold = [], busy = false, lifeNow = false;
   // no creature may appear in the storyline before its life step (the world's spawn asks this; arena.html window.__idleWorld.spawn)
   const noLife = () => !!(S && S.on && S.mode === 'story' && !(S.steps && S.steps.creatures) && !lifeNow);
-  function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
+  function load() { let s = null; try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } return migrate(s); }
+  // v11: a save from before Genesis became Epoch 0 counts one epoch higher; shift it down (old day n → n-1, old days[n] → days[n-1]),
+  // keep the old numbers beside it (S.v10), and write it back. Nothing is dropped.
+  function migrate(s) { if (!s || typeof s !== 'object' || s.ev >= 2) return s; const old = { day: s.day, days: s.days };
+    if (s.day != null) s.day = Math.max(0, s.day - 1); if (s.days) { const d = {}; for (const [k, v] of Object.entries(s.days)) d[Math.max(0, +k - 1)] = v; s.days = d; }
+    s.ev = 2; if (old.day != null || old.days) s.v10 = old; try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} return s; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
   { const c2 = document.createElement('style'); c2.textContent = `html.gen-landing body{background:#000!important}
@@ -160,7 +170,7 @@ html.gen-box #lab :is(#ai-thread,#lab-thread,#ai-bar,#ai-set,#ai-smart-btn,#ai-s
 #genFront{position:fixed;inset:0;z-index:2147482500;display:flex;align-items:center;justify-content:center;background:#02030aa8;padding:16px}
 #genFront .np{max-width:520px;background:#f4ecd8;color:#1c1712;border-radius:6px;padding:20px 24px;box-shadow:0 30px 90px #000c;font:15px/1.5 Georgia,serif;transform:rotate(-1.2deg)}
 #genFront .mh{font:900 26px/1 Georgia,serif;letter-spacing:.02em;text-align:center;border-bottom:3px double #1c1712;padding-bottom:8px}#genFront .md{font:11px ui-monospace,Menlo,monospace;text-align:center;margin:6px 0 12px;opacity:.7}
-#genFront h3{font:700 22px/1.2 Georgia,serif;margin:6px 0 8px}#genFront .to{margin-top:12px;font-style:italic;opacity:.8}#genFront button{margin-top:14px;font:13px var(--ui-font,system-ui);padding:6px 14px;border-radius:12px;border:1px solid #1c1712;background:#1c1712;color:#f4ecd8;cursor:pointer}
+#genFront .ec{font:700 15px/1 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.12em;text-align:center;color:#8a1c2b;border:2px solid #8a1c2b;border-radius:4px;padding:6px 8px;margin:2px auto 10px;width:max-content;transform:rotate(1.5deg)}#genFront h3{font:700 22px/1.2 Georgia,serif;margin:6px 0 8px}#genFront .to{margin-top:12px;font-style:italic;opacity:.8}#genFront button{margin-top:14px;font:13px var(--ui-font,system-ui);padding:6px 14px;border-radius:12px;border:1px solid #1c1712;background:#1c1712;color:#f4ecd8;cursor:pointer}
 #genCosmos{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;transition:opacity 4s}
 html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosmos #floor{background-color:transparent!important;background-image:none!important}
 @media (prefers-reduced-motion: reduce){#genConsole .gc button.glow{animation:none;box-shadow:0 0 10px 1px #9fb0ff88}#genDawn{animation-duration:.01s}#genConsole .gcur{animation:none}}`;
@@ -181,7 +191,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
   const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // the Operator window's status line (Nico, v7: no second title; "consciousness 24 · epoch 0 · genesis", the epoch advancing with the story)
-  const epochNow = () => !S || !S.steps || !S.steps.light ? 0 : (S.day || 1), statusLine = () => `consciousness 24 · epoch ${epochNow()}${epochNow() === 0 ? ' · genesis' : ''}`;
+  const epochNow = () => (S && S.day) || 0, statusLine = () => `consciousness 24 · epoch ${epochNow()}${epochNow() === 0 ? ' · genesis' : ''}`;
   // the consciousness's tag (Nico, v9: "at the top of the operator window, or as a label/tag on the world, rather than the chat"): top-left of
   // the world, there whether the Operator's window is open or not (hidden in the dark, like all UI)
   function tag() { applyUnlocks(); if (!S || !S.on) return; let el = document.getElementById('genTag'); if (!el) { el = document.createElement('div'); el.id = 'genTag'; document.body.appendChild(el); } el.textContent = statusLine(); }
@@ -214,7 +224,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   const did = k => !!(S && S.steps && S.steps[k]);
   const gDone = g => g === 'sky' ? (did('weather') || did('music')) : did(g);
   const guiding = () => !!(S && S.on && !S.free);
-  const guideOf = () => storyMode() ? ['light', ...DAYS[0].goals.map(x => x[0])] : GUIDE;   // lights on closes Epoch 0, then Epoch 1's goals
+  const guideOf = () => storyMode() ? DAYS[0].goals.map(x => x[0]) : GUIDE;   // Epoch 0's goals: lights on, words, life
   const nextGuide = () => guideOf().find(g => !gDone(g)) || null;
   const introOf = g => { const s = STEPS[g] && STEPS[g].intro; return typeof s === 'function' ? s() : s || ''; };
   const sayOf = g => { const s = STEPS[g] && STEPS[g].say; return typeof s === 'function' ? s() : s || ''; };
@@ -302,7 +312,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   function hush() { cls('gen-hush', 1); setTimeout(() => cls('gen-hush', 0), 60000); }
 
   // ---------- the steps
-  function done(step, line, at, extra) { S = S || { on: true, steps: {}, t0: now(), n: 1 }; if (S.steps[step]) return; S.steps[step] = now(); save(); if (step === 'music') silence(false); tag(); if (storyMode() && (step === 'words' || step === 'creatures')) mark(step === 'words' ? 'e1words' : 'e1life');
+  function done(step, line, at, extra) { S = S || { on: true, steps: {}, t0: now(), n: 1, ev: 2 }; if (S.steps[step]) return; S.steps[step] = now(); save(); if (step === 'music') silence(false); tag(); if (storyMode() && (step === 'words' || step === 'creatures')) mark(step === 'words' ? 'e1words' : 'e1life');
     const h = H(), text = { words: 'the first words fell into the void', creatures: 'the first creatures crawled out of a word', light: 'the first light', weather: 'the first weather', hut: 'the first building blocks turned up', music: 'the first music' }[step];
     try { h && h.log('genesis', { step, text, at, ...(extra || {}) }); } catch (e) {}
     try { window.__almanac && window.__almanac.ev('genesis', text, {}); } catch (e) {}
@@ -310,14 +320,14 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     if (n >= ALIVE_AFTER && !S.alive) { S.alive = now(); save(); alive(); ln = pick(LINES.alive); }
     const g = guiding() && nextGuide();
     renderDay();
-    if (guiding() && !g && storyMode()) { say(ln); setTimeout(() => dayDone(1), 2600); return; }
+    if (guiding() && !g && storyMode()) { say(ln); setTimeout(() => dayDone(0), 2600); return; }
     if (guiding() && !g) { say(ln); setTimeout(() => endGuide(false), 2200); return; }
     if (g) { say(ln); setTimeout(() => renderConsole(introOf(g)), 1800); } else say(ln); }
   function alive() { window.__genesisVoid = false; const h = H(); cosmos.fade();
     if (hold.length && h) { const cs = h.creatures(); for (const c of hold.splice(0)) { if (c.el) c.el.style.visibility = ''; if (!cs.includes(c)) cs.push(c); } }
     hush(); cls('gen-void', 0); night(false);
     if (!storyMode()) try { window.__first5 && window.__first5.startTrail && window.__first5.startTrail(['hwwiki', S.steps.weather ? 'weather' : null].filter(Boolean)); } catch (e) { console.error(e); }
-    setTimeout(() => { try { window.__notify && window.__notify({ kind: 'system', icon: '🌌', html: 'this world is alive. keep building with the Operator, or just watch', ttl: 9000 }); } catch (e) {} }, 61000); }
+    setTimeout(() => { try { window.__notify && window.__notify({ kind: 'system', icon: '🌌', html: 'this consciousness is alive. keep building with the Operator, or just watch', ttl: 9000 }); } catch (e) {} }, 61000); }
   // one step at a time (chips are disabled while one runs); steps call each other's inner versions, never the guarded ones
   const step = async (k, fn) => { if (busy) return 'busy'; busy = true; renderConsole(); try { return await fn(); } catch (e) { console.warn('genesis: ' + k, e); renderConsole('that did not work. try again?'); return null; } finally { busy = false; renderConsole(); } };
 
@@ -383,7 +393,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !(S && S.n) ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { if (S) { S.on = false; save(); } applyUnlocks(); dropFlag(); return readyWorld(); }
-    S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
+    S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode, ev: 2 }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
     if (mode === 'free') cls('gen-calm', 0);
     if (mode === 'story') { blackCover(true); cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); return true; }
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
@@ -407,7 +417,10 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
   // (Id and le, the halves that crawled off at the end of the intro, come back, meet and fold into its window) and pings a sonar: each ping
   // is a faint ring that, for a moment, outlines the swirling letters in thin light. Lights on reveals everything.
   // A click finishes the line (or goes to the next), holding pauses, Esc or "skip ›" goes straight to the Operator. ?nolanding skips it all.
+  // v11 (Nico: "we need some sort of explanation of why there's no sound in the begining, like '...in time for dinner... and why is there
+  // no sound?!... is that a black...'"): two lines after dinner say it out loud, then the hole
   const DARK = ['whaa…', 'oh my god, my girlfriend is going to be mad… where am I?', "I don't think I'll make it back in time for dinner…",
+    'and why is there no sound?! not a hum, not even my own steps…', 'is that a black…',
     'ohhh what?! is that a black hole!!! this is not good!!', 'wait, what... why is that black hole moving...', "it's coming my way,....", "today really isn't my luckyyyy daaaaayyyyy!!!! aaaaahhhhh!!!"];   // the last three: Nico, story v5
   const darkHold = s => Math.max(1.4, s.length * 0.04 + 0.3), DCPS = 55;
   let land = { phase: 'none', clicks: 0 }, nightCv = null;
@@ -545,23 +558,23 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
   function undock() { opTitle(); const bd = $('#genBackdrop'); if (bd) { bd.style.transition = 'opacity .72s ease-in-out'; bd.classList.add('out'); setTimeout(() => bd.remove(), 800); } wakeShown = []; flipDock(); renderConsole(); renderDay(); }
 
   // ---------- the epochs: the goal card, and a front page when an epoch is done
-  function renderDay() { if (!storyMode()) return; tag(); const d = DAYS[(S.day || 1) - 1]; if (!d) return; let el = $('#genDay');
+  function renderDay() { if (!storyMode()) return; tag(); const d = dayOf(S.day || 0); if (!d) return; let el = $('#genDay');
     if (document.documentElement.classList.contains('gen-box')) { if (el) el.remove(); return; }
     if (!el) { el = document.createElement('div'); el.id = 'genDay'; document.body.appendChild(el); }
-    const ok = k => S.days && S.days[d.n] ? true : (d.n === 1 ? did(k) : false), soon = d.n > 1;
+    const ok = k => S.days && S.days[d.n] ? true : (d.n === 0 ? did(k) : false), soon = d.n > 0;
     el.classList.toggle('soon', soon);
     el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">EPOCH ${d.n} · ${esc(d.title.toUpperCase())}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
-      (soon ? `<div class="wip">The next epochs are coming. Id|le is a work in progress, and it's open source: <a href="${esc(window.IDLE_REPO || 'https://github.com/nicobrenner/id-le')}" target="_blank" rel="noopener">see how it's made</a>. Until then the world is yours: keep playing.</div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
+      (soon ? `<div class="wip">The next epochs are coming. Id|le is a work in progress, and it's open source: <a href="${esc(window.IDLE_REPO || 'https://github.com/nicobrenner/id-le')}" target="_blank" rel="noopener">see how it's made</a>. Until then the consciousness is yours: keep playing.</div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
     el.querySelector('.x').onclick = () => el.remove(); }
-  function dayDone(n) { const d = DAYS[n - 1]; if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; save(); if (n === 1) mark('e1done');
+  function dayDone(n) { const d = dayOf(n); if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; S.ev = 2; save(); if (n === 0) mark('e1done');   // funnel key kept: 'e1done' = Genesis (Epoch 0) done
     try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'epoch ' + n + ' done', {}); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_day', extra: { day: n } } })); } catch (e) {}
     const el = document.createElement('div'); el.id = 'genFront';
-    el.innerHTML = `<div class="np"><div class="mh">THE ID|LE GAZETTE</div><div class="md">consciousness 24 · epoch ${n} · special edition</div><h3>${esc(d.front.head)}</h3><div>${esc(d.front.body)}</div><div class="to"><b>TO:</b> ${esc(d.line)}</div><button>on to epoch ${n + 1} ›</button></div>`;
+    el.innerHTML = `<div class="np"><div class="mh">THE ID|LE GAZETTE</div><div class="md">consciousness 24 · epoch ${n} · special edition</div><div class="ec">EPOCH ${n} COMPLETE</div><h3>${esc(d.front.head)}</h3><div>${esc(d.front.body)}</div><div class="to"><b>TO:</b> ${esc(d.line)}</div><button>on to epoch ${n + 1} ›</button></div>`;
     document.body.appendChild(el); el.querySelector('button').onclick = () => { el.remove(); say(d.line); renderDay(); endGuide(false); }; }
 
   // ---------- the primordial universe (script section C): a canvas behind the floor; wild when the lights come on, calmer as it fills
-  const cosmos = (() => { let cv = null, g = null, raf = 0, on = false, lit = 0, litAt = 0, chaos = 1, alpha = 1, fadeAt = 0, parts = null, last = 0, bolt = null, nextBolt = 0, comets = [], P = false;
+  const cosmos = (() => { let bolts = 0, cv = null, g = null, raf = 0, on = false, lit = 0, litAt = 0, chaos = 1, alpha = 1, fadeAt = 0, parts = null, last = 0, bolt = null, nextBolt = 0, comets = [], P = false;
     const R = Math.random, GL = 'abcdefghijklmnopqrstuvwxyz01|';
     function setup() { P = matchMedia('(max-width: 600px)').matches || matchMedia('(pointer: coarse)').matches; const a = $('#arena'); if (!a) return false;
       cv = document.createElement('canvas'); cv.id = 'genCosmos'; a.insertBefore(cv, a.firstChild); g = cv.getContext('2d'); size(); addEventListener('resize', size);
@@ -596,15 +609,14 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
         comets = comets.filter(c => c.x < W + 40 && c.y < Hh + 40);
         // a distant storm on the horizon: forked lightning now and then
         const hz = Hh * 0.86;   // (v10, Nico: the row of dark cloud ovals along the horizon is gone; the lightning stays)
-        if (!RM && T > nextBolt && k > 0.08) { nextBolt = T + 1.2 + R() * (3 + 6 * (1 - k)); const x0 = W * (0.1 + R() * 0.8), pts = [[x0, hz - 30]]; let x = x0, y = hz - 30; while (y < hz + 6) { x += (R() - 0.5) * 26; y += 8 + R() * 10; pts.push([x, y]); } bolt = { pts, t: T }; thunder(); }
+        if (!RM && T > nextBolt && k > 0.08) { nextBolt = T + 1.2 + R() * (3 + 6 * (1 - k)); const x0 = W * (0.1 + R() * 0.8), pts = [[x0, hz - 30]]; let x = x0, y = hz - 30; while (y < hz + 6) { x += (R() - 0.5) * 26; y += 8 + R() * 10; pts.push([x, y]); } bolt = { pts, t: T }; bolts++; }
         if (bolt && T - bolt.t < 0.25) { const f = 1 - (T - bolt.t) / 0.25; g.globalAlpha = 0.18 * f; g.fillStyle = '#cfe0ff'; g.fillRect(0, 0, W, Hh); g.globalAlpha = f; g.strokeStyle = '#e8f1ff'; g.lineWidth = 1.6; g.beginPath(); bolt.pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); } }
       g.globalAlpha = 1; }
-    function thunder() { try { const A = window.__audio; if (!A || A.muted()) return; const ctx = A.ctx(); if (!ctx || ctx.state !== 'running') return; const o = ctx.createOscillator(), v = ctx.createGain(), t0 = ctx.currentTime + 0.4 + Math.random() * 0.8;
-      o.type = 'sine'; o.frequency.setValueAtTime(48, t0); o.frequency.exponentialRampToValueAtTime(26, t0 + 1.8); v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(0.12 * chaos, t0 + 0.08); v.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.8); o.connect(v); v.connect(A.out()); o.start(t0); o.stop(t0 + 1.9); } catch (e) {} }
+    // v11 (Nico: "not sure about the 'storm' sounds"): the young universe's distant lightning is silent; its rolling thunder is gone
     function stop() { on = false; cancelAnimationFrame(raf); removeEventListener('resize', size); if (cv) cv.remove(); cv = null; cls('gen-cosmos', 0); }
     return { start: () => { if (on) return; if (!cv && !setup()) return; on = true; cls('gen-cosmos', 1); raf = requestAnimationFrame(frame); },
       light: () => { lit = 1; litAt = performance.now(); chaos = 1; nextBolt = 0; },
-      calm: x => { chaos = Math.min(chaos, x); }, fade: () => { if (on && !fadeAt) fadeAt = performance.now(); }, stop, state: () => ({ on, lit: !!lit, chaos, alpha }) }; })();
+      calm: x => { chaos = Math.min(chaos, x); }, fade: () => { if (on && !fadeAt) fadeAt = performance.now(); }, stop, state: () => ({ on, lit: !!lit, chaos, alpha, bolts }) }; })();
 
   function dropFlag() { try { const u = new URL(location.href); if (!u.searchParams.has('genesis') && !u.searchParams.has('story')) return; u.searchParams.delete('genesis'); u.searchParams.delete('story'); u.searchParams.delete('start'); u.searchParams.delete('intro'); history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash); } catch (e) {} }
   async function newUniverse(mode) { const h = H(); if (!h) return false; silence(false);   // mode: skip the chooser (tests, links)
@@ -635,6 +647,6 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
   if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && S.steps.music) && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   applyUnlocks();
-  window.__genesis = { noLife, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { noLife, darkLines: DARK.slice(), unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();

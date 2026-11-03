@@ -126,7 +126,7 @@ def call(path, tok, raw=False, body=None):
 # the storyline's funnel (helper/worker.js 'sf': "arm|step" → browsers), in the order a player meets them
 SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done"]
 SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
-            "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 1: words", "e1life": "Epoch 1: life", "e1done": "Epoch 1 done"}
+            "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)"}
 
 
 # the Founder gift (idle-founder.js), from the same once-per-browser moments ('fd_…'), summed over the storyline's arms

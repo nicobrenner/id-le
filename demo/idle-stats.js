@@ -14,7 +14,7 @@
 //   time here     how long the page was on screen, as a bucket (<1, 1-5, 5-20, 20+ minutes); counted once per page load
 //   storyline     (11-02) which arm of the storyline test this browser is in (story or the current start; only while the test runs), and
 //                 the moments of the storyline it reached, once each: title, messages, chat, boot, run, crash, landing, Operator, lights on,
-//                 Epoch 1's words, life and end, where the intro or the landing was skipped, and the storyline offer shown / accepted
+//                 Genesis's (Epoch 0's) words, life and end (keys e1words, e1life, e1done), where the intro or the landing was skipped, and the storyline offer shown / accepted
 //   stopped at    for a guided start still running: the last of its moments you reached when you left (or finished/skipped)
 //   lab walk      the data lab walkthrough's steps reached (what, travel, kinds, team, review, stats, where), finished or ended; once per browser
 //   engagement    when you leave: how many creatures the world has (a bucket: 0-12, 13-30, 31-60, 61-150, 151+), and as buckets
