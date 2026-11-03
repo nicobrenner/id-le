@@ -113,6 +113,10 @@ out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visit
 { globalThis.__statFlushNow = false; const before = env.STATS.puts.length; await post('/lab/stats', { v: 1, feat: ['lonetest'] }); out.lone_report_written = env.STATS.puts.length > before; globalThis.__statFlushNow = true; }
 // /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
 { out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
+// the storyline funnel (11-02): known moments only, counted by arm; the arm's visits and dwell under gv
+{ await post('/lab/p', { v: 1, visit: 1, gv: 'story', sf: ['title', 'messages', 'skip:chat', 'evil<script>', 'title'], dw: '1-5' }); await post('/lab/p', { v: 1, sf: ['offer_shown', 'offer_accepted'] });
+  const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.sf = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.sf || {})) a[k] = (a[k] || 0) + n; return a; }, {});
+  out.gv_story = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.gv || {})) a[k] = (a[k] || 0) + n; return a; }, {}); }
 // jeffy proxy: an allowlist of two paths; nothing else is relayed (no network needed for these answers)
 out.jeffy_train = (await post('/jeffy/train', { text: 'x', task: 'sms_spam' })).status;
 out.jeffy_get_predict = (await go('/jeffy/predict')).status;
@@ -217,6 +221,8 @@ def worker_unit():
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
+    need(o.get("sf") == {"story|title": 1, "story|messages": 1, "story|skip:chat": 1, "none|offer_shown": 1, "none|offer_accepted": 1}, f"storyline funnel: {o.get('sf')}")
+    need(o.get("gv_story", {}).get("story|visit") == 1 and o.get("gv_story", {}).get("story|dw:1-5") == 1, f"the story arm's visits and dwell: {o.get('gv_story')}")
     ev = re.search(r"STAT_EVERY = (\d+)", open(os.path.join(ROOT, "helper", "worker.js")).read())
     need(ev and int(ev.group(1)) <= 25000, f"STAT_EVERY {ev and ev.group(1)} ms: must stay under the ~30 s a Worker's waitUntil may run after the response")
     need(o["world_poll_writes"] == 0, f"5 polls of an unregistered world wrote {o['world_poll_writes']} times to KV (expected 0: polls never create worlds; KV writes are scarce)")
@@ -1300,6 +1306,8 @@ def t_story(P):
     need("EPOCH 1" in front.upper() and "GAZETTE" in front.upper() and "EPOCH 2" in front.upper(), f"the Epoch 1 front page: {front[:160]!r}")
     pg.click("#genFront button")
     wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('EPOCH 2')", 10, P=P)
+    wip = pg.inner_text("#genDay"); need("work in progress" in wip and "open source" in wip, f"Epoch 2's card should say Id|le is a work in progress: {wip!r}")
+    need(all(k in pg.evaluate("() => window.__funnel.reached()") for k in ("landing", "operator", "lights", "e1words", "e1life", "e1done")), "the funnel should have every Epoch 0 → Epoch 1 moment")
     end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos() } }")
     need(end["days"] and "1" in end["days"] and end["day"] == 2 and end["free"] and end["alive"] and end["c"] >= 2, f"after Day 1: day 2 next, alive, free console: {end}")
     stuck_check(pg, P, "storyline")
@@ -1417,6 +1425,72 @@ def t_never_stuck(P):
     need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the creature should hide again once the window is open")
     P.clean()
     return f"closed everything in the guided start (menus hidden: {w['calm']}, Operator button visible: {w['toggle']}) → the creature on top → tap → Operator open, menus back"
+
+
+def t_title_card(P):
+    """The story's first frame (release): ø Id|le OS, "press any key to start"; the film waits there; a key starts the desktop scene (and the
+    sound); the funnel marks title → messages, and where it was skipped."""
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+    pg.wait_for_timeout(1200)
+    w = pg.evaluate("() => ({ t: window.__epoch0.time(), waiting: window.__epoch0.waiting(), scene: window.__epoch0.scene(), f: window.__funnel.reached(), skip: !!document.querySelector('#idleIntro .skip') })")
+    need(w["waiting"] and w["t"] < 0.05 and w["scene"] == "title" and "title" in w["f"] and w["skip"], f"the title card should wait, with skip visible: {w}")
+    pg.keyboard.press("Enter")
+    wait_for(pg, "() => !window.__epoch0.waiting() && window.__epoch0.time() > 1.5", 10, P=P)
+    a = pg.evaluate("() => ({ title: document.querySelector('#idleIntro').dataset.title, scene: window.__epoch0.scene(), f: window.__funnel.reached() })")
+    need(a["title"] == "0" and a["scene"] == "messages" and "messages" in a["f"], f"a key should start the desktop (messages): {a}")
+    pg.keyboard.press("Escape")
+    wait_for(pg, "() => window.__funnel.reached().includes('skip:messages')", 10, P=P)
+    P.clean()
+    return f"waits at the title ({w['t']:.2f} s), a key starts the messages, Esc marks skip:messages"
+
+
+def t_story_arms(P):
+    """The storyline A/B (off by default): a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=current gets the
+    starter world as now; a browser that already has a world keeps it, whatever its arm (returning players are never thrown into the story)."""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    off = pg.evaluate("() => ({ ab: window.__genesis.ab, v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv') })")
+    need(off["ab"] == "off" and off["v"] is None and off["gv"] is None, f"the A/B ships off: {off}")
+    wait_for(pg, "() => !!localStorage.getItem('arena.autosave')", 30, P=P)
+    ret = P.open("/arena.html?arm=story&test"); booted(ret); ret.wait_for_timeout(3000)   # this browser has a world: it keeps it
+    r = ret.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid, c: window.__arena.raw().filter(c => !c.lab).length })")
+    need(not r["intro"] and not r["void"] and r["c"] > 0, f"a returning browser in the story arm keeps its world: {r}")
+    out = []
+    for arm in ("story", "current"):   # new browsers: a fresh context each
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)
+        try:
+            q = Q.open(f"/arena.html?arm={arm}&test")
+            if arm == "story":
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+                st = q.evaluate("() => ({ v: window.__genesis.variant(), arm: window.__funnel.arm() })"); need(st == {"v": "story", "arm": "story"}, f"the story arm starts the story: {st}")
+            else:
+                booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+                cur = q.evaluate("() => ({ v: window.__genesis.variant(), intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid })")
+                need(cur["v"] == "current" and not cur["intro"] and not cur["void"], f"the current arm keeps the starter world: {cur}")
+            out.append(arm)
+        finally:
+            ctx.close()
+    P.clean()
+    return "off by default; returning browser keeps its world; new story arm → the title card; new current arm → the starter world"
+
+
+def t_story_offer(P):
+    """The storyline offer (returning players, the other arm): shown once per browser (remembered); accepting keeps the world as a snapshot
+    and starts the story."""
+    pg = P.open("/arena.html?fresh=1&test&offer"); booted(pg)
+    wait_for(pg, "() => !!document.querySelector('#storyOffer')", 30, P=P)
+    t = pg.inner_text("#storyOffer"); need("storyline mode" in t and "snapshot" in t, f"the offer: {t!r}")
+    again = pg.evaluate("() => { document.querySelector('#storyOffer').remove(); return window.__genesis.offer(); }")
+    need(again is False and pg.evaluate("() => localStorage.getItem('idle.storyOffer')") == "shown", "the offer must show once per browser")
+    pg.evaluate("() => localStorage.removeItem('idle.storyOffer')"); pg.evaluate("() => window.__genesis.offer()")
+    n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+    pg.click("#storyOffer .go")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro')", 20, P=P)
+    n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+    f = pg.evaluate("() => ({ f: window.__funnel.reached(), o: localStorage.getItem('idle.storyOffer') })")
+    need(n1 == n0 + 1 and "offer_shown" in f["f"] and "offer_accepted" in f["f"] and f["o"] == "accepted", f"accepting: a snapshot first, then the story: {n0}→{n1}, {f}")
+    pg.keyboard.press("Escape"); P.clean()
+    return f"shown once (remembered), accepted → snapshot ({n0}→{n1}) → the story"
 
 
 def t_chooser(P):
@@ -1590,7 +1664,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "title card", "story arms", "story offer", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1644,6 +1718,9 @@ def main():
                 run("wikipedia world", t_wiki)
                 run("genesis", t_genesis)
                 run("story", t_story)
+                run("title card", t_title_card)
+                run("story arms", t_story_arms)
+                run("story offer", t_story_offer)
                 run("never stuck", t_never_stuck)
                 run("story landing", t_story_landing)
                 run("story intro", t_story_intro)

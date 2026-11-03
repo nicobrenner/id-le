@@ -368,5 +368,15 @@
     chat: { note: NOTE, open: CHAT, dm: DMT, close: CLOSE, backlog: BL.map(b => ({ who: b.who, at: b.at })), dm_lines: DM.map(l => ({ who: l.who, at: l.at, text: l.text })), channels: CHANNELS.slice() },
     scenes: { messages: [0, CHAT], chat: [CHAT, CLOSE], terminal: [TERM, ADUR] }, beat: BT, sayFz, events: AEV.length, lastSay: () => lastSay };
 
-  window.__termBoot = { dur: DUR, draw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
+  // the title card (Nico: "typical retro 'Press any key to start'… like the scientist is either working remote, or just arrived at work and
+  // is opening the computer"): the story's first frame, waiting for a key or a tap (which also lets the sound start)
+  function titleDraw(g, W, H, t, P, RM) {
+    const port = portOf(W, H, P); g.fillStyle = BG; g.fillRect(0, 0, W, H);
+    const big = Math.round(clamp(W / (port ? 8 : 13), 38, 96)), on = RM || Math.floor(t * 1.6) % 2 === 0, warm = RM ? 1 : clamp(t / 0.8);
+    g.save(); g.globalAlpha = warm; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `700 ${big}px ${MONO}`; g.fillStyle = '#e9f6ff'; g.shadowColor = CY; g.shadowBlur = 24; g.fillText('ø Id|le OS', W / 2, H * 0.42); g.shadowBlur = 0;
+    g.font = `${Math.round(big * 0.24)}px ${MONO}`; g.fillStyle = DIM; g.fillText('v 0/67 · lab-07', W / 2, H * 0.42 + big * 0.75);
+    if (on) { g.font = `700 ${Math.round(clamp(big * 0.3, 15, 26))}px ${MONO}`; g.fillStyle = AMB; g.fillText(port || matchMedia('(pointer: coarse)').matches ? 'TAP TO START' : 'PRESS ANY KEY TO START', W / 2, H * 0.66); }
+    g.restore(); overlay(g, W, H, 0.8); }
+  window.__termBoot = { dur: DUR, draw, title: titleDraw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
 })();

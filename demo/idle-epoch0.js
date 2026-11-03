@@ -353,7 +353,7 @@
     const sndB = document.createElement('button'); sndB.className = 'ib snd'; sndB.textContent = '🔊 sound'; el.appendChild(sndB); document.body.appendChild(el);
     let ct = null, st = null, done = false, raf = 0, S = null, start = performance.now(), res; const promise = new Promise(r => res = r);
     // hold to read: pointer/finger down (or Space) freezes the film's clock; release resumes. Only "skip ›" and Esc skip.
-    let soundT = 0, pausedAt = 0, pausedMs = 0; const now = () => pausedAt || performance.now();
+    let soundT = 0, pausedAt = 0, pausedMs = 0, waiting = false, titleT0 = 0, scene = null; const now = () => pausedAt || performance.now();
     const elapsed = () => (now() - start - pausedMs) / 1000, B = () => bootOf(ct), total = () => B() + (RM ? rmTotal(ct) : totalOf(ct));
     const filmT = A => { const b = B(); return A < b ? A : b + (RM ? rmTime(A - b, ct) : A - b); };   // what to draw at A (reduced motion re-times the run, not the boot)
     const pause = () => { if (pausedAt || done) return; pausedAt = performance.now(); el.classList.add('paused'); hint.textContent = 'paused · release to go on ·'; if (S) { S.stop(0.15); S = null; } };
@@ -364,20 +364,30 @@
     const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, A.out(), ctx.currentTime - (elapsed() - B())); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); try { preBeds(ctx, S.out, ct, soundT, ctx.currentTime); } catch (e) {} syncSnd(); };
     const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) ? 'none' : ''; };
     sndB.addEventListener('click', e => { e.stopPropagation(); const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
-    const finish = skipped => { if (done) return; done = true; cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
+    const mark = k => { if (ct && ct.story && window.__funnel) window.__funnel.mark(k); };
+    // which scene of the story intro this moment is in (for the funnel): title, messages, chat, boot, run, crash
+    const sceneOf = A => { if (waiting) return 'title'; const TB = window.__termBoot, R = arrOf(ct), b = B(); if (R && A < TB.arrive.scenes.chat[0]) return 'messages'; if (R && A < R) return 'chat'; if (A < b) return 'boot'; return A - b < CS.flash ? 'run' : 'crash'; };
+    // the title card (story with the arrival): a key or a tap starts the desktop, and lets the sound start (a gesture unlocks audio)
+    const begin = () => { if (!waiting || done) return; waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now(); pausedMs = 0; pausedAt = 0; el.classList.remove('paused');
+      const A = window.__audio; try { if (A && !A.muted()) A.resume(); } catch (e) {} setTimeout(() => { if (audioReady()) startSound(); syncSnd(); }, 250); };
+    const finish = skipped => { if (done) return; if (skipped && ct) mark('skip:' + sceneOf(elapsed())); done = true; cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
       const out = { tone: 'epoch0', story: !!(ct && ct.story), boot, arrive: !!(ct && ct.arrive), skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
       try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'end', ...out } })); } catch (e) {}
       if (opts.keep && !skipped) { cur = { promise, el, close: () => { el.classList.add('out'); setTimeout(() => el.remove(), 650); cur = null; } }; res(out); return; }
       el.classList.add('out'); setTimeout(() => { el.remove(); cur = null; res(out); }, skipped ? 350 : 650); };
-    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(true); } else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) pause(); } };
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(true); } else if (waiting) { e.preventDefault(); e.stopPropagation(); if (!e.repeat) begin(); } else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) pause(); } };
     const onKeyUp = e => { if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); resume(); } };
-    el.addEventListener('pointerdown', e => { if (e.target === sndB || e.target === skipB) return; e.preventDefault(); pause(); });
+    el.addEventListener('pointerdown', e => { if (e.target === sndB || e.target === skipB) return; e.preventDefault(); if (waiting) { begin(); return; } pause(); });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
     skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
-    cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt };
+    cur = { promise, el, close: () => finish(true), time: () => elapsed(), paused: () => !!pausedAt, waiting: () => waiting, start: () => begin(), scene: () => ct ? sceneOf(elapsed()) : null };
     Promise.all([loadBank(), loadLoss()]).then(() => { ct = makeContent({ story: !!(opts.story || Q.has('story')) }); ct.boot = boot; ct.arrive = boot && wantArrive(opts, ct.story); start = performance.now(); window.__epoch0.last = ct;
+      if (ct.story && ct.arrive && window.__termBoot && window.__termBoot.title && opts.title !== false && !Q.has('notitle')) { waiting = true; titleT0 = performance.now(); el.dataset.title = '1'; hint.style.display = 'none'; }
       if (liveOK) fillLive(ct, () => elapsed() - B()).catch(() => {}); if (audioReady()) startSound(); syncSnd();
-      const loop = () => { if (done) return; const T = elapsed(); if (T >= total()) { frameAll(g, innerWidth, innerHeight, filmT(total() - 0.01), ct, st, P, RM); return finish(false); }
+      const loop = () => { if (done) return;
+        if (waiting) { start = performance.now(); mark('title'); try { window.__termBoot.title(g, innerWidth, innerHeight, (performance.now() - titleT0) / 1000, P, RM); } catch (e) {} raf = requestAnimationFrame(loop); return; }
+        const T = elapsed(); { const sc = sceneOf(T); if (sc !== scene) { scene = sc; mark(sc); } }
+        if (T >= total()) { frameAll(g, innerWidth, innerHeight, filmT(total() - 0.01), ct, st, P, RM); return finish(false); }
         frameAll(g, innerWidth, innerHeight, filmT(T), ct, st, P, RM);
         if (S && !RM) { const b = B(); try { if (b && soundT < b) preSound(S.ctx, S.out, ct, soundT, T, S.ctx.currentTime); liveSound(S, ct, soundT - b, T - b, S.ctx.currentTime); } catch (e) {} soundT = T; }
         raf = requestAnimationFrame(loop); }; loop(); });
@@ -401,5 +411,5 @@
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
   window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
-    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont() };   // the bank tool samples through the same path
+    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();
