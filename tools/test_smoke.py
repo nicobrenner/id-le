@@ -106,6 +106,8 @@ def js_syntax():
     return f"{len(files)} scripts"
 
 
+REVIEW_STUB = {"logos": {"kind": "logos", "title": "the logo", "items": ["c3-typed-dust", "c3-typed-crt", "a3-dust", "b3a-dust-crt", "b3b-crt", "scope-strike", "scope-crt", "typed-scope", "scope-meter", "scope-shockwave", "strike-purr-static", "crt-off"], "showTotals": False, "open": True},
+               "fonts": {"kind": "fonts", "title": "our fonts", "items": ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"], "showTotals": False, "open": True}}
 WORKER_TEST = r"""
 globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; }; globalThis.__statFlushNow = true;   // production writes a stats batch STAT_EVERY after its first report (inside that request's waitUntil); tests run timers at once
 const kv = () => { const m = new Map(), puts = []; return { m, puts, get: async k => m.get(k) ?? null, put: async (k, v) => { puts.push(k); m.set(k, v); } }; };
@@ -200,6 +202,23 @@ out.rate_61st = last;
   const g2 = await (await go('/lab/gift/' + id)).json();
   out.gift = { letter: g1.letter, label: JSON.stringify(g1).includes('private'), claimed0: g1.claimed, c1: c1.ok, writes: w1 - w0, c2: c2.already, claimed1: g2.claimed,
     unknown: (await go('/lab/gift/zzzzzzzzzzzzzzzzzzzzzzzz')).status, revoked: (await go('/lab/gift/revokedrevokedrevokedr')).status, bad: (await go('/lab/gift/AB')).status }; }
+// reviews (11-03): the built-in config, validation (unknown item, bad score, nothing scored), once per visitor and day, totals add up,
+// notes to the private queue only, totals shown only when the review says so, a closed review refuses, KV configs override
+{ const cfg = await (await go('/lab/review/logos')).json(), list = await (await go('/lab/reviews')).json();
+  const bad1 = (await post('/lab/review/logos', { scores: { 'nope': 3 } }, '7.7.7.1')).status, bad2 = (await post('/lab/review/logos', { scores: { 'scope-strike': 6 } }, '7.7.7.1')).status;
+  const bad3 = (await post('/lab/review/logos', { scores: {} }, '7.7.7.1')).status, bad4 = (await post('/lab/review/logos', { scores: { 'scope-strike': 2.5 } }, '7.7.7.1')).status;
+  const K1 = 'abcdefghijklmnopqrstuvwxyz', K2 = 'zyxwvutsrqponmlkjihgfedcba', nokey = (await post('/lab/review/logos', { scores: { 'scope-strike': 3 } }, '7.7.7.1')).status;
+  const w0 = env.STATS.puts.length, s1 = await (await post('/lab/review/logos', { scores: { 'scope-strike': 5, 'typed-scope': 4 }, notes: { 'typed-scope': 'love the typing, mail me at a@b.co' }, bkey: K1 }, '7.7.7.1')).json(), w1 = env.STATS.puts.length;
+  const r2 = await post('/lab/review/logos', { scores: { 'scope-strike': 1 }, bkey: K1 }, '7.7.7.9'), s2 = await r2.json(), w2 = env.STATS.puts.length;
+  const s3 = await (await post('/lab/review/logos', { scores: { 'scope-strike': 3 }, bkey: K2 }, '7.7.7.1')).json(), w3 = env.STATS.puts.length;
+  const agg = JSON.parse(env.STATS.m.get('review:logos:agg')), fb = [...env.STATS.m.entries()].filter(([k, v]) => k.startsWith('fb:') && JSON.parse(v).kind === 'review').map(([k, v]) => JSON.parse(v));
+  env.STATS.m.set('review:closed1', JSON.stringify({ kind: 'fonts', title: 'old', items: ['f1'], open: false }));
+  env.STATS.m.set('review:tot1', JSON.stringify({ kind: 'fonts', title: 'shown', items: ['f1', 'f2'], showTotals: true }));
+  const closed = (await post('/lab/review/closed1', { scores: { f1: 3 }, bkey: K1 }, '7.7.7.3')).status, t1 = await (await post('/lab/review/tot1', { scores: { f1: 4 }, bkey: K1 }, '7.7.7.3')).json();
+  out.review = { kind: cfg.kind, items: cfg.items.length, totals0: 'totals' in cfg, listed: list.reviews.map(r => r.rid).sort().join(','), bad: [bad1, bad2, bad3, bad4],
+    nokey, s1: s1.ok === true && !s1.totals, writes1: w1 - w0, s2: r2.status === 409 && !!s2.already, writes2: w2 - w1, s3: s3.ok === true, writes3: w3 - w2,
+    rawkey: [...env.STATS.m.values()].some(v => v.includes(K1)), hashes: JSON.parse(env.STATS.m.get('review:logos:agg')).bk.length, sends: agg.sends, strike: agg.items['scope-strike'], typed: agg.items['typed-scope'].sum,
+    notes: fb.length, scrubbed: fb.length === 1 && !JSON.stringify(fb[0]).includes('a@b.co') && fb[0].rid === 'logos', closed, shown: t1.totals && t1.totals.f1.avg, unknown: (await go('/lab/review/nope')).status }; }
 console.log(JSON.stringify(out));
 """
 
@@ -312,7 +331,10 @@ def worker_unit():
     need(egx == {"reels:1-5": 1, "errs:1": 1}, f"v2 buckets {egx}")
     gf = o["gift"]
     need(gf == {"letter": "Hi Sam!", "label": False, "claimed0": False, "c1": True, "writes": 1, "c2": True, "claimed1": True, "unknown": 404, "revoked": 404, "bad": 404}, f"gift links: {gf}")
-    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links"
+    rv = o["review"]
+    need(rv == {"kind": "logos", "items": 12, "totals0": False, "listed": "fonts,logos", "bad": [400, 400, 400, 400], "nokey": 400, "s1": True, "writes1": 3, "s2": True, "writes2": 0, "s3": True, "writes3": 2, "rawkey": False, "hashes": 2,
+                "sends": 2, "strike": {"n": 2, "sum": 8, "s": [0, 0, 0, 1, 0, 1]}, "typed": 4, "notes": 1, "scrubbed": True, "closed": 410, "shown": 4, "unknown": 404}, f"reviews: {rv}")
+    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links, reviews"
 
 
 def local_server_unit():   # server.py, the local server anyone who clones the repo runs: no network (a stub site and a stub Jeffy on localhost)
@@ -463,6 +485,14 @@ class Page:
                     was = g["claimed"]; g["claimed"] = True; g["claims"] = g.get("claims", 0) + 1
                     return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": False, "already": True} if was else {"ok": True}))
                 return route.fulfill(status=200, content_type="application/json", body=json.dumps({"letter": g["letter"], "claimed": g["claimed"]}))
+            if path == "/lab/reviews": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"reviews": [{"rid": "logos", "kind": "logos", "title": "the logo", "n": 12}, {"rid": "fonts", "kind": "fonts", "title": "our fonts", "n": 8}]}))
+            if path.startswith("/lab/review/"):
+                rid = path[len("/lab/review/"):]; cfg = REVIEW_STUB.get(rid)
+                if not cfg: return route.fulfill(status=404, content_type="application/json", body='{"error":"no such review"}')
+                if route.request.method == "POST":
+                    self.fb.append(("review:" + rid, route.request.post_data or "")); n = len([k for k, _ in self.fb if k == "review:" + rid])
+                    return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "already": True} if n > 1 else {"ok": True}))
+                return route.fulfill(status=200, content_type="application/json", body=json.dumps({"rid": rid, **cfg}))
             if path == "/lab/oracle": self.fb.append(("oracle", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"id":"t1"}')
             if path == "/lab/vote": self.fb.append(("vote", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"votes":4}')
             if path == "/lab/roadmap": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"items": [{"id": "mods", "title": "Mods", "line": "share rules and looks", "status": "planned"}, {"id": "bodies", "title": "New bodies", "line": "", "status": "later"}], "votes": {"mods": 3}, "url": "https://github.com/nicobrenner/id-le/issues/20"}))
@@ -1882,6 +1912,55 @@ def t_founder(P):
     P.clean()
     return f"no offer for a later world; offer → letter (draft, signed) → 3 experiments, undo, {trees} generations → 'Nibbet Prime' with the seed badge; snapshot first, +1 creature, card mark, can't be removed, first in the sidebar, kept through a reload and in snapshots; a second gift link: refused"
 
+def t_reviews(P):
+    """⭐ reviews (idle-reviews.js): ?review=logos opens the lightbox with Nico's note and the five logos; ▶ plays one (drawn from the audio
+    clock, the game hushed meanwhile, still playing after a score); scores and a note are sent once (to the stub); reopened it shows them
+    sent and can't send again; the 🧪 reviewer row in ⚙; 🧪's ⭐ reviews tab lists both and opens the fonts review; closing un-hushes."""
+    pg = P.open("/arena.html?review=logos&test"); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; }")
+    wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 60, P=P)
+    r0 = pg.evaluate("() => ({ note: document.querySelector('#review .note').innerText, logos: !!window.IdleLogos, hushed: window.__audio.hushed(), kind: window.__reviews.state().kind })")
+    need("Nico" in r0["note"] and r0["logos"] and r0["hushed"] and r0["kind"] == "logos", f"the logo review: {r0}")
+    pg.click("#review .card[data-item=scope-strike] .play")
+    wait_for(pg, "() => window.__reviews.state().playing", 20, P=P); pg.wait_for_timeout(1800)
+    pg.click("#review .card[data-item=scope-strike] [data-score='5']"); pg.click("#review .card[data-item=typed-scope] [data-score='4']")
+    lit = pg.evaluate("() => { const c = document.querySelector('#review .card[data-item=scope-strike] canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 64) n += d[i] + d[i + 1] + d[i + 2] > 60; return { n, connected: c.isConnected, playing: window.__reviews.state().playing }; }")
+    need(lit["n"] > 0 and lit["connected"], f"the logo didn't draw (or its canvas was replaced by a score): {lit}")
+    pg.fill("#review textarea[data-note=typed-scope]", "love the typing")
+    pg.click("#review .send")
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__reviews.state().sent", 15, P=P)
+    st = pg.evaluate("() => window.__reviews.state()"); need(st["sent"], f"not sent: {st} {P.fb}")
+    sent = [json.loads(b) for k, b in P.fb if k == "review:logos"]
+    bk = pg.evaluate("() => localStorage.getItem('idle.bkey')")
+    need(len(sent) == 1 and sent[0]["scores"] == {"scope-strike": 5, "typed-scope": 4} and sent[0]["notes"] == {"typed-scope": "love the typing"} and sent[0].get("bkey") == bk and re.fullmatch(r"[a-z2-7]{26}", bk or ""), f"sent: {sent} (bkey {bk})")
+    pg.evaluate("() => window.__reviews.close()"); un = pg.evaluate("() => window.__audio.hushed()")
+    need(not un, "the game stayed hushed after the review closed")
+    pg.evaluate("() => window.__reviews.open('logos')"); wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 20, P=P)
+    again = pg.evaluate("() => ({ send: !!document.querySelector('#review .send'), dis: [...document.querySelectorAll('#review [data-score]')].every(b => b.disabled), on: document.querySelectorAll('#review [data-score].on').length, first: [...document.querySelectorAll('#review .card')].slice(0, 2).map(c => c.dataset.item), groups: [...document.querySelectorAll('#review .grp')].map(g => g.textContent), sent: window.__reviews.state().sent })")
+    need(not again["send"] and again["dis"] and again["on"] == 2 and again["sent"], f"a second send must not be possible: {again}")
+    need(again["first"] == ["c3-typed-dust", "c3-typed-crt"] and len(again["groups"]) == 3 and again["groups"][0].startswith("round 3"), f"the logos grouped by round, Nico's top two first: {again}")
+    pg.evaluate("() => window.__reviews.close()")
+    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); row = pg.evaluate("() => !!document.getElementById('reviewerRow')"); pg.evaluate("() => window.__settings.close()")
+    need(row, "no 🧪 reviewer row in ⚙ after sending")
+    pg.evaluate("() => { window.__feedback.open('rev'); }"); wait_for(pg, "() => document.querySelectorAll('#oracle [data-review]').length === 2", 15, P=P)
+    pg.click("#oracle [data-review=fonts]"); wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 8", 20, P=P)
+    f = pg.evaluate("() => ({ kind: window.__reviews.state().kind, fam: getComputedStyle(document.querySelector('#review .card .sample')).fontFamily })")
+    need(f["kind"] == "fonts" and "Idle F1" in f["fam"], f"the fonts review: {f}")
+    pg.close(); P.clean()
+    return f"?review=logos: Nico's note, 12 logos in 3 rounds (C3 pair first), ▶ drew {lit['n']} lit samples with the game hushed, scored 2 + a note, sent once, reopened sent (no send), ⚙ reviewer row, 🧪 ⭐ tab → fonts (8, Idle F1…)"
+
+
+def t_reviews_phone(P):
+    """⭐ reviews at 375 px: the lightbox fills the screen without sideways scroll; ▶ and the score buttons are tappable."""
+    pg = P.open("/arena.html?review=logos&test"); booted(pg)
+    wait_for(pg, "() => document.querySelectorAll('#review.on .card').length === 12", 60, P=P)
+    r = pg.evaluate("() => { const b = document.querySelector('#review .box').getBoundingClientRect(), p = document.querySelector('#review .play').getBoundingClientRect(), s = document.querySelector('#review [data-score]').getBoundingClientRect(); return { w: innerWidth, l: b.left, r: b.right, sw: document.getElementById('review').scrollWidth, cw: document.getElementById('review').clientWidth, play: Math.round(p.height), score: Math.round(s.height) }; }")
+    need(r["l"] >= 0 and r["r"] <= r["w"] and r["sw"] <= r["cw"] and r["play"] >= 36 and r["score"] >= 30, f"the review at 375 px: {r}")
+    lastBtn = pg.evaluate("() => Math.max(...[...document.querySelectorAll('#review [data-score]')].map(b => b.getBoundingClientRect().right))")
+    need(lastBtn <= r["w"], f"score buttons run off the screen: {lastBtn} > {r['w']}")
+    pg.screenshot(path=os.path.join(tempfile.gettempdir(), "review-375.png")); pg.close(); P.clean()
+    return f"375 px: box {r['l']:.0f}–{r['r']:.0f}, no sideways scroll, ▶ {r['play']} px, scores {r['score']} px"
+
+
 def t_founder_link(P):
     """Founder by a gift link (a brand-new browser): the letter right away; an expired link shows a note and no letter"""
     pg = P.open("/arena.html?gift=founder&founder_now=2027-06-01&test")
@@ -2159,13 +2238,17 @@ def t_prod_gates(P, root):
         pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
         g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
         need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
+    # ⭐ reviews (idle-reviews.js) are off on id-le.com: ?review= opens nothing, 🧪 has no ⭐ tab
+    pg = P.open("/arena.html?review=logos"); booted(pg); pg.wait_for_timeout(3000)
+    rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: window.__reviews, box: !!document.querySelector('#review'), tab: t }; }")
+    need(rv["api"] is None and not rv["box"] and not rv["tab"], f"reviews on production: {rv}"); pg.close()
     # keyframes (idle-keys.js) do nothing on id-le.com: no gate, no sandbox, no strip
     pg = P.open("/arena.html?at=end#keys"); booted(pg)
     k = pg.evaluate("() => ({ key: window.__storyKey || null, keys: !!window.__keys, gate: !!document.querySelector('#keyGate'), strip: !!document.querySelector('#keyStrip'), real: Object.getOwnPropertyDescriptor(window, 'localStorage') ? 'own' : 'proto' })")
     need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
-    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)"
+    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)/reviews"
 
 
 def t_chooser(P):
@@ -2341,7 +2424,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "reviews", "reviews phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2406,6 +2489,8 @@ def main():
                 run("never stuck", t_never_stuck)
                 run("founder", t_founder)
                 run("founder link", t_founder_link)
+                run("reviews", t_reviews)
+                run("reviews phone", t_reviews_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("founder personal", t_founder_personal)
                 run("founder phone", t_founder_phone, is_mobile=True, has_touch=True)
                 run("story landing", t_story_landing)

@@ -631,7 +631,7 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 St
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_end', extra: { epoch: S.day || 0 } } })); } catch (e) {} }
   function endChoice(k, e) {
     if (k === 'open') { S.endOpen = true; save(); renderDay(); return; }
-    if (k === 'roadmap') { mark('end_roadmap'); S.endOpen = false; save(); renderDay(); try { window.__feedback && window.__feedback.open('road'); } catch (er) {} return; }
+    if (k === 'roadmap') { mark('end_roadmap'); S.endOpen = false; save(); renderDay(); try { window.__feedback && window.__feedback.open('road', null, null, 'end'); } catch (er) {} return; }
     if (k === 'github') { mark('end_github'); return; }   // the link opens in a new tab; the card stays
     if (k === 'free') { mark('end_free'); freePlay(); } }
   // free-play: every feature now, the same world; the storyline can be picked up again from ⚙ (resumeStory)
