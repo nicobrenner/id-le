@@ -72,7 +72,17 @@ def fontgen_round():
             need(not empty, f"{n} draws nothing for {empty}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    return f"{len(cands)} fonts, every character drawn"
+    try:
+        import check_glyphs   # needs Pillow: l stays one piece, D keeps a straight back, N its stems (Nico's round-1 screenshots)
+    except ImportError:
+        return f"{len(cands)} fonts, every character drawn (confusables skipped: no Pillow)"
+    bad = []
+    for f in sorted(os.listdir(os.path.join(ROOT, "demo", "fonts"))):
+        if f.endswith(".woff2"):
+            probs, _ = check_glyphs.check(os.path.join(ROOT, "demo", "fonts", f))
+            bad += [f"{f}: {x}" for x in probs]
+    need(not bad, "confusable glyphs in the shipped fonts: " + "; ".join(bad[:4]))
+    return f"{len(cands)} fonts, every character drawn; shipped fonts keep l/!, D/O, N apart"
 
 
 def js_syntax():
@@ -1334,9 +1344,10 @@ def t_story(P):
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
     fs = pg.evaluate("() => { const l = document.querySelector('#genConsole .gw p, #genConsole .gl'), lab = document.querySelector('#lab'); return { fz: l ? getComputedStyle(l).fontSize : null, lh: l ? parseFloat(getComputedStyle(l).lineHeight) / parseFloat(getComputedStyle(l).fontSize) : 0, over: lab.scrollWidth - lab.clientWidth, fam: getComputedStyle(document.documentElement).getPropertyValue('--op-font').trim() }; }")
     need(fs["fz"] == "17px" and abs(fs["lh"] - 1.45) < 0.02 and fs["over"] <= 1 and fs["fam"], f"the Operator's words: 17 px, line-height 1.45, no overflow, family from --op-font: {fs}")
-    gt = pg.evaluate("() => (document.querySelector('#genConsole .gt') || {}).textContent || ''")
+    gt = pg.evaluate("() => (document.querySelector('#genTag') || {}).textContent || ''")
+    need(not pg.evaluate("() => !!document.querySelector('#genConsole .gt')"), "no status line inside the Operator's chat (v9: it's a tag on the world)")
     need(gt == "consciousness 24 · epoch 0 · genesis", f"the Operator's status line before the lights: {gt!r}")
-    need("new consciousness" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"], "the Tiny Operator's lines should be in the thread")
+    need("the consciousness you were training" in w["thread"] and "tumble there, Doc" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"] and "We have a lot of work" not in w["thread"], "the Tiny Operator's opening (v9, 5 lines) should be in the thread")
     son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
     nm = pg.evaluate("() => ({ head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
     need("Operator" in nm["head"] and "Oracle" in nm["toggle"], f"the rename: TO's window reads Operator, the panel's button reads Oracle: {nm}")
@@ -1344,9 +1355,12 @@ def t_story(P):
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
     line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
     need("we can see something" in line, f"the lights-on reaction line: {line!r}")
+    fl = wait_for(pg, "() => window.__genesis.landing().flip && (() => { const f = window.__genesis.landing().flip, x = document.querySelector('#lab').getBoundingClientRect().left; return performance.now() - f.t0 > 250 && { ...f, mid: x }; })()", 10, P=P)
+    need(min(fl["from"]["x"], fl["to"]["x"]) + 5 < fl["mid"] < max(fl["from"]["x"], fl["to"]["x"]) - 5, f"the Operator flies from the middle to its dock (mid-flight between): {fl}")
     wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
     need("Oracle" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the panel should read 🔮 Oracle again")
-    gt1 = pg.evaluate("() => (document.querySelector('#genConsole .gt') || {}).textContent || ''"); need(gt1 == "consciousness 24 · epoch 1", f"after the lights: {gt1!r}")
+    gt1 = pg.evaluate("() => { const t = document.querySelector('#genTag'), r = t && t.getBoundingClientRect(); return t && { text: t.textContent, shown: getComputedStyle(t).display !== 'none', left: r.left, top: r.top }; }")
+    need(gt1 and gt1["text"] == "consciousness 24 · epoch 1" and gt1["shown"] and gt1["left"] < 40 and gt1["top"] < 40, f"after the lights: the tag at the world's top-left: {gt1}")
     day = pg.inner_text("#genDay")
     need("EPOCH 1" in day and "first life" in day and "DAY" not in day, f"the Epoch 1 card: {day!r}")
     for _ in range(2):
@@ -1447,6 +1461,8 @@ def t_story_landing(P):
     pg.wait_for_timeout(1200)
     say = pg.evaluate("() => { const s = window.__termBoot.arrive.lastSay(); return s && { y: s.cy / s.H, who: s.who }; }")
     need(say and abs(say["y"] - 0.5) < 0.01 and say["who"] == "doc", f"your lines should be in the middle of the screen: {say}")
+    rg = pg.evaluate("() => ({ ring: window.__genesis.landing().ring, hushed: window.__audio.hushed() })")
+    need(rg["ring"] and rg["ring"].get("tried") and not rg["ring"].get("err"), f"the ringing must be attempted at the landing: {rg}")
     lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 35, P=P)
     need(lnd["why"] == "lines" and lnd["shown"] == 7 and 12 <= lnd["after"] <= 28, f"all 7 lines, then the Operator: {lnd}")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark")
@@ -1653,6 +1669,52 @@ def t_title_card(P):
     return f"waits at the title ({w['t']:.2f} s), a key starts the messages, Esc marks skip:messages"
 
 
+FONT_LAYOUT_JS = """async () => { await document.fonts.ready;
+  const vis = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+  const over = [...document.querySelectorAll('button, .chip, .pchip, #lab-head, #genConsole .gl')].filter(vis).filter(e => e.scrollWidth - e.clientWidth > 1).map(e => (e.id || e.className || e.tagName) + (e.id ? '' : ':' + (e.textContent || '').replace(/\\d+/g, '#').trim().slice(0, 18)));
+  return { fam: getComputedStyle(document.body).fontFamily, f3: document.fonts.check('16px "Idle F3"'), page: document.documentElement.scrollWidth - innerWidth, over }; }"""
+
+
+def _font_layout(P, w, h, mobile):
+    """the same page with ?nofonts (the system fonts) and with Id|le's fonts: what overflows with the fonts that didn't before"""
+    res = {}
+    for q in ("nofonts&", ""):
+        pg = P.open(f"/arena.html?{q}test"); pg.set_viewport_size({"width": w, "height": h}); booted(pg)
+        with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 30)
+        pg.wait_for_timeout(1500)
+        res[q or "fonts"] = pg.evaluate(FONT_LAYOUT_JS); pg.close()
+    a, b = res["nofonts&"], res["fonts"]
+    need(b["fam"].startswith('"Idle F3"') and b["f3"], f"the UI isn't in Id|le's font: {b['fam'][:60]}, loaded={b['f3']}")
+    need(not a["fam"].startswith('"Idle'), f"?nofonts still uses Id|le's font: {a['fam'][:40]}")
+    new = sorted(set(b["over"]) - set(a["over"]))
+    need(b["page"] <= 1 and not new, f"{w}×{h}: overflow with the fonts: page {b['page']} px, newly clipped: {new[:6]}")
+    return f"{w}×{h}: UI in Idle F3, no new overflow ({len(b['over'])} clipped with fonts, {len(a['over'])} without)"
+
+
+def t_fonts(P):
+    """Id|le's own typefaces (idle-fonts.js): the UI is set in f3, each creature family speaks in its own voice, the Operator and the Oracle
+    get their faces, and nothing overflows that didn't overflow in the system fonts (desktop)."""
+    note = _font_layout(P, 1400, 900, False)
+    pg = P.open("/arena.html?test"); booted(pg)
+    r = pg.evaluate("""async () => { await document.fonts.ready; const F = window.IDLE_FONTS, out = {};
+      for (const k of Object.keys(F.fam)) { const b = document.createElement('div'); b.className = 'bubble'; b.dataset.f = k; document.body.appendChild(b); out[k] = getComputedStyle(b).fontFamily.split(',')[0]; b.remove(); }
+      const lab = document.getElementById('lab'), sel = document.getElementById('ai-brain');
+      return { fam: out, key: F.key({ g: { job: 'math' }, voiceKey: 'tok' }) + '/' + F.key({ g: { job: 'hoard' }, voiceKey: 'crawly' }), role: lab && lab.dataset.role, brain: sel && sel.value }; }""")
+    want_fam = {"tok": "F6", "crawly": "F5", "architect": "F2", "debug": "F1", "math": "F8", "classify": "F4", "designer": "F7"}
+    bad = {k: v for k, v in r["fam"].items() if want_fam[k] not in v}
+    need(not bad and r["key"] == "math/crawly", f"creature voices: {r}")
+    need(r["role"] == ("operator" if r["brain"] == "tiny" else "oracle"), f"the panel's role mark: {r}")
+    P.clean()
+    return note + "; 7 creature voices; panel marked " + str(r["role"])
+
+
+def t_fonts_phone(P):
+    """Id|le's fonts on a 390×844 phone: no new overflow in the bar, chips and panels."""
+    note = _font_layout(P, 390, 844, True)
+    P.clean()
+    return note
+
+
 def t_hint_phone(P):
     """On a 375×667 phone the intro's "hold to read" hint and skip › stay clear of the desktop's dock (drawn centred at the bottom, 178 px wide)."""
     pg = P.open("/arena.html?story&test"); pg.set_viewport_size({"width": 375, "height": 667})
@@ -1721,7 +1783,7 @@ def t_story_v6(P):
     wait_for(old, "() => !!(window.__genesis && window.__genesis.mode() === 'story')", 30, P=P)   # it went to ?story (which then drops its flag from the address)
     pg = P.open("/arena.html?fresh=1&test&nofirst5"); booted(pg)
     r = pg.evaluate("""async () => { const E = window.__epoch0; await E.loadBank(); await E.loadLoss(); const C = E.clock;
-      const L = t => E.logoAt(t), cut = C.split + 0.95, out = { on: [L(cut + 0.5).on, L(cut + 2.9).on, L(cut + 3.4).on], cols: [L(cut + 1.2).colour, L(cut + 2.2).colour, L(cut + 3.0).colour] };
+      const L = t => E.logoAt(t), cut = C.split + 0.95, out = { on: [L(cut + 0.5).on, L(cut + 5.0).on, L(cut + 5.5).on], cols: [L(cut + 1.2).colour, L(cut + 2.2).colour, L(cut + 3.0).colour] };
       const ct = E.makeContent({ seed: 2, story: true }); ct.boot = true; const B = window.__termBoot.dur, chk = (W, H, ph) => { const cv = document.createElement('canvas'); cv.width = W * (ph ? 2 : 1); cv.height = H * (ph ? 2 : 1);
         const res = []; for (const T of [24.5, 25.3, 26.1]) { E.frame(ct, B + T, cv, ph ? { phone: true, scale: 2 } : {}); const k = E.layoutCheck(); if (k.ref && k.band) res.push(!(k.band.y < k.ref.y + k.ref.h && k.band.y + k.band.h > k.ref.y)); } return res; };
       out.clear = { desktop: chk(1280, 720, false), phone: chk(390, 844, true) }; return out; }""")
@@ -1919,7 +1981,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1990,6 +2052,8 @@ def main():
                 run("genesis phone", t_genesis_phone, is_mobile=True, has_touch=True)
                 run("pedia desktop", t_pedia)
                 run("pedia halloween", t_pedia_halloween)
+                run("fonts", t_fonts)
+                run("fonts phone", t_fonts_phone, is_mobile=True, has_touch=True)
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()

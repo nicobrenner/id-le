@@ -72,11 +72,11 @@
 
   // ---------- the card in the team panel, and a pill while the panel is closed
   const css = document.createElement('style');
-  css.textContent = `#team .dlw{margin:6px 0 8px;padding:8px 10px;border:1px solid #2b5cff88;border-radius:10px;background:color-mix(in srgb,#2b5cff 9%,transparent);font:12.5px/1.45 system-ui}
+  css.textContent = `#team .dlw{margin:6px 0 8px;padding:8px 10px;border:1px solid #2b5cff88;border-radius:10px;background:color-mix(in srgb,#2b5cff 9%,transparent);font:12.5px/1.45 var(--ui-font,system-ui)}
 #team .dlw .stp{display:block;font-size:10.5px;opacity:.65;margin-bottom:2px}#team .dlw .acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
-#team .dlw button{font:11.5px system-ui;padding:3px 9px;border-radius:12px;border:1px solid #2b5cff;background:transparent;color:inherit;cursor:pointer}#team .dlw button.pri{background:#2b5cff;color:#fff}
+#team .dlw button{font:11.5px var(--ui-font,system-ui);padding:3px 9px;border-radius:12px;border:1px solid #2b5cff;background:transparent;color:inherit;cursor:pointer}#team .dlw button.pri{background:#2b5cff;color:#fff}
 #team .dlw button.end{border-color:#8886;opacity:.75}#team .dlw .dots{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}#team .dlw .dots i{width:6px;height:6px;border-radius:50%;background:#8886}#team .dlw .dots i.on{background:#2b5cff}
-#dlwBtn{font:11px system-ui;margin-left:6px;padding:1px 7px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer}.dlw-flash{outline:2px solid #2b5cff;outline-offset:3px;border-radius:8px;transition:outline-color 2s}
+#dlwBtn{font:11px var(--ui-font,system-ui);margin-left:6px;padding:1px 7px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer}.dlw-flash{outline:2px solid #2b5cff;outline-offset:3px;border-radius:8px;transition:outline-color 2s}
 @media (max-width:500px){#team .dlw{font-size:13.5px}#team .dlw button{font-size:13px;padding:6px 12px}}`;
   document.head.appendChild(css);
   let pill = null, pillFor = '', lastHtml = '';

@@ -32,6 +32,8 @@ HEADERS = """/*
   Cache-Control: public, max-age=31536000, immutable
 /jeffy-heads/*
   Cache-Control: public, max-age=604800
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
 """
 
 
@@ -109,6 +111,8 @@ def main():
         if f.endswith(".jpg"): shutil.copy2(os.path.join(img, f), os.path.join(out, "img", f))
     # the data lab's in-browser classifiers (idle-jeffy.js): fetched only when the lab opens, never on a first visit
     shutil.copytree(os.path.join(DEMO, "jeffy-heads"), os.path.join(out, "jeffy-heads"))
+    # Id|le's own typefaces (tools/fontgen/export.py); their URLs carry a content hash, so they can be cached for good
+    shutil.copytree(os.path.join(DEMO, "fonts"), os.path.join(out, "fonts"))
     sums = vendor_ort(out)
     if a.staging: mark_staging(out)
     stamp_versions(out)
