@@ -13,6 +13,10 @@
   const FOUNDING_UNTIL = '2026-11-24T08:00:00Z';    // PLACEHOLDER: gift links work until then (about two weeks after the launch)
   const WORLD_ON_PROD = false;                      // the early-world gift on id-le.com: switch on at the launch (links work everywhere)
   const LINKS_ON_PROD = false;                      // gift links (general and personal) on id-le.com: off until the launch (the letter is a draft)
+  // hidden everywhere for now, staging included (Nico, 11-03: "let's stick to the Humans in the Loop/HITL… let's gate/hide the founder badges"):
+  // no ⚙ row, no offers, ?gift=founder and personal gift links do nothing, Founder badges aren't drawn. The code stays, and the tests run it
+  // with ?founder_test (test sites only). The first-seen date is still kept, so early browsers are known if it comes back.
+  const FOUNDER_ON = false;
   const LETTER_DRAFT = true;                        // the letter below is a draft: Nico rewrites it
   const LETTER = ["Hi! I'm Nico, I make Id|le.",
     "You were here before the story began, back when it was a few creatures eating words, and that means a lot. Thank you!! 🙏",
@@ -42,6 +46,11 @@
     if (isFinite(m) && m !== kept) sv(KS, m); return isFinite(m) ? m : null; }
   // kept on every page load, even where the gift isn't offered yet, so a browser that plays before the launch is known as early later
   setTimeout(() => { if (hasWorld()) firstSeen(); }, 20000);
+  if (!FOUNDER_ON && !(testSite && Q.has('founder_test'))) {
+    window.__founder = { off: true, available: () => false, open: () => null, card: () => {}, claimed: () => null, badges: [],
+      eligible: () => ({ world: false, link: false, personal: null, expired: false, firstSeen: hasWorld() ? firstSeen() : null }),
+      dates: () => ({ before: new Date(BEFORE).toISOString(), until: new Date(UNTIL).toISOString(), worldOnProd: WORLD_ON_PROD, letterDraft: LETTER_DRAFT, on: false }) };
+    return; }
 
   const state = () => ld(K, {});
   const claimed = () => !!state().claimed;
