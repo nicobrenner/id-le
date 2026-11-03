@@ -37,9 +37,9 @@
   // and comments in subtitles, gets excited, then scared: the curve keeps falling past the chart's floor, lines pour out and overlap,
   // "can we stop it?!", "run!!!!", a white flash and a tear, silence; then the cut (Idle → Id|le) and the halves crawl off into the dark.
   // No "in the beginning there was…" and no "your turn" here: the Tiny Operator takes over (idle-genesis.js, the waking up).
-  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 32.4, crawl: 34.9, end: 36.9 };
-  const LOGO_HOLD = 3.2, IDLE_BPM = 84, PURR = 1;   // PURR: the signature purr's variant on the logo (1 warm FM, 2 saw + arpeggio chime, 3 deep rumble)   // story v6: after the cut Id|le holds 3.2 s, its pipe cycling the rainbow at the engine's idle tempo; then black
-  const STRIKES = [30.2, 30.75, 31.3];
+  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 31.0, crawl: 34.9, end: 36.9 };
+  const LOGO_HOLD = 3.4, IDLE_BPM = 84, PURR = 4, PURR_GAP = 0.5;   // PURR: the signature purr's variant (1 warm FM, 2 saw + chime, 3 deep rumble, 4 b2's purr into noise: Nico's pick); it starts PURR_GAP s after the cut's thunder   // story v6: after the cut Id|le holds 3.2 s, its pipe cycling the rainbow at the engine's idle tempo; then black
+  const STRIKES = [];   // v7: no run-up of strikes; the one lightning is the cut's
   // the engine's tempo during the run (boot-script.md v6): idle 84 → 110 bpm while it learns, → 170 when it runs away, → 260 at the vortex
   const runBpm = T => T < CS.over ? 84 + 26 * T / CS.over : T < CS.spin ? 110 + 60 * (T - CS.over) / (CS.spin - CS.over) : 170 + 90 * Math.min(1, (T - CS.spin) / (CS.flash - CS.spin));
   const RUN_BEATS = (() => { const b = []; for (let t = 0.2; t < CS.flash; t += 60 / runBpm(t)) b.push(t); return b; })();
@@ -313,7 +313,7 @@
     if (T >= CS.flash) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
       const wf = RM ? 0 : 1 - clamp((T - CS.flash - 0.08) / 0.37); if (wf > 0) { g.fillStyle = `rgba(255,255,255,${wf})`; g.fillRect(0, 0, W, H); }
       for (const s0 of STRIKES) bolt(g, W, H, T - s0, s0, RM, 1);
-      const cutT = CS.split + 0.95; bolt(g, W, H, T - cutT + 0.05, 77, RM, 0.6);   // the cut has its own lightning, far behind the word
+      const cutT = CS.split + 0.95; bolt(g, W, H, T - cutT + 0.05, 77, RM, 1);   // the one lightning: as the bar cuts Id|le
       if (T >= CS.split) drawSplit(g, W, H, T - (CS.split - C.split), P, RM, st); return; }
     const L = layout(W, H, P), ci = curveInfo(); g.save();
     if (!RM && T > CS.panic) { const k = clamp((T - CS.panic) / (CS.tear - CS.panic)); g.translate((Math.random() - 0.5) * 9 * k, (Math.random() - 0.5) * 9 * k); }   // the room shakes
@@ -378,15 +378,15 @@
   function scheduleAll(S, ct, t0) {   // recordings: every timed sound of the film at once (offline)
     const ex = extraOf(ct);
     if (ct.story) { S.hum(0, true); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e)); for (let t = CS.over; t < CS.tear; t += 0.03 + 0.12 * (1 - (t - CS.over) / (CS.tear - CS.over)) * Math.random()) S.tick(t0 + t, 12);
-      { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => B0.beat(S.ctx || S.out.context, S.out, t0 + t, i, beatK(t))); if (B0.purr) B0.purr(S.ctx || S.out.context, S.out, t0 + CS.split + 0.95, PURR); } }
-      S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); S.thunder(t0 + CS.split + 0.95, 0.5); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
+      { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => B0.beat(S.ctx || S.out.context, S.out, t0 + t, i, beatK(t))); if (B0.purr) B0.purr(S.ctx || S.out.context, S.out, t0 + CS.split + 0.95 + PURR_GAP, PURR); } }
+      S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); S.thunder(t0 + CS.split + 0.95, 1); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
     S.note(t0 + C.final + 0.2); S.cut(t0 + ex + C.split + 0.95); S.thunder(t0 + ex + C.split + 0.95, 0.5); }
   function liveSound(S, ct, T0, T1, now) {   // live: sounds for what was drawn between film seconds T0 and T1 (ticks follow the tokens shown)
     const ex = extraOf(ct), cross = t => t > T0 && t <= T1;
     if (ct.story) { for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
       if (T1 > CS.over && T1 < CS.tear && Math.random() < 0.25 + 0.6 * (T1 - CS.over) / (CS.tear - CS.over)) S.tick(now, 12);
-      { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => { if (cross(t)) B0.beat(S.ctx, S.out, now, i, beatK(t)); }); if (B0.purr && cross(CS.split + 0.95)) B0.purr(S.ctx, S.out, now, PURR); } }
-      STRIKES.forEach(x => { if (cross(x + 0.05)) S.thunder(now); }); if (cross(CS.split + 0.95)) S.thunder(now, 0.5);
+      { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => { if (cross(t)) B0.beat(S.ctx, S.out, now, i, beatK(t)); }); if (B0.purr && cross(CS.split + 0.95 + PURR_GAP)) B0.purr(S.ctx, S.out, now, PURR); } }
+      STRIKES.forEach(x => { if (cross(x + 0.05)) S.thunder(now); }); if (cross(CS.split + 0.95)) S.thunder(now, 1);
       const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); return; }
     for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
     if (cross(C.final + 0.2)) S.note(now); if (cross(ex + C.split + 0.95)) S.cut(now); if (cross(ex + C.split + 0.95)) S.thunder(now, 0.5); }
