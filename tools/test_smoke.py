@@ -1468,6 +1468,20 @@ def t_story_migrate(P):
     return f"v10 save (old Epoch 1 done, day 2) → Epoch 0 done, epoch {st2['day']} reached, v10 numbers kept, stable on reload"
 
 
+def t_logo_thunder(P):
+    """The logo's thunder (the one strike at the Id|le cut) must not clip: it peaked at ~1.5 before the master. 60 fresh buffers (its noise
+    is random) at full strength, and one offline render of the voice: every peak < 1.0 (by design ≤ 0.9)."""
+    pg = P.open("/arena.html?test&intro=0"); booted(pg)
+    r = pg.evaluate("""async () => { const c = new OfflineAudioContext(1, 44100 * 3, 44100); let worst = 0, raw = 0;
+      for (let k = 0; k < 60; k++) { const T = window.__epoch0.thunderBuf(c, 1), d = T.buffer.getChannelData(0); let p = 0; for (let i = 0; i < d.length; i++) p = Math.max(p, Math.abs(d[i])); raw = Math.max(raw, p); worst = Math.max(worst, p * T.gain); }
+      const T = window.__epoch0.thunderBuf(c, 1), s = c.createBufferSource(), g = c.createGain(); s.buffer = T.buffer; g.gain.value = T.gain; s.connect(g); g.connect(c.destination); s.start(0.05);
+      const out = (await c.startRendering()).getChannelData(0); let rp = 0; for (let i = 0; i < out.length; i++) rp = Math.max(rp, Math.abs(out[i]));
+      return { worst, raw, rendered: rp }; }""")
+    need(r["worst"] < 1.0 and r["rendered"] < 1.0, f"the logo thunder clips: {r}")
+    P.clean()
+    return f"60 buffers: peak {r['worst']:.3f} (buffer ≤ {r['raw']:.3f} × gain 0.9), rendered {r['rendered']:.3f}"
+
+
 def t_story_intro(P):
     """The story version of Epoch 0, drawn frame by frame: the scientist's subtitles, the overrun, the white flash, black, the cut."""
     pg = P.open("/arena.html?fresh=1&test&nofirst5"); booted(pg)
@@ -2114,7 +2128,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2181,6 +2195,7 @@ def main():
                 run("founder phone", t_founder_phone, is_mobile=True, has_touch=True)
                 run("story landing", t_story_landing)
                 run("story intro", t_story_intro)
+                run("logo thunder", t_logo_thunder)
                 run("boot intro", t_boot_intro)
                 run("chooser", t_chooser)
                 run("genesis phone", t_genesis_phone, is_mobile=True, has_touch=True)
