@@ -1,5 +1,5 @@
 // idle-live.js: the creator's live view (demo/live.html, served at /live; 11-03). Everyone with Id|le open right now is a soft circle
-// that pops in when they arrive and fades when they leave, grouped by mode (the storyline, free play, a ready world, the plain world)
+// that pops in when they arrive and fades when they leave, grouped by mode (the storyline, the playground from nothing or as a ready world, the plain world)
 // or by country; it grows with their time in the game, and its glyph says what they're doing (the storyline's step, a panel open).
 // Side charts: online over the last hour, arrivals and leaves per minute, where storyline players are, panels, countries, devices.
 // Reads GET /lab/live every 2.5 s while this page is visible, with the creator's key (Authorization: Bearer …, kept in this browser's
@@ -7,7 +7,7 @@
 (() => {
   const KEY = 'idle.liveKey', EVERY = 2500, $ = s => document.querySelector(s);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-  const MODE = { story: ['storyline', css('--s-story')], free: ['free play', css('--s-free')], ready: ['ready world', css('--s-ready')], world: ['plain world', css('--s-world')] };
+  const MODE = { story: ['storyline', css('--s-story')], free: ['playground · from nothing', css('--s-free')], ready: ['playground · ready world', css('--s-ready')], world: ['plain world', css('--s-world')] };
   // countries: the three with most players get the categorical hues (fixed slot order, by count at the moment they first appear), the rest grey
   const CC_SLOTS = [css('--s-story'), css('--s-free'), css('--s-ready')], OTHER = css('--s-world');
   const STEP = { intro: 'intro', dark: 'the dark', lights: 'lights on', words: 'words', life: 'life', 'genesis-done': 'Genesis done', epoch: 'epoch', end: 'end card' };

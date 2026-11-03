@@ -412,7 +412,7 @@ def main():
             if o["offer"]:
                 print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
             if o.get("end"):
-                en = o["end"]; print(f"           end of what's built: shown {en.get('shown', 0)}, roadmap {en.get('roadmap', 0)}, GitHub {en.get('github', 0)}, free-play {en.get('free', 0)}")
+                en = o["end"]; print(f"           end of what's built: shown {en.get('shown', 0)}, roadmap {en.get('roadmap', 0)}, GitHub {en.get('github', 0)}, the playground {en.get('free', 0)}")
         fd = fd_total(sfs)
         if fd:
             print("\nFounder gift (browsers, once each): " + ", ".join(f"{lab} {fd.get(k, 0)}" for k, lab in FD_STEPS)
@@ -534,7 +534,7 @@ def dashboard(days, since, traffic, note):
         f'<p class="muted">{e(arm)}</p>' + bars([(SF_NAMES[k], o["steps"].get(k, 0)) for k in SF_STEPS], total=next((o["steps"][k] for k in SF_STEPS if o["steps"].get(k)), None))
         + (f'<p class="muted">skipped at: {e(", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in o["skips"].items()))}</p>' if o["skips"] else "")
         + (f'<p class="muted">storyline offer: shown {o["offer"].get("shown", 0)}, accepted {o["offer"].get("accepted", 0)}</p>' if o["offer"] else "")
-        + (f'<p class="muted">end of what\'s built: shown {o["end"].get("shown", 0)}, roadmap {o["end"].get("roadmap", 0)}, GitHub {o["end"].get("github", 0)}, free-play {o["end"].get("free", 0)}</p>' if o.get("end") else "")
+        + (f'<p class="muted">end of what\'s built: shown {o["end"].get("shown", 0)}, roadmap {o["end"].get("roadmap", 0)}, GitHub {o["end"].get("github", 0)}, the playground {o["end"].get("free", 0)}</p>' if o.get("end") else "")
         for arm, o in sorted(_sf.items())) + "</section>") if _sf else ""
     _fd = fd_total(_sf)
     if _fd:
