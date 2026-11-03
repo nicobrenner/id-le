@@ -1569,15 +1569,16 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // so the audio graph costs nothing. Remembered in idle.audio. Sound is ON by default (Nico, Halloween night: "it makes a huge difference
   // in the vibe"): browsers start audio only after a gesture, so the first tap/key/click anywhere starts it with a 3 s fade-in. Only a choice
   // the player made (🔊, the popover's switch) is kept as muted: st.explicit marks it; older saved states without it get the new default.
-  const Master = (() => { const K = 'idle.audio', AC = window.AudioContext || window.webkitAudioContext; let ctx = null, out = null, fxOut = null, sus = 0, faded = false;
+  const Master = (() => { const K = 'idle.audio', AC = window.AudioContext || window.webkitAudioContext; let ctx = null, out = null, fxOut = null, sus = 0, faded = false, hushG = null, hushed = false;
     const st = (() => { let s = null; try { s = JSON.parse(localStorage.getItem(K) || 'null'); } catch (e) {} if (s) { s = Object.assign({ muted: true, vol: 0.9, fx: true }, s); if (!s.explicit) s.muted = false; return s; }
       return { muted: false, vol: 0.5, fx: true }; })();
     const save = () => { try { localStorage.setItem(K, JSON.stringify(st)); } catch (e) {} };
-    function get() { if (!ctx) { ctx = new AC(); out = ctx.createGain(); out.gain.value = (st.muted || (!faded && ctx.state !== 'running')) ? 0 : st.vol; out.connect(ctx.destination); fxOut = ctx.createGain(); fxOut.connect(out); if (st.muted) ctx.suspend(); } return ctx; }
+    function get() { if (!ctx) { ctx = new AC(); out = ctx.createGain(); out.gain.value = (st.muted || (!faded && ctx.state !== 'running')) ? 0 : st.vol; hushG = ctx.createGain(); hushG.gain.value = hushed ? 0 : 1; out.connect(hushG); hushG.connect(ctx.destination); fxOut = ctx.createGain(); fxOut.connect(out); if (st.muted) ctx.suspend(); } return ctx; }
     function apply(tc = 0.03) { if (!ctx) return; const now = ctx.currentTime; clearTimeout(sus); out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(out.gain.value, now); out.gain.setTargetAtTime(st.muted ? 0 : st.vol, now, tc);   // short ramps: no clicks
       if (st.muted) sus = setTimeout(() => { if (st.muted && ctx.state === 'running') ctx.suspend(); }, 300); else if (ctx.state !== 'running') ctx.resume(); }
     const changed = () => { save(); apply(); try { dispatchEvent(new CustomEvent('idle:audio', { detail: { ...st } })); } catch (e) {} };
-    const api = { ctx: get, out: () => (get(), out), fxOut: () => (get(), fxOut), muted: () => st.muted, vol: () => st.vol, fx: () => st.fx, fxOn: () => st.fx && !st.muted,
+    const api = { hush(on) { hushed = !!on; if (hushG && ctx) { const t = ctx.currentTime; hushG.gain.cancelScheduledValues(t); hushG.gain.setValueAtTime(hushG.gain.value, t); hushG.gain.setTargetAtTime(hushed ? 0 : 1, t, hushed ? 0.15 : 0.8); } }, hushed: () => hushed,
+      ctx: get, out: () => (get(), out), fxOut: () => (get(), fxOut), muted: () => st.muted, vol: () => st.vol, fx: () => st.fx, fxOn: () => st.fx && !st.muted,
       setMuted(m) { st.muted = !!m; st.explicit = true; if (!m) get(); changed(); logEvent('sound', { on: !m }); }, toggle() { this.setMuted(!st.muted); return !st.muted; },
       setVol(v) { st.vol = Math.max(0, Math.min(1, +v)); if (st.muted && st.vol > 0) st.muted = false; if (!st.muted) get(); changed(); }, setFx(on) { st.fx = !!on; changed(); },
       resume() { if (st.muted) return; get(); const fadeIn = () => { if (faded || st.muted) return; faded = true; const t = ctx.currentTime; out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(0, t); out.gain.setTargetAtTime(st.vol, t, 1.0); };   // the first start fades in over ~3 s

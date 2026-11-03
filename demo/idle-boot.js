@@ -108,7 +108,7 @@
 
   // ---------- the boot itself (T: seconds, 0..DUR) ----------
   function draw(g, W, H, T, P, RM) {
-    const p = panes(W, H, P), port = p.port, fz = port ? Math.round(clamp(W / 34, 10, 12)) : Math.round(clamp(W / 78, 11, 17)), lh = fz * 1.42, pad = port ? 12 : 26;
+    const p = panes(W, H, P), port = p.port, fz = port ? Math.round(clamp(W / 27, 13, 16)) : Math.round(clamp(W / 78, 11, 17)), lh = fz * 1.42, pad = port ? 12 : 26;
     g.fillStyle = BG; g.fillRect(0, 0, W, H);
     if (!RM && T < 0.32) { const u = ease(T / 0.32); g.fillStyle = '#dff6ff'; g.globalAlpha = 1 - u * 0.4; g.fillRect(W / 2 - W * 0.5 * u, H / 2 - 1 - u * 2, W * u, 2 + u * 4); g.globalAlpha = 1; return; }   // the tube warms up: a line that opens
     if (T < K.log + 0.2) {   // the globe, a title, a progress bar
@@ -119,7 +119,7 @@
       const n = 24, k = Math.floor(clamp((T - 0.3) / (K.log - 0.5)) * n); g.fillStyle = CY; g.fillText('[' + '#'.repeat(k) + '.'.repeat(n - k) + ']', W / 2, H * 0.44 + R * 1.38 + lh * 1.3); g.restore();
       if (T < K.log) { overlay(g, W, H); return; } }
     if (T < K.shell) {   // the boot log, then the login, scrolling like a console
-      const rowsMax = Math.floor((H - pad * 2) / lh), lines = [], width = port ? 31 : 44;
+      const rowsMax = Math.floor((H - pad * 2) / lh), lines = [], width = port ? Math.max(12, Math.floor((W - pad * 2) / (fz * 0.6)) - 14) : 44;
       LOG.forEach((l, i) => { if (port && !l[4]) return; const t0 = LOGT[i]; if (T < t0) return; let txt = l[0];
         if (l[0].startsWith('unified memory') && T < t0 + l[3] * 0.85 && !RM) txt = `unified memory: ${Math.floor(1048576 * ease(clamp((T - t0) / (l[3] * 0.85)))).toLocaleString('en-US')} MB`;
         const done = T >= t0 + l[3] * 0.6 || RM; lines.push({ txt: txt.length > width ? txt.slice(0, width - 1) + '…' : txt, st: l[1] && done ? l[1] : '', col: l[2], dots: !!l[1], width, os: l[5] === 'os' }); });
@@ -146,15 +146,16 @@
   // the shell's lines (the prompt, the command and its output; in the film, the training log follows)
   function shellLines(T, RM, port) {
     const out = [{ txt: port ? '[session project-24]' : '[session project-24 · 4 panes · zero universes running]', col: DIM }];
-    if (T >= K.cmd - 0.4) out.push({ prompt: true, cmd: cmdTyped(T, RM), cur: T < K.enter });
+    if (T >= K.cmd - 0.4) { if (port) out.push({ prompt: true, cmd: null }, { txt: '❯ ' + cmdTyped(T, RM), col: '#f2f2f2', cur: T < K.enter, cmd2: true }); else out.push({ prompt: true, cmd: cmdTyped(T, RM), cur: T < K.enter }); }
     (port ? SHELL_OUT_P : SHELL_OUT).forEach(([t0, s]) => { if (T >= t0) out.push({ txt: s, col: CY }); });
     return out; }
+  let lastCmd = null;   // where the typed command ends (tests: it must stay on screen on phones)
   function shellText(g, r, p, T, RM, extra, fz) {
     const lh = fz * 1.5, x0 = r.x + 10, y0 = r.y + p.titleH + 6, rowsMax = Math.max(1, Math.floor((r.h - p.titleH - 10) / lh));
     let lines = shellLines(T, RM, p.port); if (extra) lines = lines.concat(extra); const vis = lines.slice(-rowsMax);
     g.save(); g.beginPath(); g.rect(r.x + 1, r.y + p.titleH, r.w - 2, r.h - p.titleH - 1); g.clip(); g.font = `${fz}px ${MONO}`; g.textBaseline = 'middle';
-    vis.forEach((L, i) => { const y = y0 + lh * (i + 0.5); if (L.prompt) { const x = prompt(g, x0, y, fz, p.port); g.font = `${fz}px ${MONO}`; g.fillStyle = '#f2f2f2'; g.fillText(L.cmd, x, y); if (L.cur) cursor(g, x + g.measureText(L.cmd).width + 2, y, fz, T); }
-      else { g.fillStyle = L.col || TXT; g.fillText(L.txt, x0, y); } });
+    vis.forEach((L, i) => { const y = y0 + lh * (i + 0.5); if (L.prompt) { const x = prompt(g, x0, y, L.cmd == null ? Math.round(fz * 0.8) : fz, p.port); if (L.cmd == null) return; g.font = `${fz}px ${MONO}`; g.fillStyle = '#f2f2f2'; g.fillText(L.cmd, x, y); const e = x + g.measureText(L.cmd).width; lastCmd = { x: e, y, W: innerWidth }; if (L.cur) cursor(g, e + 2, y, fz, T); }
+      else { g.fillStyle = L.col || TXT; g.fillText(L.txt, x0, y); if (L.cmd2) { const e = x0 + g.measureText(L.txt).width; lastCmd = { x: e, y, W: innerWidth }; if (L.cur) cursor(g, e + 2, y, fz, T); } } });
     g.restore(); }
 
   // ---------- the panes during the film (Tf: Epoch 0's own seconds) ----------
@@ -189,12 +190,22 @@
     return p; }
 
   // ---------- sound (through the intro's own output; optional) ----------
-  const EV = (() => { const ev = [{ t: 0.02, k: 'crt' }, { t: 0.3, k: 'relay' }, { t: K.log, k: 'disk', d: K.login - K.log }];
+  const EV = (() => { const ev = [{ t: 0, k: 'pad', d: DUR + 0.6 }, { t: 0.02, k: 'crt' }, { t: 0.3, k: 'relay' }, { t: 0.55, k: 'post' }, { t: 1.2, k: 'floppy' }, { t: K.log, k: 'disk', d: K.login - K.log }];
+    LOG.forEach((l, i) => { if (i % 3 === 1) ev.push({ t: LOGT[i] + 0.05, k: 'seek' }); ev.push({ t: LOGT[i] + 0.09, k: 'blip', n: i }); });
     LOG.forEach((l, i) => { ev.push({ t: LOGT[i], k: 'tick' }); if (l[1] === 'BYPASSED') ev.push({ t: LOGT[i] + l[3] * 0.6, k: 'warn' }); });
     keyTimes(USER, K.user, 13).forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.pass - 0.12, k: 'enter' }); keyTimes(PASS, K.pass + 0.1, 15).forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.last - 0.1, k: 'enter' });
     CK.forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.enter, k: 'enter' }); SHELL_OUT.forEach(([t]) => ev.push({ t, k: 'tick' })); ev.push({ t: K.split, k: 'whoomp' });
     return ev.sort((a, b) => a.t - b.t); })();
   const noiseOf = new WeakMap();
+  // the intro's own music (story v5, Nico: "the intro needs its own background music/ambience"): a slow pad, Am · F · C · G, 4 s each,
+  // three detuned saws through a low-pass per chord, crossfading; it starts at intro second T0 (a bed: it picks up mid-way when the sound comes on late)
+  const CHORDS = [[110, 130.81, 164.81], [87.31, 110, 130.81], [130.81, 164.81, 196], [98, 123.47, 146.83]];
+  function pad(ctx, dest, at, dur, T0, vol = 0.016) {
+    const out = ctx.createGain(); out.gain.setValueAtTime(0, at); out.gain.linearRampToValueAtTime(vol, at + 1.2); out.gain.setValueAtTime(vol, at + Math.max(1.2, dur - 1)); out.gain.linearRampToValueAtTime(0.0001, at + dur);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 620; lp.Q.value = 0.4; lp.connect(out); out.connect(dest);
+    for (let c0 = Math.floor(T0 / 4) * 4; c0 < T0 + dur; c0 += 4) { const ch = CHORDS[Math.floor(c0 / 4) % 4], s0 = at + Math.max(0, c0 - T0), s1 = at + Math.min(dur, c0 + 4.6 - T0);
+      if (s1 <= s0 + 0.05) continue; const v = ctx.createGain(); v.gain.setValueAtTime(0, s0); v.gain.linearRampToValueAtTime(1, s0 + 0.8); v.gain.setValueAtTime(1, Math.max(s0 + 0.8, s1 - 0.8)); v.gain.linearRampToValueAtTime(0.0001, s1); v.connect(lp);
+      for (const f of ch) for (const det of [-6, 7]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det; o.connect(v); o.start(s0); o.stop(s1 + 0.05); } } }
   function noise(ctx) { let b = noiseOf.get(ctx); if (b) return b; const n = ctx.sampleRate | 0; b = ctx.createBuffer(1, n, ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; noiseOf.set(ctx, b); return b; }
   function sound(ctx, dest, e, at) {
     const tone = (type, f, t0, dur, vol, f2) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur); v.gain.setValueAtTime(0, t0); v.gain.linearRampToValueAtTime(vol, t0 + Math.min(.008, dur / 4)); v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(v); v.connect(dest); o.start(t0); o.stop(t0 + dur + .05); };
@@ -208,11 +219,17 @@
       case 'warn': tone('square', 880, at, 0.09, 0.04); tone('square', 660, at + 0.12, 0.12, 0.04); break;
       case 'key': burst(at, 0.03, 0.16, 2400 + Math.random() * 900, 1.5); tone('sine', 180, at, 0.02, 0.03); break;
       case 'enter': burst(at, 0.06, 0.22, 1300, 1.2); tone('sine', 130, at, 0.06, 0.06); break;
-      case 'whoomp': tone('sine', 170, at, 0.45, 0.12, 52); burst(at, 0.35, 0.04, 500, 0.6); break; } }
+      case 'whoomp': tone('sine', 170, at, 0.45, 0.12, 52); burst(at, 0.35, 0.04, 500, 0.6); break;
+      case 'pad': pad(ctx, dest, at, e.d, e.from || 0); break;
+      case 'post': tone('square', 1000, at, 0.16, 0.035); break;   // the power-on self-test beep
+      case 'floppy': for (let i = 0; i < 2; i++) for (let k = 0; k < 9; k++) { const t0 = at + i * 0.75 + k * 0.055; tone('square', 95 + (k % 3) * 12, t0, 0.03, 0.03); burst(t0, 0.02, 0.05, 1800, 2); } break;   // the drive's stepper, twice
+      case 'seek': for (let k = 0; k < 4; k++) burst(at + k * 0.04 + Math.random() * 0.02, 0.012, 0.09, 3800, 3); break;   // the disk's head ticking
+      case 'blip': { const n = e.n || 0, f = [1568, 1760, 2093, 2349][n % 4]; tone('sine', f, at, 0.05, 0.022); tone('sine', f * 1.5, at + 0.06, 0.04, 0.016); break; } } }
   function fire(ctx, dest, T0, T1, at) { for (const e of EV) if (e.t > T0 && e.t <= T1) { try { sound(ctx, dest, e, at); } catch (er) {} } }
   function fireAll(ctx, dest, t0) { for (const e of EV) { try { sound(ctx, dest, e, t0 + e.t); } catch (er) {} } }
+  // (beds started mid-way remember where in the music they are)
   // continuous sounds already under way at T (the sound was switched on mid-way, or resumed after a hold): start them for what is left
-  function bootBeds(ctx, dest, T, at) { for (const e of EV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { sound(ctx, dest, { ...e, d: e.t + e.d - T }, at); } catch (er) {} } }
+  function bootBeds(ctx, dest, T, at) { for (const e of EV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { sound(ctx, dest, { ...e, d: e.t + e.d - T, from: T - e.t }, at); } catch (er) {} } }
 
   // ---------- arriving at the lab (v4, boot-script.md): the scientist's own computer, one continuous desktop ----------
   // Nico: "let's just keep the phone… no keycard, we could just show a faux-Slack… a message notification from Lester, he replies, brief
@@ -227,13 +244,13 @@
     { me: true, text: "yes, I'm sure everything will be fine… ok, arriving now, see you later 😘" },
     { me: false, text: 'good luck!! 🍀' }];
   // when each message lands: hers after typing dots, his after a short pause; then enough time to read it
-  const TH = (() => { let t = 0.9; return THREAD.map(m => { const dots = m.me ? 0 : 0.55, at = t + dots; t = at + Math.max(0.85, m.text.length * 0.022); return { ...m, dots: at - dots, at }; }); })();
-  const NOTE = TH[TH.length - 1].at + 0.9, CHAT = NOTE + 1.0;
+  const TH = (() => { let t = 1.1; return THREAD.map(m => { const dots = m.me ? 0 : 0.8, at = t + dots; t = at + Math.max(1.2, m.text.length * 0.031); return { ...m, dots: at - dots, at }; }); })();
+  const NOTE = TH[TH.length - 1].at + 1.3, CHAT = NOTE + 1.9;   // the notification slides in and stays a beat before the chat opens
   // the team chat: a few believable recent lines in #training-runs (bots and handles, no real people; no training text)
   const CHANNELS = ['training-runs', 'experiments', 'evals', 'cluster-admin', 'random'];
   const BACKLOG = [['ops-bot', 'run 23: checkpoint archived · 412 GB'], ['evalbot', 'p23 final · loss 1.43 · 2 evals flagged "unusual"'], ['night-shift', 'anyone else see the thermals spike at 3am?'],
     ['ops-bot', 'breaker B7 reset (manual)'], ['night-shift', 'cluster is all yours today, doc']];
-  const BL = BACKLOG.map((b, i) => ({ who: b[0], text: b[1], at: CHAT + 0.2 + i * 0.25 }));
+  const BL = BACKLOG.map((b, i) => ({ who: b[0], text: b[1], at: CHAT + 0.4 + i * 0.36 }));
   // the DM with Lester: his notification, then the scientist's lines and Lester's answers (Nico's lines; Lester's approved as final)
   const DMLINES = [
     { who: 'lester', text: 'hey doc, you in? 👋' },
@@ -243,11 +260,11 @@
     { who: 'lester', text: "I'll keep a hand on the breaker this time" },
     { who: 'scientist', text: "Alright, let's boot this cluster and start the run right away…" },
     { who: 'lester', text: 'good luck, doc' }];
-  const DMT = CHAT + 0.2 + BACKLOG.length * 0.25 + 0.5;   // switching to the DM
+  const DMT = CHAT + 0.4 + BACKLOG.length * 0.36 + 0.8;   // switching to the DM
   // his lines are typed into the input (fast, he's done this before), then sent; Lester's come after "Lester is typing…"; each stays long enough to read
   const DM = (() => { let t = DMT + 0.3; return DMLINES.map((l, i) => { let typeAt = t, at;
-      if (i === 0) at = t; else if (l.who === 'scientist') { at = t + l.text.length / 90 + 0.15; } else { at = t + 0.6; }
-      t = at + Math.max(0.8, l.text.length * 0.025); return { ...l, typeAt, at }; }); })();
+      if (i === 0) at = t; else if (l.who === 'scientist') { at = t + l.text.length / 62 + 0.2; } else { at = t + 0.9; }
+      t = at + Math.max(1.15, l.text.length * 0.034); return { ...l, typeAt, at }; }); })();
   const CLOSE = DM[DM.length - 1].at + 1.0, TERM = CLOSE + 0.45, ADUR = TERM + 0.75, BT = NOTE;
   const lastLine = DM[DM.length - 1];
   const WHO = { scientist: { label: 'scientist', col: '#ffe2b8', bar: '#ffcf8a', lab: '#c9a26b' }, lester: { label: 'lester', col: '#c4f2dd', bar: '#6fd6a8', lab: '#6fd6a8' } };
@@ -305,14 +322,18 @@
     const hw0 = g.measureText(dm ? '● Lester' : '# training-runs').width; g.font = `${Math.round(fs * 0.8)}px ${SANS}`; g.fillStyle = '#6f7d8a'; if (mw > hw0 + 220) g.fillText(dm ? 'direct message' : 'runs, checkpoints, the cluster', mx + 14 + hw0 + 12, c.y + fs * 1.25);
     // the lines: monospace, a time, a nick in its colour, the text wrapped under it
     const lines = dm ? DM.filter(l => T >= l.at) : BL.filter(l => T >= l.at), mono = `${Math.round(fs * 0.92)}px ${MONO}`, rowsAll = []; g.font = mono;
-    for (const l of lines) { const nick = l.who === 'scientist' ? 'doc' : l.who === 'lester' ? 'Lester' : l.who, head = `${hhmm()}  <${nick}> `, hw = g.measureText(head).width, rows = wrapRows(g, l.text, mw - 28 - hw);
-      rows.forEach((r, j) => rowsAll.push({ head: j ? '' : head, hw, nick, who: l.who, r, u: RM ? 1 : clamp((T - l.at) / 0.2) })); if (dm) rowsAll.push({ gap: true }); }
+    for (const l of lines) { const nick = l.who === 'scientist' ? 'doc' : l.who === 'lester' ? 'Lester' : l.who, u = RM ? 1 : clamp((T - l.at) / 0.2);
+      if (port) { rowsAll.push({ nickRow: true, nick, who: l.who, u }); wrapRows(g, l.text, mw - 28).forEach(r => rowsAll.push({ head: '', hw: 0, nick, who: l.who, r, u })); if (dm) rowsAll.push({ gap: true }); continue; }
+      const head = `${hhmm()}  <${nick}> `, hw = g.measureText(head).width, rows = wrapRows(g, l.text, mw - 28 - hw);
+      rows.forEach((r, j) => rowsAll.push({ head: j ? '' : head, hw, nick, who: l.who, r, u })); if (dm) rowsAll.push({ gap: true }); }
     const inputH = fs * 2.6, top = c.y + fs * 2.4 + 6, maxRows = Math.floor((c.h - fs * 2.4 - inputH - 12) / lh), vis = rowsAll.slice(-maxRows);
-    vis.forEach((rw, i) => { if (rw.gap) return; const y = top + lh * (i + 0.5); g.globalAlpha = rw.u; if (rw.head) { g.fillStyle = '#56616d'; g.fillText(hhmm(), mx + 14, y); g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(`<${rw.nick}>`, mx + 14 + g.measureText(hhmm() + '  ').width, y); }
+    vis.forEach((rw, i) => { if (rw.gap) return; const y = top + lh * (i + 0.5); g.globalAlpha = rw.u;
+      if (rw.nickRow) { g.font = `700 ${Math.round(fs * 0.78)}px ${MONO}`; g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(rw.nick, mx + 14, y); g.fillStyle = '#56616d'; g.fillText(' ' + hhmm(), mx + 14 + g.measureText(rw.nick).width, y); g.font = mono; g.globalAlpha = 1; return; }
+      if (rw.head) { g.fillStyle = '#56616d'; g.fillText(hhmm(), mx + 14, y); g.fillStyle = NICK[rw.who] || '#9aa7b4'; g.fillText(`<${rw.nick}>`, mx + 14 + g.measureText(hhmm() + '  ').width, y); }
       g.fillStyle = rw.who === 'scientist' ? '#f3e6d2' : '#dbe4ec'; g.fillText(rw.r, mx + 14 + rw.hw, y); g.globalAlpha = 1; });
     // "Lester is typing…" and the scientist's line being typed in the input
     const iy = c.y + c.h - inputH + 6; g.strokeStyle = '#2a333e'; rr(g, mx + 10, iy, mw - 20, inputH - 14, 8); g.stroke(); g.font = `${Math.round(fs * 0.9)}px ${SANS}`;
-    const typing = DM.find(l => T >= l.typeAt && T < l.at); if (dm && typing && typing.who === 'scientist') { const n = RM ? typing.text.length : Math.floor((T - typing.typeAt) * 90), s = typing.text.slice(0, n); g.fillStyle = '#f3e6d2'; const vis2 = s.length > 70 ? '…' + s.slice(-70) : s; g.fillText(vis2, mx + 20, iy + (inputH - 14) / 2); if (Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = '#cfd6dd'; g.fillRect(mx + 22 + g.measureText(vis2).width, iy + 6, 2, inputH - 26); } }
+    const typing = DM.find(l => T >= l.typeAt && T < l.at); if (dm && typing && typing.who === 'scientist') { const n = RM ? typing.text.length : Math.floor((T - typing.typeAt) * 62), s = typing.text.slice(0, n); g.fillStyle = '#f3e6d2'; const vis2 = s.length > 70 ? '…' + s.slice(-70) : s; g.fillText(vis2, mx + 20, iy + (inputH - 14) / 2); if (Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = '#cfd6dd'; g.fillRect(mx + 22 + g.measureText(vis2).width, iy + 6, 2, inputH - 26); } }
     else { g.fillStyle = '#56616d'; g.fillText(dm ? 'message Lester' : 'message #training-runs', mx + 20, iy + (inputH - 14) / 2); }
     if (dm && typing && typing.who === 'lester') { g.font = `italic ${Math.round(fs * 0.78)}px ${SANS}`; g.fillStyle = '#6fd6a8'; g.fillText('Lester is typing…', mx + 14, iy - fs * 0.6); }
     g.restore(); }
@@ -326,24 +347,24 @@
     const apps = [['💬', 'messages', T < CLOSE - 2 && T < NOTE + 1.2], ['#', 'labchat', T >= NOTE && T < CLOSE], ['>_', 'terminal', T >= TERM - 0.2]], dw = apps.length * 54 + 16, dx = W / 2 - dw / 2, dy = H - 62;
     g.fillStyle = '#0f141bd9'; rr(g, dx, dy, dw, 52, 14); g.fill(); apps.forEach(([ic, nm, on], i) => { const x = dx + 16 + i * 54; g.fillStyle = '#1b222c'; rr(g, x, dy + 7, 38, 38, 9); g.fill(); g.font = `600 ${ic.length > 1 && ic !== '💬' ? 14 : 18}px ${ic === '💬' ? SANS : MONO}`; g.fillStyle = '#d6dde4'; g.textAlign = 'center'; g.fillText(ic, x + 19, dy + 27); g.textAlign = 'left'; if (on) { g.fillStyle = '#7ee3f5'; g.beginPath(); g.arc(x + 19, dy + 49, 2, 0, 7); g.fill(); } });
     if (port) { // phones: one window at a time, the full screen
-      if (T < CHAT) { const a = clamp((T - 0.2) / 0.3) * (1 - clamp((T - CHAT + 0.25) / 0.25)); const c = win(g, 6, 30, W - 12, H - 100, 'messages', a); thread(g, c, T, fs, RM); c.done(); }
-      else if (T < CLOSE + 0.3) { const a = clamp((T - CHAT) / 0.25) * (1 - clamp((T - CLOSE) / 0.3)); const c = win(g, 6, 30, W - 12, H - 100, 'labchat', a); labchat(g, c, T, fs, true, RM); c.done(); } }
+      if (T < CHAT + 0.45) { const a = clamp((T - 0.2) / 0.3); const c = win(g, 6, 30, W - 12, H - 100, 'messages', a); thread(g, c, T, fs, RM); c.done(); }
+      if (T >= CHAT && T < CLOSE + 0.3) { const u = RM ? 1 : ease(clamp((T - CHAT) / 0.45)), a = (1 - clamp((T - CLOSE) / 0.3)); const c = win(g, 6, 30 + (1 - u) * H, W - 12, H - 100, 'labchat', a); labchat(g, c, T, fs, true, RM); c.done(); } }
     else { // desktop: messages on the left, labchat over it on the right
       const mw = Math.min(420, W * 0.34), mh = Math.min(H - 130, 620), ma = clamp((T - 0.2) / 0.3) * (1 - clamp((T - CLOSE) / 0.4) * 0.6);
       if (ma > 0) { const c = win(g, W * 0.06, 40, mw, mh, 'messages · ❤️', ma); thread(g, c, T, fs, RM); c.done(); }
       if (T >= CHAT && T < CLOSE + 0.35) { const u = RM ? 1 : ease(clamp((T - CHAT) / 0.3)), out = clamp((T - CLOSE) / 0.35), cw = Math.min(820, W * 0.6), ch = Math.min(H - 120, 600);
         const c = win(g, W - cw - W * 0.05, 52, cw, ch, 'labchat · lab-07', u * (1 - out), (0.94 + 0.06 * u) * (1 - 0.2 * out)); labchat(g, c, T, fs, false, RM); c.done(); } }
     // the notification from Lester
-    if (T >= NOTE && T < CHAT + 0.4) { const a = RM ? 1 : ease(clamp((T - NOTE) / 0.25)) * (1 - clamp((T - CHAT) / 0.4)), nw = Math.min(330, W - 24), nx = W - nw - 12 + (1 - a) * 40;
-      g.save(); g.globalAlpha = a; g.fillStyle = '#18202aee'; rr(g, nx, 34, nw, 62, 12); g.fill(); g.strokeStyle = '#2e3a47'; rr(g, nx, 34, nw, 62, 12); g.stroke();
-      g.font = `700 12px ${SANS}`; g.fillStyle = '#6fd6a8'; g.fillText('labchat · Lester', nx + 14, 52); g.font = `13px ${SANS}`; g.fillStyle = '#e1e8ee'; g.fillText(DMLINES[0].text, nx + 14, 74); g.restore(); }
+    if (T >= NOTE && T < CHAT + 0.4) { const sl = RM ? 1 : ease(clamp((T - NOTE) / 0.45)), a = Math.min(1, sl * 1.4) * (1 - clamp((T - CHAT) / 0.4)), nw = Math.min(port ? W - 24 : 330, W - 24), nx = port ? 12 : W - nw - 12, ny = 34 - (1 - sl) * 90, tap = T > CHAT - 0.45;
+      g.save(); g.globalAlpha = a; g.shadowColor = '#000'; g.shadowBlur = 20; g.fillStyle = tap ? '#22303dee' : '#18202aee'; rr(g, nx, ny, nw, 62, 12); g.fill(); g.shadowBlur = 0; g.strokeStyle = tap ? '#7ee3f5' : '#2e3a47'; g.lineWidth = tap ? 1.5 : 1; rr(g, nx, ny, nw, 62, 12); g.stroke();
+      g.font = `700 12px ${SANS}`; g.fillStyle = '#6fd6a8'; g.fillText('labchat · Lester', nx + 14, ny + 18); g.font = `13px ${SANS}`; g.fillStyle = '#e1e8ee'; g.fillText(DMLINES[0].text, nx + 14, ny + 40); g.restore(); }
     // the terminal opens: a window that grows to the whole screen, then the boot takes over
     if (T >= TERM - 0.1) { const u = RM ? 1 : ease(clamp((T - TERM) / 0.55)), w = W * (0.3 + 0.7 * u), h = H * (0.3 + 0.7 * u); g.fillStyle = BG; rr(g, W / 2 - w / 2, H / 2 - h / 2, w, h, 10 * (1 - u)); g.fill();
       g.font = `${Math.round(fs * 0.95)}px ${MONO}`; g.fillStyle = TXT; g.fillText('$ ', W / 2 - w / 2 + 14, H / 2 - h / 2 + 22); }
     overlay(g, W, H, 0.35);
     if (T < 0.5) { g.fillStyle = `rgba(0,0,0,${1 - T / 0.5})`; g.fillRect(0, 0, W, H); } }
   // sound: the room (a quiet hum, rain on the window), the messages, the notification, the chat's ticks, his keys, the windows
-  const AEV = (() => { const ev = [{ t: 0, k: 'room', d: ADUR }];
+  const AEV = (() => { const ev = [{ t: 0, k: 'room', d: ADUR }, { t: 0.4, k: 'pad', d: ADUR - 0.4 }];
     TH.forEach(m => ev.push({ t: m.at, k: m.me ? 'sent' : 'recv' })); ev.push({ t: NOTE, k: 'notify' }, { t: CHAT, k: 'win' });
     BL.forEach(b => ev.push({ t: b.at, k: 'tick' })); DM.forEach((l, i) => { if (i === 0) return; if (l.who === 'scientist') { for (let t = l.typeAt; t < l.at - 0.15; t += 0.07 + 0.03 * ((i * 7 + t * 13) % 1)) ev.push({ t, k: 'key' }); ev.push({ t: l.at, k: 'send' }); } else ev.push({ t: l.at, k: 'tick' }); });
     ev.push({ t: CLOSE, k: 'win' }, { t: TERM, k: 'win' }); return ev.sort((a, b) => a.t - b.t); })();
@@ -360,10 +381,11 @@
       case 'tick': tone('sine', 1500, at, 0.05, 0.03); break;
       case 'key': nz(at, 0.03, 0.12, 'bandpass', 2600 + Math.random() * 800, 1.5); break;
       case 'send': nz(at, 0.06, 0.12, 'bandpass', 1300, 1.2); break;
-      case 'win': nz(at, 0.25, 0.04, 'bandpass', 600, 0.8, false, 0.01, 1800); break; } }
+      case 'win': nz(at, 0.25, 0.04, 'bandpass', 600, 0.8, false, 0.01, 1800); break;
+      case 'pad': pad(ctx, dest, at, e.d, e.from || 0, 0.013); break; } }
   const afire = (ctx, dest, T0, T1, at) => { for (const e of AEV) if (e.t > T0 && e.t <= T1) { try { asound(ctx, dest, e, at); } catch (er) {} } };
   const afireAll = (ctx, dest, t0) => { for (const e of AEV) { try { asound(ctx, dest, e, t0 + e.t); } catch (er) {} } };
-  const abeds = (ctx, dest, T, at) => { for (const e of AEV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { asound(ctx, dest, { ...e, d: e.t + e.d - T }, at); } catch (er) {} } };
+  const abeds = (ctx, dest, T, at) => { for (const e of AEV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { asound(ctx, dest, { ...e, d: e.t + e.d - T, from: T - e.t }, at); } catch (er) {} } };
   const arrive = { dur: ADUR, draw: arriveDraw, fire: afire, fireAll: afireAll, beds: abeds, lines: [], thread: TH.map(m => ({ at: m.at, me: m.me, text: m.text })),
     chat: { note: NOTE, open: CHAT, dm: DMT, close: CLOSE, backlog: BL.map(b => ({ who: b.who, at: b.at })), dm_lines: DM.map(l => ({ who: l.who, at: l.at, text: l.text })), channels: CHANNELS.slice() },
     scenes: { messages: [0, CHAT], chat: [CHAT, CLOSE], terminal: [TERM, ADUR] }, beat: BT, sayFz, events: AEV.length, lastSay: () => lastSay };
@@ -378,5 +400,5 @@
     g.font = `${Math.round(big * 0.24)}px ${MONO}`; g.fillStyle = DIM; g.fillText('v 0/67 · lab-07', W / 2, H * 0.42 + big * 0.75);
     if (on) { g.font = `700 ${Math.round(clamp(big * 0.3, 15, 26))}px ${MONO}`; g.fillStyle = AMB; g.fillText(port || matchMedia('(pointer: coarse)').matches ? 'TAP TO START' : 'PRESS ANY KEY TO START', W / 2, H * 0.66); }
     g.restore(); overlay(g, W, H, 0.8); }
-  window.__termBoot = { dur: DUR, draw, title: titleDraw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
+  window.__termBoot = { lastCmd: () => lastCmd, dur: DUR, draw, title: titleDraw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
 })();

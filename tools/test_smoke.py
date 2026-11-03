@@ -1272,6 +1272,9 @@ def t_story(P):
     wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 10, P=P)
     v = pg.evaluate("() => ({ box: document.documentElement.classList.contains('gen-box'), con: !!document.querySelector('#genConsole [data-gsay]'), lab: !!(document.querySelector('#lab') && document.querySelector('#lab').classList.contains('open')), night: !!document.querySelector('#genNight'), handle: getComputedStyle(document.querySelector('#toHandle')).display, skip: !!document.querySelector('#genNightSkip') })")
     need(not v["box"] and not v["con"] and not v["lab"] and v["night"] and v["skip"] and v["handle"] == "none", f"the dark should come first, without the Operator: {v}")
+    ui = pg.evaluate("() => [...document.body.children].filter(e => !['arena', 'genNight', 'genNightSkip', 'genArrive'].includes(e.id) && !/SCRIPT|STYLE/.test(e.tagName)).filter(e => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.05 && r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; }).map(e => e.id || e.tagName)")
+    need(not ui, f"nothing of the UI while it's dark (story v5): {ui}")
+    need(pg.evaluate("() => window.__audio.hushed()"), "from the landing on, sound doesn't exist yet: the master must be hushed")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark: the first ones come with 'bring life'")
     vw = pg.viewport_size; n0 = pg.evaluate("() => window.__genesis.landing().shown")
     for k in range(4): pg.mouse.click(vw["width"] * (0.3 + 0.1 * k), vw["height"] * 0.3); pg.wait_for_timeout(200)
@@ -1320,11 +1323,13 @@ def t_story_intro(P):
     pg = P.open("/arena.html?fresh=1&test&nofirst5"); booted(pg)
     r = pg.evaluate("""async () => { const E = window.__epoch0; await E.loadBank(); await E.loadLoss(); const ct = E.makeContent({ story: true, seed: 3 }), cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
       const at = T => { E.frame(ct, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let s = 0; for (let i = 0; i < d.length; i += 4 * 97) s += d[i] + d[i + 1] + d[i + 2]; return s / (d.length / (4 * 97)) / 3; };
-      const out = { total: E.total(ct), dark: at(3), sub: 0, flash: 0, black: 0, cut: 0 }; for (const T of [5, 10, 20, 24, 28]) out.sub = Math.max(out.sub, at(T)); out.flash = at(29.8); out.black = at(30.6); out.cut = at(32.2); return out; }""")
+      const out = { total: E.total(ct), dark: at(3), sub: 0, flash: 0, black: 0, cut: 0 }; for (const T of [5, 10, 20, 24, 28]) out.sub = Math.max(out.sub, at(T)); out.flash = at(29.8); out.black = at(30.6); out.strike = at(30.78); out.cut = at(33.6); out.spin = at(29.6);
+      const sh = E.curveShape(true), pl = E.curveShape(false); out.endX = sh[sh.length - 1][0]; out.plainEnd = pl[pl.length - 1][0]; out.mono = sh.every((p, i) => !i || p[0] >= sh[i - 1][0]); return out; }""")
     need(30 < r["total"] < 42, f"the story intro should run ~37 s: {r}")
-    need(r["flash"] > 200 and r["black"] < 5 and r["cut"] > r["black"], f"white flash, then black, then the cut: {r}")
+    need(r["flash"] > 200 and r["black"] < 5 and r["strike"] > r["black"] + 3 and r["cut"] > r["black"], f"white flash, the dark with lightning strikes, then the cut: {r}")
+    need(0.45 <= r["endX"] <= 0.55 and r["plainEnd"] == 1 and r["mono"], f"the story's curve ends mid-pane (the dive starts there), the plain one spans the pane: {r}")
     P.clean()
-    return f"{r['total']:.1f} s; flash {r['flash']:.0f}, black {r['black']:.1f}, cut {r['cut']:.1f}"
+    return f"{r['total']:.1f} s; flash {r['flash']:.0f}, black {r['black']:.1f}, a strike {r['strike']:.1f}, cut {r['cut']:.1f}; the curve ends at {r['endX']:.2f} of the width, the dive from there"
 
 
 def t_boot_intro(P):
@@ -1341,8 +1346,9 @@ def t_boot_intro(P):
       const litA = T => { E.frame(sc, T, cv); const d = cv.getContext('2d').getImageData(0, 0, 640, 360).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 31) if (d[i] + d[i + 1] + d[i + 2] > 150) n++; return n; };
       const order = AR.scenes.messages[0] < AR.scenes.chat[0] && AR.scenes.chat[0] < AR.scenes.terminal[0] && C.note < C.open && C.open < C.dm && C.dm < C.close && AR.thread[AR.thread.length - 1].at < C.open;
       const lester = C.dm_lines.filter(l => l.who === 'lester').map(l => l.text), doc = C.dm_lines.filter(l => l.who === 'scientist').length, arrLit = [2, (C.open + C.dm) / 2, (C.dm + C.close) / 2].map(litA);
+      const pb = E.makeContent({ seed: 4 }); pb.boot = true; const pc = document.createElement('canvas'); pc.width = 750; pc.height = 1334; E.frame(pb, B.clock.enter - 0.05, pc, { phone: true, scale: 2 }); const cmdX = B.lastCmd() ? B.lastCmd().x : null;
       return { dur: B.dur, total: E.total(ct), plain: E.total(E.makeContent({ seed: 4 })), lit, m, ev: B.events, want: [E.wantBoot({}), E.wantBoot({ boot: false }), E.wantBoot({ tone: 'boot' })],
-        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), order, thread: AR.thread.length, lester, doc, chans: C.channels, backlog: C.backlog.length, arrLit, aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
+        arr: AR.dur, stotal: E.total(sc), splain: E.total(E.makeContent({ seed: 4, story: true })), order, cmdX, thread: AR.thread.length, lester, doc, chans: C.channels, backlog: C.backlog.length, arrLit, aev: AR.events, warr: [E.wantArrive({}, true), E.wantArrive({}, false)] }; }""")
     need(10 <= r["dur"] <= 16, f"the boot should take 10-16 s: {r['dur']}"); need(abs(r["total"] - r["plain"] - r["dur"]) < 0.01, f"the run should follow the boot: {r}")
     need(all(v > 8 for v in r["lit"].values()), f"every stage of the boot should draw something: {r['lit']}")
     titles = r["m"][0]["titles"]
@@ -1354,7 +1360,8 @@ def t_boot_intro(P):
     need(r["warr"] == [True, False], f"the arrival plays in the story only (or ?intro=boot): {r['warr']}")
     need(r["order"] and r["thread"] == 6 and r["doc"] == 3 and r["lester"][1:] == ["anytime, doc. 23 was… something", "I'll keep a hand on the breaker this time", "good luck, doc"], f"messages, then labchat and the DM with Lester, then the terminal: {r}")
     need({"training-runs", "experiments", "evals", "cluster-admin", "random"} <= set(r["chans"]) and r["backlog"] >= 3, f"labchat's channels and a backlog: {r['chans']}")
-    need(all(n > 8 for n in r["arrLit"]) and 22 <= r["arr"] <= 33, f"the desktop draws in every part, ~30 s: {r['arrLit']}, {r['arr']}")
+    need(all(n > 8 for n in r["arrLit"]) and 33 <= r["arr"] <= 46, f"the desktop draws in every part, ~40 s: {r['arrLit']}, {r['arr']}")
+    need(r["cmdX"] is not None and r["cmdX"] <= 371, f"on a 375-wide phone the typed command must stay on screen: ends at {r['cmdX']}")
     need(all(m["sciY"] == (720 if i % 2 == 0 else 844) / 2 for i, m in enumerate(r["m"])), "the scientist's subtitles should be in the middle of the screen")
     pg2 = P.open("/arena.html?intro=boot&fresh=1&test&nofirst5")
     wait_for(pg2, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.boot === '1' && window.__epoch0.time() > 2", 30, P=P)
@@ -1392,6 +1399,9 @@ def t_story_landing(P):
     pg.click("#genConsole [data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit && !document.querySelector('#genNight')", 10, P=P)
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "lights on brings no creatures: life comes next")
+    need(pg.evaluate("() => window.__audio.hushed()"), "still silent after lights on (until the music step)")
+    pg.evaluate("() => window.__genesis.actions.music && window.__genesis.actions.music()"); pg.wait_for_timeout(500)
+    need(not pg.evaluate("() => window.__audio.hushed()"), "the music step brings sound back")
     P.clean()
     return f"the dark for {lnd['after']:.1f} s (7 lines, centred, no creatures), the Operator arrived, {son['pings']} pings outlined {son['rimmed']} letters; lights on lifted the dark"
 

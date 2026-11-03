@@ -37,7 +37,8 @@
   // and comments in subtitles, gets excited, then scared: the curve keeps falling past the chart's floor, lines pour out and overlap,
   // "can we stop it?!", "run!!!!", a white flash and a tear, silence; then the cut (Idle → Id|le) and the halves crawl off into the dark.
   // No "in the beginning there was…" and no "your turn" here: the Tiny Operator takes over (idle-genesis.js, the waking up).
-  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 31.0, crawl: 33.5, end: 36.4 };
+  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 32.4, crawl: 34.9, end: 37.8 };
+  const STRIKES = [30.2, 30.75, 31.3];   // story v5 (Nico): after the flash, a few lightning strikes in the dark, then the cut (with its own flash of lightning)
   const SUBS = [   // [film second it starts, the scientist's line] (typed; a different font from the model's)
     [1.9, "…ok. it's babbling. that's normal."], [9.2, 'oh wow, these losses are exceptional…'], [12.8, 'wait… it keeps learning!!'],
     [16.4, "and it's only a… a few megabytes?!"], [20.0, "look at those losses, after all these epochs, and… it doesn't stop…"],
@@ -127,11 +128,12 @@
     return { port, term: true, panes: p, cv: { x: l.x + 14, y: l.y + top + 14, w: l.w - 28, h: l.h - top - 14 - (port ? 30 : 40) },
       ln: { x: s.x + (port ? 18 : 30), y: s.y + top + fz * 0.6, w: s.w - (port ? 32 : 50), fz, eh: port ? fz * 4.1 : fz * 2.85 } }; }
   // the curve's points, and where each line sits on it
+  // the story's chart (Nico): the real descent with its x axis compressed into the first half, so the run-away dive starts mid-pane
   function curveInfo() { const { b, f } = lossPts(), all = b.concat(f), N = all.length - 1, hi = Math.max(...all), lo = Math.min(...all);
-    const ks = SCHED.map(st => st.k < 0 ? N : Math.min(N, st.k)); return { b, f, all, N, hi, lo, ks }; }
+    const ks = SCHED.map(st => st.k < 0 ? N : Math.min(N, st.k)); return { b, f, all, N, hi, lo, ks, s: story }; }
   const epochLabel = (ci, k) => k < ci.b.length ? `epoch ${k + 1}` : `fine-tune ${k - ci.b.length + 1}`;
   // x: the square root of the epoch's share of the run, so the first epochs (where the loss falls fastest) get room; y: the real loss
-  function ptXY(ci, L, k) { const { x, y, w, h } = L.cv; return [x + 22 + (w - 32) * Math.sqrt(k / ci.N), y + 10 + (h - 30) * (1 - (ci.all[k] - ci.lo) / (ci.hi - ci.lo || 1))]; }
+  function ptXY(ci, L, k) { const { x, y, w, h } = L.cv; return [x + 22 + (w - 32) * (ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N)), y + 10 + (h - 30) * (1 - (ci.all[k] - ci.lo) / (ci.hi - ci.lo || 1))]; }
   // the dot: at the current line's point, travelling there in the first 0.7 s of its slot
   function dotK(ci, T) { if (T < C.babble) return 0; const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1), u = ease(clamp((T - C.babble - i * C.slot) / 0.7));
     const k0 = i ? ci.ks[i - 1] : 0; return k0 + (ci.ks[i] - k0) * u; }
@@ -141,7 +143,7 @@
     const { x, y, w, h } = L.cv, kd = RM ? ci.ks[clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1)] : dotK(ci, T), kn = Math.floor(kd);
     g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h);
     g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = DIM; g.textBaseline = 'alphabetic'; if (!L.term) g.fillText('training loss', x + 8, y - 8);   // in the panes, the pane's title says it
-    g.textAlign = 'right'; g.fillText('epochs →', x + w - 8, y + h + 16); g.textAlign = 'left';
+    g.textAlign = 'right'; g.fillText(ci && ci.s ? 'epochs → (compressed)' : 'epochs →', x + w - 8, y + h + 16); g.textAlign = 'left';
     // the curve so far, up to the dot
     g.beginPath(); for (let k = 0; k <= kn; k++) { const [px, py] = ptXY(ci, L, k); k ? g.lineTo(px, py) : g.moveTo(px, py); }
     const fr = kd - kn; let dx, dy; if (kn < ci.N && fr > 0) { const [ax, ay] = ptXY(ci, L, kn), [bx, by] = ptXY(ci, L, kn + 1); dx = ax + (bx - ax) * fr; dy = ay + (by - ay) * fr; g.lineTo(dx, dy); } else [dx, dy] = ptXY(ci, L, kn);
@@ -151,7 +153,7 @@
     for (let i = 0; i < shown; i++) { const [px, py] = ptXY(ci, L, ci.ks[i]); g.fillStyle = '#4f7f8c'; g.beginPath(); g.arc(px, py, 2.5, 0, 7); g.fill(); }
     let v = ci.all[Math.round(kd)];
     if (story && T > CS.over) {   // past the end of the curve: it keeps falling, through the chart's floor and off the screen
-      const u = (T - CS.over) / (CS.flash - CS.over), [ex, ey] = ptXY(ci, L, ci.N), fall = u * u * (h + H * 0.9), ox = ex + Math.min(40, u * 60);
+      const u = (T - CS.over) / (CS.flash - CS.over), [ex, ey] = ptXY(ci, L, ci.N), fall = u * u * (h + H * 0.9), ox = ex + (ci.s ? u * (w - 32) * 0.22 : Math.min(40, u * 60));
       g.beginPath(); g.moveTo(ex, ey); g.quadraticCurveTo(ex + 20, ey + 4, ox, ey + fall); g.strokeStyle = MAG; g.lineWidth = 2; g.shadowColor = MAG; g.shadowBlur = 10; g.stroke(); g.shadowBlur = 0; dx = ox; dy = ey + fall; v = ci.all[ci.N] - u * u * 9; }
     g.shadowColor = CUR; g.shadowBlur = 14; g.fillStyle = '#e8fbff'; g.beginPath(); g.arc(dx, dy, 4.5, 0, 7); g.fill(); g.shadowBlur = 0;
     g.font = `${L.port ? 11 : 13}px ui-monospace, Menlo, monospace`; g.fillStyle = story && T > CS.over ? MAG : CUR;
@@ -260,8 +262,17 @@
     for (let i = N - 1; i >= 0; i--) { const r0 = R * i / N, r1 = R * (i + 1) / N; g.save(); g.beginPath(); g.arc(cx, cy, r1, 0, 7); g.arc(cx, cy, r0, 0, 7, true); g.clip();
       g.translate(cx, cy); g.rotate(spin * (1.7 - i / N)); const s2 = shrink * (1 - 0.25 * k * (1 - i / N)); g.scale(s2, s2); g.drawImage(vbuf, -cx, -cy); g.restore(); }
     const glow = g.createRadialGradient(cx, cy, 0, cx, cy, R * 0.5); glow.addColorStop(0, `rgba(255,240,255,${0.6 * k * k})`); glow.addColorStop(1, 'rgba(224,54,122,0)'); g.fillStyle = glow; g.fillRect(0, 0, c.width, c.height); g.restore(); }
+  // a lightning strike at age a (seconds): a jagged bolt from the top, a branch, the dark lit for an instant (seeded, so frames agree)
+  function bolt(g, W, H, a, seed, RM, k) { if (a < 0 || a > 0.45) return; const f = RM ? (a < 0.2 ? 0.6 : 0) : Math.max(Math.exp(-a * 14), a > 0.09 ? 0.7 * Math.exp(-(a - 0.09) * 12) : 0) * k; if (f < 0.02) return;
+    const r = rng((seed * 1000) | 0); g.save(); g.fillStyle = `rgba(200,215,255,${0.22 * f})`; g.fillRect(0, 0, W, H); g.strokeStyle = `rgba(235,242,255,${f})`; g.shadowColor = '#9fb4ff'; g.shadowBlur = 18 * f; g.lineWidth = 2;
+    let x = W * (0.2 + 0.6 * r()), y = 0; g.beginPath(); g.moveTo(x, y); const pts = []; while (y < H * (0.55 + 0.3 * r())) { y += H * (0.04 + 0.05 * r()); x += (r() - 0.5) * W * 0.06; g.lineTo(x, y); pts.push([x, y]); } g.stroke();
+    const [bx, by] = pts[(pts.length / 2) | 0] || [x, y]; g.lineWidth = 1; g.beginPath(); g.moveTo(bx, by); let cx = bx, cy = by; for (let i = 0; i < 4; i++) { cy += H * 0.04; cx += (r() - 0.3) * W * 0.05; g.lineTo(cx, cy); } g.stroke(); g.restore(); }
   function frameStory(g, W, H, T, ct, st, P, RM) {
-    if (T >= CS.flash + 0.45) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); if (T >= CS.split) drawSplit(g, W, H, T - (CS.split - C.split), P, RM, st); return; }
+    if (T >= CS.flash) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+      const wf = RM ? 0 : 1 - clamp((T - CS.flash - 0.08) / 0.37); if (wf > 0) { g.fillStyle = `rgba(255,255,255,${wf})`; g.fillRect(0, 0, W, H); }
+      for (const s0 of STRIKES) bolt(g, W, H, T - s0, s0, RM, 1);
+      const cutT = CS.split + 0.95; bolt(g, W, H, T - cutT + 0.05, 77, RM, 0.6);   // the cut has its own lightning, far behind the word
+      if (T >= CS.split) drawSplit(g, W, H, T - (CS.split - C.split), P, RM, st); return; }
     const L = layout(W, H, P), ci = curveInfo(); g.save();
     if (!RM && T > CS.panic) { const k = clamp((T - CS.panic) / (CS.tear - CS.panic)); g.translate((Math.random() - 0.5) * 9 * k, (Math.random() - 0.5) * 9 * k); }   // the room shakes
     g.fillStyle = '#000'; g.fillRect(-20, -20, W + 40, H + 40);
@@ -316,6 +327,8 @@
       tick: (at, e) => tone('square', 1400 + Math.random() * 900 - e * 40, at, 0.018 + e * 0.002, 0.03),
       note: at => { tone('sine', 65.4, at, 2.6, 0.12); tone('sine', 98, at + .05, 2.2, 0.05); },
       cut: at => { tone('square', 2400, at, 0.035, 0.09, 600); tone('sine', 180, at, 0.12, 0.08, 60); },
+      thunder: (at, v = 1) => { const n = Math.floor(ctx.sampleRate * 2.2), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0); let last = 0; for (let i = 0; i < n; i++) { last = last * 0.985 + (Math.random() * 2 - 1) * 0.06; d[i] = last * Math.pow(1 - i / n, 1.6) * (i < 600 ? 3 : 1); }
+        const src = ctx.createBufferSource(), v2 = ctx.createGain(); src.buffer = b; v2.gain.value = 0.9 * v; src.connect(v2); v2.connect(out); src.start(at); nodes.push(src); },
       crash: at => { const n = Math.floor(ctx.sampleRate * 0.9), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5);
         const src = ctx.createBufferSource(), v = ctx.createGain(); src.buffer = b; v.gain.value = 0.35; src.connect(v); v.connect(out); src.start(at); nodes.push(src); tone('sine', 50, at, 1.6, 0.25, 28); },
       skitter: (a, b) => { for (let t = a; t < b; t += 0.05 + Math.random() * 0.07) tone('triangle', 3000 + Math.random() * 1500, t, 0.012, 0.02); },
@@ -323,12 +336,13 @@
   function scheduleAll(S, ct, t0) {   // recordings: every timed sound of the film at once (offline)
     const ex = extraOf(ct);
     if (ct.story) { S.hum(0, true); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e)); for (let t = CS.over; t < CS.tear; t += 0.03 + 0.12 * (1 - (t - CS.over) / (CS.tear - CS.over)) * Math.random()) S.tick(t0 + t, 12);
-      S.crash(t0 + CS.flash); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); S.skitter(t0 + d + C.crawl + 0.2, t0 + d + C.turn - 0.3); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
+      S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); S.thunder(t0 + CS.split + 0.95, 0.5); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); S.skitter(t0 + d + C.crawl + 0.2, t0 + d + C.turn - 0.3); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
     S.note(t0 + C.final + 0.2); S.cut(t0 + ex + C.split + 0.95); S.skitter(t0 + ex + C.crawl + 0.2, t0 + ex + C.turn - 0.3); }
   function liveSound(S, ct, T0, T1, now) {   // live: sounds for what was drawn between film seconds T0 and T1 (ticks follow the tokens shown)
     const ex = extraOf(ct), cross = t => t > T0 && t <= T1;
     if (ct.story) { for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
       if (T1 > CS.over && T1 < CS.tear && Math.random() < 0.25 + 0.6 * (T1 - CS.over) / (CS.tear - CS.over)) S.tick(now, 12);
+      STRIKES.forEach(x => { if (cross(x + 0.05)) S.thunder(now); }); if (cross(CS.split + 0.95)) S.thunder(now, 0.5);
       const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); if (cross(d + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); return; }
     for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
     if (cross(C.final + 0.2)) S.note(now); if (cross(ex + C.split + 0.95)) S.cut(now); if (cross(ex + C.crawl + 0.2)) S.skitter(now, now + (C.turn - C.crawl - 0.5)); }
@@ -411,5 +425,5 @@
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
   window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
-    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
+    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();
