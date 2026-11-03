@@ -6,6 +6,13 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-02
 
+**Id|le's own typefaces, round 1 (tools only, nothing in the game yet).** Nico: "could we 'evolve'/create our own font based on the ethos of Id|le?… very digital, very tech, very AI". `tools/fontgen/`: every glyph is a hand-written skeleton of straight strokes (A–Z, a–z, 0–9, punctuation, the Spanish set á é í ó ú ñ ü ¿ ¡ and capitals, ç ï ö); a 16-gene genome turns it into ink: vector strokes or pixels (square or LED dots), weight, corners (square, chamfer, round), x-height, width, terminals, the pipe (a gap cut through stems, like the | in Id|le), dot shape, aperture, slant, mono, spacing. `review.py` builds a round and a scoring page, `breed.py` makes 8 children from favourites (2 blends + crossover with 15% mutation), `roles.py` mocks each role.
+- Round 1: 8 hand-picked genomes (Terminal, Circuit, Soft Machine, Datapulse, Oracle Pixel, LED Matrix, Kinetic, Hairline AI); woff2 3.5–15.7 KB each, 63 KB for all 8. Nico: "they are all incredible!!! … what if we only use our own fonts for the whole thing?"
+- Type system proposal (~/Desktop/idle-trailers/fonts/roles.html): Operator f3 Soft Machine, Doc's subtitles f7 Kinetic, terminal/labchat f1 Terminal, UI f2 Circuit, Gazette/epoch cards f4 Datapulse, the Oracle f8 Hairline AI (≥16 px), pedia f3; one font per creature family.
+- Legibility at 12 px, computed from the genomes (1× screen): f1, f2, f3 hold (stroke ≥0.98 px, x-height ≥6 px); f4 and f8 grey out (stroke 0.84 and 0.72 px), f5/f6 pixel cells are 1.2 px (the grid smears below 16 px), f7 is slanted. Those stay out of small text.
+- Finding: cutting the pipe through a dotted stem makes "i" read as "!" ("Mathemat!c!an" in f8); the cut now skips i, j, ! and ¡.
+- Test "fontgen": every round-1 genome builds and draws every character of the Operator's and the Spanish lines.
+
 **Story v7 (staging): one thunder, the purr into noise, a consciousness.** Nico: "the story is almost world-class now"; the intro music v1 stays as is ("excellent!").
 - **One lightning:** no run-up of strikes after the flash; black from the flash to the split (now 31.0 s, was 32.4), then the one lightning and thunder exactly as the bar cuts Id|le (31.95 s), 0.5 s of silence, then the purr. The logo holds 3.4 s; the story intro is 35.8 s (was 37.0).
 - **The purr, variant 4** (Nico: "I really like the b2 first part, but not the bell… maybe it could end in white noise… ppbbrrrrtttsssss"): b2's saw purr for 1.4 s (the brr), 9 band-passed clicks slowing down (the t-t-t), then white noise through a closing high-pass fading over 0.9 s (the sssss); ≈2.9 s. Rendered to sounds/b4-purr-b2-into-noise.wav.

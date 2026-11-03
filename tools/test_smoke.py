@@ -51,6 +51,30 @@ def no_conflict_markers():
     return f"{len(files)} files clean"
 
 
+def fontgen_round():
+    """tools/fontgen: every round-1 genome builds a font that maps every character the Operator and the Spanish lines use."""
+    try:
+        from fontTools.ttLib import TTFont
+    except ImportError:
+        return "skipped: fontTools not installed"
+    sys.path.insert(0, os.path.join(ROOT, "tools", "fontgen"))
+    import fontgen, json as _json
+    cands = _json.load(open(os.path.join(ROOT, "tools", "fontgen", "rounds", "round1.json")))
+    tmp = tempfile.mkdtemp(prefix="idle-font-")
+    text = "…hey. hey! relax, it only eats worlds Oh wow, are you ok? Say: lights on ¿Cachai? Ñandú, acción, pingüino ¡Ya po! Id|le 0123456789"
+    try:
+        for n, g in cands.items():
+            ttf, _ = fontgen.build_font({**fontgen.default_genome(), **{k: v for k, v in g.items() if k in fontgen.GENES}}, n, tmp)
+            f = TTFont(ttf); cmap = f.getBestCmap(); glyf = f["glyf"]
+            missing = sorted({c for c in text if ord(c) not in cmap})
+            need(not missing, f"{n} has no glyph for {missing}")
+            empty = [c for c in set(text) if c != " " and glyf[cmap[ord(c)]].numberOfContours == 0]
+            need(not empty, f"{n} draws nothing for {empty}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return f"{len(cands)} fonts, every character drawn"
+
+
 def js_syntax():
     files = [os.path.join(DEMO, f) for f in sorted(os.listdir(DEMO)) if f.endswith(".js")] + [os.path.join(ROOT, "helper", "worker.js")]
     tmp = tempfile.mkdtemp(prefix="idle-js-"); bad = []
@@ -1728,6 +1752,7 @@ def main():
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
     if want("conflict markers"): check("conflict markers", no_conflict_markers)
+    if want("fontgen"): check("fontgen", fontgen_round)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
