@@ -1272,7 +1272,7 @@ def t_story(P):
     wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 10, P=P)
     v = pg.evaluate("() => ({ box: document.documentElement.classList.contains('gen-box'), con: !!document.querySelector('#genConsole [data-gsay]'), lab: !!(document.querySelector('#lab') && document.querySelector('#lab').classList.contains('open')), night: !!document.querySelector('#genNight'), handle: getComputedStyle(document.querySelector('#toHandle')).display, skip: !!document.querySelector('#genNightSkip') })")
     need(not v["box"] and not v["con"] and not v["lab"] and v["night"] and v["skip"] and v["handle"] == "none", f"the dark should come first, without the Operator: {v}")
-    ui = pg.evaluate("() => [...document.body.children].filter(e => !['arena', 'genNight', 'genNightSkip', 'genArrive'].includes(e.id) && !/SCRIPT|STYLE/.test(e.tagName)).filter(e => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.05 && r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; }).map(e => e.id || e.tagName)")
+    ui = pg.evaluate("() => [...document.body.children].filter(e => !['arena', 'genNight', 'genNightSkip', 'genArrive', 'genBlack'].includes(e.id) && !/SCRIPT|STYLE/.test(e.tagName)).filter(e => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.05 && r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; }).map(e => e.id || e.tagName)")
     need(not ui, f"nothing of the UI while it's dark (story v5): {ui}")
     need(pg.evaluate("() => window.__audio.hushed()"), "from the landing on, sound doesn't exist yet: the master must be hushed")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark: the first ones come with 'bring life'")
@@ -1289,7 +1289,7 @@ def t_story(P):
     w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.querySelector('#genConsole [data-gsay]').textContent, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
     need(w["mode"] == "story" and w["pre"] == "lights on" and "lights on" in w["say"], f"the waking up should end on 'lights on', pre-filled: {w}")
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
-    need("new universe" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"], "the Tiny Operator's lines should be in the thread")
+    need("new consciousness" in w["thread"] and "tumble" in w["thread"] and "10 epochs" in w["thread"] and "it only eats worlds" in w["thread"], "the Tiny Operator's lines should be in the thread")
     son = pg.evaluate("() => window.__genesis.landing()"); need(son["pings"] >= 1 and son["night"], f"the Operator should ping the dark: {son}")
     nm = pg.evaluate("() => ({ head: document.querySelector('#lab-head b').textContent, toggle: document.querySelector('#lab-toggle').textContent })")
     need("Operator" in nm["head"] and "Oracle" in nm["toggle"], f"the rename: TO's window reads Operator, the panel's button reads Oracle: {nm}")
@@ -1395,7 +1395,7 @@ def t_story_landing(P):
     wait_for(pg, "() => window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 10, P=P)
     pg.wait_for_timeout(1200)
     say = pg.evaluate("() => { const s = window.__termBoot.arrive.lastSay(); return s && { y: s.cy / s.H, who: s.who }; }")
-    need(say and abs(say["y"] - 0.5) < 0.01 and say["who"] == "you", f"your lines should be in the middle of the screen: {say}")
+    need(say and abs(say["y"] - 0.5) < 0.01 and say["who"] == "doc", f"your lines should be in the middle of the screen: {say}")
     lnd = wait_for(pg, "() => window.__genesis.landing().phase !== 'dark' && window.__genesis.landing()", 35, P=P)
     need(lnd["why"] == "lines" and lnd["shown"] == 7 and 12 <= lnd["after"] <= 28, f"all 7 lines, then the Operator: {lnd}")
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "no creatures in the dark")
@@ -1520,6 +1520,39 @@ def t_story_offer(P):
     need(n1 == n0 + 1 and "offer_shown" in f["f"] and "offer_accepted" in f["f"] and f["o"] == "accepted", f"accepting: a snapshot first, then the story: {n0}→{n1}, {f}")
     pg.keyboard.press("Escape"); P.clean()
     return f"shown once (remembered), accepted → snapshot ({n0}→{n1}) → the story"
+
+
+def t_story_v6(P):
+    """Story v6: ?intro=epoch0 is retired (it goes to the storyline); the logo keeps its pipe, cycling colours, then cuts to black; the
+    'conscious' label is never under the dialog (desktop and phone); between the intro and the dark nothing of the world or the UI shows,
+    frame by frame (~50 ms), only black for 1.5 s (with the ringing: sound still on), then silence."""
+    old = P.open("/arena.html?intro=epoch0&test")
+    wait_for(old, "() => !!(window.__genesis && window.__genesis.mode() === 'story')", 30, P=P)   # it went to ?story (which then drops its flag from the address)
+    pg = P.open("/arena.html?fresh=1&test&nofirst5"); booted(pg)
+    r = pg.evaluate("""async () => { const E = window.__epoch0; await E.loadBank(); await E.loadLoss(); const C = E.clock;
+      const L = t => E.logoAt(t), cut = C.split + 0.95, out = { on: [L(cut + 0.5).on, L(cut + 2.9).on, L(cut + 3.4).on], cols: [L(cut + 1.2).colour, L(cut + 2.2).colour, L(cut + 3.0).colour] };
+      const ct = E.makeContent({ seed: 2, story: true }); ct.boot = true; const B = window.__termBoot.dur, chk = (W, H, ph) => { const cv = document.createElement('canvas'); cv.width = W * (ph ? 2 : 1); cv.height = H * (ph ? 2 : 1);
+        const res = []; for (const T of [24.5, 25.3, 26.1]) { E.frame(ct, B + T, cv, ph ? { phone: true, scale: 2 } : {}); const k = E.layoutCheck(); if (k.ref && k.band) res.push(!(k.band.y < k.ref.y + k.ref.h && k.band.y + k.band.h > k.ref.y)); } return res; };
+      out.clear = { desktop: chk(1280, 720, false), phone: chk(390, 844, true) }; return out; }""")
+    need(r["on"] == [True, True, False] and len(set(r["cols"])) == 3, f"the logo: the pipe stays ~3 s cycling colours, then black: {r}")
+    need(all(r["clear"]["desktop"]) and len(r["clear"]["desktop"]) >= 2 and all(r["clear"]["phone"]) and len(r["clear"]["phone"]) >= 2, f"'conscious' must not be under the dialog band: {r['clear']}")
+    # the transition, frame by frame: Esc from the title, then screenshots of the middle every ~50 ms
+    st = P.open("/arena.html?story&test")
+    wait_for(st, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+    vw = st.viewport_size; clip = {"x": vw["width"] * 0.15, "y": vw["height"] * 0.15, "width": vw["width"] * 0.7, "height": vw["height"] * 0.7}
+    st.keyboard.press("Escape"); t0 = time.time(); shots = []
+    while time.time() - t0 < 2.6:
+        shots.append((round(time.time() - t0, 2), base64.b64encode(st.screenshot(clip=clip)).decode()))
+    early = st.evaluate("() => ({ hushed: window.__audio.hushed(), cover: !!document.querySelector('#genBlack') })")
+    st.wait_for_timeout(2500); late = st.evaluate("() => window.__audio.hushed()")
+    stats = st.evaluate("""async shots => { const out = []; for (const [t, b] of shots) { const img = new Image(); img.src = 'data:image/png;base64,' + b; await img.decode(); const c = document.createElement('canvas'); c.width = 160; c.height = 90;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0, 160, 90); const d = g.getImageData(0, 0, 160, 90).data; let bright = 0, mx = 0; for (let i = 0; i < d.length; i += 4) { const v = (d[i] + d[i + 1] + d[i + 2]) / 3; if (v > 170) bright++; mx = Math.max(mx, v); } out.push([t, bright / (d.length / 4), mx]); } return out; }""", shots)
+    worst = max(stats, key=lambda x: x[1])
+    need(worst[1] < 0.01, f"the world or the UI showed between the intro and the dark: {worst[1] * 100:.1f}% bright pixels at {worst[0]} s")
+    black = [x for x in stats if 0.9 <= x[0] <= 1.6]
+    need(black and all(x[2] < 25 for x in black), f"pitch black about a second after the intro: {black[:4]}")
+    need(late, "silent after the ringing"); P.clean()
+    return f"?intro=epoch0 → ?story; logo on ~3 s, cycling {r['cols']}, then black; 'conscious' clear of the dialog (desktop {len(r['clear']['desktop'])}, phone {len(r['clear']['phone'])} frames); {len(shots)} frames over the transition, ≤{worst[1] * 100:.2f}% bright, black from 0.9 s"
 
 
 def t_chooser(P):
@@ -1693,7 +1726,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "title card", "hint phone", "story arms", "story offer", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1747,6 +1780,7 @@ def main():
                 run("wikipedia world", t_wiki)
                 run("genesis", t_genesis)
                 run("story", t_story)
+                run("story v6", t_story_v6)
                 run("title card", t_title_card)
                 run("hint phone", t_hint_phone)
                 run("story arms", t_story_arms)

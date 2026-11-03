@@ -444,6 +444,8 @@
     let bin = ''; const u8 = new Uint8Array(dv.buffer); for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 32768)); return btoa(bin); }
   window.__intro = { play, render, renderAudio, close: () => { if (cur) cur.close(); else if (window.__epoch0) window.__epoch0.close(); },
     playing: () => (!!cur && !!cur.el && cur.el.isConnected) || !!(window.__epoch0 && window.__epoch0.playing()), off: qi === '0', get tone() { return pick(qi); }, tones: ALL, scenes: tone => film(toneOf(tone), false).map(s => s.d) };
-  // debug and comparison: ?intro=epoch0 | storm | eerie | epic plays on load (the genesis flow, ?genesis, calls play() itself)
-  if (ALL.includes(qi) && !Q.has('genesis')) { const go = () => setTimeout(() => play({ tone: qi }), 300); if (document.readyState === 'complete') go(); else addEventListener('load', go, { once: true }); }
+  // ?intro=epoch0 is retired (Nico, v6: "we can scrap the ?intro=epoch0"): an old link goes to the storyline, where the intro now lives
+  if (qi === 'epoch0' && !Q.has('genesis') && !Q.has('story')) { try { const u = new URL(location.href); u.searchParams.delete('intro'); u.searchParams.set('story', ''); location.replace(u.pathname + u.search.replace('story=', 'story') + u.hash); } catch (e) {} }
+  // debug and comparison: ?intro=storm | eerie | epic | boot plays on load (the genesis flow, ?genesis, calls play() itself)
+  if (ALL.includes(qi) && qi !== 'epoch0' && !Q.has('genesis')) { const go = () => setTimeout(() => play({ tone: qi }), 300); if (document.readyState === 'complete') go(); else addEventListener('load', go, { once: true }); }
 })();

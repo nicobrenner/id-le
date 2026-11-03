@@ -37,8 +37,13 @@
   // and comments in subtitles, gets excited, then scared: the curve keeps falling past the chart's floor, lines pour out and overlap,
   // "can we stop it?!", "run!!!!", a white flash and a tear, silence; then the cut (Idle → Id|le) and the halves crawl off into the dark.
   // No "in the beginning there was…" and no "your turn" here: the Tiny Operator takes over (idle-genesis.js, the waking up).
-  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 32.4, crawl: 34.9, end: 37.8 };
-  const STRIKES = [30.2, 30.75, 31.3];   // story v5 (Nico): after the flash, a few lightning strikes in the dark, then the cut (with its own flash of lightning)
+  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 32.4, crawl: 34.9, end: 36.9 };
+  const LOGO_HOLD = 3.2, IDLE_BPM = 84, PURR = 1;   // PURR: the signature purr's variant on the logo (1 warm FM, 2 saw + arpeggio chime, 3 deep rumble)   // story v6: after the cut Id|le holds 3.2 s, its pipe cycling the rainbow at the engine's idle tempo; then black
+  const STRIKES = [30.2, 30.75, 31.3];
+  // the engine's tempo during the run (boot-script.md v6): idle 84 → 110 bpm while it learns, → 170 when it runs away, → 260 at the vortex
+  const runBpm = T => T < CS.over ? 84 + 26 * T / CS.over : T < CS.spin ? 110 + 60 * (T - CS.over) / (CS.spin - CS.over) : 170 + 90 * Math.min(1, (T - CS.spin) / (CS.flash - CS.spin));
+  const RUN_BEATS = (() => { const b = []; for (let t = 0.2; t < CS.flash; t += 60 / runBpm(t)) b.push(t); return b; })();
+  const beatK = t => clamp(0.35 + 0.65 * (runBpm(t) - 84) / 176);   // how hard each beat hits   // story v5 (Nico): after the flash, a few lightning strikes in the dark, then the cut (with its own flash of lightning)
   const SUBS = [   // [film second it starts, the scientist's line] (typed; a different font from the model's)
     [1.9, "…ok. it's babbling. that's normal."], [9.2, 'oh wow, these losses are exceptional…'], [12.8, 'wait… it keeps learning!!'],
     [16.4, "and it's only a… a few megabytes?!"], [20.0, "look at those losses, after all these epochs, and… it doesn't stop…"],
@@ -148,12 +153,13 @@
   const keyed = (K, T) => { if (T <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (T <= K[i][0]) { const [t0, v0] = K[i - 1], [t1, v1] = K[i], u = (T - t0) / (t1 - t0); return v0 + (v1 - v0) * (i === K.length - 1 ? u * u : u * u * (3 - 2 * u) * 0.35 + u * 0.65); } return K[K.length - 1][1]; };
   const storyPt = T => [keyed(SKX, T), keyed(SKY, T)];
   function drawStoryCurve(g, W, H, T, L, RM) {
-    const a = clamp((T - C.curve) / 0.6) * (1 - clamp((T - CS.flash) / 0.1)); if (a <= 0) return; const { x, y, w, h } = L.cv, px = u => x + 10 + (w - 20) * u, py = v => y + 8 + (h - 16) * v, fz = L.port ? 10 : 11;
+    lastRef = null; const a = clamp((T - C.curve) / 0.6) * (1 - clamp((T - CS.flash) / 0.1)); if (a <= 0) return; const { x, y, w, h } = L.cv, px = u => x + 10 + (w - 20) * u, py = v => y + 8 + (h - 16) * v, fz = L.port ? 10 : 11;
     g.save(); g.globalAlpha = a; g.strokeStyle = '#26323d'; g.lineWidth = 1; g.strokeRect(x, y, w, h); g.font = `${fz}px ui-monospace, Menlo, monospace`; g.textBaseline = 'alphabetic';
     if (!L.term) { g.fillStyle = DIM; g.fillText('training loss', x + 8, y - 8); } g.fillStyle = DIM; g.textAlign = 'right'; g.fillText('epochs → (stylized)', x + w - 8, y + h + 16); g.textAlign = 'left';
     // the reference lines: dotted, labelled at the right; the one the curve has just passed glows a little
     for (const [v, lab] of REFS) { const yy = py(v), passed = keyed(SKY, T) >= v; g.setLineDash([2, 4]); g.strokeStyle = passed ? '#7ee3f566' : '#3a4a56'; g.beginPath(); g.moveTo(x + 4, yy); g.lineTo(x + w - 4, yy); g.stroke(); g.setLineDash([]);
-      g.fillStyle = passed ? '#9fdcea' : '#6b7d89'; g.textAlign = 'right'; g.fillText(lab, x + w - 6, yy - 4); g.textAlign = 'left'; }
+      g.fillStyle = passed ? '#9fdcea' : '#6b7d89'; g.textAlign = 'right'; g.fillText(lab, x + w - 6, yy - 4); g.textAlign = 'left';
+      if (lab === 'conscious') { const tw = g.measureText(lab).width; lastRef = { x: x + w - 6 - tw, y: yy - 4 - fz, w: tw, h: fz + 2 }; } }
     // the curve so far, drawn in small steps: cyan, then magenta once it runs away
     const tEnd = Math.min(T, CS.flash), step = RM ? 0.25 : 0.04; let prev = null;
     for (let t = C.curve; t <= tEnd + 1e-6; t += step) { const [u, v] = storyPt(t), X = px(u), Y = py(v); if (prev) { g.strokeStyle = t > CS.over ? MAG : CUR; g.lineWidth = 2; g.shadowColor = g.strokeStyle; g.shadowBlur = t > CS.over ? 10 : 4; g.beginPath(); g.moveTo(prev[0], prev[1]); g.lineTo(X, Y); g.stroke(); } prev = [X, Y]; }
@@ -214,22 +220,29 @@
   // the cut (Nico: "don't add the creatures to the id|le title!!! do the one with the red line, no creatures… it kinda ruins a bit the moment
   // of nothingness"): the word, the tokenizer's red bar falling and cutting it, a flash of lightning, then the word fades into the dark. No legs.
   function crawlers(W, H, P) { return { big: P ? 64 : clamp(W / 9, 72, 150) }; }
+  const RAINBOW = ['#61bb46', '#fdb827', '#f5821f', '#e03a3e', '#963d97', '#009ddc'];   // green, yellow, orange, red, purple, blue: the classic stripes, as colours only
+  const mixHex = (a, b, u) => { const p = h => [1, 3, 5].map(k => parseInt(h.slice(k, k + 2), 16)), A = p(a), B = p(b); return `rgb(${A.map((v, k) => Math.round(v + (B[k] - v) * u)).join(',')})`; };
+  function pipeColour(t) { const c = ((t * 0.9) % 6 + 6) % 6, i = Math.floor(c); return mixHex(RAINBOW[i], RAINBOW[(i + 1) % 6], (c - i) * (c - i) * (3 - 2 * (c - i))); }
   function drawSplit(g, W, H, T, P, RM, st) {
     if (T < C.split) return; const big = st.cr.big, cy = H * 0.5;
     const ap = clamp((T - C.split) / 0.4), cutT = C.split + 0.95, cut = T >= cutT || RM, gap = cut ? (RM ? big * .32 : big * .32 * ease(clamp((T - cutT) / 0.35))) : 0;
-    g.font = `${big}px Georgia, 'Times New Roman', serif`; g.textBaseline = 'alphabetic'; const wId = g.measureText('Id').width, base = cy + big * .32;
-    const fadeOut = 1 - clamp((T - C.crawl) / (C.turn - C.crawl - 0.2)), xA = W / 2 - gap / 2 - wId, xB = W / 2 + gap / 2;   // after the cut the halves hold, then go dark
-    g.globalAlpha = ap * fadeOut; g.fillStyle = INK; g.fillText('Id', xA, base); g.fillText('le', xB, base);
-    // the tokenizer's bar: falls, cuts, glows magenta, fades
-    const fallT = clamp((T - (C.split + 0.55)) / 0.4), barY = -big + (base - big * .85 + big) * ease(fallT), barA = (1 - clamp((T - (cutT + 0.9)) / 0.6)) * (RM ? 1 : (T > C.split + 0.5 ? 1 : 0));
-    if (barA > 0 && T < C.crawl + 0.4) { g.globalAlpha = barA * fadeOut; g.fillStyle = MAG; g.shadowColor = MAG; g.shadowBlur = cut ? 18 : 6; g.fillRect(W / 2 - big * .035, cut ? base - big * .85 : barY, big * .07, big * .98); g.shadowBlur = 0; }
+    if (T >= cutT + LOGO_HOLD) return;   // the hard cut to black
+    g.font = `${big}px Georgia, 'Times New Roman', serif`; g.textBaseline = 'alphabetic'; const wId = g.measureText('Id').width, base = cy + big * .32, xA = W / 2 - gap / 2 - wId, xB = W / 2 + gap / 2;
+    g.globalAlpha = ap; g.fillStyle = INK; g.fillText('Id', xA, base); g.fillText('le', xB, base);
+    // the tokenizer's bar: falls (magenta) and cuts; then it stays, cycling the rainbow, throbbing like an engine idling (it never stops)
+    const fallT = clamp((T - (C.split + 0.55)) / 0.4), barY = -big + (base - big * .85 + big) * ease(fallT);
+    if (RM || T > C.split + 0.5) { const after = Math.max(0, T - cutT - 0.25), beat = RM ? 0 : 0.5 + 0.5 * Math.cos(2 * Math.PI * Math.max(0, T - cutT) * IDLE_BPM / 60), throb = T > cutT ? 1 + 0.05 * beat : 1;
+      const col = T < cutT + 0.25 ? MAG : after < 0.4 ? mixHex('#e0367a', RAINBOW[0], after / 0.4) : pipeColour(after - 0.4), bw = big * .07, bh = big * .98 * throb;
+      g.globalAlpha = 1; g.fillStyle = col; g.shadowColor = col; g.shadowBlur = cut ? 14 + 10 * beat : 6; g.fillRect(W / 2 - bw / 2, cut ? base - big * .85 - (bh - big * .98) / 2 : barY, bw, cut ? bh : big * .98); g.shadowBlur = 0; }
     if (!RM && T >= cutT && T < cutT + 0.12) { g.globalAlpha = 0.25 * (1 - (T - cutT) / 0.12); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); }
     g.globalAlpha = 1; }
+  // for tests and the recorder: the pipe's colour, and whether the logo is still on screen, at film time T after the split (plain timing)
+  const logoAt = Tl => ({ on: Tl >= C.split && Tl < C.split + 0.95 + LOGO_HOLD, colour: Tl > C.split + 0.95 + 0.65 ? pipeColour(Tl - C.split - 0.95 - 0.65) : null });
   function drawTurn(g, W, H, T, P) { const a = clamp((T - C.turn - 0.3) / 0.8); if (a <= 0) return; const fz = P ? 16 : Math.round(clamp(W / 60, 15, 22));
     g.globalAlpha = a; g.font = `italic ${fz}px Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK; g.fillText('your turn', W / 2, H * 0.5); const w = g.measureText('your turn').width;
     if (Math.floor(T * 2.4) % 2 === 0) { g.fillStyle = CUR; g.fillRect(W / 2 + w / 2 + 5, H * 0.5 - fz * .5, fz * .5, fz); } g.textAlign = 'left'; g.globalAlpha = 1; }
   // the first line takes as long as the model's own ending needs (typed, held, deleted, then "nothing"); everything after waits for it
-  const extraOf = ct => ct.story ? 0 : Math.max(0, finalDone(ct) + 0.9 - C.split), totalOf = ct => ct.story ? CS.end + 0.5 : C.total + extraOf(ct);
+  const extraOf = ct => ct.story ? 0 : Math.max(0, finalDone(ct) + 0.9 - C.split), totalOf = ct => ct.story ? CS.split + 0.95 + LOGO_HOLD + 0.4 : C.total + extraOf(ct);
   // the overrun: lines pour out faster and faster, overlapping, shaking; then "run!!!!", a tear and a white flash, silence
   function drawOverrun(g, W, H, T, ct, P, RM, L) {
     const fz = L.ln.fz; g.textBaseline = 'middle';
@@ -241,18 +254,21 @@
   // at least 1.4× the model's text (Nico: "the subtitles are small, smaller than the text on the screen… people miss it")
   function subNow(T) {
     if (story) { let cur = null; for (const s of SUBS) if (T >= s[0]) cur = s; if (!cur || T >= CS.tear) return null;
-      return { t0: cur[0], text: cur[1], last: cur === SUBS[SUBS.length - 1], panic: T >= SUBS[5][0], who: 'scientist' }; }
+      return { t0: cur[0], text: cur[1], last: cur === SUBS[SUBS.length - 1], panic: T >= SUBS[5][0], who: 'doc' }; }
     if (T >= C.final - 0.4) return null; if (T < C.babble) return T < 0.3 ? null : { t0: 0.3, text: 'nothing yet' };
     if (T >= C.stack) return { t0: C.stack, text: 'lower loss, better sentences' };
     const i = clamp(Math.floor((T - C.babble) / C.slot), 0, SCHED.length - 1); return { t0: C.babble + i * C.slot + 0.15, text: SCHED[i].cap }; }
   const subFz = (L, P) => Math.round(Math.max(P ? 18 : 22, L.ln.fz * 1.45));
   function subRows(g, text, maxW) { const ws = text.split(/(?<= )/); const rows = []; let a = ''; for (const w of ws) { if (a && g.measureText(a + w).width > maxW) { rows.push(a); a = w; } else a += w; } rows.push(a); return rows; }
+  let lastRef = null, lastBand = null;   // the 'conscious' label's box (drawStoryCurve) and the dialog band's (drawSub), this frame
   function drawSub(g, W, H, T, P, RM, L) {
     const s = subNow(T); if (!s) return; const n = RM ? s.text.length : Math.floor((T - s.t0) * (s.last ? 22 : 34)); if (n <= 0) return;
     const fz = subFz(L, P), lh = fz * 1.28; g.save(); g.font = `italic 600 ${fz}px "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
     // wrap the whole line first (rows don't jump while it types), then show the typed part
     const rows = subRows(g, s.text, Math.min(W * 0.88, 980)); let left = n; const shown = rows.map(r => { const t = r.slice(0, Math.max(0, left)); left -= r.length; return t; }).filter(t => t);
-    const cy = s.who ? H / 2 : L.term ? L.panes.band.y + L.panes.band.h / 2 : H - (P ? 104 : 80) - (rows.length - 1) * lh / 2, y0 = cy - (rows.length - 1) * lh / 2;
+    let cy = s.who ? H / 2 : L.term ? L.panes.band.y + L.panes.band.h / 2 : H - (P ? 104 : 80) - (rows.length - 1) * lh / 2;
+    if (s.who && lastRef) { const half = (rows.length * lh + fz * 0.7) / 2 + fz * 1.4, top = cy - half, bot = cy + half; if (top < lastRef.y + lastRef.h + 6 && bot > lastRef.y - 4) cy += lastRef.y + lastRef.h + 6 - top; }   // keep 'conscious' readable
+    const y0 = cy - (rows.length - 1) * lh / 2; lastBand = s.who ? { y: cy - (rows.length * lh + fz * 0.7) / 2 - fz * 1.4, h: rows.length * lh + fz * 0.7 + fz * 2.8 } : null;
     if (s.last && !RM) { const sm = clamp((T - s.t0) / (CS.tear - s.t0)); const txt = shown.join(''); g.translate(W / 2, cy); g.scale(1 + sm * 1.6, 1 - sm * 0.35);   // the words stretch and smear as it gets away
       for (let k = 4; k >= 1; k--) { g.globalAlpha = 0.12 * k * (1 - sm * 0.5); g.fillStyle = '#ffd9a0'; g.fillText(txt, -k * sm * 18, 0); } g.globalAlpha = 1; g.fillStyle = '#ffe9c9'; g.fillText(txt, 0, 0); g.restore(); return; }
     const bw = Math.min(W - 16, Math.max(...rows.map(r => g.measureText(r).width)) + fz * 1.6), bh = rows.length * lh + fz * 0.7, sh = s.panic && !RM ? (Math.random() - 0.5) * 3 : 0, by = y0 - lh / 2 - fz * 0.35;
@@ -362,12 +378,14 @@
   function scheduleAll(S, ct, t0) {   // recordings: every timed sound of the film at once (offline)
     const ex = extraOf(ct);
     if (ct.story) { S.hum(0, true); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e)); for (let t = CS.over; t < CS.tear; t += 0.03 + 0.12 * (1 - (t - CS.over) / (CS.tear - CS.over)) * Math.random()) S.tick(t0 + t, 12);
+      { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => B0.beat(S.ctx || S.out.context, S.out, t0 + t, i, beatK(t))); if (B0.purr) B0.purr(S.ctx || S.out.context, S.out, t0 + CS.split + 0.95, PURR); } }
       S.crash(t0 + CS.flash); STRIKES.forEach(x => S.thunder(t0 + x + 0.05)); S.thunder(t0 + CS.split + 0.95, 0.5); const d = CS.split - C.split; S.cut(t0 + d + C.split + 0.95); return; } S.hum(ex); for (let i = 0; i < SCHED.length; i++) lineReveal(ct, i).forEach(t => S.tick(t0 + t, SCHED[i].e));
     S.note(t0 + C.final + 0.2); S.cut(t0 + ex + C.split + 0.95); S.thunder(t0 + ex + C.split + 0.95, 0.5); }
   function liveSound(S, ct, T0, T1, now) {   // live: sounds for what was drawn between film seconds T0 and T1 (ticks follow the tokens shown)
     const ex = extraOf(ct), cross = t => t > T0 && t <= T1;
     if (ct.story) { for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
       if (T1 > CS.over && T1 < CS.tear && Math.random() < 0.25 + 0.6 * (T1 - CS.over) / (CS.tear - CS.over)) S.tick(now, 12);
+      { const B0 = window.__termBoot; if (B0 && B0.beat) { RUN_BEATS.forEach((t, i) => { if (cross(t)) B0.beat(S.ctx, S.out, now, i, beatK(t)); }); if (B0.purr && cross(CS.split + 0.95)) B0.purr(S.ctx, S.out, now, PURR); } }
       STRIKES.forEach(x => { if (cross(x + 0.05)) S.thunder(now); }); if (cross(CS.split + 0.95)) S.thunder(now, 0.5);
       const d = CS.split - C.split; if (cross(CS.flash)) S.crash(now); if (cross(d + C.split + 0.95)) S.cut(now); return; }
     for (let i = 0; i < SCHED.length; i++) for (const t of lineReveal(ct, i)) if (cross(t)) S.tick(now, SCHED[i].e);
@@ -451,5 +469,5 @@
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
   window.__epoch0 = { play, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
-    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
+    sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();
