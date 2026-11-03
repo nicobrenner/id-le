@@ -11,6 +11,8 @@
 //   fire(ctx, dest, T0, T1, at) (live sound for boot seconds T0..T1), fireAll(ctx, dest, t0) (recordings) }.
 (() => {
   const BG = '#06090b', TXT = '#b9c6cc', DIM = '#5d6b74', OK = '#7fd38a', AMB = '#f0b45a', RED = '#ff5d5d', CY = '#7ee3f5', MAG = '#e0367a', BORDER = '#22323c', ACT = '#4fae63';
+  const IDLE_BPM = 84;   // the idle engine's tempo (story v6 music): the computer scenes and the logo's throb
+  const MODEM = 'boot';   // where the modem handshake plays: 'boot' (under the spinning globe and the progress bar; Nico's option B) or 'logo' (not yet)
   const MONO = 'ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace';
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)), ease = u => u * u * (3 - 2 * u);
   const portOf = (W, H, P) => !!P || W < H * 1.1;
@@ -33,7 +35,7 @@
     ['torch 4.1.0+cu152', 'OK', OK, 0.22, 1],
     ['graph cache: 2,113 kernels', 'warm', OK, 0.18, 0],
     ['tokenizer: byte-pair, 8k vocab', 'OK', OK, 0.2, 1],
-    ['/lab/universes: 23 runs archived', 'mounted', OK, 0.24, 1],
+    ['/lab/minds: 23 minds archived', 'mounted', OK, 0.24, 1],
     ['thermals: 31 °C', 'OK', OK, 0.16, 0],
     ['safety interlock', 'BYPASSED', AMB, 0.62, 1],
     ['oracle-trainer.service', 'ready', CY, 0.2, 1]];
@@ -65,8 +67,8 @@
     g.save(); g.globalAlpha = a; if (ovScan) { g.fillStyle = ovScan; g.fillRect(0, 0, W, H); } g.fillStyle = ovVig; g.fillRect(0, 0, W, H); g.restore(); }
   // the agnoster-style prompt: coloured segments joined by arrow tips
   function prompt(g, x, y, fz, port) {
-    const segs = port ? [['operator', '#2b2b2b', '#e6e6e6'], ['~/universes', '#2f6fb5', '#eef4ff'], ['⎇ main', '#4f9a4a', '#0b120b']]
-      : [['operator@lab-07', '#2b2b2b', '#e6e6e6'], ['~/universes', '#2f6fb5', '#eef4ff'], ['⎇ main ✔', '#4f9a4a', '#0b120b']];
+    const segs = port ? [['operator', '#2b2b2b', '#e6e6e6'], ['~/minds', '#2f6fb5', '#eef4ff'], ['⎇ main', '#4f9a4a', '#0b120b']]
+      : [['operator@lab-07', '#2b2b2b', '#e6e6e6'], ['~/minds', '#2f6fb5', '#eef4ff'], ['⎇ main ✔', '#4f9a4a', '#0b120b']];
     const h = fz * 1.35, tip = h * 0.42, pad = fz * 0.55; g.font = `${fz}px ${MONO}`; g.textBaseline = 'middle'; let cx = x;
     segs.forEach(([s, bg, fg], i) => { const w = g.measureText(s).width + pad * 2 + (i ? tip : 0);
       g.fillStyle = bg; g.fillRect(cx, y - h / 2, w, h); g.fillStyle = fg; g.fillText(s, cx + pad + (i ? tip : 0), y + 1);
@@ -115,7 +117,7 @@
       const a = clamp((T - K.globe) / 0.4) * (1 - clamp((T - (K.log - 0.25)) / 0.4)), R = Math.min(W, H) * (port ? 0.3 : 0.24);
       globe(g, W / 2, H * 0.44, R, Math.max(9, Math.round(R / 9.5)), T, a, RM);
       g.save(); g.globalAlpha = a; g.font = `${fz}px ${MONO}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = DIM;
-      g.fillText('lab node 07 · universe observatory', W / 2, H * 0.44 + R * 1.38);
+      g.fillText('lab node 07 · consciousness lab', W / 2, H * 0.44 + R * 1.38);
       const n = 24, k = Math.floor(clamp((T - 0.3) / (K.log - 0.5)) * n); g.fillStyle = CY; g.fillText('[' + '#'.repeat(k) + '.'.repeat(n - k) + ']', W / 2, H * 0.44 + R * 1.38 + lh * 1.3); g.restore();
       if (T < K.log) { overlay(g, W, H); return; } }
     if (T < K.shell) {   // the boot log, then the login, scrolling like a console
@@ -126,7 +128,7 @@
       if (T >= K.login) { lines.push({ txt: '' }); lines.push({ txt: 'lab-node-07 login: ' + typed(USER, K.user, 13, T, RM), cur: T < K.pass });
         if (T >= K.pass - 0.08) lines.push({ txt: 'password: ' + typed(PASS, K.pass + 0.1, 15, T, RM), cur: T < K.last });
         if (T >= K.last) lines.push({ txt: port ? 'Last login: Sun Nov 1 23:58 · obs-deck' : 'Last login: Sun Nov  1 23:58:12 2041 from observation-deck', col: DIM });
-        if (T >= K.welcome) lines.push({ txt: port ? 'welcome back, operator.' : 'welcome back, operator. 23 universes archived, 0 running.', col: TXT }); }
+        if (T >= K.welcome) lines.push({ txt: port ? 'welcome back, operator.' : 'welcome back, operator. 23 minds archived, 0 running.', col: TXT }); }
       const vis = lines.slice(-rowsMax); g.font = `${fz}px ${MONO}`; g.textBaseline = 'middle';
       vis.forEach((L, i) => { const y = pad + lh * (i + 0.5); g.fillStyle = L.col && !L.dots ? L.col : TXT; let x = pad;
         if (L.os) { g.save(); g.font = `700 ${Math.round(fz * 1.25)}px ${MONO}`; g.shadowColor = CY; g.shadowBlur = 14; g.fillStyle = '#e9f6ff'; g.fillText(L.txt, x, y); g.restore(); return; }   // the OS's name, bright
@@ -145,7 +147,7 @@
     overlay(g, W, H); }
   // the shell's lines (the prompt, the command and its output; in the film, the training log follows)
   function shellLines(T, RM, port) {
-    const out = [{ txt: port ? '[session project-24]' : '[session project-24 · 4 panes · zero universes running]', col: DIM }];
+    const out = [{ txt: port ? '[session project-24]' : '[session project-24 · 4 panes · zero minds running]', col: DIM }];
     if (T >= K.cmd - 0.4) { if (port) out.push({ prompt: true, cmd: null }, { txt: '❯ ' + cmdTyped(T, RM), col: '#f2f2f2', cur: T < K.enter, cmd2: true }); else out.push({ prompt: true, cmd: cmdTyped(T, RM), cur: T < K.enter }); }
     (port ? SHELL_OUT_P : SHELL_OUT).forEach(([t0, s]) => { if (T >= t0) out.push({ txt: s, col: CY }); });
     return out; }
@@ -169,7 +171,7 @@
     const n = Math.floor(Math.max(0, Tf) * 7 + (red ? o.overT * o.overT * 14 : 0)), extra = [], rowsMax = 14;
     for (let i = Math.max(0, n - rowsMax); i < n; i++) { const tt = i / 7, runaway = red && i >= Math.floor(o.overStart * 7), l = runaway ? o.lossAt(o.overStart) - (i - o.overStart * 7) * 0.02 : o.lossAt(tt), step = (i + 1) * 50;
       const util = Math.round(clamp(30 + 68 * Math.min(1, tt / 22) + Math.sin(i * 1.7) * 2, 0, 99));
-      extra.push(i % 23 === 22 && !runaway ? { txt: `ckpt  universes/p24/step${step}.pt  saved`, col: DIM }
+      extra.push(i % 23 === 22 && !runaway ? { txt: `ckpt  minds/p24/step${step}.pt  saved`, col: DIM }
         : { txt: p.port ? `step ${step} loss ${l.toFixed(3)} ${runaway ? 100 : util}%` : `step ${String(step).padStart(6)}  loss ${l.toFixed(3)}  lr 3.0e-4  ${(1.1 + 0.3 * Math.sin(i)).toFixed(2)}M tok/s  gpu ${runaway ? 100 : util}%`, col: runaway ? (l < 0 ? RED : AMB) : '#8fa3ad' }); }
     if (o.over > 0.35) extra.push({ txt: p.port ? 'WARN loss below floor' : 'WARN loss below the chart floor · stop requested · ignored', col: RED });
     g.save(); g.globalAlpha = a; shellText(g, p.log, p, DUR + 2, true, extra, p.pfz); g.restore();
@@ -190,7 +192,7 @@
     return p; }
 
   // ---------- sound (through the intro's own output; optional) ----------
-  const EV = (() => { const ev = [{ t: 0, k: 'pad', d: DUR + 0.6 }, { t: 0.02, k: 'crt' }, { t: 0.3, k: 'relay' }, { t: 0.55, k: 'post' }, { t: 1.2, k: 'floppy' }, { t: K.log, k: 'disk', d: K.login - K.log }];
+  const EV = (() => { const ev = [{ t: 0, k: 'pad', d: DUR + 0.6 }, ...(() => { const b = []; for (let t = 0.4, i = 0; t < DUR; t += 60 / IDLE_BPM, i++) b.push({ t, k: 'beat', i }); return b; })(), { t: 0.02, k: 'crt' }, { t: 0.3, k: 'relay' }, { t: 0.55, k: 'post' }, ...(MODEM === 'boot' ? [{ t: 0.45, k: 'modem' }] : [{ t: 1.2, k: 'floppy' }]), { t: K.log, k: 'disk', d: K.login - K.log }];
     LOG.forEach((l, i) => { if (i % 3 === 1) ev.push({ t: LOGT[i] + 0.05, k: 'seek' }); ev.push({ t: LOGT[i] + 0.09, k: 'blip', n: i }); });
     LOG.forEach((l, i) => { ev.push({ t: LOGT[i], k: 'tick' }); if (l[1] === 'BYPASSED') ev.push({ t: LOGT[i] + l[3] * 0.6, k: 'warn' }); });
     keyTimes(USER, K.user, 13).forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.pass - 0.12, k: 'enter' }); keyTimes(PASS, K.pass + 0.1, 15).forEach(t => ev.push({ t, k: 'key' })); ev.push({ t: K.last - 0.1, k: 'enter' });
@@ -200,6 +202,15 @@
   // the intro's own music (story v5, Nico: "the intro needs its own background music/ambience"): a slow pad, Am · F · C · G, 4 s each,
   // three detuned saws through a low-pass per chord, crossfading; it starts at intro second T0 (a bed: it picks up mid-way when the sound comes on late)
   const CHORDS = [[110, 130.81, 164.81], [87.31, 110, 130.81], [130.81, 164.81, 196], [98, 123.47, 146.83]];
+  // the idle engine (story v6, boot-script.md): a pulse that never stops (a soft low thump and a tick, like an engine idling or a clock) and,
+  // except at idle, one note of an arpeggio per beat, A minor pentatonic, its pattern shifting every 8 beats; k (0..1) is how hard it runs
+  const PENTA = [220, 261.63, 293.66, 329.63, 392, 440, 523.25], ARP = [[0, 2, 4, 2], [1, 3, 5, 3], [0, 4, 6, 4], [2, 4, 5, 1]];
+  function beat(ctx, dest, at, i = 0, k = 0.3, idle = false) {
+    const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(idle ? 52 : 60 + 30 * k, at); o.frequency.exponentialRampToValueAtTime(38, at + 0.16);
+    v.gain.setValueAtTime(0, at); v.gain.linearRampToValueAtTime(idle ? 0.08 : 0.045 + 0.07 * k, at + 0.008); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.22); o.connect(v); v.connect(dest); o.start(at); o.stop(at + 0.26);
+    const s = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), nv = ctx.createGain(); s.buffer = noise(ctx); bp.type = 'bandpass'; bp.frequency.value = 3500; bp.Q.value = 2; nv.gain.setValueAtTime(0.01 + 0.02 * k, at); nv.gain.exponentialRampToValueAtTime(0.0001, at + 0.025); s.connect(bp); bp.connect(nv); nv.connect(dest); s.start(at, Math.random() * 0.5); s.stop(at + 0.04);
+    if (idle) return; const pat = ARP[Math.floor(i / 8) % ARP.length], f = PENTA[pat[i % 4]] * (k > 0.7 ? 2 : 1), a = ctx.createOscillator(), av = ctx.createGain();
+    a.type = 'triangle'; a.frequency.value = f; a.detune.value = (i % 2 ? 4 : -4); av.gain.setValueAtTime(0, at + 0.01); av.gain.linearRampToValueAtTime(0.016 + 0.018 * k, at + 0.02); av.gain.exponentialRampToValueAtTime(0.0001, at + 0.2 + 0.15 * (1 - k)); a.connect(av); av.connect(dest); a.start(at + 0.01); a.stop(at + 0.4); }
   function pad(ctx, dest, at, dur, T0, vol = 0.016) {
     const out = ctx.createGain(); out.gain.setValueAtTime(0, at); out.gain.linearRampToValueAtTime(vol, at + 1.2); out.gain.setValueAtTime(vol, at + Math.max(1.2, dur - 1)); out.gain.linearRampToValueAtTime(0.0001, at + dur);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 620; lp.Q.value = 0.4; lp.connect(out); out.connect(dest);
@@ -220,8 +231,10 @@
       case 'key': burst(at, 0.03, 0.16, 2400 + Math.random() * 900, 1.5); tone('sine', 180, at, 0.02, 0.03); break;
       case 'enter': burst(at, 0.06, 0.22, 1300, 1.2); tone('sine', 130, at, 0.06, 0.06); break;
       case 'whoomp': tone('sine', 170, at, 0.45, 0.12, 52); burst(at, 0.35, 0.04, 500, 0.6); break;
-      case 'pad': pad(ctx, dest, at, e.d, e.from || 0); break;
-      case 'post': tone('square', 1000, at, 0.16, 0.035); break;   // the power-on self-test beep
+      case 'pad': pad(ctx, dest, at, e.d, e.from || 0, 0.011); break;
+      case 'beat': beat(ctx, dest, at, e.i, 0.25); break;
+      case 'post': tone('square', 1000, at, 0.16, 0.035); break;
+      case 'modem': modem(ctx, dest, at); break;   // the node dialling in while the globe spins   // the power-on self-test beep
       case 'floppy': for (let i = 0; i < 2; i++) for (let k = 0; k < 9; k++) { const t0 = at + i * 0.75 + k * 0.055; tone('square', 95 + (k % 3) * 12, t0, 0.03, 0.03); burst(t0, 0.02, 0.05, 1800, 2); } break;   // the drive's stepper, twice
       case 'seek': for (let k = 0; k < 4; k++) burst(at + k * 0.04 + Math.random() * 0.02, 0.012, 0.09, 3800, 3); break;   // the disk's head ticking
       case 'blip': { const n = e.n || 0, f = [1568, 1760, 2093, 2349][n % 4]; tone('sine', f, at, 0.05, 0.022); tone('sine', f * 1.5, at + 0.06, 0.04, 0.016); break; } } }
@@ -267,7 +280,7 @@
       t = at + Math.max(1.15, l.text.length * 0.034); return { ...l, typeAt, at }; }); })();
   const CLOSE = DM[DM.length - 1].at + 1.0, TERM = CLOSE + 0.45, ADUR = TERM + 0.75, BT = NOTE;
   const lastLine = DM[DM.length - 1];
-  const WHO = { scientist: { label: 'scientist', col: '#ffe2b8', bar: '#ffcf8a', lab: '#c9a26b' }, lester: { label: 'lester', col: '#c4f2dd', bar: '#6fd6a8', lab: '#6fd6a8' } };
+  const WHO = { scientist: { label: 'doc', col: '#ffe2b8', bar: '#ffcf8a', lab: '#c9a26b' }, lester: { label: 'lester', col: '#c4f2dd', bar: '#6fd6a8', lab: '#6fd6a8' } };
   function wrapRows(g, text, maxW) { const ws = text.split(/(?<= )/), rows = []; let a = ''; for (const w of ws) { if (a && g.measureText(a + w).width > maxW) { rows.push(a); a = w; } else a += w; } rows.push(a); return rows; }
   let lastSay = null;
   // a line in the middle of the screen: big, typed, on a dim band, with who says it above (used where no window shows the words: the dark)
@@ -364,7 +377,7 @@
     overlay(g, W, H, 0.35);
     if (T < 0.5) { g.fillStyle = `rgba(0,0,0,${1 - T / 0.5})`; g.fillRect(0, 0, W, H); } }
   // sound: the room (a quiet hum, rain on the window), the messages, the notification, the chat's ticks, his keys, the windows
-  const AEV = (() => { const ev = [{ t: 0, k: 'room', d: ADUR }, { t: 0.4, k: 'pad', d: ADUR - 0.4 }];
+  const AEV = (() => { const ev = [{ t: 0, k: 'room', d: ADUR }, { t: 0.4, k: 'pad', d: ADUR - 0.4 }]; for (let t = 0.6, i = 0; t < ADUR; t += 60 / IDLE_BPM, i++) ev.push({ t, k: 'beat', i });
     TH.forEach(m => ev.push({ t: m.at, k: m.me ? 'sent' : 'recv' })); ev.push({ t: NOTE, k: 'notify' }, { t: CHAT, k: 'win' });
     BL.forEach(b => ev.push({ t: b.at, k: 'tick' })); DM.forEach((l, i) => { if (i === 0) return; if (l.who === 'scientist') { for (let t = l.typeAt; t < l.at - 0.15; t += 0.07 + 0.03 * ((i * 7 + t * 13) % 1)) ev.push({ t, k: 'key' }); ev.push({ t: l.at, k: 'send' }); } else ev.push({ t: l.at, k: 'tick' }); });
     ev.push({ t: CLOSE, k: 'win' }, { t: TERM, k: 'win' }); return ev.sort((a, b) => a.t - b.t); })();
@@ -382,7 +395,8 @@
       case 'key': nz(at, 0.03, 0.12, 'bandpass', 2600 + Math.random() * 800, 1.5); break;
       case 'send': nz(at, 0.06, 0.12, 'bandpass', 1300, 1.2); break;
       case 'win': nz(at, 0.25, 0.04, 'bandpass', 600, 0.8, false, 0.01, 1800); break;
-      case 'pad': pad(ctx, dest, at, e.d, e.from || 0, 0.013); break; } }
+      case 'pad': pad(ctx, dest, at, e.d, e.from || 0, 0.009); break;
+      case 'beat': beat(ctx, dest, at, e.i, 0.2); break; } }
   const afire = (ctx, dest, T0, T1, at) => { for (const e of AEV) if (e.t > T0 && e.t <= T1) { try { asound(ctx, dest, e, at); } catch (er) {} } };
   const afireAll = (ctx, dest, t0) => { for (const e of AEV) { try { asound(ctx, dest, e, t0 + e.t); } catch (er) {} } };
   const abeds = (ctx, dest, T, at) => { for (const e of AEV) if (e.d && T > e.t && T < e.t + e.d - 0.3) { try { asound(ctx, dest, { ...e, d: e.t + e.d - T, from: T - e.t }, at); } catch (er) {} } };
@@ -400,5 +414,41 @@
     g.font = `${Math.round(big * 0.24)}px ${MONO}`; g.fillStyle = DIM; g.fillText('v 0/67 · lab-07', W / 2, H * 0.42 + big * 0.75);
     if (on) { g.font = `700 ${Math.round(clamp(big * 0.3, 15, 26))}px ${MONO}`; g.fillStyle = AMB; g.fillText(port || matchMedia('(pointer: coarse)').matches ? 'TAP TO START' : 'PRESS ANY KEY TO START', W / 2, H * 0.66); }
     g.restore(); overlay(g, W, H, 0.8); }
-  window.__termBoot = { lastCmd: () => lastCmd, dur: DUR, draw, title: titleDraw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
+  // the signature purr (Nico: "a 'signature purring sound' that matches the animation on the | of id|le… like the logo of a console when it
+  // loads"): a warm low tone, amplitude-modulated like an engine idling (the pipe's throb), opening up, then a soft chime as the pipe settles.
+  // Three variants to choose from by ear (boot-script.md v6); returns its length in seconds.
+  function purr(ctx, dest, at, variant = 1) {
+    const out = ctx.createGain(); out.gain.value = 1; out.connect(dest); const D = variant === 3 ? 3.0 : 2.6;
+    const car = ctx.createOscillator(), mod = ctx.createOscillator(), modG = ctx.createGain(), am = ctx.createOscillator(), amG = ctx.createGain(), body = ctx.createGain(), lp = ctx.createBiquadFilter();
+    car.type = variant === 2 ? 'sawtooth' : 'triangle'; car.frequency.setValueAtTime(variant === 3 ? 46 : 58, at); car.frequency.linearRampToValueAtTime(variant === 3 ? 55 : 70, at + D * 0.7);
+    mod.frequency.value = variant === 2 ? 87 : 116; modG.gain.setValueAtTime(18, at); modG.gain.linearRampToValueAtTime(variant === 1 ? 60 : 35, at + D * 0.6); mod.connect(modG); modG.connect(car.frequency);   // FM: a growl that opens up
+    am.frequency.setValueAtTime(variant === 2 ? 26 : 22, at); am.frequency.linearRampToValueAtTime(IDLE_BPM / 60 * (variant === 2 ? 4 : 8), at + D * 0.8); amG.gain.value = 0.5; am.connect(amG); amG.connect(body.gain);   // AM: the purr slowing into the idle throb
+    body.gain.setValueAtTime(0.5, at); lp.type = 'lowpass'; lp.frequency.setValueAtTime(220, at); lp.frequency.linearRampToValueAtTime(variant === 3 ? 900 : 1400, at + D * 0.6); lp.frequency.linearRampToValueAtTime(400, at + D);
+    const env = ctx.createGain(); env.gain.setValueAtTime(0, at); env.gain.linearRampToValueAtTime(0.16, at + 0.25); env.gain.setValueAtTime(0.16, at + D * 0.65); env.gain.exponentialRampToValueAtTime(0.0001, at + D);
+    car.connect(body); body.connect(lp); lp.connect(env); env.connect(out); for (const o of [car, mod, am]) { o.start(at); o.stop(at + D + 0.05); }
+    if (variant === 3) { const n = ctx.createBufferSource(), nb = ctx.createBiquadFilter(), ng = ctx.createGain(); n.buffer = noise(ctx); n.loop = true; nb.type = 'lowpass'; nb.frequency.value = 160; ng.gain.setValueAtTime(0, at); ng.gain.linearRampToValueAtTime(0.06, at + 0.4); ng.gain.exponentialRampToValueAtTime(0.0001, at + D); n.connect(nb); nb.connect(ng); ng.connect(out); n.start(at); n.stop(at + D); }
+    // the chime as the pipe settles: a soft bell (sine partials), pentatonic, rising
+    const chimeAt = at + D * 0.62, notes = variant === 2 ? [523.25, 659.25, 784, 1046.5] : variant === 3 ? [392, 587.33] : [659.25, 987.77];
+    notes.forEach((f, k) => { const t = chimeAt + k * (variant === 2 ? 0.09 : 0.14); for (const [m, g0] of [[1, 0.05], [2.76, 0.012], [5.4, 0.005]]) { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'sine'; o.frequency.value = f * m; v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(g0, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0001, t + 1.4 / m + 0.3); o.connect(v); v.connect(out); o.start(t); o.stop(t + 1.8); } });
+    return D + 0.6; }
+  // a modem connecting (Nico: "simulate part of a modem connecting to the internet… or use it for the computer boot"): our own condensed handshake:
+  // dial tone, DTMF digits, the answer tone with its phase flips, the screech of training (two-tone bursts, chirps, noise), then hiss cut to silence
+  function modem(ctx, dest, at) {
+    const out = ctx.createGain(); out.gain.value = 0.5; out.connect(dest); let t = at;
+    const tone = (fs, t0, d, v = 0.08, type = 'sine') => { const g = ctx.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 0.005); g.gain.setValueAtTime(v, t0 + d - 0.01); g.gain.linearRampToValueAtTime(0, t0 + d); g.connect(out); fs.forEach(f => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.connect(g); o.start(t0); o.stop(t0 + d + 0.02); }); };
+    tone([350, 440], t, 0.7, 0.06); t += 0.75;   // dial tone
+    const DT = { 1: [697, 1209], 2: [697, 1336], 3: [697, 1477], 4: [770, 1209], 5: [770, 1336], 6: [770, 1477], 7: [852, 1209], 8: [852, 1336], 9: [852, 1477], 0: [941, 1336] };
+    for (const d of '5550724') { tone(DT[d], t, 0.07, 0.07); t += 0.11; } t += 0.25;   // the number (a fictional one)
+    for (let k = 0; k < 4; k++) { tone([2100], t + k * 0.22, 0.2, 0.05); } t += 0.95;   // the answer tone, its phase flipping
+    for (let k = 0; k < 10; k++) { const f = k % 2 ? [1200, 2400] : [980, 1650]; tone(f, t, 0.09, 0.05, k % 3 ? 'square' : 'sine'); t += 0.1; }   // training: two-tone bursts
+    { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sawtooth'; o.frequency.setValueAtTime(600, t); o.frequency.exponentialRampToValueAtTime(3200, t + 0.35); o.frequency.exponentialRampToValueAtTime(900, t + 0.6); g.gain.setValueAtTime(0.03, t); g.gain.linearRampToValueAtTime(0, t + 0.6); o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.62); t += 0.6; }   // a chirp
+    { const n = ctx.createBufferSource(), g = ctx.createGain(); n.buffer = noise(ctx); n.loop = true; g.gain.setValueAtTime(0.09, t); g.gain.setValueAtTime(0.09, t + 0.55); g.gain.linearRampToValueAtTime(0, t + 0.57); n.connect(g); g.connect(out); n.start(t); n.stop(t + 0.6); t += 0.6; }   // the hiss, then cut
+    return t - at; }
+  // the intro's music v1 (for listening alone, boot-script.md v6): T0..T0+dur, idle engine at 84 bpm then a run whose tempo climbs
+  function music(ctx, dest, at, idleFor = 15, runFor = 30) {
+    pad(ctx, dest, at, idleFor + 1, 0, 0.011); let i = 0; for (let t = 0.4; t < idleFor; t += 60 / IDLE_BPM) beat(ctx, dest, at + t, i++, 0.25);
+    const rb = T => T < 23.2 ? 84 + 26 * T / 23.2 : T < 26.6 ? 110 + 60 * (T - 23.2) / 3.4 : 170 + 90 * Math.min(1, (T - 26.6) / 3.15), sc = runFor / 29.75;
+    for (let T = 0.2; T < 29.75; T += 60 / rb(T)) beat(ctx, dest, at + idleFor + T * sc, i++, Math.max(0, Math.min(1, 0.35 + 0.65 * (rb(T) - 84) / 176)));
+    return idleFor + runFor; }
+  window.__termBoot = { purr, modem, music, pad, beat, idleBpm: IDLE_BPM, lastCmd: () => lastCmd, dur: DUR, draw, title: titleDraw, panes, chrome, overlay, fire, fireAll, beds: bootBeds, arrive, say, clock: K, events: EV.length };
 })();

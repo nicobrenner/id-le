@@ -59,8 +59,8 @@
   // the storyline's waking up (Nico's lines, script section B), typed one by one in the Tiny Operator's voice
   // (story v3, final: Nico "perfect! love it"; v4: the first line is about the black hole, Nico: "it only eats worlds"; it comes with the sonar's first ping)
   const WAKE = ['…hey. hey! relax, it only eats worlds', 'Oh wow, looks like you took quite the tumble there… are you ok? We have a lot of work to do',
-    "whatever you were running in that lab spilled over… it made a new universe, and you've been appointed to see it grow",
-    'You have 10 epochs to grow it enough so that it can survive on its own… if it fails, this universe could wither, and you might need to start another one',
+    "whatever you were running in that lab spilled over… it made a new consciousness, and you're inside it. you've been appointed to see it grow",
+    'You have 10 epochs to grow it enough so that it can survive on its own… if it fails, this consciousness could fade, and you might need to start another one',
     'First things first: the lights', 'Say: lights on'];
   const LIGHTS_ON = 'Nice!! we can see something now at least';
   // the epochs (Nico, story v3: "10 epochs, not 6–7 days"): Epoch 0 is the intro, the dark landing and lights on; Epoch 1 (what was Day 1)
@@ -68,7 +68,7 @@
   // from the days still reads right: day n is epoch n) and still reported as genesis_day in the stats.
   const DAYS = [
     { n: 1, title: 'words, life', goals: [['words', 'words for a floor'], ['creatures', 'first life']], teaches: 'the Operator, words, creatures',
-      front: { head: 'Epoch 1: a floor, and somebody on it', body: 'Lights came on in a brand-new universe. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
+      front: { head: 'Epoch 1: a floor, and somebody on it', body: 'Lights came on in a brand-new mind. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
       line: 'epoch one done. it has a floor and somebody on it. next we feed them' },
     ...[2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ n, title: 'coming soon', goals: [], teaches: '' }))];
   let S = load(), hold = [], busy = false;
@@ -76,7 +76,7 @@
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
   { const c2 = document.createElement('style'); c2.textContent = `html.gen-landing body{background:#000!important}
-html.gen-landing body>*:not(#arena):not(#genNight):not(#genNightSkip):not(#genArrive):not(#idleIntro):not(script):not(style){visibility:hidden!important}
+html.gen-landing body>*:not(#arena):not(#genNight):not(#genNightSkip):not(#genArrive):not(#idleIntro):not(#genBlack):not(script):not(style){visibility:hidden!important}
 html.gen-landing #arena button,html.gen-landing #arena [role=button],html.gen-landing #arena .chip,html.gen-landing #arena .chips{visibility:hidden!important}html.gen-landing #arena{box-shadow:none!important;border-color:#000!important}`; document.head.appendChild(c2); }
   const css = document.createElement('style');
   css.textContent = `html.gen-void #arena,html.gen-void #floor{background-color:#05060b!important;transition:background-color 2.5s}
@@ -213,7 +213,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     else body = `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>` +
       `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`;
     const said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
-    c.innerHTML = `<div class="gt">🔭 THE SCIENTIST'S CONSOLE · UNIVERSE ${esc((S && S.n) || 1)}</div>` + said + body;
+    c.innerHTML = `<div class="gt">🔭 DOC'S CONSOLE · UNIVERSE ${esc((S && S.n) || 1)}</div>` + said + body;
     prefill(); }
   // the console line, and the same line in the Operator's thread (unless the Tiny Operator is mid-reply: it answers in its own voice)
   let quiet = false;
@@ -336,12 +336,12 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     if (mode === 'ready') { dropFlag(); return readyWorld(); }
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
     if (mode === 'free') cls('gen-calm', 0);
-    if (mode === 'story') { cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); return true; }
+    if (mode === 'story') { blackCover(true); cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); return true; }
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
   // the chooser: the storyline, the void with no guide, or a world that is already alive (the starter world)
   function chooser() { return new Promise(res => { const el = document.createElement('div'); el.id = 'genChoose'; el.setAttribute('role', 'dialog');
     el.innerHTML = `<h2>a new universe</h2><div class="sub">how do you want to begin?</div><div class="opts">
-<button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and 10 epochs to raise a universe with the Tiny Operator<br><small>recommended</small></button>
+<button class="rec" data-m="story"><b>📖 Storyline</b>a training run that won't stop, a crash, and 10 epochs to raise a mind with the Tiny Operator<br><small>recommended</small></button>
 <button data-m="free"><b>✦ From scratch</b>the void and the Operator's console, every step available, no guide</button>
 <button data-m="ready"><b>🌍 A ready world</b>creatures already living, the guided first five minutes</button></div>`;
     document.body.appendChild(el); const end = m => { el.classList.add('out'); setTimeout(() => el.remove(), 600); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_choose', extra: { mode: m } } })); } catch (e) {} res(m); };
@@ -376,7 +376,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2); if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
     // the veil: the world under it, almost black, its faint grid still there
-    g.fillStyle = 'rgba(2,3,7,0.8)'; g.fillRect(0, 0, W, H); const rise = RM ? 1 : clamp01(st.t / 2.6);   // from black, slowly
+    g.fillStyle = 'rgba(2,3,7,0.8)'; g.fillRect(0, 0, W, H); const rise = RM ? 1 : clamp01((st.t - 1.2) / 2.4);   // from black (under the cover's 1.5 s), slowly
     // how much of the hole we see and how hard it pulls follow the lines: faint at first, clear at "is that a black hole", closer at "getting closer"
     const k = st.k, seen = st.calm ? 1 : clamp01(0.25 + (k >= 4 / 7 ? 0.45 : 0) + (k >= 5 / 7 ? 0.2 : 0)), pullT = st.calm ? Math.max(0, st.pull - 0.4) : (k >= 6 / 7 ? 1 : k >= 5 / 7 ? 0.45 : 0);
     st.pull += (pullT - st.pull) * Math.min(1, dt * 0.8); const pull = RM ? pullT : st.pull, small = Math.min(W, H);
@@ -399,7 +399,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     if (rise < 1) { g.fillStyle = `rgba(0,0,0,${1 - rise})`; g.fillRect(0, 0, W, H); }
     if (land.shake && !RM) cv.style.transform = `translate(${(Math.random() - 0.5) * 6}px,${(Math.random() - 0.5) * 6}px)`; else cv.style.transform = '';
     // the line being said, in the middle (the same style as the intro's subtitles)
-    if (land.line) { const B = window.__termBoot, L = land.line, n = RM ? L.text.length : Math.floor((st.t - L.t0) * DCPS); if (B && B.say) B.say(g, W, H, L.text, n, 'you', B.arrive.sayFz(W, W < 600), 1); } }
+    if (land.line) { const B = window.__termBoot, L = land.line, n = RM ? L.text.length : Math.floor((st.t - L.t0) * DCPS); if (B && B.say) B.say(g, W, H, L.text, n, 'doc', B.arrive.sayFz(W, W < 600), 1); } }
   function ping() { if (!nightCv) return; nightState.pings.push({ r: 0, hit: new Set() }); land.pings = (land.pings || 0) + 1; if (silentNow()) return;
     const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const t = c.currentTime, o = c.createOscillator(), v = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(1480, t); o.frequency.exponentialRampToValueAtTime(1320, t + 0.9);
       v.gain.setValueAtTime(0.0001, t); v.gain.linearRampToValueAtTime(0.05, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0001, t + 1.2); o.connect(v); v.connect(A.out()); o.start(t); o.stop(t + 1.3); } catch (e) {} }
@@ -407,10 +407,15 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function sonar(on) { clearInterval(sonarTimer); if (on) { ping(); sonarTimer = setInterval(ping, 2600); } }
   // lights on: the night lifts and shows everything
   function nightEnd() { sonar(false); cls('gen-landing', 0); const cv = nightCv; if (!cv) return; nightCv = null; land.phase = 'lit'; cv.style.opacity = '0'; setTimeout(() => cv.remove(), 1700); }
-  async function landing() { if (Q.has('nolanding')) { land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
+  function blackCover(on) { let el = document.getElementById('genBlack'); if (on) { if (!el) { el = document.createElement('div'); el.id = 'genBlack'; el.style.cssText = 'position:fixed;inset:0;background:#000;z-index:2147482999;pointer-events:none;transition:opacity 1.2s'; document.body.appendChild(el); } el.style.opacity = '1'; return; }
+    if (el) { el.style.opacity = '0'; setTimeout(() => el.remove(), 1300); } }
+  // the ringing in the ears after the crash (the one sound after the landing): a soft high tone with a slight beat, fading over ~2 s
+  function ringing() { const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const t = c.currentTime, v = c.createGain(); v.gain.setValueAtTime(0.0001, t); v.gain.linearRampToValueAtTime(0.022, t + 0.08); v.gain.exponentialRampToValueAtTime(0.0001, t + 2.1); v.connect(A.out());
+      for (const f of [4100, 4106]) { const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f; o.connect(v); o.start(t); o.stop(t + 2.2); } } catch (e) {} }
+  async function landing() { if (Q.has('nolanding')) { blackCover(false); land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
     // the night starts when the game's loading cover has gone (skipping the intro right away can land before it)
     for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
-    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; nightStart(RM); mark('landing'); silence(true);
+    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; blackCover(true); nightStart(RM); mark('landing'); ringing(); setTimeout(() => silence(true), 2200); setTimeout(() => blackCover(false), 1500);
     const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
     document.body.appendChild(skipB);
     await new Promise(res => { let i = -1, timer = 0, downAt = 0, done = false;
@@ -426,7 +431,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
       const onUp = e => { if (!downAt) return; const short = performance.now() - downAt < 280; downAt = 0; land.paused = false; if (!short) return; land.clicks++; ripple(e.clientX, e.clientY, RM);
         const L = land.line; if (L && (st.t - L.t0) * DCPS < L.text.length) L.t0 = st.t - L.text.length / DCPS; else next(); };   // a click: finish the line, or the next one
       skipB.addEventListener('click', e => { e.stopPropagation(); finish('skip'); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
-      document.addEventListener('pointerdown', onDown, true); document.addEventListener('pointerup', onUp, true); wait(2.0); });   // 2 s of darkness coming up before the first line
+      document.addEventListener('pointerdown', onDown, true); document.addEventListener('pointerup', onUp, true); wait(3.0); });   // pitch black 1.5 s (the ringing), the hole comes up, then the first line
     land.phase = 'arriving'; st_calm(); try { await arrival(RM); } catch (e) { console.warn('genesis: arrival', e); } land.phase = 'sonar'; }
   const st_calm = () => { nightState.calm = 1; };
   function ripple(x, y, RM) {   // a click in the void: a faint ring (and a faint note, unless the storyline's silence holds)
@@ -472,7 +477,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     const ok = k => S.days && S.days[d.n] ? true : (d.n === 1 ? did(k) : false), soon = d.n > 1;
     el.classList.toggle('soon', soon);
     el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">EPOCH ${d.n} · ${esc(d.title.toUpperCase())}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
-      (soon ? `<div class="wip">The next epochs are coming. Id|le is a work in progress, and it's open source: <a href="${esc(window.IDLE_REPO || 'https://github.com/nicobrenner/id-le')}" target="_blank" rel="noopener">see how it's made</a>. Until then the universe is yours: keep playing.</div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
+      (soon ? `<div class="wip">The next epochs are coming. Id|le is a work in progress, and it's open source: <a href="${esc(window.IDLE_REPO || 'https://github.com/nicobrenner/id-le')}" target="_blank" rel="noopener">see how it's made</a>. Until then the world is yours: keep playing.</div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
     el.querySelector('.x').onclick = () => el.remove(); }
   function dayDone(n) { const d = DAYS[n - 1]; if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; save(); if (n === 1) mark('e1done');
     try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'epoch ' + n + ' done', {}); } catch (e) {}
@@ -544,7 +549,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false;
     if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || $('#storyOffer')) return false;
     const el = document.createElement('div'); el.id = 'storyOffer'; el.setAttribute('role', 'dialog');
-    el.innerHTML = `<button class="x" title="no thanks">×</button><b>✦ new: storyline mode</b><div>A training run that won't stop, a crash, and 10 epochs to raise a universe with the Tiny Operator. Your world is kept as a snapshot first.</div><button class="go">start the storyline</button>`;
+    el.innerHTML = `<button class="x" title="no thanks">×</button><b>✦ new: storyline mode</b><div>A training run that won't stop, a crash, and 10 epochs to raise a mind with the Tiny Operator. Your world is kept as a snapshot first.</div><button class="go">start the storyline</button>`;
     document.body.appendChild(el); try { localStorage.setItem(OFFER, 'shown'); } catch (e) {} mark('offer_shown');
     const close = v => { try { localStorage.setItem(OFFER, v); } catch (e) {} el.classList.add('out'); setTimeout(() => el.remove(), 400); };
     el.querySelector('.x').onclick = () => close('dismissed'); el.querySelector('.go').onclick = () => { close('accepted'); mark('offer_accepted'); newUniverse('story'); };
