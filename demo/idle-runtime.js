@@ -86,6 +86,8 @@ window.__funnel = (() => { const K = 'idle.funnel'; let m = {}; try { m = JSON.p
 
   async function local(path, init) {   // static mode: answer a /lab or /worlds or /jeffy call here
     const method = ((init && init.method) || 'GET').toUpperCase(), body = init && init.body ? (() => { try { return JSON.parse(init.body); } catch (e) { return {}; } })() : {};
+    // a personal gift link (idle-founder.js): the site's own service; with no helper configured, the page's own origin answers (or doesn't)
+    if (/^\/lab\/gift\/[a-z2-7]{20,40}(\/claim)?$/.test(path)) return realFetch((CFG.helper ? CFG.helper.replace(/\/$/, '') : '') + path, init);
     if (OWN_PATHS.test(path)) return CFG.helper ? realFetch(CFG.helper.replace(/\/$/, '') + path, init) : json({ ok: false, error: 'telling the scientists needs the id-le.com helper: on a copy of your own, open an issue on GitHub instead' }, 503);
     if (CFG.helper && HELPER_PATHS.some(p => path.startsWith(p))) {
       if (!helperOn()) return path.startsWith('/worlds/state') ? json({ me: { name: '', links: [], requests: [], inbox: [] }, peers: {}, offline: HELPER_OFF }) : json({ ok: false, error: HELPER_OFF });

@@ -129,6 +129,19 @@ SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "b
             "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 1: words", "e1life": "Epoch 1: life", "e1done": "Epoch 1 done"}
 
 
+# the Founder gift (idle-founder.js), from the same once-per-browser moments ('fd_…'), summed over the storyline's arms
+FD_STEPS = [("world", "eligible: early world"), ("link", "eligible: gift link"), ("offer", "offer shown"), ("letter", "letter shown"), ("creator", "creator opened"),
+            ("exp1", "ran 1+ experiments"), ("exp5", "ran 5+"), ("exp20", "ran 20+"), ("released", "released")]
+
+
+def fd_total(sfs):
+    t = {}
+    for o in sfs.values():
+        for k, n in o.get("fd", {}).items():
+            t[k] = t.get(k, 0) + n
+    return t
+
+
 def sf_split(sf):
     """{'story|title': n, 'story|skip:chat': n, 'none|offer_shown': n, ...} → {arm: {'steps': {...}, 'skips': {...}, 'offer': {...}}}"""
     out = {}
@@ -139,6 +152,8 @@ def sf_split(sf):
         o = out.setdefault(arm, {"steps": {}, "skips": {}, "offer": {}})
         if step.startswith("skip:"):
             o["skips"][step[5:]] = o["skips"].get(step[5:], 0) + n
+        elif step.startswith("fd_"):
+            o.setdefault("fd", {})[step[3:]] = o.setdefault("fd", {}).get(step[3:], 0) + n
         elif step.startswith("offer_"):
             o["offer"][step[6:]] = o["offer"].get(step[6:], 0) + n
         else:
@@ -355,6 +370,10 @@ def main():
                 print(f"           skipped at: " + ", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in sorted(o["skips"].items(), key=lambda kv: -kv[1])))
             if o["offer"]:
                 print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
+        fd = fd_total(sfs)
+        if fd:
+            print("\nFounder gift (browsers, once each): " + ", ".join(f"{lab} {fd.get(k, 0)}" for k, lab in FD_STEPS)
+                  + " · badges: " + (", ".join(f"{k[6:]} {n}" for k, n in sorted(fd.items(), key=lambda kv: -kv[1]) if k.startswith("badge_")) or "-"))
     gvs = gv_split(tot.get("gv"))
     if gvs:
         print("\nA/B arms (idle-genesis.js, only while the switch is on; time on screen = still there after 1 / 5 min):")
@@ -471,6 +490,10 @@ def dashboard(days, since, traffic, note):
         + (f'<p class="muted">skipped at: {e(", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in o["skips"].items()))}</p>' if o["skips"] else "")
         + (f'<p class="muted">storyline offer: shown {o["offer"].get("shown", 0)}, accepted {o["offer"].get("accepted", 0)}</p>' if o["offer"] else "")
         for arm, o in sorted(_sf.items())) + "</section>") if _sf else ""
+    _fd = fd_total(_sf)
+    if _fd:
+        sf_html += ("<section><h2>Founder gift</h2><p class=\"muted\">Browsers reaching each moment (once per browser).</p>" + bars([(lab, _fd.get(k, 0)) for k, lab in FD_STEPS], total=max(_fd.get("world", 0) + _fd.get("link", 0), 1))
+                    + f'<p class="muted">badges chosen: {e(", ".join(f"{k[6:]} {n}" for k, n in _fd.items() if k.startswith("badge_")) or "-")}</p></section>')
     _gv = gv_split(tot.get("gv"))
     gv_html = ("<section><h2>A/B arms: time on screen by arm</h2>" + "".join(
         f'<p class="muted">{e(v)}: {o["visits"]} visits</p>' + bars([(x, o["dw"].get(x, 0)) for x in DWELL], total=sum(o["dw"].values()) or None)
