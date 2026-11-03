@@ -433,6 +433,6 @@ ${reduced() ? '<div class="sub">reduced motion is on: no strobe, spotlights hold
       if (st.bg) { S.bg = Object.assign(BG0(), st.bg, { on: S.bg.on }); S.bg.voices = Object.assign(BG0().voices, S.bg.voices); }
       if (st.queue && !S.queue.length) S.queue = st.queue.filter(id => S.sets.some(s => s.t === id)); if (st.qo) S.qo = Object.assign(S.qo, st.qo); save(); render(); },
     bgTrack: () => trackOf(S.bg, world()), bgSet: o => { Object.assign(S.bg, o); bgRestart(); render(); }, loadSet, bgFromTrack, qPlay, qNext, styles: Object.keys(STYLES), _q: () => deck.q, _out: () => deck.out,
-    setBg, play, drop, features, source, setSource, setBase, baseOn: () => !!(deck.playing && S.deck.base), rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); reDuck(); render(); }, _ducks: () => [...ducks], _gains: () => ctx && { bg: +bgBus.gain.value.toFixed(3), deck: +deckBus.gain.value.toFixed(3) }, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _sfx: { owl, knock, boo }, _ctx: () => ctx, _deck: deck, _bg: bg };
+    setBg, play, drop, features, source, setSource, setBase, baseOn: () => !!(deck.playing && S.deck.base), rave: () => !!S.rave, setRave: on => { S.rave = !!on; save(); reDuck(); render(); }, _ducks: () => [...ducks], _gains: () => ctx && { bg: +bgBus.gain.value.toFixed(3), deck: +deckBus.gain.value.toFixed(3) }, _bgWant: () => S.bg.on && !deck.playing ? +bgVol().toFixed(3) : 0, PRESETS: Object.keys(PRESETS), SCALES: Object.keys(SCALES), _sfx: { owl, knock, boo }, _ctx: () => ctx, _deck: deck, _bg: bg };
   render();
 })();
