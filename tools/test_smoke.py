@@ -138,7 +138,7 @@ out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visit
 // /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
 { out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
 // the storyline funnel (11-02): known moments only, counted by arm; the arm's visits and dwell under gv
-{ await post('/lab/p', { v: 1, visit: 1, gv: 'story', sf: ['title', 'messages', 'skip:chat', 'evil<script>', 'title'], dw: '1-5' }); await post('/lab/p', { v: 1, sf: ['offer_shown', 'offer_accepted'] });
+{ await post('/lab/p', { v: 1, visit: 1, gv: 'story', sf: ['title', 'messages', 'skip:chat', 'evil<script>', 'title'], dw: '1-5' }); await post('/lab/p', { v: 1, sf: ['offer_shown', 'offer_accepted', 'fd_link', 'fd_badge_pipe', 'fd_badge_evil'] });
   const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.sf = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.sf || {})) a[k] = (a[k] || 0) + n; return a; }, {});
   out.gv_story = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.gv || {})) a[k] = (a[k] || 0) + n; return a; }, {}); }
 // jeffy proxy: an allowlist of two paths; nothing else is relayed (no network needed for these answers)
@@ -182,6 +182,14 @@ out.rate_61st = last;
   const v3 = await (await post('/lab/vote', { id: 'mods' }, '8.8.8.8')).json(); out.vote_unknown = (await post('/lab/vote', { id: 'nope' }, '7.7.7.7')).status;
   const road = await (await go('/lab/roadmap')).json(); out.votes = { v1: v1.votes, v2: v2.already === true, v3: v3.votes, road_items: road.items.length, road_votes: road.votes.mods };
   out.fb_ip_stored = [...env.STATS.m.entries()].some(([k, v]) => (k + v).includes('5.5.5.5') || (k + v).includes('7.7.7.7')); }
+// personal gift links (11-02): the letter by id, never the label; one write to claim; then 'already'; revoked and unknown ids: 404
+{ const id = 'abcdefghijklmnopqrstuvwx'; env.STATS.m.set('gift:' + id, JSON.stringify({ letter: 'Hi Sam!', created: 1, label: 'Sam (private)', exp: Date.now() + 86400e3 }));
+  env.STATS.m.set('gift:revokedrevokedrevokedr', JSON.stringify({ letter: 'x', revoked: 1 }));
+  const g1 = await (await go('/lab/gift/' + id)).json(), w0 = env.STATS.puts.length;
+  const c1 = await (await post('/lab/gift/' + id + '/claim', {})).json(), w1 = env.STATS.puts.length, c2 = await (await post('/lab/gift/' + id + '/claim', {})).json();
+  const g2 = await (await go('/lab/gift/' + id)).json();
+  out.gift = { letter: g1.letter, label: JSON.stringify(g1).includes('private'), claimed0: g1.claimed, c1: c1.ok, writes: w1 - w0, c2: c2.already, claimed1: g2.claimed,
+    unknown: (await go('/lab/gift/zzzzzzzzzzzzzzzzzzzzzzzz')).status, revoked: (await go('/lab/gift/revokedrevokedrevokedr')).status, bad: (await go('/lab/gift/AB')).status }; }
 console.log(JSON.stringify(out));
 """
 
@@ -245,7 +253,7 @@ def worker_unit():
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
-    need(o.get("sf") == {"story|title": 1, "story|messages": 1, "story|skip:chat": 1, "none|offer_shown": 1, "none|offer_accepted": 1}, f"storyline funnel: {o.get('sf')}")
+    need(o.get("sf") == {"story|title": 1, "story|messages": 1, "story|skip:chat": 1, "none|offer_shown": 1, "none|offer_accepted": 1, "none|fd_link": 1, "none|fd_badge_pipe": 1}, f"storyline funnel: {o.get('sf')}")
     need(o.get("gv_story", {}).get("story|visit") == 1 and o.get("gv_story", {}).get("story|dw:1-5") == 1, f"the story arm's visits and dwell: {o.get('gv_story')}")
     ev = re.search(r"STAT_EVERY = (\d+)", open(os.path.join(ROOT, "helper", "worker.js")).read())
     need(ev and int(ev.group(1)) <= 25000, f"STAT_EVERY {ev and ev.group(1)} ms: must stay under the ~30 s a Worker's waitUntil may run after the response")
@@ -292,7 +300,9 @@ def worker_unit():
          f"Operator signals {x.get('op')} (only fixed keys and small positive integers)")
     egx = {k: v for k, v in o["eg"].items() if v and (k.startswith("reels") or k.startswith("errs"))}
     need(egx == {"reels:1-5": 1, "errs:1": 1}, f"v2 buckets {egx}")
-    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits"
+    gf = o["gift"]
+    need(gf == {"letter": "Hi Sam!", "label": False, "claimed0": False, "c1": True, "writes": 1, "c2": True, "claimed1": True, "unknown": 404, "revoked": 404, "bad": 404}, f"gift links: {gf}")
+    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links"
 
 
 def local_server_unit():   # server.py, the local server anyone who clones the repo runs: no network (a stub site and a stub Jeffy on localhost)
@@ -421,6 +431,7 @@ class Page:
         self.warns, self.notes, self.before_reload = [], [], []
         self.stats = stats_sink if stats_sink is not None else []
         self.fb = []
+        self.gifts = {}
         ctx.route("**/*", self._route)
 
     def _route(self, route):
@@ -434,6 +445,13 @@ class Page:
             if path.startswith("/worlds/state"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"me": {"name": "", "links": [], "requests": [], "inbox": []}, "peers": {}}))
             if path == "/lab/fetch": return route.fulfill(status=200, content_type="application/json", body=json.dumps(WIKI_PAGE))
             if path == "/lab/img": return route.fulfill(status=200, content_type="image/png", body=base64.b64decode(PNG))
+            if path.startswith("/lab/gift/"):
+                gid, claim = path[len("/lab/gift/"):].split("/")[0], path.endswith("/claim"); g = self.gifts.get(gid)
+                if not g: return route.fulfill(status=404, content_type="application/json", body='{"error":"no such gift"}')
+                if claim:
+                    was = g["claimed"]; g["claimed"] = True; g["claims"] = g.get("claims", 0) + 1
+                    return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": False, "already": True} if was else {"ok": True}))
+                return route.fulfill(status=200, content_type="application/json", body=json.dumps({"letter": g["letter"], "claimed": g["claimed"]}))
             if path == "/lab/oracle": self.fb.append(("oracle", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"id":"t1"}')
             if path == "/lab/vote": self.fb.append(("vote", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"votes":4}')
             if path == "/lab/roadmap": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"items": [{"id": "mods", "title": "Mods", "line": "share rules and looks", "status": "planned"}, {"id": "bodies", "title": "New bodies", "line": "", "status": "later"}], "votes": {"mods": 3}, "url": "https://github.com/nicobrenner/id-le/issues/20"}))
@@ -1477,6 +1495,146 @@ def t_never_stuck(P):
     return f"closed everything in the guided start (menus hidden: {w['calm']}, Operator button visible: {w['toggle']}) → the creature on top → tap → Operator open, menus back"
 
 
+# the Founder gift (idle-founder.js): an early world or a gift link → Nico's letter → the creature creator → one Founder per browser
+FD_AUTOSAVED = "() => { try { return !!JSON.parse(localStorage.getItem('arena.autosave') || 'null'); } catch (e) { return false; } }"
+FD_IN_SAVE = "() => { try { const a = JSON.parse(localStorage.getItem('arena.autosave') || 'null'); return !!(a && (a.residents || []).some(r => r.genome && r.genome.founder)); } catch (e) { return false; } }"
+FD_ONE = "() => { const c = window.__arena.raw().find(x => x.g && x.g.founder); return c ? { name: c.name, badge: c.g.founder.badge, exps: c.g.founder.exps, via: c.g.founder.via, tree: (c.g.founder.lineage || []).length } : null; }"
+def fd_creator_run(pg, P, name, badge):
+    """in the open creator: experiments, a pick, a wild one, undo, another pick, a bad name, a good one, a badge, release"""
+    pg.evaluate("() => window.__founder.test.experiment()"); pg.click('#founderLab .vars button[data-v="2"]')
+    pg.evaluate("() => window.__founder.test.experiment(0.42)"); pg.click('#founderLab .vars button[data-v="0"]')
+    s1 = pg.evaluate("() => window.__founder.test.state()")
+    pg.click('#founderLab [data-f="undo"]'); s2 = pg.evaluate("() => window.__founder.test.state()")
+    need(s1["hist"] == 2 and s2["hist"] == 1 and s2["gens"] == 2 and pg.evaluate("() => document.querySelectorAll('#founderLab .vars button').length") == 8, f"undo should take back the last pick and offer its 8 again: {s1['hist']}→{s2['hist']}, gens {s2['gens']}")
+    pg.click('#founderLab .vars button[data-v="5"]'); pg.evaluate("() => window.__founder.test.experiment()"); pg.click('#founderLab .vars button[data-v="1"]')
+    trees = pg.evaluate("() => document.querySelectorAll('#founderLab .tree .gen').length")
+    bad = pg.evaluate("() => window.__founder.test.name('Fuckles')"); need(bool(bad), "a blocked name must be refused")
+    pg.fill('#founderLab .name input', name); pg.click(f'#founderLab .badges [data-b="{badge}"]')
+    st = pg.evaluate("() => window.__founder.test.state()")
+    pg.click('#founderLab [data-f="release"]'); pg.wait_for_timeout(900)
+    return st, trees
+
+def t_founder(P):
+    """Founder by an early world: a world, then (a launch date in the past) no offer; with the real dates the offer, Nico's letter, the
+    creator (experiments, undo, the family tree, a name, a badge), release; a snapshot first, nothing lost, the badge on the card, a
+    Founder can't be removed, it survives a reload and goes into snapshots, and a gift link later doesn't give a second one."""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 30)
+    wait_for(pg, FD_AUTOSAVED, 40, P=P); pg.close()
+    pg = P.open("/arena.html?founder&founder_before=2020-01-01&test"); booted(pg); pg.wait_for_timeout(3500)
+    no = pg.evaluate("() => ({ offer: !!document.querySelector('#founderOffer'), e: window.__founder.eligible(), avail: window.__founder.available() })")
+    need(not no["offer"] and not no["e"]["world"] and not no["avail"], f"a world newer than the launch is not a Founder: {no}"); pg.close()
+    pg = P.open("/arena.html?founder&test"); booted(pg)
+    wait_for(pg, "() => !!document.querySelector('#founderOffer')", 20, P=P)
+    before = pg.evaluate("() => ({ names: window.__arena.raw().map(c => c.name), snaps: JSON.parse(localStorage.getItem('arena.snaps') || '[]').length })")
+    pg.click("#founderOffer .go"); wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 5, P=P)
+    lt = pg.evaluate("() => ({ text: document.querySelector('#founderLetter .paper').innerText, draft: !!document.querySelector('#founderLetter .draft') })")
+    need("— Nico" in lt["text"] and "before the story began" in lt["text"] and lt["draft"], f"the letter: {lt}")
+    pg.click("#founderLetter .open"); wait_for(pg, "() => !!document.querySelector('#founderLab canvas.prev')", 5, P=P)
+    st, trees = fd_creator_run(pg, P, "Nibbet Prime", "seed")
+    need(trees >= 3, f"the family tree should show each generation: {trees}")
+    one = pg.evaluate(FD_ONE)
+    after = pg.evaluate("() => ({ names: window.__arena.raw().map(c => c.name), snaps: JSON.parse(localStorage.getItem('arena.snaps') || '[]'), card: (document.querySelector('#whisper .fbadge') || {}).textContent || '', shown: document.querySelector('#whisper').style.display, f: window.__funnel.reached(), lab: !!document.querySelector('#founderLab') })")
+    need(one and one["name"] == "Nibbet Prime" and one["badge"] == "seed" and one["via"] == "world" and one["exps"] == 3 and one["tree"] >= 3, f"the Founder in the world: {one}")
+    need(set(before["names"]) <= set(after["names"]) and len(after["names"]) == len(before["names"]) + 1, f"nothing lost, one more: {len(before['names'])} → {len(after['names'])}")
+    need(len(after["snaps"]) == min(15, before["snaps"] + 1) and after["snaps"][-1]["name"].startswith("before the Founder"), f"a snapshot first: {before['snaps']} → {[s['name'] for s in after['snaps']][-2:]}")
+    need("FOUNDER" in after["card"] and after["shown"] == "block" and not after["lab"], f"its card opens with the Founder mark: {after['card']!r}, {after['shown']}")
+    need(all(k in after["f"] for k in ["fd_world", "fd_offer", "fd_letter", "fd_creator", "fd_exp1", "fd_released", "fd_badge_seed"]), f"the funnel: {after['f']}")
+    pg.evaluate("() => { const c = window.__arena.raw().find(x => x.g.founder), b = document.createElement('button'); b.dataset.a = 'recall'; b.dataset.k = c.key; document.querySelector('#evo').appendChild(b); b.click(); b.remove(); }")
+    need(pg.evaluate(FD_ONE) is not None, "a Founder must not be removable from the evolution panel")
+    side = pg.evaluate("() => { window.__herd.toggle(true); const g = [...document.querySelectorAll('#herd h5.grp')].map(h => h.textContent.trim()); window.__herd.toggle(false); return g; }")
+    need(side and "★ Founders" in side[0], f"the Founder is listed first in the creatures sidebar: {side[:3]}")
+    pg.evaluate("() => window.__genHooks.snapshot('founder test')")
+    need(pg.evaluate("() => { const s = JSON.parse(localStorage.getItem('arena.snaps') || '[]').pop(); return (s.residents || []).some(r => r.genome && r.genome.founder && r.name === 'Nibbet Prime'); }"), "a new snapshot should carry the Founder")
+    wait_for(pg, FD_IN_SAVE, 30, P=P); pg.close()
+    pg = P.open("/arena.html?gift=founder&test"); booted(pg); pg.wait_for_timeout(3500)
+    again = pg.evaluate(FD_ONE); dup = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), lab: !!document.querySelector('#founderLab'), avail: window.__founder.available(), n: window.__arena.raw().filter(c => c.g.founder).length, toast: document.body.innerText.includes('You already have your Founder') })")
+    need(again and again["name"] == "Nibbet Prime" and again["badge"] == "seed", f"the Founder survives a reload: {again}")
+    need(not dup["letter"] and not dup["lab"] and not dup["avail"] and dup["n"] == 1 and dup["toast"], f"one Founder per browser, even with a gift link: {dup}")
+    P.clean()
+    return f"no offer for a later world; offer → letter (draft, signed) → 3 experiments, undo, {trees} generations → 'Nibbet Prime' with the seed badge; snapshot first, +1 creature, card mark, can't be removed, first in the sidebar, kept through a reload and in snapshots; a second gift link: refused"
+
+def t_founder_link(P):
+    """Founder by a gift link (a brand-new browser): the letter right away; an expired link shows a note and no letter"""
+    pg = P.open("/arena.html?gift=founder&founder_now=2027-06-01&test")
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => document.body.innerText.includes('has expired')", 40, P=P)
+    ex = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), note: document.body.innerText.includes('has expired'), e: window.__founder.eligible() })")
+    need(not ex["letter"] and ex["note"] and ex["e"]["expired"], f"an expired link: {ex}"); pg.close()
+    pg = P.open("/arena.html?gift=founder&test"); booted(pg)
+    wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
+    need(pg.evaluate("() => window.__funnel.reached().includes('fd_link') && window.__founder.eligible().link"), "the link should be counted")
+    P.clean()
+    return "expired link: a note, no letter; a valid link: the letter right away"
+
+def t_founder_personal(P):
+    """a personal gift link: Nico's own letter (not the general draft), opened once (one claim), read again in the same browser, then the
+    creator; in another browser the same link says it was already opened; an unknown link says it isn't valid"""
+    gid = "abcdefghijklmnopqrstuvwx"; P.gifts[gid] = {"letter": "Hi Sam!\n\nThanks for the bug report on Halloween night.\nThis one is for you.", "claimed": False}
+    pg = P.open(f"/arena.html?gift={gid}&test"); booted(pg)
+    wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
+    lt = pg.evaluate("() => ({ text: document.querySelector('#founderLetter .paper').innerText, draft: !!document.querySelector('#founderLetter .draft'), personal: document.querySelector('#founderLetter').dataset.personal, f: window.__funnel.reached() })")
+    need("Hi Sam!" in lt["text"] and "Halloween night" in lt["text"] and "— Nico" in lt["text"] and not lt["draft"] and lt["personal"] == "1", f"the personal letter: {lt}")
+    need("fd_personal" in lt["f"] and P.gifts[gid]["claims"] == 1, f"opened once: claims {P.gifts[gid].get('claims')}, funnel {lt['f']}")
+    pg.click("#founderLetter .later"); pg.close()
+    pg = P.open(f"/arena.html?gift={gid}&test"); booted(pg)
+    wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
+    need("Hi Sam!" in pg.evaluate("() => document.querySelector('#founderLetter .paper').innerText") and P.gifts[gid]["claims"] == 1, "the same browser reads it again, with no second claim")
+    pg.click("#founderLetter .open"); wait_for(pg, "() => !!document.querySelector('#founderLab canvas.prev')", 5, P=P)
+    pg.fill('#founderLab .name input', "Sam's Spark"); pg.click('#founderLab .badges [data-b="spark"]'); pg.click('#founderLab [data-f="release"]'); pg.wait_for_timeout(800)
+    one = pg.evaluate(FD_ONE); need(one and one["name"] == "Sam's Spark" and one["via"] == "link", f"released: {one}")
+    P.clean(); pg.close()
+    ctx2 = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); P2 = Page(ctx2, P.base); P2.gifts = P.gifts
+    try:
+        pg2 = P2.open(f"/arena.html?gift={gid}&test")
+        wait_for(pg2, "() => document.body.innerText.includes('already opened')", 40, P=P2)
+        need(not pg2.evaluate("() => !!document.querySelector('#founderLetter')"), "another browser must not see the letter")
+        pg2.close(); pg3 = P2.open("/arena.html?gift=zzzzzzzzzzzzzzzzzzzzzzzz&test")
+        wait_for(pg3, "() => document.body.innerText.includes(\"isn't valid\")", 40, P=P2)
+        P2.clean()
+    finally:
+        ctx2.close()
+    return "Nico's letter (no draft mark), one claim, read again in the same browser → creator → 'Sam's Spark'; another browser: 'already opened'; an unknown id: 'isn't valid'"
+
+def gift_tool_unit():
+    """tools/gift.py against a stand-in for the KV namespace: a link with ≥ 96 random bits, the letter and a private label stored with a
+    180-day expiry, list without letters, revoke"""
+    sys.path.insert(0, os.path.join(ROOT, "tools")); import gift
+    class FakeKV:
+        def __init__(self): self.m, self.exp = {}, {}
+        def put(self, k, v, expiration=None): self.m[k] = v; self.exp[k] = expiration
+        def get(self, k): return self.m.get(k)
+        def keys(self, prefix): return [{"name": k} for k in self.m if k.startswith(prefix)]
+    kv = FakeKV(); t0 = 1_800_000_000
+    gid, url = gift.create(kv, "Hi Sam!\n\nThank you.", "Sam from r/chile", staging=False, now=t0)
+    rec = json.loads(kv.m["gift:" + gid])
+    need(re.fullmatch(r"[a-z2-7]{24}", gid) and url == "https://id-le.com/?gift=" + gid, f"id/link: {gid} {url}")
+    need(rec["letter"].startswith("Hi Sam!") and rec["label"] == "Sam from r/chile" and abs(kv.exp["gift:" + gid] - (t0 + 180 * 86400)) < 2, f"stored: {rec}, exp {kv.exp['gift:' + gid]}")
+    gid2, url2 = gift.create(kv, "Another", "", staging=True, now=t0 + 5)
+    need(url2.startswith("https://staging.id-le.com/?gift=") and gid2 != gid, "staging link / distinct ids")
+    gs = gift.gifts(kv); need([g["id"] for g in gs] == [gid2, gid], f"newest first: {[g['id'] for g in gs]}")
+    gift.revoke(kv, gid); need(json.loads(kv.m["gift:" + gid]).get("revoked"), "revoked")
+    try:
+        gift.create(kv, " ", "x"); raise AssertionError("an empty letter was accepted")
+    except SystemExit:
+        pass
+    return f"link {url[:32]}…, 120-bit id, 180-day expiry, list newest first, revoke"
+
+
+def t_founder_phone(P):
+    """the creator on a 390×844 phone: no sideways scroll, the release button on screen, the whole flow works"""
+    pg = P.open("/arena.html?gift=founder&test"); pg.set_viewport_size({"width": 390, "height": 844}); booted(pg)
+    wait_for(pg, "() => !!document.querySelector('#founderLetter .paper')", 20, P=P)
+    lw = pg.evaluate("() => { const r = document.querySelector('#founderLetter .paper').getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth }; }")
+    need(lw["l"] >= 0 and lw["r"] <= lw["w"] + 1, f"the letter fits: {lw}")
+    pg.click("#founderLetter .open"); wait_for(pg, "() => !!document.querySelector('#founderLab canvas.prev')", 5, P=P)
+    fit = pg.evaluate("() => { const L = document.querySelector('#founderLab'), g = document.querySelector('#founderLab .go').getBoundingClientRect(); return { sw: L.scrollWidth, cw: L.clientWidth, go: [g.top, g.bottom, g.left, g.right], w: innerWidth, h: innerHeight }; }")
+    need(fit["sw"] <= fit["cw"] + 1 and fit["go"][1] <= fit["h"] and fit["go"][0] >= 0 and fit["go"][3] <= fit["w"], f"the creator on a phone: {fit}")
+    st, _ = fd_creator_run(pg, P, "Pocket Founder", "pipe")
+    one = pg.evaluate(FD_ONE); need(one and one["name"] == "Pocket Founder" and one["badge"] == "pipe" and one["via"] == "link", f"released from a phone: {one}")
+    P.clean()
+    return f"letter and creator fit 390 px (creator {fit['sw']}≤{fit['cw']} px wide, release button on screen); released 'Pocket Founder' (pipe)"
+
+
 def t_title_card(P):
     """The story's first frame (release): ø Id|le OS, "press any key to start"; the film waits there; a key starts the desktop scene (and the
     sound); the funnel marks title → messages, and where it was skipped."""
@@ -1757,10 +1915,11 @@ def main():
     if want("js syntax"): check("js syntax", js_syntax)
     if want("conflict markers"): check("conflict markers", no_conflict_markers)
     if want("fontgen"): check("fontgen", fontgen_round)
+    if want("gift tool"): check("gift tool: personal gift links", gift_tool_unit)
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -1820,6 +1979,10 @@ def main():
                 run("story arms", t_story_arms)
                 run("story offer", t_story_offer)
                 run("never stuck", t_never_stuck)
+                run("founder", t_founder)
+                run("founder link", t_founder_link)
+                run("founder personal", t_founder_personal)
+                run("founder phone", t_founder_phone, is_mobile=True, has_touch=True)
                 run("story landing", t_story_landing)
                 run("story intro", t_story_intro)
                 run("boot intro", t_boot_intro)

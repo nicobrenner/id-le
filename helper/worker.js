@@ -156,7 +156,9 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted'];
+const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted',
+  // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
+  'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown'];
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
@@ -436,6 +438,22 @@ async function feedback(req, env, path, ip) {
   return json({ error: 'unknown path' }, 404);
 }
 
+// personal gift links (the Founder gift, idle-founder.js; created by Nico with tools/gift.py): gift:<id> in the feedback namespace holds
+// { letter, created, label, exp, claimed?, revoked? }. GET /lab/gift/<id> returns only the letter and whether it was opened (never the
+// label); POST /lab/gift/<id>/claim marks it opened (one write, the only one a reader ever causes). Ids are ≥ 96 random bits (base32).
+const GIFT_ID = /^[a-z2-7]{20,40}$/, giftMem = new Map();
+async function gift(req, env, path, ip) {
+  const m = path.match(/^\/lab\/gift\/([a-z2-7]+)(\/claim)?$/); if (!m || !GIFT_ID.test(m[1])) return json({ error: 'no such gift' }, 404);
+  const mk = ip + '|' + Math.floor(Date.now() / 60000), misses = giftMem.get(mk) || 0; if (misses >= 10) return json({ error: 'slow down' }, 429);
+  const kv = fbKV(env), key = 'gift:' + m[1]; let g = null; try { g = JSON.parse(await kv.get(key) || 'null'); } catch (e) {}
+  if (!g || g.revoked || typeof g.letter !== 'string') { giftMem.set(mk, misses + 1); if (giftMem.size > 5000) giftMem.clear(); return json({ error: 'no such gift' }, 404); }
+  if (!m[2]) { if (req.method !== 'GET') return json({ error: 'GET only' }, 405); return json({ letter: g.letter.slice(0, 4000), claimed: !!g.claimed, created: g.created || null }); }
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+  if (g.claimed) return json({ ok: false, already: true });
+  g.claimed = Date.now(); const ttl = g.exp ? Math.max(60, Math.floor(g.exp / 1000 - Date.now() / 1000)) : FB_TTL;
+  await kv.put(key, JSON.stringify(g), { expirationTtl: ttl }); return json({ ok: true });
+}
+
 export default {
   pages: PV_PAGES,
   // the Pages wrapper (tools/build_static.py) calls this for every HTML page it serves, once the response is ready
@@ -451,6 +469,7 @@ export default {
     const k = ip + '|' + min + (bg ? '|bg' : ''), n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (bg ? 240 : (+env.RATE_PER_MIN || 60))) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
     if (path === '/lab/oracle' || path === '/lab/roadmap' || path === '/lab/vote') return cors(env, req, await feedback(req, env, path, ip));
+    if (path.startsWith('/lab/gift/')) return cors(env, req, await gift(req, env, path, ip));
     if (path === '/lab/stats' || path === '/lab/p') return stats(req, env, ctx);   // /lab/p: the same reports under a plain name   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {
