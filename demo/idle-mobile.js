@@ -31,14 +31,14 @@
   #ntf{left:8px!important;right:8px;max-width:none!important;bottom:112px}
   body.msheet #ntf{visibility:hidden!important}
   #roomchat{left:0!important;right:0!important;width:auto!important;max-width:none!important}
-  #mSheet{position:fixed;left:0;right:0;bottom:0;z-index:10002;background:var(--floor,#fff);color:var(--ink,#222);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px #0006;padding:10px 12px calc(14px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .22s;font:13px system-ui}
+  #mSheet{position:fixed;left:0;right:0;bottom:0;z-index:10002;background:var(--floor,#fff);color:var(--ink,#222);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px #0006;padding:10px 12px calc(14px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .22s;font:13px var(--ui-font,system-ui)}
   #mSheet.on{transform:none}
   #mSheet .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}#mSheet .mh small{opacity:.65}
   #mSheet .mg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  #mSheet .mg button{min-height:64px;border:1px solid #8886;border-radius:12px;background:transparent;color:inherit;font:12px system-ui;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 4px}
+  #mSheet .mg button{min-height:64px;border:1px solid #8886;border-radius:12px;background:transparent;color:inherit;font:12px var(--ui-font,system-ui);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 4px}
   #mSheet .mg button b{font-size:20px;font-weight:400;line-height:1}
   #mSheet .mx{min-height:44px;min-width:44px;border:0;background:none;color:inherit;font-size:18px}
-  #mSheet .mnote{font:12px/1.4 system-ui;opacity:.75;margin:10px 2px 0}#mSheet .mnote a,#mSheet .mlink{color:inherit}#mSheet .mlink{border:0;background:none;padding:0;font:inherit;text-decoration:underline;min-height:0}
+  #mSheet .mnote{font:12px/1.4 var(--ui-font,system-ui);opacity:.75;margin:10px 2px 0}#mSheet .mnote a,#mSheet .mlink{color:inherit}#mSheet .mlink{border:0;background:none;padding:0;font:inherit;text-decoration:underline;min-height:0}
   .mgrab{display:block;width:40px;height:5px;border-radius:3px;background:#8888;margin:0 auto 8px}
 }`;
   document.head.appendChild(css);

@@ -95,7 +95,7 @@ html.gen-void #ai-thread>.ai-row.page{display:none}
 #genConsole{margin:8px 10px 4px;padding:10px 12px;border:1px solid #6b7cff66;border-radius:12px;background:linear-gradient(180deg,#0d1030,#0a0b16);color:#cfd6ff;font:12px ui-monospace,Menlo,monospace}
 #genConsole .gt{font-weight:700;letter-spacing:.06em;font-size:11px;opacity:.75;margin-bottom:6px}
 :root{--op-font:Georgia,serif}#genConsole .gl{font:17px/1.45 var(--op-font);color:#fff;margin:2px 0 8px}@media (max-width:600px){#genConsole .gl,#genConsole .gw p{font-size:16px}}#genConsole .gl b{color:#9fb0ff;font:600 11px ui-monospace,Menlo,monospace;margin-right:6px}
-#genConsole .gc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}#genConsole .gc button{font:12px system-ui;padding:5px 10px;border-radius:14px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;cursor:pointer}
+#genConsole .gc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}#genConsole .gc button{font:12px var(--ui-font,system-ui);padding:5px 10px;border-radius:14px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;cursor:pointer}
 #genConsole .gc button:hover{background:#2a3180}#genConsole .gc button[disabled]{opacity:.45;cursor:default}
 #genConsole .gc button.glow{border-color:#cfd6ff;box-shadow:0 0 0 0 #9fb0ffaa;animation:genGlow 1.8s ease-in-out infinite;font-weight:600}
 #genConsole .gc button.quiet{background:transparent;border-style:dashed;opacity:.8}
@@ -118,11 +118,11 @@ html.gen-void #ai-thread>.ai-row.page{display:none}
 #genBackdrop{position:fixed;inset:0;z-index:2147481990;background:#02030acc;backdrop-filter:blur(2px);transition:opacity 1.2s}#genBackdrop.out{opacity:0;pointer-events:none}
 html.gen-box #lab{position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:min(620px,94vw)!important;height:auto!important;max-height:84vh!important;z-index:2147482000!important;border-radius:16px!important;box-shadow:0 24px 90px #000e,0 0 0 1px #6b7cff55!important;overflow:auto!important}
 html.gen-box #lab :is(#ai-thread,#lab-thread,#ai-bar,#ai-set,#ai-smart-btn,#ai-smart){display:none!important}
-#genChoose{position:fixed;inset:0;z-index:2147483100;background:radial-gradient(90% 70% at 50% 40%,#0d1030,#020208);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px;color:#cfd6ff;font:14px system-ui;transition:opacity .6s}
+#genChoose{position:fixed;inset:0;z-index:2147483100;background:radial-gradient(90% 70% at 50% 40%,#0d1030,#020208);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px;color:#cfd6ff;font:14px var(--ui-font,system-ui);transition:opacity .6s}
 #genChoose.out{opacity:0;pointer-events:none}#genChoose h2{font:italic 26px Georgia,serif;color:#fff;margin:0;letter-spacing:.01em}#genChoose .sub{opacity:.7;margin:-8px 0 6px}
 #genChoose .opts{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;max-width:860px}
-#genChoose button{width:250px;text-align:left;padding:16px 18px;border-radius:14px;border:1px solid #8ea0ff55;background:#11143acc;color:#fff;cursor:pointer;font:13px/1.45 system-ui}
-#genChoose button:hover,#genChoose button:focus-visible{border-color:#cfd6ff;background:#1a1f55;outline:none}#genChoose button b{display:block;font:600 16px system-ui;margin-bottom:6px}
+#genChoose button{width:250px;text-align:left;padding:16px 18px;border-radius:14px;border:1px solid #8ea0ff55;background:#11143acc;color:#fff;cursor:pointer;font:13px/1.45 var(--ui-font,system-ui)}
+#genChoose button:hover,#genChoose button:focus-visible{border-color:#cfd6ff;background:#1a1f55;outline:none}#genChoose button b{display:block;font:600 16px var(--ui-font,system-ui);margin-bottom:6px}
 #genChoose button.rec{border-color:#cfd6ff;box-shadow:0 0 18px #9fb0ff55}#genChoose button small{opacity:.7}
 @media (max-width:600px){#genChoose button{width:100%}#genChoose .opts{flex-direction:column;width:100%}}
 #genDay{position:fixed;left:14px;top:14px;z-index:40;min-width:200px;max-width:min(300px,70vw);padding:10px 12px;border-radius:12px;background:#0a0b16e6;border:1px solid #6b7cff66;color:#cfd6ff;font:12px ui-monospace,Menlo,monospace;transition:opacity .8s}
@@ -132,7 +132,7 @@ html.gen-box #lab :is(#ai-thread,#lab-thread,#ai-bar,#ai-set,#ai-smart-btn,#ai-s
 #genFront{position:fixed;inset:0;z-index:2147482500;display:flex;align-items:center;justify-content:center;background:#02030aa8;padding:16px}
 #genFront .np{max-width:520px;background:#f4ecd8;color:#1c1712;border-radius:6px;padding:20px 24px;box-shadow:0 30px 90px #000c;font:15px/1.5 Georgia,serif;transform:rotate(-1.2deg)}
 #genFront .mh{font:900 26px/1 Georgia,serif;letter-spacing:.02em;text-align:center;border-bottom:3px double #1c1712;padding-bottom:8px}#genFront .md{font:11px ui-monospace,Menlo,monospace;text-align:center;margin:6px 0 12px;opacity:.7}
-#genFront h3{font:700 22px/1.2 Georgia,serif;margin:6px 0 8px}#genFront .to{margin-top:12px;font-style:italic;opacity:.8}#genFront button{margin-top:14px;font:13px system-ui;padding:6px 14px;border-radius:12px;border:1px solid #1c1712;background:#1c1712;color:#f4ecd8;cursor:pointer}
+#genFront h3{font:700 22px/1.2 Georgia,serif;margin:6px 0 8px}#genFront .to{margin-top:12px;font-style:italic;opacity:.8}#genFront button{margin-top:14px;font:13px var(--ui-font,system-ui);padding:6px 14px;border-radius:12px;border:1px solid #1c1712;background:#1c1712;color:#f4ecd8;cursor:pointer}
 #genCosmos{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;transition:opacity 4s}
 html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosmos #floor{background-color:transparent!important;background-image:none!important}
 @media (prefers-reduced-motion: reduce){#genConsole .gc button.glow{animation:none;box-shadow:0 0 10px 1px #9fb0ff88}#genDawn{animation-duration:.01s}#genConsole .gcur{animation:none}}`;
@@ -439,7 +439,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     // the night starts when the game's loading cover has gone (skipping the intro right away can land before it)
     for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; blackCover(true); nightStart(RM); mark('landing'); ringing(); setTimeout(() => silence(true), 2800); setTimeout(() => blackCover(false), 1500);
-    const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
+    const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
     document.body.appendChild(skipB);
     await new Promise(res => { let i = -1, timer = 0, downAt = 0, done = false;
       const st = nightState, next = () => { clearTimeout(timer); if (done) return; i++; if (i >= DARK.length) return finish('lines'); const text = DARK[i];
@@ -586,8 +586,8 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}@media (max-width:6
     const close = v => { try { localStorage.setItem(OFFER, v); } catch (e) {} el.classList.add('out'); setTimeout(() => el.remove(), 400); };
     el.querySelector('.x').onclick = () => close('dismissed'); el.querySelector('.go').onclick = () => { close('accepted'); mark('offer_accepted'); newUniverse('story'); };
     return true; }
-  { const css2 = document.createElement('style'); css2.textContent = `#storyOffer{position:fixed;left:14px;bottom:14px;z-index:60;max-width:min(330px,calc(100vw - 28px));padding:12px 14px 12px;border-radius:12px;background:#0a0b16f0;border:1px solid #6b7cff88;color:#cfd6ff;font:12.5px/1.45 system-ui;box-shadow:0 10px 40px #0008;transition:opacity .4s}
-#storyOffer b{display:block;margin-bottom:4px;color:#e9ecff}#storyOffer .go{margin-top:8px;font:600 12px system-ui;padding:5px 12px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff33;color:#e9ecff;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
+  { const css2 = document.createElement('style'); css2.textContent = `#storyOffer{position:fixed;left:14px;bottom:14px;z-index:60;max-width:min(330px,calc(100vw - 28px));padding:12px 14px 12px;border-radius:12px;background:#0a0b16f0;border:1px solid #6b7cff88;color:#cfd6ff;font:12.5px/1.45 var(--ui-font,system-ui);box-shadow:0 10px 40px #0008;transition:opacity .4s}
+#storyOffer b{display:block;margin-bottom:4px;color:#e9ecff}#storyOffer .go{margin-top:8px;font:600 12px var(--ui-font,system-ui);padding:5px 12px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff33;color:#e9ecff;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
 @media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px}}`; document.head.appendChild(css2); }
   // offered once the world is up and the player has looked around a little (20 s; ?offer: 1 s)
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }

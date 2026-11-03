@@ -15,7 +15,7 @@
   const helperOn = () => S.helper !== false, statsOn = () => S.stats !== false;
   const statsLive = () => pub() && !sandbox() && !local() && statsOn();   // the only case anything is sent
   const css = document.createElement('style'); css.textContent = `
-#settings{position:fixed;right:16px;top:56px;z-index:9996;display:none;width:min(380px,calc(100vw - 32px));max-height:76vh;overflow:auto;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:12px;padding:8px 10px 10px;box-shadow:0 8px 28px #0006;font:12px/1.45 system-ui;box-sizing:border-box}
+#settings{position:fixed;right:16px;top:56px;z-index:9996;display:none;width:min(380px,calc(100vw - 32px));max-height:76vh;overflow:auto;background:var(--floor);color:var(--ink);border:1px solid #8886;border-radius:12px;padding:8px 10px 10px;box-shadow:0 8px 28px #0006;font:12px/1.45 var(--ui-font,system-ui);box-sizing:border-box}
 #settings.on{display:block}#settings .hd{display:flex;justify-content:space-between;align-items:center;margin:-8px -10px 6px;padding:8px 10px 6px;position:sticky;top:-8px;z-index:2;background:var(--floor);border-bottom:1px solid #8883;cursor:grab;user-select:none;touch-action:none}#settings.drag .hd{cursor:grabbing}
 #settings .hd b{font-size:13px}#settings button{font:inherit;font-size:12px;padding:2px 9px;border-radius:8px;border:1px solid #8886;background:none;color:inherit;cursor:pointer}
 #settings .row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #8882}#settings .row .t{flex:1}#settings .row .t b{display:block;font-size:12.5px}#settings .row small{opacity:.7}

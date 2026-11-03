@@ -148,7 +148,7 @@ window.__funnel = (() => { const K = 'idle.funnel'; let m = {}; try { m = JSON.p
     try { localStorage.setItem('arena.autorestore', 'on'); } catch (e) {}
     if (window.__bootOk) window.__bootOk(); location.reload();
   }
-  const alertish = t => { const el = document.createElement('div'); el.textContent = t; el.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);background:#222;color:#fff;padding:6px 12px;border-radius:8px;z-index:99999;font:13px system-ui'; document.body.appendChild(el); setTimeout(() => el.remove(), 3500); };
+  const alertish = t => { const el = document.createElement('div'); el.textContent = t; el.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);background:#222;color:#fff;padding:6px 12px;border-radius:8px;z-index:99999;font:13px var(--ui-font,system-ui)'; document.body.appendChild(el); setTimeout(() => el.remove(), 3500); };
   // drafts: whatever is half-typed in a chat box (any textarea with an id, and the room chat line) survives a reload; it is put back once the box
   // appears and cleared once the box is empty again (sent). Text inputs are left alone: some of them hold API keys.
   (() => { const SEL = 'textarea[id], input#chat', K = id => 'idle.draft.' + id, seen = new WeakSet();

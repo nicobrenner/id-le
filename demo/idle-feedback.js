@@ -22,13 +22,13 @@
 
   const css = document.createElement('style');
   css.textContent = `#oracle{position:absolute;right:16px;top:56px;z-index:40;width:360px;max-width:calc(100% - 24px);max-height:calc(100% - 80px);overflow:auto;display:none;
-  background:var(--panel,#fffdf8f4);color:inherit;border:1px solid #8885;border-radius:12px;box-shadow:0 10px 32px #0005;font:13px system-ui;padding:10px 12px}
+  background:var(--panel,#fffdf8f4);color:inherit;border:1px solid #8885;border-radius:12px;box-shadow:0 10px 32px #0005;font:13px var(--ui-font,system-ui);padding:10px 12px}
 #oracle.on{display:block}#oracle .hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}#oracle .hd b{flex:1;font-size:13px}
 #oracle .tabs{display:flex;gap:4px;margin:2px 0 8px}#oracle .tabs button{font:inherit;font-size:12px;border:1px solid #8886;background:none;color:inherit;border-radius:12px;padding:3px 10px;cursor:pointer}
 #oracle .tabs button.on{background:#7a4cff;border-color:#7a4cff;color:#fff}#oracle button.x{border:0;background:none;color:inherit;cursor:pointer;font-size:14px}
 #oracle .kinds{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}#oracle .kinds button{font:inherit;font-size:12px;border:1px solid #8886;background:none;color:inherit;border-radius:12px;padding:3px 9px;cursor:pointer}
 #oracle .kinds button.on{border-color:#7a4cff;box-shadow:0 0 0 1px #7a4cff inset}
-#oracle textarea{width:100%;box-sizing:border-box;min-height:84px;font:13px system-ui;border:1px solid #8886;border-radius:8px;padding:6px 8px;background:transparent;color:inherit;resize:vertical}
+#oracle textarea{width:100%;box-sizing:border-box;min-height:84px;font:13px var(--ui-font,system-ui);border:1px solid #8886;border-radius:8px;padding:6px 8px;background:transparent;color:inherit;resize:vertical}
 #oracle .ctx{font-size:11.5px;opacity:.8;margin:6px 0}#oracle .ctx label{display:block;margin:2px 0}#oracle .row{display:flex;align-items:center;gap:8px;margin-top:6px}
 #oracle .send{font:inherit;border:0;background:#7a4cff;color:#fff;border-radius:14px;padding:5px 14px;cursor:pointer}#oracle .send[disabled]{opacity:.5;cursor:default}
 #oracle small{opacity:.7}#oracle .msg{margin-top:8px;font-style:italic}#oracle .it{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #8882}
