@@ -75,6 +75,9 @@
   function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
+  { const c2 = document.createElement('style'); c2.textContent = `html.gen-landing body{background:#000!important}
+html.gen-landing body>*:not(#arena):not(#genNight):not(#genNightSkip):not(#genArrive):not(#idleIntro):not(script):not(style){visibility:hidden!important}
+html.gen-landing #arena button,html.gen-landing #arena [role=button],html.gen-landing #arena .chip,html.gen-landing #arena .chips{visibility:hidden!important}html.gen-landing #arena{box-shadow:none!important;border-color:#000!important}`; document.head.appendChild(c2); }
   const css = document.createElement('style');
   css.textContent = `html.gen-void #arena,html.gen-void #floor{background-color:#05060b!important;transition:background-color 2.5s}
 html.gen-void #floor{background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px)!important;background-size:64px 64px!important}
@@ -149,6 +152,9 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
   const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const mark = k => { try { window.__funnel && window.__funnel.mark(k); } catch (e) {} };
+  // silence (Nico, story v5): from the landing until the storyline's music step, sound "doesn't exist yet": everything is held at zero
+  // (the player's own mute and volume aren't touched); the Operator's arrival and its sonar are visual only
+  const silence = on => { try { window.__audio && window.__audio.hush && window.__audio.hush(on); } catch (e) {} }, silentNow = () => { try { return !!(window.__audio && window.__audio.hushed && window.__audio.hushed()); } catch (e) { return false; } };
 
   // ---------- the void: no words, no creatures, a dark floor with a faint grid, and nothing else on screen but the console
   function toVoid() { const h = H(); if (!h) return; cls('gen-void', 1); cls('gen-calm', 1); cls('gen-lit', 0); night(true); window.__genesisVoid = true;
@@ -253,7 +259,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function hush() { cls('gen-hush', 1); setTimeout(() => cls('gen-hush', 0), 60000); }
 
   // ---------- the steps
-  function done(step, line, at, extra) { S = S || { on: true, steps: {}, t0: now(), n: 1 }; if (S.steps[step]) return; S.steps[step] = now(); save(); if (storyMode() && (step === 'words' || step === 'creatures')) mark(step === 'words' ? 'e1words' : 'e1life');
+  function done(step, line, at, extra) { S = S || { on: true, steps: {}, t0: now(), n: 1 }; if (S.steps[step]) return; S.steps[step] = now(); save(); if (step === 'music') silence(false); if (storyMode() && (step === 'words' || step === 'creatures')) mark(step === 'words' ? 'e1words' : 'e1life');
     const h = H(), text = { words: 'the first words fell into the void', creatures: 'the first creatures crawled out of a word', light: 'the first light', weather: 'the first weather', hut: 'the first building blocks turned up', music: 'the first music' }[step];
     try { h && h.log('genesis', { step, text, at, ...(extra || {}) }); } catch (e) {}
     try { window.__almanac && window.__almanac.ev('genesis', text, {}); } catch (e) {}
@@ -328,7 +334,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !(S && S.n) ? 'story' : null;   // a new browser in the story arm goes straight in (later new universes get the chooser)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { dropFlag(); return readyWorld(); }
-    S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag();
+    S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
     if (mode === 'free') cls('gen-calm', 0);
     if (mode === 'story') { cosmos.start(); await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); return true; }
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
@@ -352,7 +358,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // is a faint ring that, for a moment, outlines the swirling letters in thin light. Lights on reveals everything.
   // A click finishes the line (or goes to the next), holding pauses, Esc or "skip ›" goes straight to the Operator. ?nolanding skips it all.
   const DARK = ['whaa…', 'oh my god, my girlfriend is going to be mad… where am I?', "I don't think I'll make it back in time for dinner…",
-    'ohhh what?! is that a black hole!!! this is not good!!', 'what are those things moving over there?…', 'are they…. getting…. closer?!!', "aaaaaaaa! AAAAA!!! don't eat me pleasE!!!!"];
+    'ohhh what?! is that a black hole!!! this is not good!!', 'wait, what... why is that black hole moving...', "it's coming my way,....", "today really isn't my luckyyyy daaaaayyyyy!!!! aaaaahhhhh!!!"];   // the last three: Nico, story v5
   const darkHold = s => Math.max(1.4, s.length * 0.04 + 0.3), DCPS = 55;
   let land = { phase: 'none', clicks: 0 }, nightCv = null;
   const clamp01 = x => Math.max(0, Math.min(1, x)), ease = u => u * u * (3 - 2 * u);
@@ -370,7 +376,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2); if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
     // the veil: the world under it, almost black, its faint grid still there
-    g.fillStyle = 'rgba(2,3,7,0.8)'; g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(2,3,7,0.8)'; g.fillRect(0, 0, W, H); const rise = RM ? 1 : clamp01(st.t / 2.6);   // from black, slowly
     // how much of the hole we see and how hard it pulls follow the lines: faint at first, clear at "is that a black hole", closer at "getting closer"
     const k = st.k, seen = st.calm ? 1 : clamp01(0.25 + (k >= 4 / 7 ? 0.45 : 0) + (k >= 5 / 7 ? 0.2 : 0)), pullT = st.calm ? Math.max(0, st.pull - 0.4) : (k >= 6 / 7 ? 1 : k >= 5 / 7 ? 0.45 : 0);
     st.pull += (pullT - st.pull) * Math.min(1, dt * 0.8); const pull = RM ? pullT : st.pull, small = Math.min(W, H);
@@ -390,10 +396,11 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
       if (l.rim > 0.02) { g.save(); g.strokeStyle = `rgba(126,227,245,${0.9 * l.rim})`; g.lineWidth = 1; g.shadowColor = '#7ee3f5'; g.shadowBlur = 6 * l.rim; g.strokeText(l.ch, x, y); g.restore(); } }
     for (const p of st.pings) { g.strokeStyle = `rgba(126,227,245,${0.3 * (1 - p.r / maxR)})`; g.lineWidth = 1.2; g.beginPath(); g.arc(ox, oy, p.r, 0, 7); g.stroke(); }
     g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    if (rise < 1) { g.fillStyle = `rgba(0,0,0,${1 - rise})`; g.fillRect(0, 0, W, H); }
     if (land.shake && !RM) cv.style.transform = `translate(${(Math.random() - 0.5) * 6}px,${(Math.random() - 0.5) * 6}px)`; else cv.style.transform = '';
     // the line being said, in the middle (the same style as the intro's subtitles)
     if (land.line) { const B = window.__termBoot, L = land.line, n = RM ? L.text.length : Math.floor((st.t - L.t0) * DCPS); if (B && B.say) B.say(g, W, H, L.text, n, 'you', B.arrive.sayFz(W, W < 600), 1); } }
-  function ping() { if (!nightCv) return; nightState.pings.push({ r: 0, hit: new Set() }); land.pings = (land.pings || 0) + 1;
+  function ping() { if (!nightCv) return; nightState.pings.push({ r: 0, hit: new Set() }); land.pings = (land.pings || 0) + 1; if (silentNow()) return;
     const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const t = c.currentTime, o = c.createOscillator(), v = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(1480, t); o.frequency.exponentialRampToValueAtTime(1320, t + 0.9);
       v.gain.setValueAtTime(0.0001, t); v.gain.linearRampToValueAtTime(0.05, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0001, t + 1.2); o.connect(v); v.connect(A.out()); o.start(t); o.stop(t + 1.3); } catch (e) {} }
   let sonarTimer = 0;
@@ -403,7 +410,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   async function landing() { if (Q.has('nolanding')) { land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
     // the night starts when the game's loading cover has gone (skipping the intro right away can land before it)
     for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
-    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; nightStart(RM); mark('landing');
+    const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; nightStart(RM); mark('landing'); silence(true);
     const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px system-ui;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
     document.body.appendChild(skipB);
     await new Promise(res => { let i = -1, timer = 0, downAt = 0, done = false;
@@ -419,40 +426,28 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
       const onUp = e => { if (!downAt) return; const short = performance.now() - downAt < 280; downAt = 0; land.paused = false; if (!short) return; land.clicks++; ripple(e.clientX, e.clientY, RM);
         const L = land.line; if (L && (st.t - L.t0) * DCPS < L.text.length) L.t0 = st.t - L.text.length / DCPS; else next(); };   // a click: finish the line, or the next one
       skipB.addEventListener('click', e => { e.stopPropagation(); finish('skip'); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
-      document.addEventListener('pointerdown', onDown, true); document.addEventListener('pointerup', onUp, true); next(); });
+      document.addEventListener('pointerdown', onDown, true); document.addEventListener('pointerup', onUp, true); wait(2.0); });   // 2 s of darkness coming up before the first line
     land.phase = 'arriving'; st_calm(); try { await arrival(RM); } catch (e) { console.warn('genesis: arrival', e); } land.phase = 'sonar'; }
   const st_calm = () => { nightState.calm = 1; };
-  function ripple(x, y, RM) {   // a click in the void: a faint ring, and a faint note if the sound is on
+  function ripple(x, y, RM) {   // a click in the void: a faint ring (and a faint note, unless the storyline's silence holds)
     const d = document.createElement('div'); d.className = 'genRipple'; d.style.cssText = `position:fixed;left:${x - 8}px;top:${y - 8}px;width:16px;height:16px;border-radius:50%;border:1px solid #7ee3f580;pointer-events:none;z-index:2147481980;transition:transform .9s ease-out,opacity .9s ease-out`;
     document.body.appendChild(d); requestAnimationFrame(() => { d.style.transform = `scale(${RM ? 2 : 7})`; d.style.opacity = '0'; }); setTimeout(() => d.remove(), 1000);
-    const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const o = c.createOscillator(), v = c.createGain(), t = c.currentTime; o.type = 'sine'; o.frequency.setValueAtTime(520 + Math.random() * 120, t); o.frequency.exponentialRampToValueAtTime(330, t + 0.25);
+    if (silentNow()) return; const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const o = c.createOscillator(), v = c.createGain(), t = c.currentTime; o.type = 'sine'; o.frequency.setValueAtTime(520 + Math.random() * 120, t); o.frequency.exponentialRampToValueAtTime(330, t + 0.25);
       v.gain.setValueAtTime(0.0001, t); v.gain.linearRampToValueAtTime(0.025, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0001, t + 0.3); o.connect(v); v.connect(A.out()); o.start(t); o.stop(t + 0.35); } catch (e) {} }
-  function crackle() { const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const t = c.currentTime, n = Math.floor(c.sampleRate * 0.5), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
+  function crackle() { if (silentNow()) return; const A = window.__audio; try { const c = A && !A.muted() && A.ctx(); if (!c || c.state !== 'running') return; const t = c.currentTime, n = Math.floor(c.sampleRate * 0.5), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
       for (let i = 0; i < n; i++) d[i] = (Math.random() < 0.06 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.08) * (1 - i / n);   // sparse pops over a hiss
       const s = c.createBufferSource(), v = c.createGain(); s.buffer = b; v.gain.value = 0.35; s.connect(v); v.connect(A.out()); s.start(t);
       const o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(90, t + 0.3); o.frequency.exponentialRampToValueAtTime(640, t + 0.75); g.gain.setValueAtTime(0.0001, t + 0.3); g.gain.linearRampToValueAtTime(0.06, t + 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.85); o.connect(g); g.connect(A.out()); o.start(t + 0.3); o.stop(t + 0.9); } catch (e) {} }
   function arrival(RM) { return new Promise(res => {
     const cv = document.createElement('canvas'); cv.id = 'genArrive'; cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:2147482001;pointer-events:none;transition:opacity .5s';
     document.body.appendChild(cv); const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const K = window.__critDraw, big = W < 600 ? 64 : Math.max(72, Math.min(150, W / 9)), cy = H / 2, base = cy + big * .32, gap0 = big * .32;
-    const mk = (hue, foot, dir) => ({ g: { legs: 8, l1: big * .26, l2: big * .32, bodyL: big * .55, bodyW: big * .42, step: big * .2, hue, footHue: foot, fidget: .8, speed: 1 }, size: 1, x: 0, y: 0, vx: 0, vy: 0, heading: dir > 0 ? 0 : Math.PI, state: 'idle', nextFidget: 0, dir, legs: null });
-    const ca = mk(262, 330, 1), cb = mk(42, 200, -1); g.font = `${big}px Georgia, 'Times New Roman', serif`; const wId = g.measureText('Id').width, wle = g.measureText('le').width;
-    const WALK = RM ? 0 : 2.8, MEET = WALK + 0.4, CRACK = MEET + 0.45, FOLD = CRACK + 0.6, wr = Math.min(560, W * 0.92), hr = Math.min(340, H * 0.6), T0 = performance.now(); let cracked = false, done = false;
-    const frame = () => { const t = (performance.now() - T0) / 1000; g.clearRect(0, 0, W, H);
-      if (t < CRACK) { const u = WALK ? ease(clamp01(t / WALK)) : 1, gap = gap0 * (1 - clamp01((t - WALK) / 0.3));
-        const a0 = -wId * 0.6, b0 = W - wle * 0.4, xA = t < WALK ? a0 + (W / 2 - gap0 / 2 - wId - a0) * u : W / 2 - gap / 2 - wId, xB = t < WALK ? b0 + (W / 2 + gap0 / 2 - b0) * u : W / 2 + gap / 2;   // from the edges, at a pace the legs can keep up with
-        const k = clamp01((t - MEET) / (CRACK - MEET)), legA = RM ? 0 : 1 - clamp01((t - WALK) / 0.35);
-        g.save(); if (k > 0) { g.translate(W / 2, cy); g.scale(1 + k * 0.6, Math.max(0.03, 1 - k)); g.translate(-W / 2, -cy); }
-        if (K && K.legs && legA > 0.02) for (const [c, x, w] of [[ca, xA, wId], [cb, xB, wle]]) { c.x = x + w / 2; c.y = cy; c.vx = t < WALK ? c.dir * 0.9 : 0; c.vy = 0; c.size = 0.3 + 0.7 * legA; try { K.sizeUp(c); if (!c.legs) K.buildLegs(c); K.stepLegs(c, t * 1000); g.globalAlpha = legA; K.legs(g, c); } catch (e) {} }
-        g.globalAlpha = 1; g.fillStyle = '#e9e4d8'; g.font = `${big}px Georgia, 'Times New Roman', serif`; g.textBaseline = 'alphabetic'; const jit = k > 0 ? (Math.random() - 0.5) * 14 * k : 0;
-        g.fillText('Id', xA + jit, base); g.fillText('le', xB - jit, base);
-        if (t > WALK + 0.25) { g.fillStyle = '#e0367a'; g.shadowColor = '#e0367a'; g.shadowBlur = 16; g.globalAlpha = clamp01((t - WALK - 0.25) / 0.15); g.fillRect(W / 2 - big * .035, base - big * .85, big * .07, big * .98); }
-        g.restore(); if (!cracked && t >= MEET) { cracked = true; crackle(); } }
-      else { const k = ease(clamp01((t - CRACK) / (FOLD - CRACK))), w = (wId + wle) * 1.6 + (wr - (wId + wle) * 1.6) * k, h = 2 + (hr - 2) * k;   // the line opens into the window
-        g.save(); g.fillStyle = `rgba(11,15,24,${0.85 * k})`; g.fillRect(W / 2 - w / 2, cy - h / 2, w, h); g.strokeStyle = '#6b7cff'; g.lineWidth = 2; g.shadowColor = '#7ee3f5'; g.shadowBlur = 24 * (1 - k * 0.5); g.strokeRect(W / 2 - w / 2, cy - h / 2, w, h); g.restore();
-        if (t >= FOLD - 0.1 && !done) { done = true; res(); setTimeout(() => { cv.style.opacity = '0'; setTimeout(() => cv.remove(), 600); }, 150); }
-        if (t > FOLD + 0.2) return; }
-      requestAnimationFrame(frame); };
+    const cy = H / 2, GLOW = RM ? 0 : 0.9, LINE = GLOW + 0.4, FOLD = LINE + 0.6, wr = Math.min(560, W * 0.92), hr = Math.min(340, H * 0.6), T0 = performance.now(); let done = false; crackle();
+    const frame = () => { const t = (performance.now() - T0) / 1000; g.clearRect(0, 0, W, H); g.save(); g.shadowColor = '#7ee3f5';
+      if (t < GLOW) { const r = 3 + 5 * Math.abs(Math.sin(t * 11)), a = clamp01(t / 0.25); g.globalAlpha = a; g.shadowBlur = 30; g.fillStyle = '#e8fbff'; g.beginPath(); g.arc(W / 2, cy, r, 0, 7); g.fill(); }
+      else if (t < LINE) { const k = ease(clamp01((t - GLOW) / (LINE - GLOW))), w = 8 + (wr - 8) * k; g.shadowBlur = 24; g.fillStyle = '#e8fbff'; g.fillRect(W / 2 - w / 2, cy - 1.5, w, 3); }
+      else { const k = ease(clamp01((t - LINE) / (FOLD - LINE))), h = 3 + (hr - 3) * k; g.fillStyle = `rgba(11,15,24,${0.85 * k})`; g.fillRect(W / 2 - wr / 2, cy - h / 2, wr, h); g.strokeStyle = '#6b7cff'; g.lineWidth = 2; g.shadowBlur = 24 * (1 - k * 0.5); g.strokeRect(W / 2 - wr / 2, cy - h / 2, wr, h);
+        if (t >= FOLD - 0.1 && !done) { done = true; res(); setTimeout(() => { cv.style.opacity = '0'; setTimeout(() => cv.remove(), 600); }, 150); } if (t > FOLD + 0.2) { g.restore(); return; } }
+      g.restore(); requestAnimationFrame(frame); };
     frame(); }); }
 
   // ---------- the storyline's waking up: the Operator as a window in the middle (a lightbox), the Tiny Operator's lines typed one by one
@@ -533,7 +528,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
       calm: x => { chaos = Math.min(chaos, x); }, fade: () => { if (on && !fadeAt) fadeAt = performance.now(); }, stop, state: () => ({ on, lit: !!lit, chaos, alpha }) }; })();
 
   function dropFlag() { try { const u = new URL(location.href); if (!u.searchParams.has('genesis') && !u.searchParams.has('story')) return; u.searchParams.delete('genesis'); u.searchParams.delete('story'); u.searchParams.delete('start'); u.searchParams.delete('intro'); history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash); } catch (e) {} }
-  async function newUniverse(mode) { const h = H(); if (!h) return false;   // mode: skip the chooser (tests, links)
+  async function newUniverse(mode) { const h = H(); if (!h) return false; silence(false);   // mode: skip the chooser (tests, links)
     if (window.__placeKind && window.__placeKind !== 'home' && window.__places) { try { await window.__places.go('home'); } catch (e) {} }
     // the old world is kept, always
     h.snapshot('before a new universe ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -559,6 +554,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
 @media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px}}`; document.head.appendChild(css2); }
   // offered once the world is up and the player has looked around a little (20 s; ?offer: 1 s)
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
+  if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && S.steps.music) && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   window.__genesis = { offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
