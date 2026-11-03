@@ -86,12 +86,12 @@
 #founderOffer{position:fixed;left:14px;bottom:14px;z-index:61;max-width:min(330px,calc(100vw - 28px));padding:12px 14px;border-radius:12px;background:#120d1cf2;border:1px solid #ffd54a88;color:#f3e9cf;font:12.5px/1.45 system-ui;box-shadow:0 10px 40px #0008;transition:opacity .4s}
 #founderOffer b{display:block;margin-bottom:4px;color:#ffe9a8}#founderOffer .go{margin-top:8px;font:600 12px system-ui;padding:5px 12px;border-radius:14px;border:1px solid #ffd54a;background:#ffd54a2a;color:#fff3cf;cursor:pointer}
 #founderOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#founderOffer.out{opacity:0}
-#founderLetter{position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;background:#05060cd0;backdrop-filter:blur(3px);padding:16px}
+#founderLetter{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:#05060cd0;backdrop-filter:blur(3px);padding:16px}
 #founderLetter .paper{position:relative;max-width:520px;width:100%;padding:26px 28px 22px;border-radius:6px 14px 10px 16px;background:linear-gradient(170deg,#fbf3df,#f1e3c2);color:#3a2a17;box-shadow:0 20px 70px #000a,inset 0 0 40px #c9a76a44;transform:rotate(-.6deg)}
 #founderLetter .paper p{margin:0 0 12px;font:19px/1.5 "Segoe Print","Bradley Hand","Comic Sans MS",cursive}#founderLetter .sign{text-align:right;font:22px/1.2 "Segoe Print","Bradley Hand","Comic Sans MS",cursive;margin:6px 0 16px}
 #founderLetter .draft{position:absolute;right:12px;top:10px;font:600 10px system-ui;letter-spacing:.08em;color:#a0522d;border:1px dashed #a0522d;padding:1px 6px;border-radius:6px;opacity:.75}
 #founderLetter .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}#founderLetter button{font:600 14px system-ui;padding:8px 16px;border-radius:18px;border:1px solid #3a2a17;background:#3a2a17;color:#fbf3df;cursor:pointer}#founderLetter button.later{background:transparent;color:#3a2a17}
-#founderLab{position:fixed;inset:0;z-index:96;display:grid;grid-template-columns:minmax(260px,360px) 1fr;background:#0b0d18;color:#dfe4ff;font:13px/1.45 system-ui}
+#founderLab{position:fixed;inset:0;z-index:2147483001;display:grid;grid-template-columns:minmax(260px,360px) 1fr;background:#0b0d18;color:#dfe4ff;font:13px/1.45 system-ui}
 #founderLab .side{padding:16px;border-right:1px solid #ffffff14;display:flex;flex-direction:column;gap:10px;overflow:auto}
 #founderLab h2{margin:0;font:600 17px system-ui;color:#ffe9a8}#founderLab h3{margin:14px 0 6px;font:600 13px system-ui;color:#ffe9a8;letter-spacing:.02em}
 #founderLab canvas.prev{width:100%;aspect-ratio:4/3;border-radius:12px;background:radial-gradient(#1a1e33,#0b0d18 75%);border:1px solid #ffffff14}
@@ -100,7 +100,7 @@
 #founderLab .chips{display:flex;flex-wrap:wrap;gap:6px}#founderLab .chip{font:12px system-ui;padding:4px 10px;border-radius:14px;border:1px solid #ffffff33;background:#ffffff0a;color:inherit;cursor:pointer}#founderLab .chip.on{border-color:#ffd54a;background:#ffd54a22;color:#fff3cf}
 #founderLab .fams{display:flex;gap:8px}#founderLab .fams button{flex:1;border:1px solid #ffffff22;border-radius:10px;background:#ffffff08;color:inherit;cursor:pointer;padding:4px}#founderLab .fams button.on{border-color:#ffd54a}
 #founderLab .vars{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}#founderLab .vars button{border:1px solid #ffffff22;border-radius:10px;background:#ffffff08;padding:2px;cursor:pointer;color:inherit}#founderLab .vars button:hover{border-color:#ffd54a}
-#founderLab .vars svg,#founderLab .fams svg,#founderLab .tree svg{width:100%;height:auto;display:block}
+#founderLab .vars svg,#founderLab .fams svg,#founderLab .tree svg{width:100%;height:auto;display:block}#founderLab .fams svg{max-height:96px}#founderLab .vars svg{max-height:120px}#founderLab .fams{max-width:420px}#founderLab .vars{max-width:760px}
 #founderLab .tree{display:flex;flex-direction:column;gap:4px}#founderLab .gen{display:flex;align-items:center;gap:4px}#founderLab .gen small{width:44px;opacity:.6;flex:none}#founderLab .gen span{width:34px;flex:none;opacity:.35;border-radius:6px}#founderLab .gen span.pick{opacity:1;outline:1.5px solid #ffd54a}
 #founderLab .badges{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}#founderLab .badges button{border:1px solid #ffffff22;border-radius:10px;background:#ffffff08;color:inherit;cursor:pointer;padding:6px 2px;font:11px system-ui}#founderLab .badges button.on{border-color:#ffd54a;background:#ffd54a1a}#founderLab .badges canvas{width:40px;height:40px;display:block;margin:0 auto 2px}
 #founderLab .name{display:flex;gap:6px}#founderLab .name input{flex:1;font:15px system-ui;padding:7px 10px;border-radius:10px;border:1px solid #ffffff33;background:#ffffff0a;color:inherit}#founderLab .name button{border-radius:10px;border:1px solid #ffffff33;background:#ffffff0a;color:inherit;cursor:pointer;padding:0 10px}
@@ -143,7 +143,7 @@
     let c = null; try { c = await (await fetch('/lab/gift/' + id + '/claim', { method: 'POST' })).json(); } catch (e) {}
     if (!c || !c.ok) { toast('This gift was already opened. Thank you for coming! ✨'); return; }
     sv(K, { ...state(), personal: { id, letter: r.letter, at: Date.now() } }); mark('fd_personal'); letter('link', r.letter); }
-  function toast(t) { const el = document.createElement('div'); el.textContent = t; el.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:97;padding:8px 14px;border-radius:14px;background:#120d1cf2;border:1px solid #ffd54a88;color:#ffe9a8;font:13px system-ui'; document.body.appendChild(el); setTimeout(() => el.remove(), 7000); }
+  function toast(t) { const el = document.createElement('div'); el.textContent = t; el.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2147483002;padding:8px 14px;border-radius:14px;background:#120d1cf2;border:1px solid #ffd54a88;color:#ffe9a8;font:13px system-ui'; document.body.appendChild(el); setTimeout(() => el.remove(), 7000); }
 
   // ---------- the creature creator ----------
   const NAME_BLOCK = /(sex|porn|nud|naked|kill|suicid|rape|nazi|hitler|cocaine|heroin|fuck|shit|bitch|bastard|nigg|fag|retard|slut|whore|dick|cock|pussy|cunt|penis|vagin|anal|cum|jizz|tits|boob)/i;
@@ -180,7 +180,7 @@
   function nameProblem(n) { n = String(n || '').trim(); if (!n) return ''; if (n.length < 2) return 'a little longer, please'; if (!/^[\p{L}\p{N}][\p{L}\p{N} |_'.-]*$/u.test(n)) return 'letters, numbers, spaces and | _ - only';
     if (NAME_BLOCK.test(n.replace(/[^\p{L}]/gu, ''))) return 'please pick another name'; if (hooks().names().some(x => x.toLowerCase() === n.toLowerCase())) return 'a creature here already has that name'; return ''; }
   function badgeIcons() { document.querySelectorAll('#founderLab .badges canvas').forEach((cv, i) => { const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, 80, 80); drawBadge(g, BADGES[i].id, 40, 42, 3, performance.now()); }); }
-  const pc = { x: 360, y: 290, vx: 0, vy: 0, tx: 0, ty: 0, heading: 0, state: 'idle', held: false, phase: 1, size: 1.6 };
+  const pc = { x: 360, y: 290, vx: 0, vy: 0, tx: 0, ty: 0, heading: 0, state: 'idle', held: false, phase: 1, size: 2.4 };
   function setPreview() { const cd = window.__critDraw; pc.g = L.g; try { cd.buildLegs(pc); } catch (e) {} }
   function loop() { cancelAnimationFrame(L.raf); setPreview(); let a = 0, last = performance.now(), ic = 0;
     const f = t => { const el = document.querySelector('#founderLab'); if (!el || !L) return; const cv = el.querySelector('canvas.prev'), g = cv.getContext('2d'), cd = window.__critDraw, dt = Math.min(50, t - last); last = t;
