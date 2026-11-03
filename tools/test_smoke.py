@@ -200,6 +200,34 @@ out.rate_61st = last;
   const g2 = await (await go('/lab/gift/' + id)).json();
   out.gift = { letter: g1.letter, label: JSON.stringify(g1).includes('private'), claimed0: g1.claimed, c1: c1.ok, writes: w1 - w0, c2: c2.already, claimed1: g2.claimed,
     unknown: (await go('/lab/gift/zzzzzzzzzzzzzzzzzzzzzzzz')).status, revoked: (await go('/lab/gift/revokedrevokedrevokedr')).status, bad: (await go('/lab/gift/AB')).status }; }
+// presence (11-03): beats from fixed lists only, held in memory (no KV write), dropped 60 s after the last beat, "bye" removes at once;
+// the creator's view needs the key (404 otherwise); production (no IDLE_ENV, with STATS) accepts beats and drops them
+{ const M = await import(process.argv[2]); const P = {};
+  const id1 = 'a1b2c3d4e5f60718', id2 = '0011223344556677', puts0 = env.STATS.puts.length + env.WORLDS.puts.length;
+  const beat = (b, ip = '4.4.4.4') => go('/lab/here', { method: 'POST', body: JSON.stringify(b) }, ip);
+  P.prod = (await beat({ v: 1, id: id1, dev: 'desktop', mode: 'world' })).status;
+  env.IDLE_ENV = 'staging'; env.LIVE_KEY = 'k'.repeat(40);
+  const live = async (k) => go('/lab/live', k === undefined ? {} : { headers: { 'CF-Connecting-IP': '4.4.4.4', Authorization: 'Bearer ' + k } });
+  P.view_before_prod_beat = (await (await live('k'.repeat(40))).json()).online;
+  P.b1 = await (await beat({ v: 1, id: id1, dev: 'phone', mode: 'story', arm: 'story', step: 'words', ep: 0, p: ['operator', 'evil', 'card', 'operator'], cr: '0-12', t: 42.4, back: 1, text: 'hello world', name: 'Doc' })).json();
+  P.b2 = await (await beat({ v: 1, id: id2, dev: 'toaster', mode: 'hack', step: 'words', ep: 3, p: 'music', cr: 'lots', t: -5 })).json();
+  P.bad = await (await beat({ v: 1, id: 'not-hex' })).json();
+  P.big = (await go('/lab/here', { method: 'POST', body: 'x'.repeat(700) })).status;
+  P.nokey = (await live()).status; P.wrong = (await live('wrong')).status; P.short = (env.LIVE_KEY = 'short', (await live('short')).status); env.LIVE_KEY = 'k'.repeat(40);
+  const v = await (await live('k'.repeat(40))).json(); P.online = v.online;
+  P.p1 = v.players.find(x => x.a === id1.slice(0, 6)); P.p2 = v.players.find(x => x.a === id2.slice(0, 6)); P.tot = v.tot; P.hist = v.hist.length ? v.hist[v.hist.length - 1] : null;
+  P.full_id = JSON.stringify(v).includes(id1); P.leak = /hello|Doc|4\.4\.4\.4/.test(JSON.stringify(v));
+  await beat({ v: 1, id: id2, bye: 1 }); P.after_bye = (await (await live('k'.repeat(40))).json()).online;
+  P.kv_writes = env.STATS.puts.length + env.WORLDS.puts.length - puts0;
+  let last = 0; for (let i = 0; i < 31; i++) last = (await beat({ v: 1, id: id1, mode: 'world' }, '3.3.3.3')).status; P.rate_31st = last;
+  // expiry, on a table with its own clock
+  let t = 1e12; const T = new M.PresenceTable(() => t); T.beat({ v: 1, id: id1, mode: 'world' }, 'US'); T.beat({ v: 1, id: id2, mode: 'free' }, 'DE');
+  t += 40e3; T.beat({ v: 1, id: id1, mode: 'world' }, 'US'); t += 25e3; const e = T.view();
+  P.expiry = { online: e.online, left: e.hist.reduce((a, h) => a + h.left, 0), arr: e.hist.reduce((a, h) => a + h.arr, 0) };
+  // the Durable Object class answers the same beat and view
+  const D = new M.Presence({}, {}); const r1 = await (await D.fetch(new Request('https://presence/beat', { method: 'POST', body: JSON.stringify({ v: 1, id: id1, mode: 'ready' }), headers: { 'X-Country': 'CL' } }))).json();
+  const r2 = await (await D.fetch(new Request('https://presence/view'))).json(); P.do = { ok: r1.ok, online: r2.online, cc: r2.players[0] && r2.players[0].cc, mode: r2.players[0] && r2.players[0].mode };
+  delete env.IDLE_ENV; delete env.LIVE_KEY; out.presence = P; }
 console.log(JSON.stringify(out));
 """
 
@@ -310,9 +338,23 @@ def worker_unit():
          f"Operator signals {x.get('op')} (only fixed keys and small positive integers)")
     egx = {k: v for k, v in o["eg"].items() if v and (k.startswith("reels") or k.startswith("errs"))}
     need(egx == {"reels:1-5": 1, "errs:1": 1}, f"v2 buckets {egx}")
+    pr = o["presence"]
+    need(pr["prod"] == 204 and pr["view_before_prod_beat"] == 0, f"production must accept and drop beats: {pr['prod']}, then online {pr['view_before_prod_beat']}")
+    need(pr["b1"].get("ok") and pr["b2"].get("ok") and pr["bad"].get("ok") is False and pr["big"] == 413, f"beats: {pr['b1']} {pr['b2']} bad id {pr['bad']} too big {pr['big']}")
+    need(pr["nokey"] == 404 and pr["wrong"] == 404 and pr["short"] == 404, f"the live view without the right key must be 404: none {pr['nokey']}, wrong {pr['wrong']}, a short server key {pr['short']}")
+    p1, p2 = pr["p1"] or {}, pr["p2"] or {}
+    need(pr["online"] == 2 and p1.get("mode") == "story" and p1.get("step") == "words" and p1.get("ep") == 0 and p1.get("p") == ["operator", "card"] and p1.get("cr") == "0-12" and p1.get("t") == 42 and p1.get("back") == 1 and p1.get("dev") == "phone", f"story beat: {p1}")
+    need(p2.get("mode") == "world" and p2.get("dev") == "desktop" and p2.get("step") is None and p2.get("ep") is None and p2.get("p") == [] and p2.get("cr") is None and p2.get("t") == 0, f"junk must fall back or drop: {p2}")
+    need(set(p1) <= {"a", "since", "t", "cc", "dev", "mode", "arm", "step", "ep", "p", "cr", "back"} and not pr["full_id"] and not pr["leak"], f"the view must hold only coarse fields (no full id, text or address): {sorted(p1)}, id {pr['full_id']}, leak {pr['leak']}")
+    need(pr["tot"]["mode"] == {"story": 1, "world": 1} and pr["tot"]["panel"] == {"operator": 1, "card": 1} and pr["tot"]["step"] == {"words": 1}, f"totals {pr['tot']}")
+    need(pr["hist"] and pr["hist"]["arr"] >= 2, f"arrivals this minute: {pr['hist']}")
+    need(pr["after_bye"] == 1 and pr["kv_writes"] == 0, f"bye must remove at once ({pr['after_bye']} left) and presence never writes KV ({pr['kv_writes']} writes)")
+    need(pr["rate_31st"] == 429, f"31st beat in a minute from one address: {pr['rate_31st']}")
+    need(pr["expiry"] == {"online": 1, "left": 1, "arr": 2}, f"expiry 60 s after the last beat: {pr['expiry']}")
+    need(pr["do"] == {"ok": True, "online": 1, "cc": "CL", "mode": "ready"}, f"the Durable Object: {pr['do']}")
     gf = o["gift"]
     need(gf == {"letter": "Hi Sam!", "label": False, "claimed0": False, "c1": True, "writes": 1, "c2": True, "claimed1": True, "unknown": 404, "revoked": 404, "bad": 404}, f"gift links: {gf}")
-    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links"
+    return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links, presence"
 
 
 def local_server_unit():   # server.py, the local server anyone who clones the repo runs: no network (a stub site and a stub Jeffy on localhost)
@@ -443,6 +485,8 @@ class Page:
         self.fb = []
         self.gifts = {}
         self.root = None   # set: the build is served from this folder at self.base (a production hostname, t_prod_gates)
+        self.here = []      # presence beats (/lab/here) this page sent
+        self.helper = None  # set: /lab/here and /lab/live go to this local helper (node helper/dev_server.mjs), t_presence
         ctx.route("**/*", self._route)
 
     def _route(self, route):
@@ -451,6 +495,15 @@ class Page:
             path = u[len(self.base):].split("?")[0]
             if path.startswith("/jeffy/capabilities"): return route.fulfill(status=200, content_type="application/json", body=json.dumps(CAPS))
             if path.startswith("/jeffy/"): return route.fulfill(status=503, content_type="application/json", body='{"error":"busy"}')
+            if path in ("/lab/here", "/lab/live"):
+                if path == "/lab/here": self.here.append(route.request.post_data or "")
+                if not self.helper: return route.fulfill(status=204, body="")
+                import urllib.request, urllib.error
+                rq = urllib.request.Request(self.helper + path, data=(route.request.post_data or "").encode() if route.request.method == "POST" else None, method=route.request.method,
+                                            headers={k: v for k, v in route.request.headers.items() if k.lower() in ("authorization", "content-type")} | {"X-Country": "CL", "CF-Connecting-IP": "203.0.113.5"})
+                try:
+                    with urllib.request.urlopen(rq, timeout=10) as r: return route.fulfill(status=r.status, content_type="application/json", body=r.read())
+                except urllib.error.HTTPError as e: return route.fulfill(status=e.code, content_type="application/json", body=e.read())
             if path in ("/lab/stats", "/lab/p"): self.stats.append(route.request.post_data or ""); return route.fulfill(status=204, body="")
             if path == "/lab/notices": return route.fulfill(status=200, content_type="application/json", body="[]")
             if path.startswith("/worlds/state"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"me": {"name": "", "links": [], "requests": [], "inbox": []}, "peers": {}}))
@@ -2132,6 +2185,10 @@ def t_prod_gates(P, root):
       f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
       ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
     need(r["host"] == "id-le.com" and not r["live"], f"not emulating production: {r}")
+    # presence: off on id-le.com (PRESENCE_ON_PROD), even with stats live and a forced beat
+    pz = P.open("/arena.html"); booted(pz); pz.wait_for_timeout(4000)
+    pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on, sent: window.__presence.beat() })"); pz.close()
+    need(pr["stats"] and not pr["on"] and pr["sent"] is False and not P.here, f"presence beat on production: {pr}, {len(P.here)} beats")
     need(not r["void"] and not r["intro"] and not r["offer"] and not r["founder"], f"story/offer/founder visible on production: {r}")
     need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
     pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
@@ -2166,6 +2223,58 @@ def t_prod_gates(P, root):
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
     return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)"
+
+
+def t_presence(P):
+    """the creator's live view: two game tabs beat and show up as two players in /live, one closes (bye) and is gone; a tab with stats off
+    or Global Privacy Control never beats; the key is needed (a wrong one is refused)"""
+    import secrets, socket, subprocess as sp
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    key = secrets.token_urlsafe(32)
+    node = sp.Popen(["node", os.path.join(ROOT, "helper", "dev_server.mjs"), str(port)], env={**os.environ, "LIVE_KEY": key}, stdout=sp.PIPE, stderr=sp.STDOUT)
+    try:
+        t0 = time.time()
+        while time.time() - t0 < 10:
+            try: socket.create_connection(("127.0.0.1", port), 0.3).close(); break
+            except OSError: time.sleep(0.2)
+        P.helper = f"http://127.0.0.1:{port}"
+        tabs = []
+        for i in range(2):
+            pg = P.open("/arena.html?statstest&test"); booted(pg)
+            wait_for(pg, "() => window.__presence && window.__presence.state().running", 20, P=P); tabs.append(pg)
+        ids = {json.loads(b)["id"] for b in P.here if b}
+        need(len(ids) == 2, f"two tabs, {len(ids)} ids beating ({len(P.here)} requests, first {P.here[:1]!r}, state {tabs[0].evaluate('() => window.__presence.state()')})")
+        lv = P.open("/live.html"); lv.wait_for_selector("#key input", state="visible", timeout=10000)
+        lv.fill("#key input", "wrong-key-" + "x" * 30); lv.click("#key button")
+        wait_for(lv, "() => /not accepted/.test(document.querySelector('#key .err').textContent)", 15, P=P)
+        lv.fill("#key input", key); lv.click("#key button")
+        wait_for(lv, "() => window.__live.state().online === 2 && window.__live.state().nodes.length === 2", 20, P=P)
+        tip = lv.evaluate("() => document.querySelector('#bMode').textContent + '|' + document.querySelector('#bCc').textContent")
+        need("plain world" in tip and "CL" in tip, f"side charts: {tip}")
+        tabs[1].evaluate("() => window.__presence.bye()"); tabs[1].goto("about:blank")   # what pagehide does (a beacon sent from an unloading page never reaches the test's routes)
+        try: wait_for(lv, "() => window.__live.state().online === 1", 20, P=P)
+        except AssertionError: raise AssertionError(f"no bye: {[b for b in P.here if 'bye' in b]}, live {lv.evaluate('() => window.__live.state()')}")
+        lv.wait_for_timeout(1800)
+        need(len(lv.evaluate("() => window.__live.state().nodes")) == 1, "the closed tab's circle is still there")
+        lv.screenshot(path=os.path.join(tempfile.gettempdir(), "idle-live-view.png"))
+        # stats off, and Global Privacy Control: no beat at all (the game tabs close first: they'd keep beating)
+        tabs[0].evaluate("() => window.__presence.bye()"); tabs[0].goto("about:blank"); wait_for(lv, "() => window.__live.state().online === 0", 20, P=P); lv.wait_for_timeout(500)
+        n0 = len(P.here)
+        pg = P.ctx.new_page(); pg.add_init_script("try { localStorage.setItem('idle.settings', JSON.stringify({ stats: false })); } catch (e) {}")
+        pg.goto(P.base + "/arena.html?statstest&test"); booted(pg); pg.wait_for_timeout(4000)
+        off = pg.evaluate("() => ({ on: window.__presence.state().on, sent: window.__presence.beat() })")
+        g = P.ctx.new_page(); g.add_init_script("Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', { get: () => true }); try { localStorage.removeItem('idle.settings'); } catch (e) {}")
+        g.goto(P.base + "/arena.html?statstest&test"); booted(g); g.wait_for_timeout(4000)
+        gpc = g.evaluate("() => ({ on: window.__presence.state().on, stats: window.__settings.statsLive() })")
+        need(not off["on"] and off["sent"] is False and not gpc["on"] and gpc["stats"] and len(P.here) == n0, f"stats off {off}, GPC {gpc}, beats sent meanwhile {len(P.here) - n0}")
+        bad = [b for b in P.here if b and set(json.loads(b)) - {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye"}]
+        need(not bad, f"a beat carried a field outside the list: {bad[:1]}")
+        for x in (pg, g): x.close()
+        P.clean()
+        return f"{len(P.here)} beats from 2 tabs; /live showed 2, then 1 after a bye; wrong key refused; stats off and GPC silent"
+    finally:
+        node.terminate()
+        with contextlib.suppress(Exception): node.wait(5)
 
 
 def t_chooser(P):
@@ -2341,7 +2450,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2422,6 +2531,7 @@ def main():
                 run("pedia halloween", t_pedia_halloween)
                 run("fonts", t_fonts)
                 run("fonts phone", t_fonts_phone, is_mobile=True, has_touch=True)
+                run("presence", t_presence, service_workers="block")   # requests a service worker makes itself pass by the test routes
                 run("prod gates", t_prod_gates, out, service_workers="block")
                 if a.full: run("fps", t_fps)
             finally:
