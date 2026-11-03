@@ -140,7 +140,7 @@ const X = { did: ['w_reel', 'w_reel_end', 'w_dream', 'w_mind', 'irc_msg', 'inbox
   opa: ['creature', 'disaster', 'evolve', 'look', 'rave_off', 'rave_on', 'rename', 'spawn', 'weather', 'ai_say', 'ai_weather', 'ai_spawn', 'ai_words', 'ai_disaster'],
   rage: ['advBtn', 'djBtn', 'reelsBtn', 'drawerBtn', 'treesBtn', 'almanacBtn', 'studioBtn', 'herdBtn', 'ntfBtn', 'pediaBtn', 'labBtn', 'connBtn', 'snapBtn', 'evolveWorldBtn', 'lab-toggle', 'rc-open',
     'settingsBtn', 'soundBtn', 'mMore', 'collBtn', 'addBtn', 'whisper', 'studio', 'team', 'dj', 'advpanel', 'almanac', 'drawer', 'trees', 'reelpanel', 'reel', 'lab', 'roomchat', 'settings', 'conn', 'herd',
-    'insp', 'quick', 'minimap', 'topbar', 'placesBar', 'ntf', 'mSheet', 'zoomCtl', 'world', 'other'] };
+    'insp', 'quick', 'minimap', 'topbar', 'placesBar', 'ntf', 'mSheet', 'zoomCtl', 'world', 'other', 'whisper:hangry', 'whisper:mutate', 'whisper:big', 'whisper:revert', 'whisper:keep', 'whisper:clone', 'whisper:portrait', 'whisper:rest', 'whisper:input', 'whisper:name', 'whisper:text', 'whisper:head', 'world:creature', 'world:word', 'world:empty', 'world:thing'] };
 // the Operator (11-01): outcomes, the guessed action and a confidence bucket, retries, giving up, caps and ?!/!!, a mood label computed in
 // the player's browser, genesis tries/nudges/steps; never any text. Every key is built from these fixed lists.
 X.op = [].concat(['acted', 'unsure', 'nudged', 'chat', 'error'].map(k => 'out:' + k), ['tool', 'none', 'error'].map(k => 'byo:' + k), ['lo', 'mid', 'hi'].map(k => 'cf:' + k),

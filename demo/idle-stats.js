@@ -26,7 +26,8 @@
 //                 for the starter world's own creatures (game content), anyone else is 'other'
 //   messages      (v2) how many IRC lines, @inbox lines and Operator messages (and which Operator actions ran), never their text
 //   path          (v2) the first three features opened, in order (e.g. card>studio>reels)
-//   frustration   (v2) rage clicks (3 fast clicks in one spot) and where (a known panel or button, else 'world'/'other'), leaving within
+//   frustration   (v2) rage clicks (3 fast clicks in one spot) and where (a known panel or button, else 'world'/'other'; in the creature card which
+//                 button or part, in the world whether on a creature, a word, a thing or empty floor), leaving within
 //                 30 s of the first click, leaving without any click, how many errors a page load saw (a bucket)
 //   operator      (11-01) how conversations with the Operator go, never their text: each message's outcome (the Tiny Operator acted,
 //                 was unsure, needed a nudge, only chatted, or failed; your own AI used a tool or not), the action it guessed and how sure
@@ -140,10 +141,16 @@
   }, 1000);
   // frustration: rage clicks (3 within 600 ms and 24 px), where they happened (a known panel or button, else the world or 'other')
   const RAGE_IDS = new Set(Object.keys(FEAT).concat(['whisper', 'studio', 'team', 'dj', 'advpanel', 'almanac', 'drawer', 'trees', 'reelpanel', 'reel', 'lab', 'roomchat', 'settings', 'conn', 'herd', 'insp', 'quick', 'minimap', 'topbar', 'placesBar', 'ntf', 'mSheet', 'zoomCtl']));
-  const rageWhere = t => { for (let el = t; el && el.nodeType === 1; el = el.parentElement) if (el.id && RAGE_IDS.has(el.id)) return el.id; return t && t.closest && t.closest('#arena') ? 'world' : 'other'; };
+  // inside the creature card (#whisper) and the world, a sub-target: which button or part of the card; on a creature, a word, a thing, or nothing
+  const WACTS = ['hangry', 'mutate', 'big', 'revert', 'keep', 'clone', 'portrait', 'rest'];
+  const whisperPart = t => { const b = t.closest && t.closest('[data-wact]'); if (b && WACTS.includes(b.dataset.wact)) return b.dataset.wact; if (t.closest && t.closest('#whisperIn, .win')) return 'input';
+    if (t.closest && t.closest('.cnm')) return 'name'; if (t.closest && t.closest('.chead')) return 'head'; return 'text'; };
+  const worldPart = (t, x, y) => { try { const k = window.__clickKit; if (k && k.critAt(x, y)) return 'creature'; if (t.closest && t.closest('.thing, .design')) return 'thing'; if (k && k.wordAt(x, y)) return 'word'; } catch (e) {} return 'empty'; };
+  const rageWhere = (t, x, y) => { for (let el = t; el && el.nodeType === 1; el = el.parentElement) if (el.id && RAGE_IDS.has(el.id)) return el.id === 'whisper' ? 'whisper:' + whisperPart(t) : el.id;
+    return t && t.closest && t.closest('#arena') ? 'world:' + worldPart(t, x, y) : 'other'; };
   const taps = []; let firstAct = 0, rageAt = 0;
   addEventListener('pointerdown', e => { const t = performance.now(); if (!firstAct) firstAct = t; taps.push([t, e.clientX, e.clientY]); while (taps.length && t - taps[0][0] > 600) taps.shift();
-    if (taps.filter(c => Math.hypot(c[1] - e.clientX, c[2] - e.clientY) <= 24).length >= 3 && t - rageAt > 1000) { rageAt = t; taps.length = 0; inc(E2.rage, rageWhere(e.target)); E2.did.add('rage'); } }, true);
+    if (taps.filter(c => Math.hypot(c[1] - e.clientX, c[2] - e.clientY) <= 24).length >= 3 && t - rageAt > 1000) { rageAt = t; taps.length = 0; inc(E2.rage, rageWhere(e.target, e.clientX, e.clientY)); E2.did.add('rage'); } }, true);
   addEventListener('keydown', () => { if (!firstAct) firstAct = performance.now(); }, true);
   const leaveFlags = () => { const t = performance.now(); if (t < 5000) return; if (!firstAct) E2.did.add('no_interact'); else if (t - firstAct < 30000) E2.did.add('quick_exit'); };
   const e2part = () => { const x = {}; for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'op']) if (Object.keys(E2[k]).length) x[k] = { ...E2[k] };
