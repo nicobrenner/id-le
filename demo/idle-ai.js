@@ -89,25 +89,43 @@
 #ai-smart-btn{margin:6px 10px 0;font-size:12px;padding:4px 10px;border-radius:14px;border:1px solid #b07cff;background:#b07cff18;color:inherit;cursor:pointer;animation:aiGlow 2.6s ease-in-out infinite}
 @keyframes aiGlow{0%,100%{box-shadow:0 0 0 #b07cff00}50%{box-shadow:0 0 12px #b07cff99}}@media (prefers-reduced-motion:reduce){#ai-smart-btn{animation:none}}
 #ai-smart{display:none;padding:8px 10px;border-bottom:1px solid #8884;font-size:12px;line-height:1.45}#ai-smart.on{display:block}#ai-smart p{margin:0 0 6px}#ai-smart .opt{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881}#ai-smart button{font-size:11px;padding:1px 8px;margin:3px 4px 0 0}
-#lab.open~#lab-toggle,#lab.open #lab-toggle{display:none}`;
+#lab.open~#lab-toggle,#lab.open #lab-toggle{display:none}
+#oracleBox{position:fixed;inset:0;z-index:2147482600;display:flex;align-items:center;justify-content:center;padding:16px;background:#02030ab8;backdrop-filter:blur(2px)}#oracleBox[hidden]{display:none}
+#oracleBox .ob{width:min(560px,100%);max-height:86vh;overflow:auto;background:var(--bg,#14151c);color:var(--ink,#e8e6e1);border-radius:16px;box-shadow:0 24px 90px #000c,0 0 0 1px #b07cff66;font:13px var(--oracle-font,var(--ui-font,system-ui))}
+#oracleBox .oh{display:flex;align-items:baseline;gap:10px;padding:12px 14px;border-bottom:1px solid #8884}#oracleBox .oh b{font-size:16px}#oracleBox .oh span{flex:1;opacity:.65;font-size:12px}#oracleBox .ox{background:none;border:0;color:inherit;cursor:pointer;font-size:15px;opacity:.7}
+#oracleBox #ai-bar{border-bottom:1px solid #8884;padding:10px 14px}#oracleBox #ai-smart,#oracleBox #ai-set{padding:10px 14px}
+#ai-oracle-link{display:inline-block;margin:0 8px 0 0;font-size:12px;color:inherit;opacity:.75;text-decoration:none}#ai-oracle-link:hover{opacity:1;text-decoration:underline}`;
   document.head.appendChild(css);
   const lab = $('#lab'), head = $('#lab-head'), text = $('#lab-text'), sendBtn = $('#lab-send');
   if (!lab || !head || !text || !sendBtn) return;
   const bar = document.createElement('div'); bar.id = 'ai-bar';
-  bar.innerHTML = `<span title="who answers in this chat">brain</span><select id="ai-brain"><option value="relay">🛠 your coding agent (local)</option><option value="anthropic">Claude (your key)</option><option value="openai">OpenAI-compatible (your key)</option><option value="local">local model</option><option value="tiny">📟 Tiny Operator (TO): free, in your browser</option></select><button id="ai-gear" title="connect your AI">⚙</button><button id="ai-new" title="start a new conversation">new</button>`;
+  bar.innerHTML = `<span title="who answers in this chat">brain</span><select id="ai-brain"><option value="relay">🛠 your coding agent (local)</option><option value="anthropic">Claude (your key)</option><option value="openai">OpenAI-compatible (your key)</option><option value="local">local model</option><option value="tiny">📟 Tiny Operator (TO): free, in your browser</option></select><button id="ai-gear" title="connect your AI">⚙</button>`;   // one conversation, no "new" (Nico, v10)
   const set = document.createElement('div'); set.id = 'ai-set';
   const smart = document.createElement('div'); smart.id = 'ai-smart';
-  const smartBtn = document.createElement('button'); smartBtn.id = 'ai-smart-btn'; smartBtn.textContent = '🧠 Bring your own AI'; smartBtn.title = 'the ways to seat a bigger AI here, in place of the Tiny Operator';
   const thread = document.createElement('div'); thread.id = 'ai-thread';
-  head.after(smartBtn); smartBtn.after(bar); bar.after(smart); smart.after(set); $('#lab-thread').after(thread);
+  // the 🔮 Oracle (Nico, v10: "the Operator is too busy… the sidebar chat is Operator. Everything should be very clean"): who sits in the
+  // Operator's chair (the brain), the ways to bring your own AI and their settings live in a lightbox, opened from the chat's footer (🔮),
+  // from "/oracle" typed in the chat, from ⚙ settings and from the guided start's last step. The sidebar is the Operator's chat, nothing else.
+  const box = document.createElement('div'); box.id = 'oracleBox'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'the Oracle: bring your own AI'); box.hidden = true;
+  box.innerHTML = `<div class="ob"><div class="oh"><b>🔮 Oracle</b><span>bring your own AI to the Operator's chair</span><button class="ox" title="close">✕</button></div></div>`;
+  document.body.appendChild(box); const boxBody = box.querySelector('.ob');
+  boxBody.append(bar, smart, set); smart.classList.add('on'); $('#lab-thread').after(thread);
+  const openBox = why => { box.hidden = false; renderSet(); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'oracle_open', extra: { from: why || 'chat' } } })); } catch (e) {} setTimeout(() => { try { brainSel.focus(); } catch (e) {} }, 30); };
+  const closeBox = () => { box.hidden = true; };
+  box.addEventListener('click', e => { if (e.target === box || e.target.closest('.ox')) closeBox(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !box.hidden) closeBox(); });
+  window.__oracleBox = { open: openBox, close: closeBox, isOpen: () => !box.hidden };
+  { const f = $('#lab-form small'), a = document.createElement('a'); a.id = 'ai-oracle-link'; a.href = '#'; a.textContent = '🔮 Oracle'; a.title = 'the Oracle: bring your own AI (or type /oracle)'; a.addEventListener('click', e => { e.preventDefault(); openBox('chat'); });
+    if (f) f.before(a); else $('#lab-form').append(a); }
+  // "/oracle" in the chat opens it (a command, like IRC's @inbox; not intent routing)
+  text.addEventListener('keydown', e => { if (e.key === 'Enter' && text.value.trim().toLowerCase() === '/oracle') { e.preventDefault(); e.stopImmediatePropagation(); text.value = ''; openBox('command'); } }, true);
   const REPO = window.IDLE_REPO || 'https://github.com/nicobrenner/id-le';
   smart.innerHTML = `<p>Right now the <b>Tiny Operator</b> (the Tiny Oracle, a 10.8 MB model in your browser) sits in the Operator's chair. It's free and private, and it knows very little. Three ways to seat a bigger AI:</p>
 <div class="opt"><b>1 · A model on your own computer</b> (Ollama or LM Studio). Nothing leaves your machine. <button data-smart="local">set it up</button></div>
 <div class="opt"><b>2 · Your own API key</b> (Claude or any OpenAI-compatible API). The key stays in this browser and goes only from this page straight to the provider you pick: your messages, a short summary of the world and the results of its actions go there; nothing goes through id-le.com, and keys are never saved in world files or snapshots. <button data-smart="anthropic">Claude</button><button data-smart="openai">other</button></div>
 <div class="opt"><b>3 · Run Id|le yourself, with your coding agent</b>. The whole game is open source (MIT): <a href="${REPO}" target="_blank" rel="noopener">get the code</a>, start it with <code>python3 server.py</code>, and seat your own coding agent (Claude Code, on a subscription or a key, or any other) in this chair: it can change anything, the game's code included. That's how Id|le was built. <a href="${REPO}/blob/main/docs/operator-coding-agent.md" target="_blank" rel="noopener">How</a> · <a href="privacy.html" target="_blank" rel="noopener">privacy</a></div>
 <div class="opt"><button data-smart="tiny">back to the Tiny Operator</button></div>`;
-  smartBtn.addEventListener('click', () => smart.classList.toggle('on'));
-  smart.addEventListener('click', e => { const b = e.target.dataset.smart; if (!b) return; cfg.brain = b; cfg.chosen = true; saveCfg(); brainSel.value = b; convo = []; applyBrain(); smart.classList.remove('on'); if (b !== 'tiny') { set.classList.add('on'); renderSet(); } });
+  smart.addEventListener('click', e => { const b = e.target.dataset.smart; if (!b) return; cfg.brain = b; cfg.chosen = true; saveCfg(); brainSel.value = b; convo = []; applyBrain(); if (b !== 'tiny') { set.classList.add('on'); renderSet(); } });
   const brainSel = $('#ai-brain');
 
   fetch('/lab/info').then(r => r.ok ? r.json() : null).then(i => { if (i && i.notes) { window.__labInfo = i; if (cfg.brain === 'relay') renderSet(); } }).catch(() => {});
@@ -130,7 +148,6 @@
   set.addEventListener('change', e => { const a = e.target.dataset.allow; if (a) { cfg.allow[a] = e.target.checked; saveCfg(); } });
   set.addEventListener('click', e => { const f = e.target.dataset.forget; if (!f) return; cfg[f].key = ''; saveCfg(); renderSet(); add('page', 'key forgotten: it is no longer stored in this browser'); });
   $('#ai-gear').addEventListener('click', () => { set.classList.toggle('on'); renderSet(); });
-  $('#ai-new').addEventListener('click', () => { convo = []; thread.innerHTML = ''; add('page', 'new conversation'); });
   brainSel.value = cfg.brain;
   const applyBrain = () => { lab.classList.toggle('ai', cfg.brain !== 'relay');
     text.placeholder = cfg.brain === 'relay' ? 'tell your coding agent what to change: the creatures, the world, the game itself… (⌘+Enter sends)' : cfg.brain === 'tiny' ? 'ask TO: make it rain, add a Mathematician, start a rave, rename Crawly to … (⌘+Enter sends)' : 'talk to your AI about the world, ask it to do things… (⌘+Enter sends)';
@@ -141,7 +158,7 @@
   // on a public site (no local server) there is no lab relay: the chat is the player's own AI, and says how to connect one
   (window.__idle ? window.__idle.mode() : Promise.resolve('server')).then(m => { if (m !== 'static') return;
     const o = brainSel.querySelector('option[value=relay]'); if (o) o.remove(); if (cfg.brain === 'relay' || (!ready() && !cfg.chosen)) { cfg.brain = 'tiny'; brainSel.value = 'tiny'; }
-    { const N = window.IDLE_NAMES; const hb = $('#lab-head b'); const P_ = N && (N.oracle || N.op); hb.textContent = P_ ? `${P_.icon} ${P_.short}` : '🔮 Oracle'; hb.title = P_ ? P_.sub : 'bring your own AI: it can change this world, even its code'; } applyBrain(); if (!thread.childElementCount) add('page', cfg.brain === 'tiny' ? 'The Tiny Operator (TO) is the Oracle sitting in the Operator\'s chair: ask it to change the weather, add a creature, start a rave, rename someone, or just chat. It runs in your browser and knows very little. 🧠 above makes your Operator smarter.' : 'The Operator talks to an AI you bring. 🧠 above shows your options.'); });
+    { const N = window.IDLE_NAMES; const hb = $('#lab-head b'); const P_ = N && N.op; hb.textContent = P_ ? `${P_.icon} ${P_.short}` : '📟 Operator'; hb.title = P_ ? P_.sub : 'the Tiny Operator: the chat that runs the world'; } applyBrain(); if (!thread.childElementCount) add('page', cfg.brain === 'tiny' ? 'The Tiny Operator (TO) is the Oracle sitting in the Operator\'s chair: ask it to change the weather, add a creature, start a rave, rename someone, or just chat. It runs in your browser and knows very little. 🔮 Oracle (below) seats a bigger AI.' : 'The Operator talks to an AI you bring. 🔮 Oracle (below) shows your options.'); });
 
   function add(who, msg, cls) { const d = document.createElement('div'); d.className = 'ai-row ' + (cls || who); d.innerHTML = '<b>' + esc(who) + '</b> ' + esc(msg); thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   function chip(t, err) { const d = document.createElement('div'); d.className = 'ai-chip' + (err ? ' err' : ''); d.textContent = t; thread.appendChild(d); thread.scrollTop = 1e9; return d; }
