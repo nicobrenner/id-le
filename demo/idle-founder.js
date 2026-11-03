@@ -49,9 +49,11 @@
   const PID = /^[a-z2-7]{20,40}$/.test(Q.get('gift') || '') ? Q.get('gift') : null;
   function eligible() { const fs = hasWorld() ? firstSeen() : null;
     const links = testSite || LINKS_ON_PROD;
-    return { world: !!(fs && fs < BEFORE && (testSite || WORLD_ON_PROD)), link: links && (!!PID || (Q.get('gift') === 'founder' && now() < UNTIL)), personal: links ? PID : null, expired: links && Q.get('gift') === 'founder' && now() >= UNTIL, firstSeen: fs }; }
+    // a vested member of the Founders team (idle-reviews.js: joined, then 14 days and 3 reviews) may open the creator too; that module is off on id-le.com for now
+    const team = !!(window.__reviews && window.__reviews.team && window.__reviews.team.vested());
+    return { world: !!(fs && fs < BEFORE && (testSite || WORLD_ON_PROD)), link: links && (!!PID || (Q.get('gift') === 'founder' && now() < UNTIL)), personal: links ? PID : null, expired: links && Q.get('gift') === 'founder' && now() >= UNTIL, team, firstSeen: fs }; }
   // never inside a storyline keyframe (idle-keys.js: a sandbox for watching the story)
-  const available = () => { if (claimed() || window.__storyKey) return false; const e = eligible(); return e.world || e.link || !!state().via; };
+  const available = () => { if (claimed() || window.__storyKey) return false; const e = eligible(); return e.world || e.link || e.team || !!state().via; };
   const busy = () => !window.__restoredOrFresh || document.documentElement.classList.contains('booting') || !!document.querySelector('#idleIntro') || !!window.__genesisVoid || !!window.__traveling || !hooks();
 
   // ---------- badges: drawn on a canvas (in the world and in the creator), and as a small mark on the card ----------
@@ -236,7 +238,7 @@
     if (e.world) { if (k * 500 < (Q.has('founder') ? 1500 : 8000)) return; clearInterval(iv); mark('fd_world'); offer(); return; }
     if (k * 500 > 30000) clearInterval(iv); }, 500); }
 
-  window.__founder = { available, open: () => (available() ? letter(state().via || (eligible().link ? 'link' : 'world')) : null), card, eligible, claimed: () => state().claimed || null, creator, badges: BADGES.map(b => b.id),
+  window.__founder = { available, open: () => (available() ? letter(state().via || (eligible().link ? 'link' : eligible().team ? 'team' : 'world')) : null), card, eligible, claimed: () => state().claimed || null, creator, badges: BADGES.map(b => b.id),
     dates: () => ({ before: new Date(BEFORE).toISOString(), until: new Date(UNTIL).toISOString(), worldOnProd: WORLD_ON_PROD, letterDraft: LETTER_DRAFT }),
     test: { experiment: r => experiment(r || 0.14), pick: i => pickVar(i), undo, name: n => { L.name = n; const i = document.querySelector('#founderLab .name input'); if (i) i.value = n; nameMsg(); return nameProblem(n); }, badge: b => { L.badge = b; render(); }, release, state: () => L && { fam: L.fam, gens: L.gens.length, exps: L.exps, hist: L.hist.length, badge: L.badge, name: L.name, g: L.g } } };
 })();

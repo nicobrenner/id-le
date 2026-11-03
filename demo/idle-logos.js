@@ -332,6 +332,10 @@ async function render(v) { const probe = new OfflineAudioContext(1, SR, SR); con
 const LOGO_CACHE = new Map(), prepareLogo = v => { if (!LOGO_CACHE.has(v.id)) LOGO_CACHE.set(v.id, render(v)); return LOGO_CACHE.get(v.id); };
 const LOGOS = V.map(v => { const probe = new OfflineAudioContext(1, SR, SR), duration = v.build(probe, probe.destination).dur;
   return { id: v.id, name: v.name, idea: v.idea, duration, prepare: () => prepareLogo(v),
+    // for ⭐ reviews (idle-reviews.js, v2): the rendered sound and its marked events (the strip under each logo, as on the lab's pages), and a
+    // still frame at time t (the poster before it plays)
+    info: () => prepareLogo(v).then(r => ({ buf: r.buf, ev: r.R.ev || [], dur: r.R.dur, poster: Math.min(r.R.dur - 0.6, r.R.M && r.R.M.c != null ? r.R.M.c + 1.0 : 2) })),
+    still(canvas, t, opts = {}) { return prepareLogo(v).then(r => { const g = canvas.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, canvas.width, canvas.height); r.S.font = opts.font || v.font || "'Idle F1', monospace"; v.draw(g, canvas.width, canvas.height, t, r.S); }); },
     build(ctx, canvas, t0, opts = {}) { if (opts.dust) DUST_MODE = opts.dust; let stopped = false, src = null, raf = 0, end; const done = new Promise(r => end = r), font = opts.font || v.font || "'Idle F1', monospace";
       prepareLogo(v).then(r => { if (stopped) return; src = ctx.createBufferSource(); src.buffer = r.buf; src.connect(opts.destination || ctx.destination); const now = ctx.currentTime; if (t0 >= now) src.start(t0); else src.start(now, now - t0);
         const g = canvas.getContext('2d'), lat = () => ctx.outputLatency || ctx.baseLatency || 0;

@@ -58,7 +58,7 @@ window.__funnel = (() => { const K = 'idle.funnel'; let m = {}; try { m = JSON.p
   const helperOn = () => { try { return (JSON.parse(localStorage.getItem('idle.settings') || '{}').helper) !== false; } catch (e) { return true; } };
   const HELPER_OFF = 'the public helper is off in ⚙ settings: creatures can\'t read web pages and worlds can\'t link until you turn it back on';
   const HELPER_PATHS = ['/lab/fetch', '/lab/page', '/lab/asset', '/lab/img', '/worlds/', '/jeffy/'];
-  const OWN_PATHS = /^\/lab\/(oracle|roadmap|vote|reviews|review\/[a-z0-9-]{1,30})(\?|$)/;   // ⭐ reviews (idle-reviews.js) too   // Tell the Oracle and the roadmap: the site's own service, not the page-reading helper, so ⚙'s helper switch doesn't apply   // /jeffy/*: the data lab's classifiers via Jeffy's public server
+  const OWN_PATHS = /^\/lab\/(oracle|roadmap|vote|reviews|review\/[a-z0-9-]{1,40}|team\/[a-z-]{1,20}(?:\/join|\/me)?)(\?|$)/;   // ⭐ reviews and teams (idle-reviews.js) too   // Tell the Oracle and the roadmap: the site's own service, not the page-reading helper, so ⚙'s helper switch doesn't apply   // /jeffy/*: the data lab's classifiers via Jeffy's public server
   const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } });
 
   // --- is there a server? (a static host answers /lab/notices with 404 or an HTML fallback page, never a JSON list)
