@@ -8,8 +8,7 @@
 //   dedupes per visitor and day without storing who), and "suggest something" opens Tell the Oracle.
 // - In 💬 IRC, "tell the Oracle …" (or "@oracle …") opens the form with those words in it; nothing is sent until you press send.
 (() => {
-  // not on id-le.com yet (Nico 11-02): on staging, local copies, or with ?oracle; TO will offer it from the Operator chat later
-  { const h = location.hostname; if (!(/^staging\./.test(h) || h === 'localhost' || h === '127.0.0.1' || /[?&]oracle\b/.test(location.search))) return; }
+  // on id-le.com too since Nov 3 (Nico: "release the fonts and the roadmap/'talk to scientist' feature")
   const $ = s => document.querySelector(s), esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const VOTED = 'idle.votes', KINDS = [['idea', '💡 an idea'], ['bug', '🐞 a bug'], ['loved', '💜 I loved this'], ['off', '🌀 something felt off']];
   const THANKS = ['noted. I will whisper it to the maker', 'the scientists heard you. the maker reads everything that comes through here', 'thank you. small worlds grow from words like these',

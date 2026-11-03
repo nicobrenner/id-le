@@ -442,6 +442,7 @@ class Page:
         self.stats = stats_sink if stats_sink is not None else []
         self.fb = []
         self.gifts = {}
+        self.root = None   # set: the build is served from this folder at self.base (a production hostname, t_prod_gates)
         ctx.route("**/*", self._route)
 
     def _route(self, route):
@@ -466,6 +467,11 @@ class Page:
             if path == "/lab/vote": self.fb.append(("vote", route.request.post_data or "")); return route.fulfill(status=200, content_type="application/json", body='{"ok":true,"votes":4}')
             if path == "/lab/roadmap": return route.fulfill(status=200, content_type="application/json", body=json.dumps({"items": [{"id": "mods", "title": "Mods", "line": "share rules and looks", "status": "planned"}, {"id": "bodies", "title": "New bodies", "line": "", "status": "later"}], "votes": {"mods": 3}, "url": "https://github.com/nicobrenner/id-le/issues/20"}))
             if path.startswith("/lab/") or path.startswith("/worlds/"): return route.fulfill(status=200, content_type="application/json", body='{"ok":false,"error":"test stub"}')
+            if self.root:
+                f = os.path.join(self.root, path.lstrip("/") or "index.html")
+                if os.path.isdir(f): f = os.path.join(f, "index.html")
+                if not os.path.isfile(f) and os.path.isfile(f + ".html"): f += ".html"
+                return route.fulfill(path=f) if os.path.isfile(f) else route.fulfill(status=404, body="")
             return route.continue_()
         if u.startswith("data:") or u.startswith("blob:"): return route.continue_()
         self.outside.append(u.split("?")[0][:100])
@@ -1858,6 +1864,50 @@ def t_story_v6(P):
     return f"?intro=epoch0 → ?story; logo on ~3 s, cycling {r['cols']}, then black; 'conscious' clear of the dialog (desktop {len(r['clear']['desktop'])}, phone {len(r['clear']['phone'])} frames); {len(shots)} frames over the transition, ≤{worst[1] * 100:.2f}% bright, black from 0.9 s"
 
 
+def t_prod_gates(P, root):
+    """id-le.com (the production hostname, served from the build, nothing leaves the browser): the fonts and 🧪 tell the scientists are
+    on; no boot or storyline intro, no storyline offer, no Storyline mode / Replay rows, no storyline in the chooser, no Founder gift
+    (?gift=founder and personal links do nothing)"""
+    P.base, P.root = "https://id-le.com", root
+    pg = P.open("/arena.html?fresh=1"); booted(pg)
+    pg.wait_for_timeout(22000)   # past the storyline offer's 20 s
+    r = pg.evaluate("""async () => { await document.fonts.ready; return { host: location.hostname, live: window.__genesis.storyLive(), void: !!window.__genesisVoid,
+      intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(),
+      f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
+      ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
+    need(r["host"] == "id-le.com" and not r["live"], f"not emulating production: {r}")
+    need(not r["void"] and not r["intro"] and not r["offer"] and not r["founder"], f"story/offer/founder visible on production: {r}")
+    need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
+    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
+    pg.evaluate("() => window.__settings.close()")
+    need("Tell the scientists" in txt and "Storyline mode" not in txt and "Replay the intro" not in txt and "Founder gift" not in txt, "⚙ rows on production: " + ", ".join(k for k in ("Tell the scientists", "Storyline mode", "Replay the intro", "Founder gift") if k in txt))
+    # 🧪: sends (to the stub), the roadmap lists and votes once
+    pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(300)
+    pg.evaluate("() => document.querySelector('#oracle [data-kind=idea]').click()"); pg.fill("#oracle textarea", "prod gate check")
+    pg.evaluate("() => document.querySelector('#oracle [data-a=send]').click()")
+    wait_for(pg, "() => /🧪/.test((document.querySelector('#oracle .msg') || {}).textContent || '')", 10, P=P)
+    pg.evaluate("() => document.querySelector('#oracle [data-tab=road]').click()")
+    wait_for(pg, "() => document.querySelectorAll('#oracle .it').length === 2", 10, P=P)
+    pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').click()"); pg.wait_for_timeout(500)
+    need(len([k for k, _ in P.fb if k == "oracle"]) == 1 and len([k for k, _ in P.fb if k == "vote"]) == 1, f"🧪 sends/votes: {P.fb}")
+    pg.evaluate("() => window.__feedback.close()")
+    # the chooser (⚙ New consciousness): no storyline on production
+    pg.evaluate("() => { window.__genesis.newUniverse(); }")
+    wait_for(pg, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 30, P=P)
+    ms = pg.evaluate("() => [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m)")
+    need(ms == ["free", "ready"], f"chooser on production: {ms}")
+    pg.close()
+    # gift links: nothing opens
+    P.gifts["abcdefghijklmnopqrstuvwx"] = {"letter": "hi", "claimed": False}
+    for q in ("gift=founder", "gift=abcdefghijklmnopqrstuvwx"):
+        pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
+        g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
+        need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
+    need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
+    P.clean()
+    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)"
+
+
 def t_chooser(P):
     """?genesis opens the chooser (Storyline · From scratch · A ready world); "From scratch" gives the free console with every chip."""
     pg = P.open("/arena.html?genesis&intro=0&test")
@@ -2031,7 +2081,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "prod gates", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2104,6 +2154,7 @@ def main():
                 run("pedia halloween", t_pedia_halloween)
                 run("fonts", t_fonts)
                 run("fonts phone", t_fonts_phone, is_mobile=True, has_touch=True)
+                run("prod gates", t_prod_gates, out, service_workers="block")
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()
