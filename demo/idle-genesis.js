@@ -587,7 +587,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode, ev: 2 }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
     if (mode === 'free') cls('gen-calm', 0);
     // v12: in the story the game is hushed from the intro on (the intro plays past it, storyOut) and held until the music step
-    if (mode === 'story') { blackCover(true); silence(true); cosmos.start(); if (SK) await SK.ready; await intro(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); await keyAdvance(); return true; }
+    if (mode === 'story') { blackCover(true); silence(true); worldHold(true); if (SK) await SK.ready; await intro(); cosmos.start(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); await keyAdvance(); return true; }
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
   // the chooser (v13, Nico: "what we currently call 'free play', the story-less space, let's call it the playground… And then there's the
   // storyline of the Doc"): two worlds, the storyline and the playground; the playground starts as a ready world (creatures already
@@ -739,7 +739,12 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
   function windIn() { snd.wind = { at: now() }; try { const m = window.__music; if (m && m.source && m.source() === 'bg' && m.setBg) { m.setBg(false); snd.wind.pausedBg = true; } } catch (e) {}
     silence(false); hum(false); }
   function music() { snd.life = { at: now() }; reward(); hum(false); }   // the celebration, after the strikes: the background music (the hush is already lifted)
-  async function landing() { if (Q.has('nolanding')) { blackCover(false); land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
+  // the world waits for the story (Nov 4): from the story's start to its landing the world neither simulates nor draws (arena.html's loops
+  // check window.__worldHold); the intro covers everything anyway, so it's only CPU, battery and stray notices saved. Never longer than 6 min.
+  let holdCap = 0;
+  function worldHold(on) { clearTimeout(holdCap); if (on) { window.__worldHold = true; holdCap = setTimeout(() => worldHold(false), 360000); return; }
+    if (!window.__worldHold) return; window.__worldHold = false; try { window.dispatchEvent(new Event('idle:worldgo')); } catch (e) {} }
+  async function landing() { worldHold(false); if (Q.has('nolanding')) { blackCover(false); land = { phase: 'done', clicks: 0, why: 'flag' }; return; }
     // keyframes past the Operator's arrival: the dark is there (for the sonar and the lights), without the lines or the arrival
     if (skAfter('operator')) { for (let i = 0; i < 200 && document.documentElement.classList.contains('booting'); i++) await new Promise(r => setTimeout(r, 100));
       land = { phase: 'sonar', clicks: 0, t0: now(), shown: 0, pings: 0, why: 'key' }; nightStart(matchMedia('(prefers-reduced-motion: reduce)').matches); silence(true); blackCover(false); return; }
@@ -880,12 +885,13 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
   const modalUp = () => !!(moment || (S && S.endOpen && document.querySelector('#genDay.end')) || document.querySelector('#offerModal'));
   function modalSync() { const up = modalUp(); cls('gen-modal', up); let bd = $('#genModalBd');
     if (up && !moment && !bd) { bd = document.createElement('div'); bd.id = 'genModalBd'; document.body.appendChild(bd); } else if ((!up || moment) && bd) bd.remove();
-    if (!up && MODAL.held.length && origNotify) { const h = MODAL.held.splice(0); h.forEach((a, i) => setTimeout(() => { try { origNotify(...a); MODAL.shown++; } catch (e) {} }, 500 + i * 700)); } }
-  function wrapNotify() { const n = window.__notify; if (!n || n.__held) return; const w = (...a) => { if (modalUp()) { MODAL.held.push(a); return null; } return n(...a); }; Object.assign(w, n); w.__held = true; origNotify = n; window.__notify = w; }
+    if (!up && !window.__worldHold && MODAL.held.length && origNotify) { const h = MODAL.held.splice(0); h.forEach((a, i) => setTimeout(() => { try { origNotify(...a); MODAL.shown++; } catch (e) {} }, 500 + i * 700)); } }
+  function wrapNotify() { const n = window.__notify; if (!n || n.__held) return; const w = (...a) => { if (modalUp() || window.__worldHold) { MODAL.held.push(a); return null; } return n(...a); }; Object.assign(w, n); w.__held = true; origNotify = n; window.__notify = w; }
   ['pointerdown', 'click', 'touchstart'].forEach(t => document.addEventListener(t, e => { if (!document.documentElement.classList.contains('gen-modal')) return;
     if (e.target.closest && e.target.closest('#genDay.end, #lab, #genConfirm, #genResume, #oracle, #stagingRibbon, #offerModal')) return;
     e.stopPropagation(); if (t !== 'touchstart') e.preventDefault(); }, true));
   setInterval(() => { wrapNotify(); modalSync(); }, 400);
+  addEventListener('idle:worldgo', () => { try { wrapNotify(); modalSync(); } catch (e) {} });   // notices held during the intro come after the landing
   window.__modal = { up: modalUp, held: () => MODAL.held.length, shown: () => MODAL.shown };
   // where a closed card goes (v15's ✅ checklist in the Operator may point it elsewhere: window.__epochTarget); the 📟 by default
   function shrinkEnd() { const el = $('#genDay.end'); if (!el) return; const a = el.getBoundingClientRect(); let t = null; try { t = window.__epochTarget && window.__epochTarget(); } catch (e) {}
