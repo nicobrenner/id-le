@@ -143,7 +143,7 @@ SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "b
             "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)",
             "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground", "e0_tap": "tapped a creature in the look-around",
             "ch_story": "chooser: the storyline", "ch_play": "chooser: the playground", "pw_shown": "playground welcome shown", "pw_story": "playground welcome: started the story",
-            "st_resume": "⚙ storyline: resumed", "title_auto": "title card auto-started", "sound_on": "turned the sound on", "st_restart": "⚙ storyline: restarted"}
+            "st_resume": "⚙ storyline: resumed", "title_auto": "title card auto-started", "sound_on": "turned the sound on", "sound_off": "muted with the speaker toggle", "st_restart": "⚙ storyline: restarted"}
 
 
 # the Founder gift (idle-founder.js), from the same once-per-browser moments ('fd_…'), summed over the storyline's arms
@@ -559,8 +559,8 @@ def main():
             st = o["steps"]; first = next((st[k] for k in SF_STEPS if st.get(k)), 0)
             line = " → ".join(f"{SF_NAMES[k]} {st[k]}" + (f" ({100 * st[k] / first:.0f}%)" if first else "") for k in SF_STEPS if st.get(k))
             print(f"  {arm:<8} {line or '-'}")
-            if st.get("title_auto") or st.get("sound_on"):
-                print(f"           title card: auto-started (no key in 2 s) {st.get('title_auto', 0)}, then turned the sound on {st.get('sound_on', 0)}")
+            if st.get("title_auto") or st.get("sound_on") or st.get("sound_off"):
+                print(f"           title card: auto-started (no key in 2 s) {st.get('title_auto', 0)}, then turned the sound on {st.get('sound_on', 0)} · the speaker toggle turned it off {st.get('sound_off', 0)}")
             if o["skips"]:
                 print(f"           skipped at: " + ", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in sorted(o["skips"].items(), key=lambda kv: -kv[1])))
             if o["offer"]:

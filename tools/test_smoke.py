@@ -2785,8 +2785,8 @@ def t_title_auto(P):
     pg.evaluate(SUSP); t0 = time.time()
     wait_for(pg, "() => !window.__epoch0.waiting()", 6, P=P); t_auto = time.time() - t0
     need(t_auto <= 2.6, f"the title card should start itself within ~2 s, took {t_auto:.1f} s")
-    a = pg.evaluate("""() => { const b = document.querySelector('#idleIntro .snd'), r = b && b.getBoundingClientRect();
-      return { auto: window.__epoch0.autoMuted(), chip: !!b && getComputedStyle(b).display !== 'none' && b.classList.contains('tap') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
+    a = pg.evaluate("""() => { const b = document.querySelector('#storySnd'), r = b && b.getBoundingClientRect();
+      return { auto: window.__epoch0.autoMuted(), chip: !!b && !b.classList.contains('gone') && b.classList.contains('chip') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
         state: window.__audio.ctx().state, f: window.__funnel.reached(), sounding: window.__epoch0.sounding() }; }""")
     need(a["auto"] and a["chip"] and a["state"] != "running" and not a["sounding"] and "title_auto" in a["f"], f"auto-start should be muted with the chip shown: {a}")
     t1 = pg.evaluate("() => window.__epoch0.time()"); s1 = pg.screenshot(); pg.wait_for_timeout(1500)
@@ -2804,8 +2804,9 @@ def t_title_auto(P):
     pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 6, P=P)
     pg.mouse.click(200, 200)
     wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding() && !window.__epoch0.autoMuted()", 10, P=P)
-    c = pg.evaluate("() => { const b = document.querySelector('#idleIntro .snd'); return { chipTap: !!b && b.classList.contains('tap'), shown: !!b && getComputedStyle(b).display !== 'none', f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
-    need(not c["chipTap"] and not c["shown"] and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and hide the chip (not pause): {c}")
+    pg.wait_for_timeout(1000)
+    c = pg.evaluate("() => { const b = document.querySelector('#storySnd'); return { chipTap: !!b && b.classList.contains('chip'), shown: !!b && !b.classList.contains('gone'), icon: b ? b.textContent : null, f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
+    need(not c["chipTap"] and c["shown"] and c["icon"] == "🔊" and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and shrink the chip into the 🔊 toggle (not pause): {c}")
     pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
     # 3. a key during the title card: starts at once, with sound, no chip
     pg = P.open("/arena.html?story&test")
@@ -2821,6 +2822,67 @@ def t_title_auto(P):
     pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted() && !window.__epoch0.waiting()", 6, P=P)
     P.clean()
     return f"auto-start in {t_auto:.1f} s, muted with the chip; moved {t2 - t1:.1f} s in 1.5 s; reached the dark silent (logo {b['logo']['arm'] if b['logo'] else '-'}); tap → sound; key → sound; story arm auto-starts"
+
+
+def t_speaker(P, phone=False):
+    """The sound toggle (Nov 4, Nico: "the 'tap for sound' message/prompt could animate/minimize to a speaker icon that stays at the bottom
+    left of the screen, like opposite/mirror of skip... and maybe it can stay there as a toggle too, so people can also turn it off"): the chip
+    shrinks after ~4 s into a bottom-left button that mirrors "skip ›"; a tap turns the sound on (🔊), another mutes it for real (the game's own
+    mute, kept in its setting), a third turns it back on in sync; it stays through the skip into the dark landing; phones: a 44 px target
+    clear of "skip ›" and the Operator"""
+    SUSP = "() => { try { const c = window.__audio && window.__audio.ctx(); if (c && c.state === 'running') c.suspend(); return true; } catch (e) { return false; } }"
+    RECT = """() => { const b = document.querySelector('#storySnd'), k = document.querySelector('#idleIntro .skip'), op = document.querySelector('#lab');
+      const R = e => { if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
+      const vis = e => !!e && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden' && +getComputedStyle(e).opacity > 0.05;
+      return { b: R(b), skip: vis(k) ? R(k) : null, op: vis(op) ? R(op) : null, cls: b ? b.className : null, icon: b ? b.textContent : null, on: b ? b.dataset.on : null, H: innerHeight, W: innerWidth,
+        muted: window.__audio.muted(), state: window.__audio.ctx().state, sounding: window.__epoch0.sounding(), f: window.__funnel.reached() }; }"""
+    over = lambda a, b: bool(a and b and a["l"] < b["r"] and b["l"] < a["r"] and a["t"] < b["b"] and b["t"] < a["b"])
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 150, P=P)
+    pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 15, P=P)
+    a = pg.evaluate(RECT)
+    need("chip" in a["cls"] and "gone" not in a["cls"] and "tap for sound" in a["icon"], f"the chip should show first: {a}")
+    pg.wait_for_timeout(4800)
+    b = pg.evaluate(RECT)
+    need("chip" not in b["cls"] and "gone" not in b["cls"] and b["icon"] in ("🔇", "🔊"), f"after ~4 s the chip should become the speaker button: {b}")
+    need(abs(b["b"]["l"] - 14) <= 2 and abs((b["H"] - b["b"]["b"]) - 14) <= 3, f"the speaker should sit at the bottom left (14 px): {b['b']} in {b['W']}x{b['H']}")
+    if b["skip"]:
+        need(abs(b["b"]["b"] - b["skip"]["b"]) <= 3 and abs((b["W"] - b["skip"]["r"]) - b["b"]["l"]) <= 3, f"it should mirror skip ›: speaker {b['b']}, skip {b['skip']}")
+        need(not over(b["b"], b["skip"]), f"it must not overlap skip ›: {b['b']} vs {b['skip']}")
+    if phone:
+        need(b["b"]["w"] >= 44 and b["b"]["h"] >= 44, f"a 44 px tap target on phones: {b['b']}")
+    else:
+        need(b["skip"] and abs(b["b"]["h"] - b["skip"]["h"]) <= 4, f"the same size as skip › on desktop: {b['b']} vs {b['skip']}")
+    # on
+    pg.click("#storySnd")
+    wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding()", 10, P=P); pg.wait_for_timeout(700)
+    c = pg.evaluate(RECT)
+    need(c["icon"] == "🔊" and not c["muted"] and "sound_on" in c["f"] and not pg.evaluate("() => window.__epoch0.paused()"), f"a tap should turn the sound on (🔊), without pausing: {c}")
+    # off: the game's own mute, kept in its setting; the film's sound stops
+    pg.click("#storySnd"); pg.wait_for_timeout(900)
+    d = pg.evaluate(RECT); saved = pg.evaluate("() => { try { return JSON.parse(localStorage.getItem('idle.audio') || 'null'); } catch (e) { return null; } }")
+    need(d["icon"] == "🔇" and d["muted"] and not d["sounding"] and d["state"] != "running" and "sound_off" in d["f"], f"a second tap should mute for real (gain 0, audio suspended): {d}")
+    need(saved and saved.get("muted") is True, f"the mute should be kept in the game's sound setting: {saved}")
+    # on again: back in sync
+    pg.click("#storySnd")
+    wait_for(pg, "() => !window.__audio.muted() && window.__audio.ctx().state === 'running' && window.__epoch0.sounding()", 10, P=P)
+    # skip into the dark landing: the toggle stays, and still mutes the game
+    pg.keyboard.press("Escape")
+    wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis && window.__genesis.landing && ['dark', 'arriving', 'sonar'].includes(window.__genesis.landing().phase)", 20, P=P)
+    pg.wait_for_timeout(3600)
+    e = pg.evaluate(RECT)
+    need(e["b"] and "gone" not in e["cls"], f"the toggle should stay into the dark landing: {e}")
+    pg.click("#storySnd"); pg.wait_for_timeout(500)
+    f = pg.evaluate(RECT)
+    need(f["muted"] and f["icon"] == "🔇", f"muting in the dark should mute the game: {f}")
+    if phone:
+        wait_for(pg, "() => { const op = document.querySelector('#lab'); return !!op && getComputedStyle(op).display !== 'none'; }", 60, P=P)
+        g = pg.evaluate(RECT)
+        need(not over(g["b"], g["op"]), f"the speaker must never sit under the Operator: {g['b']} vs {g['op']}")
+    if os.environ.get("IDLE_SHOTS"):
+        pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], f"speaker-{'phone' if phone else 'desktop'}-dark.png"))
+    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    return f"{'phone' if phone else 'desktop'}: chip → speaker at {b['b']['l']:.0f},{b['H'] - b['b']['b']:.0f} ({b['b']['w']:.0f}x{b['b']['h']:.0f}); on → off (muted, kept) → on; stays into the dark landing"
 
 
 def t_ios_sound(P, ios=True):
@@ -4042,7 +4104,7 @@ def browser_tests(a, out):
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
-        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}),
+        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
         ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
@@ -4070,7 +4132,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+LAUNCH = {"title auto", "speaker", "speaker phone", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
