@@ -2257,36 +2257,113 @@ def _rv_page(P, q="/arena.html?test"):
 
 
 def t_reviews_invite(P):
-    """The 📟 Operator delivers Nico's message: 'I have a message from Nico:', then his lines one by one in a quoted bubble, in order;
-    [I'm in ✌️] / [not now]. 'not now' asks again once, a day later at the soonest, and never a third time. 'I'm in' joins the Founders
-    (the server gets the browser key), the rest of his lines (the draft ending last), the pledge, then 'check them out ›' opens the review."""
-    pg = _rv_page(P)
-    T = pg.evaluate("() => window.__reviews.text")
+    """v3: the 📟 Operator relays Nico's message: it types (its own dots), says 'I have a message from Nico:', then the letter appears
+    as one '📨 from Nico' card, first line in view (no 'Nico is typing'); [I'm in ✌️] / [not now]. not now → the Operator's line and the 🌱
+    lights up; asked again once a day later, never a third time. I'm in → joined (the key), the review's own lines (logos: Nico's),
+    the pledge, then 'check them out ›' opens the deck; closing it with nothing judged → 'I'll give you some more time' + the 🌱 lit."""
+    pg = _rv_page(P); T = pg.evaluate("() => window.__reviews.text")
     pg.evaluate("() => { window.__reviews.invite('logos'); }"); wait_for(pg, "() => document.querySelectorAll('.rvbtns button').length === 2", 30, P=P)
-    seq = pg.evaluate("() => { const rows = [...document.querySelectorAll('.rvop,.rvnico')]; return { kinds: rows.map(r => r.classList.contains('rvop') ? 'op:' + r.textContent : 'nico'), lines: [...document.querySelectorAll('.rvnico span')].map(s => s.textContent), open: document.getElementById('lab').classList.contains('open'), btns: [...document.querySelectorAll('.rvbtns button')].map(b => b.textContent) }; }")
-    need(seq["kinds"][-2:] == ["op:I have a message from Nico:", "nico"] and seq["lines"] == T["hello"][0] and seq["btns"] == [T["yes"], T["no"]] and seq["open"], f"the delivery: {seq}")
-    pg.click(".rvbtns button.alt"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.includes('another time'))", 10, P=P)
-    inv1 = pg.evaluate("() => JSON.parse(localStorage.getItem('idle.invite'))")
-    need(inv1["answer"] == "no" and inv1["asks"] == 1, f"not now: {inv1}")
-    n = lambda: pg.evaluate("() => document.querySelectorAll('.rvnico').length")
-    pg.evaluate("() => window.__reviews.test.auto(true, 200000)"); pg.wait_for_timeout(6500)
-    need(n() == 1, "asked again within a day")
+    seq = pg.evaluate("""() => { const h = document.querySelector('.rvletter').parentElement, L = document.querySelector('.rvletter'), hr = h.getBoundingClientRect(), lr = L.getBoundingClientRect();
+      return { op: [...document.querySelectorAll('.rvop')].map(r => r.textContent), who: L.querySelector('.who').textContent, lines: [...L.querySelectorAll('span')].map(s => s.textContent),
+        typing: document.body.innerText.includes('Nico is typing'), firstInView: lr.top >= hr.top - 1 && lr.top < hr.bottom, btns: [...document.querySelectorAll('.rvbtns button')].map(b => b.textContent), nico: document.querySelectorAll('.rvnico').length }; }""")
+    need(seq["op"][-1] == "I have a message from Nico:" and seq["who"] == "📨 from Nico" and seq["lines"] == T["hello"][0] and not seq["typing"] and seq["nico"] == 0 and seq["firstInView"] and seq["btns"] == [T["yes"], T["no"]], f"the relayed letter: {seq}")
+    pg.click(".rvbtns button.alt"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.includes('come join us'))", 10, P=P)
+    wait_for(pg, "() => !!document.querySelector('.opHi')", 5, P=P)   # the cut-scene's ring on the 🌱
+    nn = pg.evaluate("() => ({ want: window.__reviews.text.notNow(false), knows: window.__reviews.test.knows(), line: [...document.querySelectorAll('.rvop')].pop().textContent, hl: window.__reviews.test.lastHighlight(), ring: true, inv: JSON.parse(localStorage.getItem('idle.invite')) })")
+    need(not nn["knows"] and nn["line"].startswith(nn["want"]) and "players who help decide what ships" in nn["line"] and nn["hl"] == "hitlBtn" and nn["ring"] and nn["inv"]["answer"] == "no", f"not now: {nn}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "invite-not-now.png"))
+    n = lambda: pg.evaluate("() => document.querySelectorAll('.rvletter').length")
+    pg.evaluate("() => window.__reviews.test.auto(true, 200000)"); pg.wait_for_timeout(6500); need(n() == 1, "asked again within a day")
     pg.evaluate("() => { window.__reviews.test.shift(25 * 3600e3); window.__reviews.test.auto(true, 200000); }")
-    wait_for(pg, "() => document.querySelectorAll('.rvnico').length === 2 && document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 20, P=P)
+    wait_for(pg, "() => document.querySelectorAll('.rvletter').length === 2 && document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 20, P=P)
     pg.click(".rvbtns button.alt:not([disabled])"); pg.wait_for_timeout(300)
     pg.evaluate("() => { window.__reviews.test.shift(25 * 3600e3); window.__reviews.test.auto(true, 200000); }"); pg.wait_for_timeout(6500)
-    need(n() == 2, f"asked a third time ({n()} bubbles)")
-    # I'm in
+    need(n() == 2, f"asked a third time ({n()} letters)")
     pg.evaluate("() => { localStorage.removeItem('idle.invite'); window.__reviews.invite('logos'); }"); wait_for(pg, "() => document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 30, P=P)
     pg.click(".rvbtns button:not(.alt):not([disabled])"); wait_for(pg, "() => [...document.querySelectorAll('.rvbtns button:not([disabled])')].some(b => b.textContent.includes('check them out'))", 30, P=P)
-    last = pg.evaluate("() => { const b = [...document.querySelectorAll('.rvnico')].pop(); return { paras: [...b.querySelectorAll('p')].map(p => [...p.querySelectorAll('span')].map(s => s.textContent)), pledge: !!document.querySelector('.rvpledge'), team: window.__reviews.team.status() }; }")
-    need(last["paras"] == T["hello"] + T["after"] and last["paras"][-1][-1].startswith("to be the logo that opens the story") and last["pledge"], f"after I'm in: {last['paras']}")
-    need(last["team"]["state"] == "vesting" and last["team"]["label"] == "in the loop (vesting)", f"team status: {last['team']}")
+    last = pg.evaluate("() => { const b = [...document.querySelectorAll('.rvletter')].pop(), hr = b.parentElement.getBoundingClientRect(); return { top: b.getBoundingClientRect().top >= hr.top - 1, paras: [...b.querySelectorAll('p')].map(p => [...p.querySelectorAll('span')].map(s => s.textContent)), pledge: !!document.querySelector('.rvpledge'), team: window.__reviews.team.status() }; }")
+    need(last["top"] and last["paras"] == T["after"]["logos"] and last["pledge"] and last["team"]["label"] == "in the loop (vesting)", f"after I'm in: {last}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "invite-letter.png"))
     joins = [json.loads(b) for k, b in P.fb if k == "join"]; bk = pg.evaluate("() => localStorage.getItem('idle.bkey')")
     need(len(joins) == 1 and joins[0]["bkey"] == bk, f"the join: {joins}")
     pg.click(".rvbtns button:not([disabled])"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 30, P=P)
+    pg.evaluate("() => window.__reviews.close()"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedNone(true)))", 10, P=P)
+    need(pg.evaluate("() => window.__reviews.test.lastHighlight()") == "hitlBtn", "the 🌱 didn't light up after closing")
     pg.close(); P.clean()
-    return f"Operator → Nico's {len(T['hello'][0])} lines in order, [I'm in]/[not now]; not now → asked once more a day later, never a third time; I'm in → joined (key sent), {sum(len(p) for p in T['after'])} more lines (draft ending), pledge, in the loop (vesting), the review opens"
+    return f"relayed: Operator dots → 'I have a message from Nico:' → one 📨 card ({len(T['hello'][0])} lines, first in view, no 'typing'); not now → its line + 🌱 lit, once more a day later, never a third; I'm in → key, Nico's logo lines, pledge → deck; closed with none judged → 'more time' + 🌱"
+
+
+def t_reviews_tab(P):
+    """The 🌱 HITL tab: for a non-member, the pitch and join (→ the invitation); for a member, the status, the open reviews with their
+    progress, resume of a half-done deck (same place, nothing judged twice), closing it after judging → 'I see you already liked some'
+    + the 🌱 lit; a finished review moves to 'sent' with your ★. A member's ?review= link → one Operator line + [open ›], never the deck."""
+    pg = _rv_page(P)
+    def click(sel):
+        try: pg.click(sel, timeout=8000)
+        except Exception as e:
+            info = pg.evaluate("s => { const b = document.querySelector(s); if (!b) return 'missing'; const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { r: [r.left, r.top, r.width, r.height], top: e ? (e.id || e.className || e.tagName) : null }; }", sel.split(" >> ")[0])
+            need(False, f"click {sel}: {info}")
+    hb = pg.evaluate("() => { const b = document.getElementById('hitlBtn'); if (!b) return 'missing'; const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { con: b.isConnected, disp: getComputedStyle(b).display, r: [r.left, r.top, r.width, r.height], top: e ? (e.id || e.className || e.tagName) : null }; }")
+    need(isinstance(hb, dict) and hb["disp"] != "none" and hb["r"][2] > 0 and hb["top"] == "hitlBtn", f"the 🌱 button: {hb}")
+    k0 = pg.evaluate("() => window.__reviews.test.knows()")
+    click("#hitlBtn"); wait_for(pg, "() => document.querySelector('#hitl.on [data-a=join]')", 10, P=P)
+    k1 = pg.evaluate("() => window.__reviews.test.knows()"); need(not k0 and k1, f"knows HITL: before the tab {k0}, after {k1}")
+    # the team named and explained, or just named (Nico: "'Nico has another one for the Humans in the Loop: the logo' if I have no idea what HITL is")
+    v = pg.evaluate("() => { const T = window.__reviews.text, rv = { title: 'the logo', n: 3 }; return { k: T.another(rv, true), u: T.another(rv, false), nk: T.notNow(true), nu: T.notNow(false), pk: T.publicAsk(rv, true)[0][0], pu: T.publicAsk(rv, false)[0][0], ck: T.closedNone(true), cu: T.closedNone(false) }; }")
+    need(v["k"] == "Nico has a new review for the Humans in the Loop: the logo" and v["u"] == "Nico has a new review: the logo. it's for the Humans in the Loop, players who help decide what ships"
+         and "HITL team here" in v["nk"] and "players who help decide what ships" in v["nu"] and "players who help decide what ships" in v["pu"] and "(" not in v["pk"] and "HITL tab" in v["ck"] and "where your reviews live" in v["cu"], f"the two variants: {v}")
+    click("#hitl [data-a=join]"); wait_for(pg, "() => document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 30, P=P)
+    click(".rvbtns button:not(.alt):not([disabled])"); wait_for(pg, "() => [...document.querySelectorAll('.rvbtns button:not([disabled])')].some(b => b.textContent.includes('check them out'))", 30, P=P)
+    click(".rvbtns button:not([disabled])"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 30, P=P); pg.wait_for_timeout(400)
+    first = []
+    for k in ("ArrowRight", "ArrowUp", "ArrowLeft"): first.append(pg.evaluate("() => window.__reviews.state().current")); pg.keyboard.press(k); pg.wait_for_timeout(450)
+    nxt = pg.evaluate("() => window.__reviews.state().current"); pg.evaluate("() => window.__reviews.close()")
+    wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedSome(true)))", 10, P=P)
+    wait_for(pg, "() => !window.__opwin.cutting()", 8, P=P); click("#hitlBtn"); wait_for(pg, "() => document.querySelectorAll('#hitl .rv').length >= 2", 10, P=P)
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__opwin.yielding() === '#hitl.on'", 3, P=P)
+    yl = pg.evaluate("() => window.__opwin.yielding()"); need(yl == "#hitl.on", f"the 🌱 tab must make the Operator step aside: {yl}")
+    t1 = pg.evaluate("() => ({ txt: document.getElementById('hitl').innerText, resume: [...document.querySelectorAll('#hitl [data-open=logos]')].map(b => b.textContent) })")
+    need("in the loop (vesting)" in t1["txt"] and "3 of 12 judged" in t1["txt"] and "0 of 8 judged" in t1["txt"] and t1["resume"] == ["resume ›"], f"the tab: {t1}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "hitl-tab.png"))
+    click("#hitl [data-open=logos]"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 20, P=P)
+    st = pg.evaluate("() => window.__reviews.state()")
+    need(st["current"] == nxt and not set(first) & set(st["queue"]) and len(st["queue"]) == 9, f"resume: current {st['current']} (expected {nxt}), queue {st['queue']}")
+    for _ in range(3): pg.keyboard.press("ArrowRight"); pg.wait_for_timeout(450)
+    click("#review [data-a=done]"); wait_for(pg, "() => window.__reviews.state().view === 'h2h'", 10, P=P)
+    click("#review [data-a=skiph2h]"); wait_for(pg, "() => window.__reviews.state().view === 'end'", 10, P=P); pg.evaluate("() => window.__reviews.close()")
+    pg.evaluate("() => window.__reviews.tab.open()"); wait_for(pg, "() => /sent/i.test(document.getElementById('hitl').innerText)", 10, P=P)
+    t2 = pg.evaluate("() => document.getElementById('hitl').innerText")
+    need(f"your ★: {first[1]}" in t2, f"past: {t2!r}")
+    pg.evaluate("() => window.__reviews.tab.close()"); pg.close()
+    # a member arriving by a link: a nudge, not the deck
+    pg = P.open("/arena.html?review=fonts&test"); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); }")
+    wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.includes('our fonts'))", 30, P=P); pg.wait_for_timeout(800)
+    nd = pg.evaluate("() => ({ line: [...document.querySelectorAll('.rvop')].pop().textContent, deck: !!window.__reviews.state(), btns: [...document.querySelectorAll('.rvbtns button:not([disabled])')].map(b => b.textContent), letters: document.querySelectorAll('.rvletter').length })")
+    need(not nd["deck"] and nd["line"] == "Nico has a new review for the Humans in the Loop: our fonts" and nd["btns"] == ["open ›", "later"] and nd["letters"] == 0, f"a member's link: {nd}")
+    pg.close(); P.clean()
+    return f"non-member: 🌱 → join → invite; member: status + '3 of 12 judged' + resume (at {nxt}, nothing twice) → done → 'sent' with ★ {first[1]}; closed after judging → 'already liked some'; a member's ?review=fonts → one line + [open ›], no deck"
+
+
+def t_reviews_link(P, engine="chromium"):
+    """?review=fonts for a non-member: the invitation with the fonts' own lines (not the logos'), the first line in view; the same on
+    WebKit (Safari's engine), where v2 opened the deck at once for a browser that had joined before."""
+    pg = P.open("/arena.html?review=fonts&test"); hits = []; pg.on("response", lambda r: hits.append((r.status, r.request.method, r.url.split("/lab/")[-1][:40])) if "/lab/" in r.url else None)
+    booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); }")
+    wait_for(pg, "() => document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 40, P=P)
+    T = pg.evaluate("() => window.__reviews.text")
+    a = pg.evaluate("""() => { const L = document.querySelector('.rvletter'), h = L.parentElement, hr = h.getBoundingClientRect(), lr = L.getBoundingClientRect();
+      return { deck: !!window.__reviews.state(), first: L.querySelector('span').textContent, inView: lr.top >= hr.top - 1 && lr.top < hr.bottom }; }""")
+    need(not a["deck"] and a["first"] == T["hello"][0][0] and a["inView"], f"{engine}: {a}")
+    pg.click(".rvbtns button:not(.alt):not([disabled])"); wait_for(pg, "() => [...document.querySelectorAll('.rvbtns button:not([disabled])')].some(b => b.textContent.includes('check them out'))", 30, P=P)
+    paras = pg.evaluate("() => [...[...document.querySelectorAll('.rvletter')].pop().querySelectorAll('p')].map(p => [...p.querySelectorAll('span')].map(s => s.textContent))")
+    need(paras == T["after"]["fonts"] and "logo" not in json.dumps(paras).lower(), f"{engine}: the fonts lines: {paras}")
+    pg.click(".rvbtns button:not([disabled])")
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().kind === 'fonts'", 30, P=P)
+    d = pg.evaluate("() => ({ st: window.__reviews.state(), on: document.getElementById('review').className, txt: document.getElementById('review').innerText.slice(0, 200) })")
+    need(d["st"] and d["st"]["kind"] == "fonts", f"{engine}: the fonts deck: {d} {P.errors[:2]} {P.console[:2]} {[h for h in hits if 'stats' not in h[2]]}")
+    if SHOTS and engine == "chromium": pg.screenshot(path=os.path.join(SHOTS, "fonts-deck.png"))
+    pg.close(); P.clean()
+    return f"{engine}: ?review=fonts → the invite (first line in view, no deck), the fonts' own lines → the fonts deck"
 
 
 def t_reviews(P):
@@ -2372,6 +2449,33 @@ def t_founder_off(P):
     return "hidden: ?gift=founder, a personal link and an early world open nothing, no ⚙ row, no badge drawing, no pedia section; ?founder_test still opens the letter"
 
 
+def t_reviews_cutscene(P, phone=False):
+    """The 'here 👉' highlight is a cut-scene (idle-opwin.js): the Operator window shrinks away so it never covers the 🌱 (or ☰ on a
+    phone) while the ring plays, comes back open, and the icon keeps a soft glow: kept across a reload, cleared by a click, or when its
+    time is up."""
+    pg = _rv_page(P); pg.evaluate("() => { window.__reviews.join(); window.__opwin.open(); }"); pg.wait_for_timeout(600)
+    tid = pg.evaluate("() => window.__reviews.highlight()"); pg.wait_for_timeout(700)
+    mid = pg.evaluate("""t => { const a = document.getElementById('lab').getBoundingClientRect(), b = document.getElementById(t).getBoundingClientRect(), op = getComputedStyle(document.getElementById('lab'));
+      const hit = !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top) && +op.opacity > 0.05; return { cutting: window.__opwin.cutting(), hit, ring: !!document.querySelector('.opHi'), opacity: +op.opacity }; }""", tid)
+    need(tid in ("hitlBtn", "mMore") and mid["cutting"] and not mid["hit"] and mid["ring"], f"the cut-scene ({tid}): {mid}")
+    wait_for(pg, "() => !window.__opwin.cutting()", 8, P=P); pg.wait_for_timeout(500)
+    after = pg.evaluate("t => ({ open: window.__opwin.isOpen(), op: +getComputedStyle(document.getElementById('lab')).opacity, glow: window.__opwin.glowing(), cls: document.getElementById(t).classList.contains('opGlow') })", tid)
+    need(after["open"] and after["op"] > 0.9 and after["glow"] == "#" + tid and after["cls"], f"after the cut-scene: {after}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "cutscene-glow" + ("-phone" if phone else "") + ".png"))
+    pg.reload(); booted(pg); pg.wait_for_timeout(800)
+    kept = pg.evaluate("t => ({ glow: window.__opwin.glowing(), cls: document.getElementById(t).classList.contains('opGlow') })", tid)
+    need(kept["glow"] == "#" + tid and kept["cls"], f"the glow after a reload: {kept}")
+    pg.evaluate("t => document.getElementById(t).click()", tid); pg.wait_for_timeout(300)
+    gone = pg.evaluate("t => ({ glow: window.__opwin.glowing(), cls: document.getElementById(t).classList.contains('opGlow'), saved: localStorage.getItem('idle.opGlow') })", tid)
+    need(gone["glow"] is None and not gone["cls"] and gone["saved"] is None, f"a click clears the glow: {gone}")
+    pg.evaluate("t => { localStorage.setItem('idle.opGlow', JSON.stringify({ sel: '#' + t, until: Date.now() + 8000 })); }", tid); pg.reload(); booted(pg)
+    t1 = pg.evaluate("() => window.__opwin.glowing()"); left = pg.evaluate("() => JSON.parse(localStorage.getItem('idle.opGlow') || '{}').until - Date.now()")
+    pg.wait_for_timeout(max(0, (left or 0)) + 600); t2 = pg.evaluate("() => window.__opwin.glowing()")
+    need(t1 == "#" + tid and t2 is None, f"the glow's time limit: {t1} → {t2}")
+    pg.close(); P.clean()
+    return f"{'phone' if phone else 'desktop'}: the Operator shrinks off the {tid} (no overlap) while the ring plays, comes back open; glow kept across a reload, cleared by a click, and by its time limit"
+
+
 def t_reviews_phone(P):
     """⭐ reviews at 375 px: the card is ≥ 70% of the lightbox and fills the width, no sideways scroll, ✕ ✓ ★ on screen."""
     pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()"); pg.wait_for_timeout(200)
@@ -2379,6 +2483,10 @@ def t_reviews_phone(P):
     r = pg.evaluate("() => { const b = document.querySelector('#review .box').getBoundingClientRect(), c = document.querySelector('#review .deck .card').getBoundingClientRect(), a = [...document.querySelectorAll('#review .acts button')].map(x => x.getBoundingClientRect()); return { w: innerWidth, h: innerHeight, area: (c.width * c.height) / (b.width * b.height), cw: c.width / innerWidth, sw: document.getElementById('review').scrollWidth, acts: a.every(x => x.bottom <= innerHeight && x.right <= innerWidth && x.left >= 0), btn: Math.round(a[0].height) }; }")
     need(r["area"] >= 0.7 and r["cw"] >= 0.9 and r["sw"] <= r["w"] and r["acts"] and r["btn"] >= 44, f"the deck at 375 px: {r}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "reviews-phone.png"))
+    pg.evaluate("() => window.__reviews.close()"); pg.evaluate("() => window.__reviews.tab.open()"); wait_for(pg, "() => document.querySelectorAll('#hitl .rv').length >= 1", 10, P=P)
+    t = pg.evaluate("() => { const r = document.getElementById('hitl').getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth, hl: window.__reviews.highlight(100) }; }")
+    need(t["l"] >= 0 and t["r"] <= t["w"] and t["hl"] in ("hitlBtn", "mMore"), f"the 🌱 tab at 375 px: {t}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "hitl-tab-phone.png"))
     pg.close(); P.clean()
     return f"375 px: card {r['area'] * 100:.0f}% of the lightbox, {r['cw'] * 100:.0f}% of the width, no sideways scroll, buttons {r['btn']} px"
 
@@ -2583,32 +2691,58 @@ def t_hint_phone(P):
 
 
 def t_story_arms(P):
-    """The storyline A/B (off by default): a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=current gets the
-    starter world as now; a browser that already has a world keeps it, whatever its arm (returning players are never thrown into the story)."""
+    """The storyline's A/B/C (v15, Nico: "A: user goes into storyline mode, B: user sees choice screen, C: user goes directly to playground"),
+    off by default: a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=choose gets the chooser (📖 / 🛝);
+    ?arm=play gets the playground's ready world, and on its first visit the floating Operator welcomes it and offers [ 📖 start the story ]
+    (snapshot first, then the story) and points at ⚙; the two-arm 'current' migrates to 'play'; a browser that already has a world keeps it."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
-    off = pg.evaluate("() => ({ ab: window.__genesis.ab, v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv') })")
-    need(off["ab"] == "off" and off["v"] is None and off["gv"] is None, f"the A/B ships off: {off}")
+    off = pg.evaluate("() => ({ ab: window.__genesis.ab, v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), arms: window.__genesis.arms })")
+    need(off["ab"] == "off" and off["v"] is None and off["gv"] is None and off["arms"] == ["story", "choose", "play"], f"the A/B/C ships off, three arms: {off}")
     wait_for(pg, "() => !!localStorage.getItem('arena.autosave')", 30, P=P)
     ret = P.open("/arena.html?arm=story&test"); booted(ret); ret.wait_for_timeout(3000)   # this browser has a world: it keeps it
     r = ret.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid, c: window.__arena.raw().filter(c => !c.lab).length })")
     need(not r["intro"] and not r["void"] and r["c"] > 0, f"a returning browser in the story arm keeps its world: {r}")
     out = []
-    for arm in ("story", "current"):   # new browsers: a fresh context each
+    for arm in ("story", "choose", "play", "current"):   # new browsers: a fresh context each ('current': a two-arm key from before v15)
         ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)
         try:
+            if arm == "current":
+                q = Q.open("/privacy.html"); q.evaluate("() => localStorage.setItem('idle.gv', 'current')"); q.close()
+                q = Q.open("/arena.html?test"); booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+                m = q.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), arm: window.__funnel.arm(), intro: !!document.querySelector('#idleIntro') })")
+                need(m == {"v": "play", "gv": "play", "arm": "play", "intro": False}, f"the two-arm 'current' becomes 'play': {m}"); out.append("current→play"); continue
             q = Q.open(f"/arena.html?arm={arm}&test")
             if arm == "story":
                 wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
                 st = q.evaluate("() => ({ v: window.__genesis.variant(), arm: window.__funnel.arm() })"); need(st == {"v": "story", "arm": "story"}, f"the story arm starts the story: {st}")
+            elif arm == "choose":
+                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
+                ch = q.evaluate("() => ({ v: window.__genesis.variant(), arm: window.__funnel.arm(), ms: [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m), intro: !!document.querySelector('#idleIntro') })")
+                need(ch["v"] == "choose" and ch["arm"] == "choose" and ch["ms"][:2] == ["story", "ready"] and not ch["intro"], f"the choose arm gets the chooser (📖 first, then 🛝): {ch}")
+                q.click("#genChoose button[data-m=ready]"); booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+                need("ch_play" in q.evaluate("() => window.__funnel.reached()") and q.evaluate("() => localStorage.getItem('idle.storyOffer')") == "chose", "the chooser's playground: counted, and no storyline offer after it")
             else:
                 booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
-                cur = q.evaluate("() => ({ v: window.__genesis.variant(), intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid })")
-                need(cur["v"] == "current" and not cur["intro"] and not cur["void"], f"the current arm keeps the starter world: {cur}")
+                pl = q.evaluate("() => ({ v: window.__genesis.variant(), arm: window.__funnel.arm(), intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid, chooser: !!document.querySelector('#genChoose') })")
+                need(pl == {"v": "play", "arm": "play", "intro": False, "void": False, "chooser": False}, f"the play arm: the playground's ready world: {pl}")
+                q.mouse.click(700, 450)   # the first tap: the welcome follows ~1.5 s later
+                wait_for(q, "() => window.__opwin.tray().chips.includes('📖 start the story') && !!document.querySelector('.opHi')", 15)
+                w = q.evaluate("() => ({ open: window.__opwin.isOpen(), thread: document.querySelector('#ai-thread').textContent, lines: window.__genesis.welcome.lines, after: window.__genesis.welcome.after, hi: document.querySelectorAll('.opHi').length, offer: !!document.querySelector('#storyOffer'), fun: window.__funnel.reached(), pw: localStorage.getItem('idle.playWelcome') })")
+                need(w["open"] and all(l in w["thread"] for l in w["lines"]) and w["after"] in w["thread"] and w["hi"] >= 1 and not w["offer"] and "pw_shown" in w["fun"] and w["pw"] == "shown",
+                     f"the play arm's welcome: the Operator says it, offers the story, points at ⚙ (no separate storyline offer): {w}")
+                need("cutting-edge things Id|le's consciousness is dreaming up" in w["thread"], "Nico's line in the welcome")
+                snaps0 = q.evaluate("() => JSON.parse(localStorage.getItem('arena.snaps') || '[]').length")
+                q.click("#opTray .opc.glow")
+                wait_for(q, "() => !!document.querySelector('#idleIntro') || !!window.__genesisVoid", 40)
+                after = q.evaluate("() => ({ mode: window.__genesis.mode(), fun: window.__funnel.reached(), snaps: JSON.parse(localStorage.getItem('arena.snaps') || '[]').length })")
+                need(after["mode"] == "story" and "pw_story" in after["fun"] and after["snaps"] > snaps0, f"[ 📖 start the story ]: the world kept as a snapshot, then the story: {snaps0} → {after}")
+                q.close(); q = Q.open("/arena.html?test"); booted(q); q.mouse.click(700, 450); q.wait_for_timeout(3000)
+                need(q.evaluate("() => !window.__opwin.tray().chips.includes('📖 start the story')"), "the welcome is once per browser")
             out.append(arm)
         finally:
             ctx.close()
     P.clean()
-    return "off by default; returning browser keeps its world; new story arm → the title card; new current arm → the starter world"
+    return "off by default, three arms; returning browser keeps its world; story → the title card; choose → the chooser (🛝 counted, no offer after); play → the ready world, the Operator's welcome (once), [ 📖 start the story ] → snapshot + story; 'current' → 'play'"
 
 
 def t_story_offer(P):
@@ -2715,6 +2849,11 @@ def t_prod_gates(P, root):
         pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
         g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
         need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
+    # v15: the A/B/C is off on id-le.com: ?arm= forces nothing (no intro, no chooser, no welcome, no arm stored)
+    for a in ("story", "choose", "play"):
+        pg = P.open(f"/arena.html?arm={a}"); booted(pg); pg.wait_for_timeout(2500)
+        ab = pg.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), intro: !!document.querySelector('#idleIntro'), ch: !!document.querySelector('#genChoose'), w: window.__genesis.playWelcome() })")
+        need(ab == {"v": None, "gv": None, "intro": False, "ch": False, "w": False}, f"?arm={a} on production: {ab}"); pg.close()
     # ⭐ reviews (idle-reviews.js) are off on id-le.com: ?review= opens nothing, 🧪 has no ⭐ tab
     pg = P.open("/arena.html?review=logos"); booted(pg); pg.wait_for_timeout(3000)
     rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: window.__reviews, box: !!document.querySelector('#review'), tab: t }; }")
@@ -2994,6 +3133,11 @@ def t_slash(P):
     pg.fill("#lab-text", "hello there"); pg.click("#lab-send"); pg.wait_for_timeout(800)
     th2 = pg.evaluate("() => document.querySelector('#ai-thread').innerText")
     need("hello there" in th2 and pg.evaluate("() => document.querySelectorAll('#ai-thread > *').length") > n0, "a plain line still goes to the Operator")
+    # /hitl opens the 🌱 HITL tab, and again closes it
+    pg.fill("#lab-text", "/hitl"); pg.keyboard.press("Enter"); pg.wait_for_timeout(400); h1 = pg.evaluate("() => window.__reviews.tab.isOpen()")
+    pg.evaluate("() => window.IdleSlash.run('/hitl', 'operator')"); pg.wait_for_timeout(600); h2 = pg.evaluate("() => window.__reviews.tab.isOpen()")
+    wait_for(pg, "() => window.__opwin.isOpen() && getComputedStyle(document.querySelector('#lab-text')).visibility !== 'hidden'", 5, P=P)
+    need(h1 and not h2, f"/hitl opens the 🌱 tab, /hitl again closes it: {h1}, {h2}")
     fun = pg.evaluate("() => Object.keys(JSON.parse(localStorage.getItem('idle.funnel') || '{}'))")
     need(all(k in fun for k in ("sc_music", "sc_find", "sc_weather", "sc_unknown")), f"funnel moments for the commands used: {fun}")
     # IRC
@@ -3227,7 +3371,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "slash", "slash phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3303,6 +3447,10 @@ def main():
                 run("reviews invite", t_reviews_invite)
                 run("reviews", t_reviews, viewport={"width": 1280, "height": 800})
                 run("reviews cliff", t_reviews_cliff)
+                run("reviews tab", t_reviews_tab)
+                run("reviews cutscene", t_reviews_cutscene)
+                run("reviews cutscene phone", t_reviews_cutscene, True, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
+                run("reviews link", t_reviews_link)
                 run("founder off", t_founder_off)
                 run("reviews phone", t_reviews_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("founder personal", t_founder_personal)
@@ -3329,6 +3477,14 @@ def main():
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()
+            if want("reviews webkit"):   # Safari's engine, desktop size: the same deliberate link behaviour as Chromium (v3)
+                wk = p.webkit.launch(headless=not a.headed)
+                try:
+                    ctx = wk.new_context(viewport={"width": 1280, "height": 800}, service_workers="block"); P = Page(ctx, base)   # WebKit's service worker would answer /lab/* past the test's stubs
+                    try: check("reviews webkit", lambda P=P: t_reviews_link(P, "webkit"))
+                    finally: ctx.close()
+                finally:
+                    wk.close()
             if want("ios sound"):
                 wk = p.webkit.launch(headless=not a.headed)
                 try:
