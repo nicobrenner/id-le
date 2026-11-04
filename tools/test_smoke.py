@@ -3245,6 +3245,41 @@ def t_story_first_paint(P, root, phone=False):
             ctx.close()
     return f"{'phone' if phone else 'desktop'}: {sum(a for a, b in out_)} frames filmed, {sum(b for a, b in out_)} before the story's black, all black; choose and play unchanged"
 
+def t_intent_links(P, root):
+    """id-le.com (production hostname): every link with an explicit destination (arena.html's INTENT_PARAMS / INTENT_HASH, Nov 4: "?lab",
+    "?wiki=Octopus" loaded the story) skips the A/B/C draw: no arm, no title card, no story black; it goes where it says and is counted as
+    entry_<kind>. A plain address (only utm tags) still gets its arm. Math.random is pinned so a draw would land on the story arm."""
+    P.base, P.root = "https://id-le.com", root
+    links = [("/?lab&utm_source=x", "lab", "lab"), ("/#lab", "lab", "lab"), ("/?datalab", "lab", "lab"), ("/?start=ready", "start", "world"),
+             ("/?wiki=Octopus", "wiki", None), ("/?review=logos", "review", None), ("/?gift=founder", "gift", None), ("/?halloween", "halloween", "world"),
+             ("/?world=abc123", "world", "world"), ("/?intro=eerie", "intro", None), ("/#c=Crawly", "creature", "world"), ("/?utm_source=x", None, "story")]
+    out = []
+    for path, kind, dest in links:
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script("Math.random = () => 0.01;"); Q = Page(ctx, P.base); Q.root = root
+        try:
+            q = Q.open(path)
+            if dest == "story":
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            else:
+                wait_for(q, "() => !!window.__restoredOrFresh && !!window.__genesis", 40); q.wait_for_timeout(2500)
+            if dest == "lab": wait_for(q, "() => document.querySelector('#team') && document.querySelector('#team').classList.contains('on') && !!(window.__dlwalk && window.__dlwalk.active())", 40)
+            if dest == "world": wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+            x = q.evaluate("""() => { let f = {}; try { f = JSON.parse(localStorage.getItem('idle.funnel') || '{}') || {}; } catch (e) {}
+              const it = document.querySelector('#idleIntro'), st = window.__genesis.state && window.__genesis.state();
+              return { gv: localStorage.getItem('idle.gv'), entry: window.__intentEntry || null, title: !!(it && it.dataset.title === '1'), story: !!(st && st.on && st.mode === 'story'),
+                black: document.documentElement.classList.contains('story-boot'), offer: !!document.querySelector('#storyOffer'), marks: Object.keys(f).filter(k => k.startsWith('entry_')) }; }""")
+            if kind is None:
+                need(x["gv"] == "story" and x["title"] and not x["entry"], f"a plain address keeps getting its arm: {x}")
+            else:
+                need(x["gv"] is None and not x["title"] and not x["story"] and not x["black"] and not x["offer"] and x["entry"] == kind, f"{path}: no arm, no story, goes where it says: {x}")
+                q.wait_for_timeout(1200); m = q.evaluate("() => { try { return Object.keys(JSON.parse(localStorage.getItem('idle.funnel') || '{}')).filter(k => k.startsWith('entry_')); } catch (e) { return []; } }")
+                need(("entry_" + kind) in m, f"{path}: funnel entry_{kind} expected, got {m}")
+            out.append(f"{path} → {kind or 'arm story'}")
+        finally:
+            ctx.close()
+    return "; ".join(out)
+
+
 def t_prod_gates(P, root):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
     storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
@@ -4055,7 +4090,7 @@ def browser_tests(a, out):
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
         ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
-        ("prod gates", t_prod_gates, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
+        ("prod gates", t_prod_gates, (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
@@ -4070,7 +4105,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+LAUNCH = {"intent links", "title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
