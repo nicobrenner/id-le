@@ -183,11 +183,14 @@ const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 // reports, visits, per tag) and never into any in-page number (Nov 4: 40 of the day's 87 reporting visits were launch checks). The one list;
 // tools/stats.py reads it from here. The page sends its tag with every report (p.u), so a page's later reports are caught too.
 const INTERNAL_TAGS = ['prod-check', 'launch-check', 'split-prod', 'split-staging', 'internal-check', 'internal-refcheck', 'hn-test', 'smoketest', 'statstest'];
+const AA_ARMS = ['story', 'choose', 'play'];
 const internalTag = t => typeof t === 'string' && (INTERNAL_TAGS.includes(t) || /^(internal|smoke)|-(check|test)$/.test(t));
 function addStats(p) {
   const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
   { const tag = typeof p.u === 'string' ? p.u : typeof p.utm === 'string' ? p.utm : null;
-    if (internalTag(tag)) { const q = d.int = d.int || { r: 0, v: 0, t: {} }; q.r++; if (p.visit === 1) q.v++; if (UTM.test(tag) && (q.t[tag] != null || Object.keys(q.t).length < 20)) bump(q.t, tag); return; } }
+    if (internalTag(tag)) { const q = d.int = d.int || { r: 0, v: 0, t: {} }; if (p.aa !== undefined) { if (AA_ARMS.includes(p.aa)) { q.aa = q.aa || {}; bump(q.aa, p.aa); } return; } q.r++; if (p.visit === 1) q.v++; if (UTM.test(tag) && (q.t[tag] != null || Object.keys(q.t).length < 20)) bump(q.t, tag); return; } }
+  // the arm beacon (idle-stats.js armBeacon): { v, aa, u } only, once per browser: arm_assigned per arm, not a batch or a visit
+  if (p.aa !== undefined) { if (AA_ARMS.includes(p.aa)) { d.aa = d.aa || {}; bump(d.aa, p.aa); } return; }
   d.batches++;
   // which report of its page load this is (1 = the first, 'v' = the one carrying the visit): batch 1s that go missing show up here (Nov 4)
   if (Number.isInteger(p.bi) && p.bi >= 1 && p.bi <= 500 && p.page !== 'pedia') { d.bi = d.bi || {}; bump(d.bi, p.bi >= 4 ? '4+' : String(p.bi)); if (p.visit === 1) bump(d.bi, 'v' + (p.bi >= 4 ? '4+' : p.bi)); }
@@ -243,7 +246,7 @@ async function flushStats(env) {
   for (const [day, add] of Object.entries(buf)) {
     const key = `stats:${day}:${SHARD}`, cur = JSON.parse(await env.STATS.get(key) || 'null') || { ...EMPTY(), writes: 0 };
     cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches; cur.writes = (cur.writes || 0) + 1;
-    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss', 'sf', 'bi']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
+    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss', 'sf', 'bi', 'aa']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
     cur.secs = (cur.secs || 0) + add.secs; cur.v2visits = (cur.v2visits || 0) + (add.v2visits || 0);
     cur.pv = mergePv(cur.pv, add.pv);
     { const q = cur.x = cur.x || EMPTY_X(); for (const k of Object.keys(EMPTY_X())) { q[k] = q[k] || {}; for (const [a, n] of Object.entries((add.x || {})[k] || {})) if (n) (X_CAP[k] ? capped(q[k], a, n, X_CAP[k]) : bump(q[k], a, n)); } }
@@ -256,7 +259,7 @@ async function flushStats(env) {
     cur.sd = cur.sd || {}; for (const [k, x] of Object.entries(add.sd || {})) { const c = cur.sd[k] = cur.sd[k] || { n: 0, sum: 0, b: {} }; c.n += x.n; c.sum += x.sum; for (const [b, n] of Object.entries(x.b)) bump(c.b, b, n); }
     cur.rb = cur.rb || {}; for (const [a, n] of Object.entries(add.rb || {})) if (n && (cur.rb[a] != null || Object.keys(cur.rb).length < 600)) bump(cur.rb, a, n);   // arm|cohort day|bucket (bounded: 5 arms x 400 days x 6)
     for (const [e, n] of Object.entries(add.err)) if (cur.err[e] || Object.keys(cur.err).length < 60) bump(cur.err, e, n);
-    if (add.int) { const q = cur.int = cur.int || { r: 0, v: 0, t: {} }; q.r += add.int.r; q.v += add.int.v; for (const [a, n] of Object.entries(add.int.t || {})) if (q.t[a] != null || Object.keys(q.t).length < 20) bump(q.t, a, n); }
+    if (add.int) { const q = cur.int = cur.int || { r: 0, v: 0, t: {} }; q.r += add.int.r; q.v += add.int.v; if (add.int.aa) { q.aa = q.aa || {}; for (const [a, n] of Object.entries(add.int.aa)) bump(q.aa, a, n); } for (const [a, n] of Object.entries(add.int.t || {})) if (q.t[a] != null || Object.keys(q.t).length < 20) bump(q.t, a, n); }
     await env.STATS.put(key, JSON.stringify(cur), { expirationTtl: 60 * 60 * 24 * 400 });
   }
 }

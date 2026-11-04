@@ -8,7 +8,7 @@
 Needs CLOUDFLARE_API_TOKEN in ~/.idle-ts/cf.env (never committed; the token itself is never printed).
 Each server isolate writes its own shard key (stats:<UTC day>:<shard>); this sums the shards per day.
 """
-import argparse, datetime as dt, html, json, os, re, sys, urllib.error, urllib.parse, urllib.request
+import argparse, math, datetime as dt, html, json, os, re, sys, urllib.error, urllib.parse, urllib.request
 
 API = "https://api.cloudflare.com/client/v4"
 NS_TITLE = "id-le-stats"
@@ -179,6 +179,24 @@ def internal_tags():
 
 def is_internal(tag, tags):
     return tag in tags or bool(re.search(r"^(internal|smoke)|-(check|test)$", tag))
+
+
+def arms_line(days):
+    """the A/B/C arms as assigned (the arm beacon, idle-stats.js armBeacon: once per browser, independent of the batches that go missing),
+    with the expected third each and a sanity flag: a chi-square test on 2 degrees of freedom (p = exp(-x2/2)); p < 0.01 means the split looks off"""
+    a, ia = {}, {}
+    for d in days.values():
+        for k, n in (d.get("aa") or {}).items():
+            a[k] = a.get(k, 0) + n
+        for k, n in ((d.get("int") or {}).get("aa") or {}).items():
+            ia[k] = ia.get(k, 0) + n
+    if not a and not ia:
+        return
+    arms = ["story", "choose", "play"]; n = sum(a.get(k, 0) for k in arms); e = n / 3 if n else 0
+    x2 = sum((a.get(k, 0) - e) ** 2 / e for k in arms) if e else 0.0; p = math.exp(-x2 / 2)
+    flag = "" if n < 9 else (f" · ⚠ split looks off (chi-square {x2:.1f}, p {p:.3f})" if p < 0.01 else f" · split looks fine (p {p:.2f})")
+    print(f"arms assigned: " + " · ".join(f"{k} {a.get(k, 0)}" for k in arms) + f" (expected {e:.1f} each of {n}){flag}"
+          + (" · our own checks: " + " · ".join(f"{k} {ia.get(k, 0)}" for k in arms) if ia else ""))
 
 
 def internal_line(days):
@@ -458,7 +476,7 @@ def main():
         print(f"no stats since {since}")
         return
     print(f"id-le.com anonymous stats, {since} .. today (UTC)\n")
-    internal_line(days)
+    internal_line(days); arms_line(days)
     srv = server_days(days)
     if srv:
         print("Counted by our server (every page request; bots apart; visitors estimated without cookies, about ±2-3%)")

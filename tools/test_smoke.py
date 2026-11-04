@@ -153,6 +153,12 @@ out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})
 out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
 // a lone report, with no later request to that isolate, must still be written (the 2-min buffer of 11-01 lost these: 180 received, 50 stored)
 { globalThis.__statFlushNow = false; const before = env.STATS.puts.length; await post('/lab/stats', { v: 1, feat: ['lonetest'] }); out.lone_report_written = env.STATS.puts.length > before; globalThis.__statFlushNow = true; }
+// the arm beacon (Nov 4): { v, aa, u } counts arm_assigned per arm, nothing else; our own checks' beacons go to int.aa; unknown arms dropped
+{ const b0 = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.batches || 0), 0);
+  for (const a of ['story', 'choose', 'play', 'play', 'evil']) await post('/lab/p', { v: 1, aa: a }); await post('/lab/p', { v: 1, aa: 'play', u: 'launch-check' });
+  const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.aa = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.aa || {})) a[k] = (a[k] || 0) + n; return a; }, {});
+  out.aaInt = ds.reduce((a, d) => { for (const [k, n] of Object.entries((d.int || {}).aa || {})) a[k] = (a[k] || 0) + n; return a; }, {});
+  out.aaBatches = ds.reduce((a, d) => a + (d.batches || 0), 0) - b0; }
 // /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
 { out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
 // the storyline funnel (11-02): known moments only, counted by arm; the arm's visits and dwell under gv
@@ -353,6 +359,7 @@ def worker_unit():
     need(o["jeffy_train"] == 404 and o["jeffy_get_predict"] == 404, f"jeffy allowlist: train {o['jeffy_train']}, GET predict {o['jeffy_get_predict']}")
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
+    need(o.get("aa") == {"story": 1, "choose": 1, "play": 2} and o.get("aaInt") == {"play": 1} and o.get("aaBatches") == 0, f"arm beacon: aa {o.get('aa')}, internal {o.get('aaInt')}, batches {o.get('aaBatches')}")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
     need(o.get("sd") == {"story|lights": {"n": 2, "sum": 725, "b": {"10-30s": 1, "10m+": 1}}, "story|e1words": {"n": 1, "sum": 4, "b": {"<10s": 1}}}, f"time per step: {o.get('sd')}")
     need(o.get("rb") == {f"story|{o['rbToday']}|d0": 1, f"lg:c3|{o['rbToday']}|d0": 1, "none|2026-11-01|d1": 1}, f"coming back: {o.get('rb')}")
@@ -1001,7 +1008,7 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"u", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"u", "aa", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -2872,6 +2879,29 @@ def t_arm_reload(P):
     return "after the isolation reload: " + ", ".join(out) + " keep their first screen"
 
 
+def t_arm_stats(P):
+    """Nov 4: production showed choose and story arms but no play arm. Each arm's fresh browser must send its arm with its visit report."""
+    got, beacons = {}, {}
+    for arm in ("story", "choose", "play"):
+        P.stats.clear()
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base, P.stats)
+        try:
+            q = Q.open(f"/arena.html?arm={arm}&statstest&test"); q.wait_for_timeout(6000)
+            q.evaluate("() => window.__stats && window.__stats._send('3m')"); q.wait_for_timeout(800)
+            sent = [json.loads(b) for b in P.stats]
+            got[arm] = [(x.get("why"), x.get("visit"), x.get("gv")) for x in sent if "aa" not in x]
+            beacons[arm] = [x for x in sent if "aa" in x]
+            q.reload(); q.wait_for_timeout(2500)
+            beacons[arm] += [x for x in [json.loads(b) for b in P.stats] if "aa" in x][len(beacons[arm]):]   # a reload sends no second beacon
+        finally:
+            ctx.close()
+    for arm, rows in got.items():
+        need(any(v == 1 and g == arm for _, v, g in rows), f"the {arm} arm's visit report must carry gv={arm}: {got}")
+        need(beacons.get(arm) == [{"v": 1, "aa": arm}], f"the {arm} arm sends one arm beacon with only v and aa: {beacons}")
+    P.clean()
+    return "visit reports carry their arm: " + ", ".join(f"{a} {len(r)} reports" for a, r in got.items())
+
+
 def t_story_arms(P):
     """The storyline's A/B/C (v15, Nico: "A: user goes into storyline mode, B: user sees choice screen, C: user goes directly to playground"),
     off by default: a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=choose gets the chooser (📖 / 🛝);
@@ -3766,7 +3796,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "arm reload", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "genesis gate", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "reviews fresh", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "arm reload", "arm stats", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "genesis gate", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "reviews fresh", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3845,6 +3875,7 @@ def main():
                 run("hint phone", t_hint_phone)
                 run("story arms", t_story_arms)
                 run("arm reload", t_arm_reload)
+                run("arm stats", t_arm_stats)
                 run("story offer", t_story_offer)
                 run("never stuck", t_never_stuck)
                 run("founder", t_founder)
