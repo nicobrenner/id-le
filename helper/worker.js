@@ -537,7 +537,8 @@ async function prCall(env, path, init) {   // the Durable Object when bound, els
   return json(T.view());
 }
 async function liveKeyOk(req, env) {   // compares SHA-256 digests, so the comparison takes the same time whatever the key
-  const want = env.LIVE_KEY || '', got = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  // trimmed: a secret pasted from `cat file | pbcopy` carries the file's trailing newline (production, 11-03), which no header can match
+  const want = String(env.LIVE_KEY || '').trim(), got = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
   if (want.length < 24 || !got) return false;
   const d = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))), a = await d(want), b = await d(got);
   let x = 0; for (let i = 0; i < a.length; i++) x |= a[i] ^ b[i]; return x === 0;
