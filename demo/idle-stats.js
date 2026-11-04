@@ -247,5 +247,16 @@
   addEventListener('visibilitychange', () => { if (document.hidden) send('hide'); });
   addEventListener('pagehide', () => send('leave'));
   setTimeout(() => send('3m'), 180000); setTimeout(() => send('15m'), 900000);
-  window.__stats = { live, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _e2: () => ({ ...e2part(), path: E2.path.join('>') }), _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop(), eg: engage(), since, back: backBucket() }) };
+  // the arm beacon (Nov 4): the A/B/C arm this browser got, sent on its own as soon as the page is on screen and stats are live, once per
+  // browser (idle.armSent). Only { v, aa, u }: the true count of assignments per arm, independent of the batches above (whose first report
+  // can go missing). helper/worker.js counts it as arm_assigned per arm (our own checks' tags in their own bucket)
+  const ARM_SENT = 'idle.armSent', ARMS3 = ['story', 'choose', 'play'];
+  const armBeacon = () => { try { if (!live() || document.hidden || document.prerendering) return false; if (localStorage.getItem(ARM_SENT)) return true;
+      const g0 = localStorage.getItem('idle.gv'), g = g0 === 'current' ? 'play' : g0; if (!ARMS3.includes(g)) return false;
+      const p = { v: 1, aa: g }; const u0 = utm(); if (u0) p.u = u0; const body = JSON.stringify(p); let ok = false;
+      try { ok = navigator.sendBeacon('/lab/p', new Blob([body], { type: 'application/json' })); } catch (e) {}
+      if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = true; } catch (e) {}
+      if (ok) localStorage.setItem(ARM_SENT, g); return ok; } catch (e) { return false; } };
+  { let n = 0; const iv = setInterval(() => { if (armBeacon() || ++n > 60) clearInterval(iv); }, 500); addEventListener('visibilitychange', () => { if (!document.hidden) armBeacon(); }); }
+  window.__stats = { live, armBeacon, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _e2: () => ({ ...e2part(), path: E2.path.join('>') }), _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop(), eg: engage(), since, back: backBucket() }) };
 })();

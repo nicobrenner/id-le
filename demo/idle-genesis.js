@@ -543,10 +543,14 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     return { steps: out, end: S.free ? (S.skipped ? 'skipped' : 'guided') : null, opened: !!S.tc }; }
 
   // ---------- boot (a first visit with ?genesis, or the genesis side of the A/B), and a new universe for anyone
+  // a story-arm browser goes straight into the story until it has really begun: the console opened (S.tc), a step done, or another mode
+  // chosen. Not S.n: boot() saves S (n: 1) before the intro, and the service worker's one-time isolation reload (idle-runtime.js, _coi)
+  // can reload the first visit right after that, which used to send story-arm newcomers to the chooser (found 11-04 after the launch)
+  const storyBegun = () => !!(S && (S.tc || (S.steps && Object.keys(S.steps).length) || (S.mode && S.mode !== 'story') || S.v10));
   async function boot(force) { if (!H()) return false;
     // which start: ?story → the storyline; ?start=free|story|ready; otherwise the chooser (script section E)
     // ('guided': the earlier guided genesis, light → words → life → weather or music, kept for links and tests)
-    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !(S && S.n) ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
+    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !storyBegun() ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { if (S) { S.on = false; save(); } applyUnlocks(); dropFlag(); return readyWorld(); }
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode, ev: 2 }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)

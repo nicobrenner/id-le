@@ -162,6 +162,12 @@ out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})
 out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
 // a lone report, with no later request to that isolate, must still be written (the 2-min buffer of 11-01 lost these: 180 received, 50 stored)
 { globalThis.__statFlushNow = false; const before = env.STATS.puts.length; await post('/lab/stats', { v: 1, feat: ['lonetest'] }); out.lone_report_written = env.STATS.puts.length > before; globalThis.__statFlushNow = true; }
+// the arm beacon (Nov 4): { v, aa, u } counts arm_assigned per arm, nothing else; our own checks' beacons go to int.aa; unknown arms dropped
+{ const b0 = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.batches || 0), 0);
+  for (const a of ['story', 'choose', 'play', 'play', 'evil']) await post('/lab/p', { v: 1, aa: a }); await post('/lab/p', { v: 1, aa: 'play', u: 'launch-check' });
+  const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.aa = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.aa || {})) a[k] = (a[k] || 0) + n; return a; }, {});
+  out.aaInt = ds.reduce((a, d) => { for (const [k, n] of Object.entries((d.int || {}).aa || {})) a[k] = (a[k] || 0) + n; return a; }, {});
+  out.aaBatches = ds.reduce((a, d) => a + (d.batches || 0), 0) - b0; }
 // /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
 { out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
 // the storyline funnel (11-02): known moments only, counted by arm; the arm's visits and dwell under gv
@@ -362,6 +368,7 @@ def worker_unit():
     need(o["jeffy_train"] == 404 and o["jeffy_get_predict"] == 404, f"jeffy allowlist: train {o['jeffy_train']}, GET predict {o['jeffy_get_predict']}")
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
+    need(o.get("aa") == {"story": 1, "choose": 1, "play": 2} and o.get("aaInt") == {"play": 1} and o.get("aaBatches") == 0, f"arm beacon: aa {o.get('aa')}, internal {o.get('aaInt')}, batches {o.get('aaBatches')}")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
     need(o.get("sd") == {"story|lights": {"n": 2, "sum": 725, "b": {"10-30s": 1, "10m+": 1}}, "story|e1words": {"n": 1, "sum": 4, "b": {"<10s": 1}}}, f"time per step: {o.get('sd')}")
     need(o.get("rb") == {f"story|{o['rbToday']}|d0": 1, f"lg:c3|{o['rbToday']}|d0": 1, "none|2026-11-01|d1": 1}, f"coming back: {o.get('rb')}")
@@ -1023,7 +1030,7 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"u", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"u", "aa", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -2857,6 +2864,66 @@ def t_hint_phone(P):
     return "hint and skip › clear of the dock at 375×667"
 
 
+def t_arm_reload(P):
+    """Nov 4 launch bug: the service worker's one-time isolation reload (?_coi=1) can reload a first visit right after genesis boot() saved
+    S (n: 1); story-arm newcomers then landed in the chooser. A reload before any story progress must keep each arm's first screen: story →
+    the title card (never the chooser), choose → the chooser, play → the playground with at most one welcome; funnel moments stay once."""
+    out = []
+    for arm in ("story", "choose", "play"):
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)
+        try:
+            q = Q.open(f"/arena.html?arm={arm}&test")
+            if arm == "story":
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            elif arm == "choose":
+                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
+            else:
+                booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+            saved = q.evaluate("() => JSON.parse(localStorage.getItem('idle.genesis') || 'null')")
+            q.goto(P.base + f"/arena.html?arm={arm}&test&_coi=1")   # the isolation reload, before any story progress
+            if arm == "story":
+                wait_for(q, "() => (!!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1') || !!document.querySelector('#genChoose')", 40)
+                r = q.evaluate("() => ({ title: !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1', chooser: !!document.querySelector('#genChoose'), f: window.__funnel.reached() })")
+                need(r["title"] and not r["chooser"], f"story arm after a reload: the title card, not the chooser: {r} (saved before the reload: {saved})")
+            elif arm == "choose":
+                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40); q.wait_for_timeout(800)
+                n = q.evaluate("() => document.querySelectorAll('#genChoose').length"); need(n == 1, f"choose arm after a reload: one chooser, got {n}")
+            else:
+                booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+                r = q.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), chooser: !!document.querySelector('#genChoose'), void: !!window.__genesisVoid })")
+                need(not r["intro"] and not r["chooser"] and not r["void"], f"play arm after a reload: the playground: {r}")
+            st = q.evaluate("() => JSON.parse(localStorage.getItem('idle.funnel') || '{}')")
+            need(all(v == 1 for v in st.values()), f"funnel moments stay once after a reload: {st}")
+            out.append(arm)
+        finally:
+            ctx.close()
+    P.clean()
+    return "after the isolation reload: " + ", ".join(out) + " keep their first screen"
+
+
+def t_arm_stats(P):
+    """Nov 4: production showed choose and story arms but no play arm. Each arm's fresh browser must send its arm with its visit report."""
+    got, beacons = {}, {}
+    for arm in ("story", "choose", "play"):
+        P.stats.clear()
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base, P.stats)
+        try:
+            q = Q.open(f"/arena.html?arm={arm}&statstest&test"); q.wait_for_timeout(6000)
+            q.evaluate("() => window.__stats && window.__stats._send('3m')"); q.wait_for_timeout(800)
+            sent = [json.loads(b) for b in P.stats]
+            got[arm] = [(x.get("why"), x.get("visit"), x.get("gv")) for x in sent if "aa" not in x]
+            beacons[arm] = [x for x in sent if "aa" in x]
+            q.reload(); q.wait_for_timeout(2500)
+            beacons[arm] += [x for x in [json.loads(b) for b in P.stats] if "aa" in x][len(beacons[arm]):]   # a reload sends no second beacon
+        finally:
+            ctx.close()
+    for arm, rows in got.items():
+        need(any(v == 1 and g == arm for _, v, g in rows), f"the {arm} arm's visit report must carry gv={arm}: {got}")
+        need(beacons.get(arm) == [{"v": 1, "aa": arm}], f"the {arm} arm sends one arm beacon with only v and aa: {beacons}")
+    P.clean()
+    return "visit reports carry their arm: " + ", ".join(f"{a} {len(r)} reports" for a, r in got.items())
+
+
 def t_story_arms(P):
     """The storyline's A/B/C (v15, Nico: "A: user goes into storyline mode, B: user sees choice screen, C: user goes directly to playground"),
     off by default: a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=choose gets the chooser (📖 / 🛝);
@@ -3762,7 +3829,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -3788,7 +3855,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"js syntax", "conflict markers", "worker", "static build", "prod gates", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+LAUNCH = {"arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
