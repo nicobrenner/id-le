@@ -227,6 +227,9 @@
     return any ? p : null;
   }
   function send(why) {
+    // the service worker's one-time isolation reload (idle-runtime.js coiReload) replaces this page: it reports nothing, the reloaded page
+    // reports the visit, so one visit is counted once (Nov 4: a pagehide beacon from the replaced page counted it twice)
+    if (window.__coiReloading) return;
     if (!live()) return; if (!sent.visit && seenMs() < 1 && why !== 'open') return;   /* never seen: nothing to report */ if (why === 'hide' || why === 'leave') leaveFlags(); const p = payload(why !== 'peek'); if (!p) return; p.why = why; p.bi = batchNo + 1;   // which report of this page load (1 = the first): shows if first reports go missing on the way
     const body = JSON.stringify(p); let ok = false; try { ok = navigator.sendBeacon('/lab/p', new Blob([body], { type: 'application/json' })); } catch (e) {}
     if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = body.length < 60000; } catch (e) {}

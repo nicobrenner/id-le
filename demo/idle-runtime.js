@@ -130,7 +130,7 @@ window.__funnel = (() => { const K = 'idle.funnel', KD = 'idle.funnelDt', KA = '
   // --- static mode only: model cache + cross-origin isolation through a service worker, and world files
   function setup() {
     // the one-time isolation reload carries ?_coi=1 so the server's page-view count (helper/worker.js) skips it; the page drops it again
-    const coiReload = () => { try { const u = new URL(location.href); u.searchParams.set('_coi', '1'); location.replace(u.href); } catch (e) { location.reload(); } };
+    const coiReload = () => { window.__coiReloading = true; try { const u = new URL(location.href); u.searchParams.set('_coi', '1'); location.replace(u.href); } catch (e) { location.reload(); } };
     try { if (/[?&]_coi=/.test(location.search)) { const u = new URL(location.href); u.searchParams.delete('_coi'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); } } catch (e) {}
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('sw.js', { scope: './' }).then(reg => { reg.active && reg.active.postMessage({ helper: helperOn() ? CFG.helper : '' }); }).catch(() => {});

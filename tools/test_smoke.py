@@ -2901,6 +2901,36 @@ def t_arm_reload(P):
     return "after the isolation reload: " + ", ".join(out) + " keep their first screen"
 
 
+def t_stats_first(P):
+    """Nov 4: first reports looked lost (by report order #1 27 vs #2 59 on production before 05:55). One page load must count its visit
+    exactly once: a visit report 3 s after the page is on screen; a page the isolation reload replaces (idle-runtime.js coiReload) sends
+    nothing, so the reloaded page's visit is the only one; the report order (bi) starts at 1 and the visit rides in #1."""
+    out = {}
+    for case in ("plain", "coi"):
+        P.stats.clear()
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base, P.stats)
+        try:
+            q = Q.open("/arena.html?statstest&test")
+            if case == "coi":
+                q.wait_for_timeout(1200)
+                q.evaluate("() => { window.__coiReloading = true; window.__stats._send('leave'); }")   # what the replaced page does on pagehide
+                q.wait_for_timeout(300); before = len(P.stats)
+                need(before == 0, f"a page being replaced by the isolation reload must report nothing: {[json.loads(b) for b in P.stats]}")
+                q.goto(P.base + "/arena.html?statstest&test&_coi=1")
+            q.wait_for_timeout(4200)
+            q.evaluate("() => window.__stats._send('3m')"); q.wait_for_timeout(500)
+            rows = [x for x in map(json.loads, P.stats) if "aa" not in x]
+            visits = [x for x in rows if x.get("visit") == 1]
+            need(len(visits) == 1, f"{case}: exactly one visit report per page load, got {len(visits)}: {[(x.get('bi'), x.get('why')) for x in rows]}")
+            need(visits[0].get("bi") == 1, f"{case}: the visit rides in report #1: {[(x.get('bi'), x.get('why'), x.get('visit')) for x in rows]}")
+            need(sorted(x.get("bi") for x in rows) == list(range(1, len(rows) + 1)), f"{case}: report order 1..n: {[x.get('bi') for x in rows]}")
+            out[case] = [(x.get("bi"), x.get("why")) for x in rows]
+        finally:
+            ctx.close()
+    P.clean()
+    return "one visit per page load, in report #1: " + "; ".join(f"{k} {v}" for k, v in out.items())
+
+
 def t_arm_stats(P):
     """Nov 4: production showed choose and story arms but no play arm. Each arm's fresh browser must send its arm with its visit report."""
     got, beacons = {}, {}
@@ -3897,7 +3927,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
