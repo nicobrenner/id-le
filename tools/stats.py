@@ -8,7 +8,7 @@
 Needs CLOUDFLARE_API_TOKEN in ~/.idle-ts/cf.env (never committed; the token itself is never printed).
 Each server isolate writes its own shard key (stats:<UTC day>:<shard>); this sums the shards per day.
 """
-import argparse, datetime as dt, html, json, os, sys, urllib.error, urllib.parse, urllib.request
+import argparse, datetime as dt, html, json, os, re, sys, urllib.error, urllib.parse, urllib.request
 
 API = "https://api.cloudflare.com/client/v4"
 NS_TITLE = "id-le-stats"
@@ -166,6 +166,42 @@ def sc_total(sfs):
         for k, n in o.get("sc", {}).items():
             t[k] = t.get(k, 0) + n
     return t
+
+
+def internal_tags():
+    """the one list of our own campaign tags lives in helper/worker.js (INTERNAL_TAGS); read it from there"""
+    try:
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "helper", "worker.js"), encoding="utf-8").read()
+        return re.findall(r"'([a-z0-9-]+)'", re.search(r"const INTERNAL_TAGS = \[(.*?)\]", src).group(1))
+    except Exception:
+        return []
+
+
+def is_internal(tag, tags):
+    return tag in tags or bool(re.search(r"^(internal|smoke)|-(check|test)$", tag))
+
+
+def internal_line(days):
+    """our own checks: kept apart by the worker from the day that change was deployed; before it, they're inside the in-page numbers"""
+    t, r, v = {}, 0, 0
+    for d in days.values():
+        q = d.get("int") or {}
+        r += q.get("r", 0); v += q.get("v", 0)
+        for k, n in (q.get("t") or {}).items():
+            t[k] = t.get(k, 0) + n
+    if r:
+        print(f"internal (our own checks, kept apart from every in-page number): {v} visits, {r} reports · " + ", ".join(f"{k} {n}" for k, n in sorted(t.items(), key=lambda kv: -kv[1])))
+    tags, mixed = set(internal_tags()), []
+    for day in sorted(days):
+        if (days[day].get("int") or {}).get("r"):
+            continue
+        n = sum(c for k, c in (days[day].get("utm") or {}).items() if is_internal(k, tags))
+        if n:
+            mixed.append(f"{day} {n}")
+    if mixed:
+        print("note: before the worker kept them apart, our own checks' in-page visits are inside the numbers below (in-page visits with an internal tag: " + ", ".join(mixed) + ")")
+    if r or mixed:
+        print()
 
 
 def sf_split(sf):
@@ -422,6 +458,7 @@ def main():
         print(f"no stats since {since}")
         return
     print(f"id-le.com anonymous stats, {since} .. today (UTC)\n")
+    internal_line(days)
     srv = server_days(days)
     if srv:
         print("Counted by our server (every page request; bots apart; visitors estimated without cookies, about ±2-3%)")

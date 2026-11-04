@@ -201,6 +201,7 @@
       for (const [k, v] of Object.entries(D)) if (!ahaSent['sd:' + k] && Number.isFinite(v)) sd[k] = Math.min(86400, Math.max(0, Math.round(v)));
       if (Object.keys(sd).length) { p.sd = Object.fromEntries(Object.entries(sd).slice(0, 30)); any = true; } } catch (e) {}
     if (backDue()) { p.rb = { c: since.d, b: backBucket() }; any = true; }
+    { const u0 = utm(); if (u0) p.u = u0; }   // the campaign tag on every report: the server keeps our own checks' reports apart (helper/worker.js INTERNAL_TAGS)
     if (!sent.visit) { p.visit = 1; p.v2 = 1; p.back = returning ? 1 : 0; p.dev = phone() ? 'phone' : 'desktop'; p.ios = window.__isIOS ? 1 : 0; p.safe = [0, 1, 2].includes(window.__safeLevel) ? window.__safeLevel : 0; p.ref = refHost(); const u = utm(); if (u) p.utm = u; any = true; }
     const fb = fpsBucket(); if (fb && !sent.fps) { p.fps = fb; any = true; }
     try { const w = window.__dlwalk && window.__dlwalk.state && window.__dlwalk.state(); if (w) { const ks = Object.keys(w.done || {}).concat(w.finished ? ['finished'] : w.skipped ? ['ended'] : []).filter(k => !ahaSent['dl:' + k]); if (ks.length) { p.dl = ks; any = true; } } } catch (e) {}

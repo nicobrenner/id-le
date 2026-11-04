@@ -139,11 +139,15 @@ await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
 await post('/lab/stats', { v: 1, x: { op: { 'out:acted': 3, 'out:unsure': 1, 'opt:light': 2, 'cf:hi': 3, 'fr:rephrase': 1, 'mood:negative': 1, 'mm:negative': 1, 'gd:light': 1, 'gt:light': 2, 'gn:light': 1, 'text:make it rain': 1, 'opt:rm -rf': 1, 'out:acted ': 1, 'fr:caps': -2, 'cf:lo': 1.5 }, did: ['op_miss', 'op_rephrase', 'op_secret'] } });
 // many distinct favorites from many page loads: capped, the rest counted as 'other'
 for (let i = 0; i < 70; i++) await post('/lab/stats', { v: 1, x: { fav: { ['name:Zz' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26))]: 1 } } });
+// our own checks (an internal campaign tag): the page's reports go to 'int', never into the totals (its visit, time and features stay out)
+await post('/lab/stats', { v: 1, visit: 1, dev: 'desktop', ref: 'direct', utm: 'prod-check', dw: '<1', feat: ['music'] });
+await post('/lab/stats', { v: 1, u: 'prod-check', dw: '1-5', dw0: '<1', feat: ['music'] });
 out.bad_format = (await post('/lab/stats', { v: 2 })).status;
 out.too_big = (await go('/lab/stats', { method: 'POST', body: 'x'.repeat(9000) })).status;
 const days = [...env.STATS.m.values()].map(v => JSON.parse(v));
 out.stats = days.reduce((a, d) => { for (const k of ['visits', 'dev', 'ref', 'utm', 'dw', 'fl', 'feat']) a[k] = typeof d[k] === 'number' ? (a[k] || 0) + d[k] : { ...(a[k] || {}), ...d[k] }; return a; }, {});
 out.stat_keys = [...new Set(days.flatMap(d => Object.keys(d)))].sort();
+out.int = days.reduce((a, d) => { const q = d.int || {}; a.r += q.r || 0; a.v += q.v || 0; for (const [k, n] of Object.entries(q.t || {})) a.t[k] = (a.t[k] || 0) + n; return a; }, { r: 0, v: 0, t: {} });
 out.bi = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.bi || {})) a[k] = (a[k] || 0) + n; return a; }, {});
 out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})) a[k] = (a[k] || 0) + n; return a; }, {}); out.secs = days.reduce((a, d) => a + (d.secs || 0), 0);
 out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
@@ -338,6 +342,7 @@ def worker_unit():
         shutil.rmtree(tmp, ignore_errors=True)
     s = o["stats"]
     need(s["visits"] == 2, f"visits {s['visits']} != 2")
+    need(o["int"] == {"r": 2, "v": 1, "t": {"prod-check": 2}} and "music" not in s["feat"] and "prod-check" not in s["utm"], f"our own checks must stay apart: int {o['int']}, feat {s['feat']}, utm {s['utm']}")
     need(s["dev"] == {"phone": 1}, f"dev {s['dev']} (a made-up device must not be counted)")
     need(s["ref"] == {"reddit.com": 1, "other": 1}, f"ref {s['ref']} (a full URL must count as 'other')")
     need(s["utm"] == {"r-webgames": 1}, f"utm {s['utm']}")
@@ -996,7 +1001,7 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"u", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
