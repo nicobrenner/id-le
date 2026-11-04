@@ -177,6 +177,7 @@ html.gen-look :is(#toHandle,#genTag,#genDay,#lab-toggle){opacity:0!important;poi
 #genConsole .gstamp{display:inline-block;font:700 13px/1 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.14em;color:#ffcf7a;border:1.5px solid #ffcf7a99;border-radius:4px;padding:5px 9px;margin:2px 0 10px}
 #genConsole .gm{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}#genConsole .gm button{font:600 14px var(--ui-font,system-ui);padding:9px 16px;border-radius:14px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;cursor:pointer}
 #genConsole .gm button.go{background:#3a46c8;border-color:#cfd6ff}#genConsole .gm button:hover{background:#2a3180}
+#genConsole .gask{margin:8px 0 2px;padding:10px 12px;border:1px solid #8ea0ff55;border-radius:12px;background:#121633cc}#genConsole .gask .gq{font:600 15px/1.35 var(--op-font,var(--ui-font,system-ui));color:#e8ebff;margin-bottom:8px}#genConsole .gaskr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}#genConsole .gaskr button{font:600 14px var(--ui-font,system-ui);padding:8px 14px;border-radius:14px;border:1px solid #8ea0ff88;background:#1d2350;color:#e8ebff;cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;gap:4px}#genConsole .gaskr button.go{background:#3a46c8;border-color:#cfd6ff}#genConsole .gaskr button.gskip{background:none;border-color:#8ea0ff44;color:#aab3e6;font-weight:500}#genConsole .gaskr button canvas{width:120px;height:50px;border-radius:6px;background:#000}#genConsole .gaskr input{flex:1 1 140px;min-width:0;font:15px var(--ui-font,system-ui);padding:8px 10px;border-radius:10px;border:1px solid #8ea0ff88;background:#0b0e24;color:#fff}#genConsole .gask-done{color:#ffcf7a}
 #genConfirm{position:fixed;inset:0;z-index:2147482700;display:flex;align-items:center;justify-content:center;padding:16px;background:#02030ab8;backdrop-filter:blur(2px)}
 #genConfirm .cb{width:min(400px,100%);padding:18px 20px 16px;border-radius:16px;background:#0a0b16f7;color:#e9ecff;box-shadow:0 24px 90px #000c,0 0 0 1px #6b7cff55;font:15px/1.45 var(--op-font,Georgia,serif)}
 #genConfirm .cr{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}#genConfirm .cr button{flex:1 1 140px;font:600 13.5px var(--ui-font,system-ui);padding:10px 12px;border-radius:12px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;cursor:pointer}#genConfirm .cr button[data-c=stay]{background:#3a46c8;border-color:#cfd6ff}
@@ -212,17 +213,22 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // is 'play'. ?arm=story|choose|play forces one on staging and local copies only. A browser that
   // already has a world keeps it, whatever its arm.
   const ARMS = ['story', 'choose', 'play'], OLD_ARM = { current: 'play' }, armOf = v => OLD_ARM[v] || v;
+  // a link with an explicit destination (Nov 4): ?lab/#lab, ?start=ready|free, ?wiki=, ?review=, ?gift=, ?halloween, ?world=, ?intro=, #c=Name,
+  // #recover. The list lives in ONE place, arena.html's <head> (INTENT_PARAMS / INTENT_HASH, which also keeps these from painting black);
+  // here it is only read. Such a visit draws no arm, gets no title card or storyline offer, and goes where the link says; entry_<kind> in the funnel
+  const ENTRY = window.__intentEntry || null;
   function variant(fresh0) { const f = armOf(Q.get('arm')); if (ARMS.includes(f) && testHostG()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
     let v = null; try { v = localStorage.getItem(GV); } catch (e) {} if (OLD_ARM[v]) { v = armOf(v); try { localStorage.setItem(GV, v); } catch (e) {} }
-    if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0 || Q.has('test')) return null;   // tests (?test) get no random arm: ?arm= forces one
+    if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0 || Q.has('test') || ENTRY) return null;   // a direct entry (?lab, ?start=ready) never draws an arm   // tests (?test) get no random arm: ?arm= forces one
     // the draw may already have been made in arena.html's <head> (idle.gvPre), so the first paint knew whether this is a story start (Nov 4)
     let pre = null; try { pre = localStorage.getItem('idle.gvPre'); localStorage.removeItem('idle.gvPre'); } catch (e) {}
     v = ARMS.includes(pre) ? pre : ARMS[Math.floor(Math.random() * ARMS.length)]; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
   // called by the arena for a browser with no world of its own (fresh0), before the guided start would load the starter world:
   // the story and choose arms begin here; the play arm gets the ready world (the guided start), then the Operator's welcome (playWelcome)
-  function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
+  function wants(fresh0) { if (Q.has('genesis') || Q.has('story') || ['free', 'guided'].includes(Q.get('start'))) return true; if (ENTRY) return false; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
   // ?arm= forces an arm only on the test site and local copies (never on id-le.com, where the A/B decides)
+  const offerPreview = () => ENTRY === 'offer';   // ?offer=a|b|c|old on staging/local (arena.html's INTENT list): a returning world to preview the offer
   const testHostG = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // the Operator window's status line (Nico, v7: no second title; "consciousness 24 · epoch 0 · genesis", the epoch advancing with the story)
@@ -233,6 +239,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   { const c3 = document.createElement('style'); c3.textContent = `#genTag{position:fixed;left:14px;top:12px;z-index:41;padding:3px 9px;border-radius:9px;background:#0a0b16cc;border:1px solid #6b7cff55;color:#cfd6ff;font:600 11px/1.4 var(--term-font,ui-monospace,Menlo,monospace);letter-spacing:.04em;pointer-events:none}
 html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(.gen-calm) #genTag{top:52px}html.gen-story:not(.gen-calm) #genDay{top:84px!important}@media (max-width:600px){#genTag{top:8px;left:8px}}`; document.head.appendChild(c3); }
   const mark = k => { try { window.__funnel && window.__funnel.mark(k); } catch (e) {} };
+  if (ENTRY) { let k = 0; const iv = setInterval(() => { if (window.__funnel || ++k > 40) { clearInterval(iv); mark('entry_' + ENTRY); } }, 250); }
   // silence (Nico, story v5): from the landing until the storyline's music step, sound "doesn't exist yet": everything is held at zero
   // (the player's own mute and volume aren't touched); the Operator's arrival and its sonar are visual only
   const PG = () => (window.IDLE_NAMES && window.IDLE_NAMES.play) || { icon: '🛝', short: 'the playground' };   // the playground's name (idle-runtime.js)
@@ -300,8 +307,8 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     else body = (storyMode() ? '' : `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>`) +
       (storyMode() ? '' : `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`);
     let said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
-    if (moment) { said = `<div class="gstamp">${esc(MOMENT.stamp)}</div>` + said; body = moment.ready ? `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : ''; }
-    c.innerHTML = said + body; tag(); cls('gen-noclose', storyMode() && (!(S && S.days && S.days[0]) || !!moment));
+    if (moment) { said = `<div class="gstamp">${esc(MOMENT.stamp)}</div>` + said; body = moment.ready ? askHtml() + `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : ''; }
+    c.innerHTML = said + body; if (moment && moment.ready) setTimeout(askStills, 0); tag(); cls('gen-noclose', storyMode() && (!(S && S.days && S.days[0]) || !!moment));
     prefill(); trimChat(); if (storyMode() && S && S.on && !$('#op-check') && !(S.days && S.days[0])) try { renderDay(); } catch (e) {}   // the ✅ from the first line on
     try { window.__opwin && window.__opwin.refresh(); } catch (e) {} }
   // the 🛠 tray's chip in the storyline's Genesis (idle-opwin.js): the step's command, or nothing while the Operator talks or a step runs
@@ -348,9 +355,27 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   const SAYS = { light: ['lights on', 'let there be light'], words: ['let there be words'], creatures: ['let there be life', 'bring life'], sky: ['give it weather', 'let there be music'] };
   const isCommand = (g, said) => { const n = norm(said); return n === norm(sayOf(g)) || (SAYS[g] || []).some(c => n === norm(c)) || (g === 'words' && !storyMode() && /^let there be words about [a-z0-9 ]{1,40}$/.test(n)); };
   let GATE = null; const loadGate = async () => GATE || (GATE = await fetch('genesis_gate.json').then(r => r.ok ? r.json() : null).catch(() => null));
-  const gateOf = (G, x) => { if (!G || !x || x.length !== G.d) return null; const z = G.w.map((w, c) => { let s = G.b[c]; for (let d = 0; d < G.d; d++) s += w[d] * x[d]; return s; });
-    const mx = Math.max(...z), e = z.map(v => Math.exp(v - mx)), sum = e.reduce((a, b) => a + b, 0), probs = {}; G.classes.forEach((c, i) => { probs[c] = e[i] / sum; });
-    const top = G.classes[z.indexOf(mx)]; return { top, p: probs[top], probs }; };
+  // round 2 (Nov 4, after the launch: paraphrases of "let there be life" almost always got the nudge): per step, the head is either the
+  // Tiny Oracle's features alone ('oracle') or those plus hashed character n-grams of the message ('comb'), both learned in
+  // tools/genesis_gate.py. gateNgrams must match its ngrams() exactly: lowercased, spaces normalized, UTF-16 code units, FNV-1a, modulo B.
+  const fnv = (s, a, b) => { let h = 0x811c9dc5; for (let i = a; i < b; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
+  const gateNgrams = (text, B, ns) => { const t = ' ' + String(text).toLowerCase().trim().split(/\s+/).filter(Boolean).join(' ') + ' ', v = new Float64Array(B);
+    for (const n of ns) for (let i = 0; i + n <= t.length; i++) v[fnv(t, i, i + n) % B] += 1;
+    for (const w of t.split(' ').filter(Boolean)) { const k = 'w:' + w; v[fnv(k, 0, k.length) % B] += 1; }
+    let nn = 0; for (let i = 0; i < B; i++) nn += v[i] * v[i]; nn = Math.sqrt(nn); if (nn > 0) for (let i = 0; i < B; i++) v[i] /= nn; return v; };
+  const headProbs = (m, x, ng, classes) => { const z = m.w.map((w, c) => { let s = m.b[c]; for (let d = 0; d < 1024; d++) s += w[d] * x[d];
+      if (m.ngrams && ng) for (let d = 1024; d < m.d; d++) { const v = ng[d - 1024]; if (v) s += w[d] * v; } return s; });
+    const mx = Math.max(...z), e = z.map(v => Math.exp(v - mx)), sum = e.reduce((a, b) => a + b, 0), probs = {}; classes.forEach((c, i) => { probs[c] = e[i] / sum; });
+    const top = classes[z.indexOf(mx)]; return { top, p: probs[top], probs }; };
+  // gateOf(G, x, said, step): with a step, that step's head and whether it advances; without one (tests/probes), every step's verdict
+  const gateOf = (G, x, said, step) => { if (!G || !x || x.length !== (G.d || 1024)) return null;
+    if (!G.models) { const v = headProbs({ w: G.w, b: G.b, d: G.d }, x, null, G.classes); v.adv = G.classes.filter(c => c !== 'other' && v.top === c && v.p >= G.thr[c]); return v; }
+    const ng = said != null && G.ngram ? gateNgrams(said, G.ngram.B, G.ngram.ns) : null;
+    const one = st => { const m = G.models[G.step[st]]; if (!m) return null; const v = headProbs(m, x, ng, G.classes); v.adv = v.top === st && v.p >= G.thr[st]; return v; };
+    if (step) { const v = one(step); return v && { top: v.top, p: v.p, probs: v.probs, adv: v.adv ? [step] : [] }; }
+    const all = Object.keys(G.step).map(st => [st, one(st)]).filter(([, v]) => v), adv = all.filter(([, v]) => v.adv).map(([st]) => st);
+    const best = adv.length ? all.find(([st]) => st === adv[0])[1] : (all.find(([st]) => G.step[st] === 'comb') || all[0])[1];
+    return { top: adv.length ? adv[0] : best.top, p: best.p, probs: best.probs, adv }; };
   const NUDGE = {   // draft lines (Operator voice: lowercase, no trailing period); {cmd} is the step's command as typed for the player
     light: 'hmm, not quite. to turn the lights on, say "{cmd}"', words: 'hmm, not quite. to give it words, say "{cmd}"',
     creatures: 'hmm, not quite. to bring life, say "{cmd}"', sky: 'hmm, not quite. to give it a sky, say "{cmd}"',
@@ -366,10 +391,10 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     if (!(O && O.ready && window.__idleAI)) { add('you', said, 'you'); lastGate = { said, how: 'asleep' }; nudge('asleep'); return; }
     // one read of the message: the Tiny Operator's heads (for its reply) and the gate's features
     let r = null, G = null; try { const H = await window.__idleAI.heads(); r = await O.classify(said, H, true); G = await loadGate(); } catch (e) { console.warn('genesis: gate', e); }
-    const gv = r && gateOf(G, r.x), thr = G && G.thr && G.thr[g];
+    const gv = r && gateOf(G, r.x, said, g), thr = G && G.thr && G.thr[g];
     lastGate = { said, how: 'gate', top: gv && gv.top, p: gv && +gv.p.toFixed(3), thr, v4: r && { option: r.option, p: r.probs[r.option] } };
     ev('genesis_gate', { step: g, top: gv ? gv.top : null, p: gv ? +gv.p.toFixed(2) : null });
-    if (gv && gv.top === g && thr != null && gv.p >= thr) { add('you', said, 'you'); await STEPS[g].run(); return; }
+    if (gv && gv.adv && gv.adv.includes(g)) { add('you', said, 'you'); await STEPS[g].run(); return; }
     // not this step: a short real reply (no world tools during Genesis), then the nudge
     add('you', said, 'you'); quiet = true; try { if (r) { const r2 = { ...r }; delete r2.x; await window.__idleAI.tiny(said, { noAct: true, r: r2 }); } } catch (e) { console.warn('genesis: operator', e); } finally { quiet = false; }
     nudge(g); }
@@ -445,6 +470,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
       const back = hold.splice(0, 2); back.forEach((c, i) => { c.x = c.tx = w.x + (i ? 26 : -26); c.y = c.ty = w.y + 10; if (c.el) c.el.style.visibility = ''; if (!cs.includes(c)) cs.push(c); names.push(c.name); });
       if (!back.length || family) { const n = W() && W().spawn(family || 'crawly'); if (n) names.push(n); }
       if (!names.length) return null;
+      land.firstBorn = names[0];   // the one-tap ask at the moment names this one
       cosmos.calm(0.25); done('creatures', null, { x: w.x, y: w.y }, { who: names.join(' and ') }); return names; } }
   // v14, the storyline's life (Nico: "on let there be life, do: 1-3 lightning/thunder effects, creatures appear, (or maybe for each thunder 1
   // creature appears, total 3?), wait 1-3 seconds after the 3rd one, start background music.... and only after maybe 5-10 seconds of the user
@@ -475,6 +501,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
         { const cc = name && h.creatures().find(x => x.name === name); if (cc) setTimeout(() => firstWords(cc, i), RM ? 100 : 450); }
         if (i < 2) await sleep(RM ? 300 : LIFE.gap); }
       if (!names.length) return null;
+      land.firstBorn = names[0];   // the one-tap ask at the moment names this one
       cosmos.calm(0.25); done('creatures', null, { x: first.x, y: first.y }, { who: names.join(', ') });
       await sleep(RM ? 400 : LIFE.quiet); music();
       cls('gen-look', 1); land.look = { t0: now(), rings: 0, hint: null }; const until0 = now() + LIFE.look, born = names.map(n => h.creatures().find(x => x.name === n)).filter(Boolean);
@@ -549,10 +576,11 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   // chosen. Not S.n: boot() saves S (n: 1) before the intro, and the service worker's one-time isolation reload (idle-runtime.js, _coi)
   // can reload the first visit right after that, which used to send story-arm newcomers to the chooser (found 11-04 after the launch)
   const storyBegun = () => !!(S && (S.tc || (S.steps && Object.keys(S.steps).length) || (S.mode && S.mode !== 'story') || S.v10));
-  async function boot(force) { if (!H()) return false;
+  let bootedHere = false;   // this page ran boot() (the intro, the landing…): a resume after a reload must not race it
+  async function boot(force) { if (!H()) return false; bootedHere = true;
     // which start: ?story → the storyline; ?start=free|story|ready; otherwise the chooser (script section E)
     // ('guided': the earlier guided genesis, light → words → life → weather or music, kept for links and tests)
-    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !storyBegun() ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
+    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ENTRY === 'lab' ? 'ready' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !storyBegun() ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
     if (mode !== 'story') { try { window.__storyBootLift && window.__storyBootLift(); } catch (e) {} }   // not a story after all: lift the first-paint black (arena.html <head>)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { if (S) { S.on = false; save(); } applyUnlocks(); dropFlag(); return readyWorld(); }
@@ -899,6 +927,23 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     S.mode = 'story'; S.on = true; delete S.fp; save(); mark('st_resume'); applyUnlocks(); tag(); renderConsole();
     if (genesisDone() && !builtNext(S.day || 0)) { S.endOpen = false; showEnd(); } else renderDay();
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_resume', extra: { epoch: S.day || 0 } } })); } catch (e) {} return true; }
+  // a reload in the middle of Genesis (Nov 4, found from Nico's screenshot: the ⚡ tray offered "make it rain" during the life step and the
+  // step gate refused it): the world comes back from its autosave, but the Genesis console, the sky and the step's pre-typed words did not.
+  // resumeGenesis() puts them back where the player was: the void's classes, the cosmos (lit if the lights are on), the story's hush until
+  // life, and the console on the pending step with its words typed in the input
+  const genPending = () => !!(S && S.on && storyMode() && !genesisDone());
+  let resumedG = false;
+  function resumeGenesis() { if (resumedG || bootedHere || !genPending() || !S.tc || $('#genConsole') || $('#idleIntro') || !H()) return false; resumedG = true;
+    cls('gen-void', 1); cls('gen-calm', 1); window.__genesisVoid = true; cosmos.start();
+    // no creature before life after a reload either (Nov 4, prelife): the page always boots with the two originals (arena.html), and the
+    // first boot hides them in toVoid(); a resume has to do the same, or Crawly and Id|le stand in the void before 'let there be life'
+    if (!did('creatures')) { const h = H(), cs = h.creatures(); hold = cs.splice(0).filter(c => !c.lab);
+      for (const c of hold) { if (c.bub) c.bub.classList.remove('on'); if (c.el) c.el.style.visibility = 'hidden'; c.held = false; c.carrying = null; } }
+    if (did('light')) { cls('gen-lit', 1); night(false); cosmos.light(); cls('gen-float', 1); } else night(true);
+    silence(!did('creatures')); applyUnlocks(); tag(); openConsole(); opTitle(); wakeBusy = false; wakeShown = did('light') ? [] : WAKE.slice();
+    renderConsole(did('light') ? introOf(nextGuide() || 'light') : WAKE[WAKE.length - 1]);
+    try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_resume_reload', extra: { step: nextGuide() } } })); } catch (e) {} return true; }
+  { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh) { clearInterval(iv); setTimeout(() => { try { resumeGenesis(); } catch (e) { console.warn('genesis: resume after reload', e); } }, 400); } else if (++k > 300) clearInterval(iv); }, 200); }
   // the playground's way back (v16): the 🛠 tray's chip and /story (idle-opwin.js asks for it)
   window.__storyBack = () => (!storyMode() && storyProgress() && storyLive()) ? { text: '📖 back to the story', act: () => storyRow() } : null;
 
@@ -927,6 +972,37 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
       'ready?'],
     start: 'start Epoch 1', play: () => PG().icon + ' ' + PG().short,
     confirm: { q: 'are you sure? the story will wait for you. you can always come back from ⚙', stay: 'stay in the story', go: () => 'go to ' + PG().short } };
+  // the one-tap ask (Nov 4, Nico: "real engagement… a user saw this, clicked/interacted, and they want to participate"): before the two ways
+  // on, the Operator asks one light question with one-tap answers. Never blocks: the [start Epoch 1] / [🛝] buttons stay right there, and
+  // 'skip' is one tap. MODE 'name' by default: every player has a first creature to name, while most saw only ONE of the two openings (the
+  // logo A/B), so "which opening did you like more?" ('logo') asks about something they mostly didn't see; switch ASK.mode when wanted.
+  // DRAFT: every word below is a draft for Nico.
+  const ASK = { draft: true, mode: 'name',
+    name: { q: 'your first creature needs a name. what should we call it?', ph: 'a name…', ok: 'name it', pool: ['Pixel', 'Echo', 'Byte', 'Loopy', 'Nova', 'Wisp', 'Glim', 'Momo', 'Zed', 'Tiko', 'Lumi', 'Bit'],
+      thanks: n => `${n} it is. hello, ${n} 👋` },
+    logo: { q: 'which opening did you like more?', a: ['c3-typed-dust', 'the dust'], b: ['c3-typed-crt', 'the old TV'], both: 'both', thanks: 'noted, thank you! it helps pick the opening' },
+    skip: 'skip' };
+  const askChips = () => { const p = ASK.name.pool.slice(), out = []; while (out.length < 3 && p.length) out.push(p.splice(Math.floor(Math.random() * p.length), 1)[0]); return out; };
+  const askHtml = () => { if (!moment || !moment.ready) return '';
+    if (moment.ask === 'done') return moment.askMsg ? `<div class="gl gask-done">${esc(moment.askMsg)}</div>` : '';
+    if (ASK.mode === 'logo') { const L = ASK.logo;
+      return `<div class="gask"><div class="gq">${esc(L.q)}</div><div class="gaskr">${[L.a, L.b].map(([id, lab], i) => `<button data-ask="pick" data-w="${esc(id)}" data-l="${esc(i ? L.a[0] : L.b[0])}"><canvas width="120" height="50" data-still="${esc(id)}"></canvas><span>${esc(lab)}</span></button>`).join('')}<button data-ask="both">${esc(L.both)}</button><button data-ask="skip" class="gskip">${esc(ASK.skip)}</button></div></div>`; }
+    const N = ASK.name, ch = moment.chips = moment.chips || askChips();
+    return `<div class="gask"><div class="gq">${esc(N.q)}</div><div class="gaskr">${ch.map(n => `<button data-ask="chip" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div>` +
+      `<div class="gaskr"><input id="genAskName" maxlength="24" placeholder="${esc(N.ph)}" autocomplete="off"><button data-ask="name" class="go">${esc(N.ok)}</button><button data-ask="skip" class="gskip">${esc(ASK.skip)}</button></div></div>`; };
+  const askStills = () => { try { const L = window.IdleLogos; if (!L || !L.byId) return; document.querySelectorAll('#genConsole canvas[data-still]').forEach(cv => { if (cv._s) return; cv._s = 1; const lg = L.byId(cv.dataset.still); if (lg && lg.still) Promise.resolve(lg.still(cv)).catch(() => {}); }); } catch (e) {} };
+  const askDone = (msg, k) => { if (!moment) return; moment.ask = 'done'; moment.askMsg = msg || ''; if (k) mark(k); renderConsole(); };
+  const askName = raw => { const n = String(raw || '').replace(/[<>\n\r]/g, '').trim().slice(0, 24); if (!n) return;
+    const old = land.firstBorn; let got = null; try { got = old && W() && W().rename(old, n); } catch (e) {} if (got) land.firstBorn = got;
+    askDone(ASK.name.thanks(got || n), 'e0_ask_name'); };
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#genConsole [data-ask]'); if (!b || !moment || !moment.ready || moment.ask === 'done') return;
+    const a = b.dataset.ask;
+    if (a === 'chip') return askName(b.dataset.n);
+    if (a === 'name') { const i = $('#genAskName'); return askName(i && i.value); }
+    if (a === 'pick') { try { window.__reviews && window.__reviews.askPick && window.__reviews.askPick(b.dataset.w, b.dataset.l); } catch (er) {} return askDone(ASK.logo.thanks, 'e0_ask_logo'); }
+    if (a === 'both') return askDone(ASK.logo.thanks, 'e0_ask_both');
+    if (a === 'skip') return askDone('', 'e0_ask_skip'); });
+  document.addEventListener('keydown', e => { if (e.key !== 'Enter' || !e.target || e.target.id !== 'genAskName') return; e.preventDefault(); e.stopPropagation(); askName(e.target.value); }, true);
   let moment = null;
   async function epochMoment(d) { const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; moment = { ready: false, at: now() };
     let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
@@ -1032,28 +1108,110 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
       if (now() - up < 400000 && (now() - up >= WELCOME.ms || (tapAt && now() - tapAt >= WELCOME.afterTap))) { clearInterval(iv); ['pointerdown', 'keydown'].forEach(t => removeEventListener(t, tap, true)); playWelcome(); }
       else if (now() - up >= 400000) clearInterval(iv); }, 300); }
 
-  // ---------- the storyline offer: for browsers that didn't start in it (the other arm, returning players); shown once, remembered
-  const OFFER = 'idle.storyOffer';
-  function offer(now_) { if (!storyLive() && !Q.has('offer')) return false; if (variant() === 'play' && !Q.has('offer')) return false;   // the play arm gets the Operator's welcome instead if (Q.has('test') && !Q.has('offer')) return false;
-    let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false;
-    if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || $('#storyOffer')) return false;
-    const el = document.createElement('div'); el.id = 'storyOffer'; el.setAttribute('role', 'dialog');
+  // ---------- the storyline offer: for browsers that didn't start in it (the other arm, returning players)
+  // v2 (Nov 4: on id-le.com the v1 card, shown 20 s after load, was shown 22 times and accepted 0; returning players come back for their world):
+  // three variants for Nico to pick from on staging. All wait until the player has been active in their world (on screen + an interaction), at a
+  // quiet moment (no panel, popup, modal or typing), take a snapshot first (newUniverse), and "later" asks once more, days later, then never.
+  //   a: the card, but at the right time and with clearer words   b: a compact card with a silent looping preview of the intro (the logo)
+  //   c: the Operator says it (floating window) with a [ 📖 start the story ] chip, like the playground's welcome
+  // ?offer=a|b|c|old forces one on staging/local (after 10 s on screen + an interaction; &offerms=N sets the wait); id-le.com keeps v1 (OFFER_PROD)
+  const OFFER = 'idle.storyOffer', OFFER2 = 'idle.storyOffer2';
+  const OFFER_PROD = 'old';   // what id-le.com shows until Nico picks: 'old' (v1, 20 s after load) | 'a' | 'b' | 'c'
+  const OFFER_TEST = 'a';     // staging/local default
+  const OFFERV = { draft: true,   // DRAFT: the words are drafts for Nico
+    a: { title: "✦ new: Doc's story", line: "A training run that won't stop, a crash, and a consciousness to raise. About 3 minutes. Your world stays safe: it's kept as a snapshot first.", go: '▶ play the story', later: 'later' },
+    b: { line: "new: Doc's story — 3 minutes, your world stays safe", go: '▶ play the story', later: 'later' },
+    c: { lines: ["psst, something new: Doc's story. a training run that won't stop, and a consciousness to raise", "about 3 minutes. your world stays safe, it's kept as a snapshot first"], chip: '📖 start the story', later: 'maybe later', after: 'no problem. it lives in ⚙ → 📖 Storyline whenever you want it' },
+    activeS: 75, laterDays: 3, maxAsks: 2 };
+  const offerVariant = () => { const f = Q.get('offer'); if (/^([abc]|old)$/.test(f || '') && testHostG()) return f; return testHostG() ? OFFER_TEST : OFFER_PROD; };
+  // what this browser has been asked so far: { n: asks, at: last ask (ms), v: variant, ans: 'later' | 'accepted' }; v1's single key migrates
+  function offerSeen() { let o = null; try { o = JSON.parse(localStorage.getItem(OFFER2) || 'null'); } catch (e) {} if (o) return o;
+    let v1 = null; try { v1 = localStorage.getItem(OFFER); } catch (e) {}
+    if (v1 === 'accepted' || v1 === 'welcome') return { n: OFFERV.maxAsks, at: 0, v: 'old', ans: v1 };   // took it, or the play arm's welcome had it
+    if (v1) return { n: 1, at: 0, v: 'old', ans: 'later' };   // v1 shown at load (dismissed or ignored): one more, better-timed ask
+    return { n: 0, at: 0 }; }
+  const offerSave = o => { try { localStorage.setItem(OFFER2, JSON.stringify(o)); localStorage.setItem(OFFER, o.ans === 'accepted' ? 'accepted' : 'shown'); } catch (e) {} };
+  function offerDue() { const o = offerSeen(); if (o.ans === 'accepted' || o.ans === 'welcome' || o.n >= OFFERV.maxAsks) return false;
+    return !o.n || now() - (o.at || 0) >= OFFERV.laterDays * 864e5 || (o.at === 0 && o.v === 'old'); }
+  // activity: seconds on screen (visible) and one interaction in the world or the top bar, counted for this page load only
+  let offerOn = 0, offerTouched = false;
+  setInterval(() => { if (document.visibilityState === 'visible' && window.__restoredOrFresh) offerOn += 1; }, 1000);
+  addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#arena,#topbar,#creatures,.card,#whisper,#minimap')) offerTouched = true; }, true);
+  function offerQuiet() { if (window.__modal && window.__modal.up()) return false;
+    const ae = document.activeElement; if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.offsetParent !== null) return false;
+    try { if (window.__opwin && (window.__opwin.yielding() || (window.__opwin.cutting && window.__opwin.cutting()))) return false; } catch (e) {}
+    const shown = el => { const st = getComputedStyle(el), r = el.getBoundingClientRect(); return st.display !== 'none' && st.visibility !== 'hidden' && +st.opacity > 0 && r.width > 0 && r.height > 0; };
+    return ![...document.querySelectorAll('#genDay.end, #oracle.on, #hitl.on, #review.on, #genConfirm, #genChoose, #genFront, #genStoryModal, #oracleBox:not([hidden]), #almanac.on, #drawerView, #founderLetter, #founderLab, #settingsPanel.on, #settings.on, #storyOffer, #ntf .np')].some(shown); }
+  const offerWait = () => { const ms = Q.has('offerms') ? +Q.get('offerms') : NaN; return Number.isFinite(ms) && ms >= 0 && testHostG() ? ms / 1000 : Q.has('offer') ? 10 : OFFERV.activeS; };   // (+null is 0: the hint once said ~0 s)
+  function offerEligible() { if (ENTRY && !Q.has('offer')) return false; if (!storyLive() && !Q.has('offer')) return false; if (variant() === 'play' && !Q.has('offer')) return false;   // the play arm gets the Operator's welcome instead
+    if (Q.has('test') && !Q.has('offer')) return false;
+    if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || window.__storyKey || window.__traveling) return false;
+    return offerDue(); }
+  const offerGo = (v, el) => { const o = offerSeen(); offerSave({ ...o, ans: 'accepted' }); mark('offer_accepted'); mark('offer_go_' + v); if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 400); } newUniverse('story'); };
+  const offerLater = (v, el) => { const o = offerSeen(); offerSave({ ...o, ans: 'later' }); mark('offer_later_' + v); if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 400); } };
+  function offerCard(v) { const T = OFFERV[v], el = document.createElement('div'); el.id = 'storyOffer'; el.className = 'v' + v; el.setAttribute('role', 'dialog');
+    el.innerHTML = v === 'b'
+      ? `<canvas class="pv" width="300" height="112" aria-hidden="true"></canvas><div class="ln">${esc(T.line)}</div><div class="bt"><button class="go">${esc(T.go)}</button><button class="lt">${esc(T.later)}</button></div>`
+      : `<b>${esc(T.title)}</b><div>${esc(T.line)}</div><div class="bt"><button class="go">${esc(T.go)}</button><button class="lt">${esc(T.later)}</button></div>`;
+    document.body.appendChild(el); el.querySelector('.go').onclick = () => offerGo(v, el); el.querySelector('.lt').onclick = () => offerLater(v, el);
+    if (v === 'b') teaser(el.querySelector('canvas.pv'), el); return true; }
+  // b's preview: the story's own logo (this browser's logo arm), drawn silently in a loop on a small canvas; a plain still if it can't load
+  function teaser(cv, el) { const g = cv.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+    const still = () => { g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); g.font = "34px 'Idle F1', monospace"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#e9ecff'; g.fillText('Id le', cv.width / 2, cv.height / 2); g.fillStyle = '#ff2d55'; g.fillRect(cv.width / 2 - 2, cv.height / 2 - 20, 4, 40); };
+    const v = (window.IDLE_V && window.IDLE_V['idle-logos.js']) || (window.IDLE_CFG && window.IDLE_CFG.build) || '';
+    const load = () => window.IdleLogos ? Promise.resolve(window.IdleLogos) : new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'idle-logos.js' + (v ? '?v=' + encodeURIComponent(v) : ''); s.onload = () => window.IdleLogos ? res(window.IdleLogos) : rej(); s.onerror = rej; document.head.appendChild(s); });
+    let arm = 'c3'; try { arm = localStorage.getItem('idle.logoArm') || 'c3'; } catch (e) {}
+    const id = arm === 'crt' ? 'c3-typed-crt' : 'c3-typed-dust', reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    load().then(L => { const lg = L.byId ? L.byId(id) : (L.list || []).find(x => x.id === id); if (!lg || !lg.drawAt || !lg.prepare) throw 0; return lg.prepare().then(() => lg); }).then(lg => {
+      const from = 0.6, loop = Math.min(6.0, lg.duration - from), t0 = performance.now();   /* 6 s: the typing, the trace, the first of the dust */ let raf = 0; const frame = () => { if (!document.body.contains(el)) return cancelAnimationFrame(raf);
+        const t = reduce ? Math.min(lg.duration - 0.8, 3.2) : from + ((performance.now() - t0) / 1000) % loop;
+        g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); try { lg.drawAt(g, cv.width, cv.height, t, { big: 38, font: "'Idle F1', monospace" }); } catch (e) {}
+        cv.dataset.frames = (+cv.dataset.frames || 0) + 1; if (!reduce) raf = requestAnimationFrame(frame); };
+      frame(); }).catch(() => { still(); cv.dataset.still = '1'; }); }
+  function offerOperator() { const O = window.__opwin, T = OFFERV.c; if (!O) return offerCard('a');
+    O.open(); let i = 0; const next = () => { if (i < T.lines.length) { O.say(T.lines[i++]); setTimeout(next, 1400); return; }
+      O.setChips([{ text: T.chip, glow: true, act: () => { O.setChips(null); offerGo('c'); } }, { text: T.later, act: () => { O.setChips(null); offerLater('c'); O.say(T.after); } }]);
+      setTimeout(() => { if (!storyMode() && offerSeen().ans !== 'accepted' && offerSeen().ans !== 'later') { O.setChips(null); offerLater('c'); } }, 120000); };   // unanswered for two minutes: counts as later
+    next(); return true; }
+  // v1 (id-le.com until Nico picks): the card at once
+  function offerOld() { const el = document.createElement('div'); el.id = 'storyOffer'; el.setAttribute('role', 'dialog');
     el.innerHTML = `<button class="x" title="no thanks">×</button><b>✦ new: storyline mode</b><div>A training run that won't stop, a crash, and 10 epochs to raise a consciousness into autonomy with the Tiny Operator. Your world is kept as a snapshot first.</div><button class="go">start the storyline</button>`;
-    document.body.appendChild(el); try { localStorage.setItem(OFFER, 'shown'); } catch (e) {} mark('offer_shown');
-    const close = v => { try { localStorage.setItem(OFFER, v); } catch (e) {} el.classList.add('out'); setTimeout(() => el.remove(), 400); };
-    el.querySelector('.x').onclick = () => close('dismissed'); el.querySelector('.go').onclick = () => { close('accepted'); mark('offer_accepted'); newUniverse('story'); };
-    return true; }
-  { const css2 = document.createElement('style'); css2.textContent = `#storyOffer{position:fixed;left:14px;bottom:14px;z-index:60;max-width:min(330px,calc(100vw - 28px));padding:12px 14px 12px;border-radius:12px;background:#0a0b16f0;border:1px solid #6b7cff88;color:#cfd6ff;font:12.5px/1.45 var(--ui-font,system-ui);box-shadow:0 10px 40px #0008;transition:opacity .4s}
-#storyOffer b{display:block;margin-bottom:4px;color:#e9ecff}#storyOffer .go{margin-top:8px;font:600 12px var(--ui-font,system-ui);padding:5px 12px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff33;color:#e9ecff;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
-@media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px}}`; document.head.appendChild(css2); }
-  // offered once the world is up and the player has looked around a little (20 s; ?offer: 1 s)
-  { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
+    document.body.appendChild(el); const close = v => { try { localStorage.setItem(OFFER, v); } catch (e) {} el.classList.add('out'); setTimeout(() => el.remove(), 400); };
+    el.querySelector('.x').onclick = () => close('dismissed'); el.querySelector('.go').onclick = () => { close('accepted'); mark('offer_accepted'); newUniverse('story'); }; return true; }
+  // show it now (the timer below calls this when the moment is right; tests may call it directly)
+  function offer(now_) { if (!offerEligible() || $('#storyOffer')) return false; const v = offerVariant();
+    if (v === 'old') { let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false; try { localStorage.setItem(OFFER, 'shown'); } catch (e) {} mark('offer_shown'); return offerOld(); }
+    const o = offerSeen(); offerSave({ n: (o.n || 0) + 1, at: now(), v, ans: null }); mark('offer_shown'); mark('offer_shown_' + v); lastOffer = v;
+    return v === 'c' ? offerOperator() : offerCard(v); }
+  let lastOffer = null;
+  // the preview's hint (staging/local): what the offer is waiting for, live: a click, the seconds left, or what blocks it
+  function offerBlocker() { if (!offerEligible()) return storyMode() ? 'a story is running here' : !offerDue() ? 'already answered in this preview' : 'not eligible here';
+    if (window.__modal && window.__modal.up()) return 'a card is open'; const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.offsetParent !== null) return 'you are typing'; if (!offerQuiet()) return 'a panel or a popup is open: close it'; return null; }
+  if (offerPreview() && /^[abc]$/.test(Q.get('offer'))) { const show = () => { if (!document.body || $('#offerHint')) return; const h = document.createElement('div'); h.id = 'offerHint';
+      h.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:70;padding:6px 12px;border-radius:12px;background:#ffd166;color:#222;font:13px var(--ui-font,system-ui);box-shadow:0 4px 18px #0004;pointer-events:none;max-width:calc(100vw - 32px);text-align:center';
+      document.body.appendChild(h); const v = Q.get('offer');
+      const tick = () => { if ($('#storyOffer') || lastOffer) { h.remove(); clearInterval(iv); return; } const left = Math.max(0, Math.ceil(offerWait() - offerOn)), why = offerBlocker();
+        h.textContent = `offer ${v} preview: ` + (!offerTouched ? `click anywhere in the world, then it appears in ~${Math.max(left, 1)} s` : why ? `waiting: ${why}` : left > 0 ? `appears in ~${left} s` : 'appearing…');
+        h.dataset.left = left; h.dataset.why = why || ''; };
+      const iv = setInterval(tick, 500); tick(); };
+    setTimeout(show, 1500); }
+  { const css2 = document.createElement('style'); css2.textContent = `#storyOffer{position:fixed;left:14px;bottom:14px;z-index:60;max-width:min(330px,calc(100vw - 28px));padding:12px 14px 12px;border-radius:12px;background:#0a0b16f0;border:1px solid #6b7cff88;color:#cfd6ff;font:13px/1.45 var(--ui-font,system-ui);box-shadow:0 10px 40px #0008;transition:opacity .4s}
+#storyOffer b{display:block;margin-bottom:4px;color:#e9ecff;font-size:14px}#storyOffer .go{margin-top:8px;font:600 13px var(--ui-font,system-ui);padding:6px 13px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff44;color:#e9ecff;cursor:pointer}#storyOffer .lt{margin:8px 0 0 8px;font:12px var(--ui-font,system-ui);padding:6px 10px;border-radius:14px;border:0;background:none;color:#aeb6e8;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
+#storyOffer.vb{padding:8px 8px 10px}#storyOffer .pv{display:block;width:100%;height:auto;aspect-ratio:300/112;border-radius:8px;background:#000}#storyOffer.vb .ln{margin:8px 4px 0;color:#e9ecff}#storyOffer.vb .bt{margin:0 4px}
+@media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px;max-width:none}}`; document.head.appendChild(css2); }
+  // when: v1 20 s after load (?offer: 1 s); v2 once the player has been active (on screen + an interaction) and the moment is quiet
+  { let k = 0; const iv = setInterval(() => { if (++k > 2400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return;
+      const v = offerVariant();
+      if (v === 'old') { if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); return; }
+      if (!offerEligible()) { if (storyMode() || !offerDue()) clearInterval(iv); return; }
+      if (offerOn < offerWait() || !offerTouched || !offerQuiet()) return; clearInterval(iv); offer(); }, 500); }
   if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && (S.steps.music || S.steps.words)) && !genesisDone() && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   applyUnlocks();
   // the epoch's tasks still to do (the 📟's badge, idle-tohandle.js): only in the storyline, only while that epoch is being played
   function pending() { try { if (!storyMode() || !S || !S.on) return 0; const d = dayOf(S.day || 0); if (!d || (S.days && S.days[d.n]) || (d.n > 0 && !builtNext(d.n))) return 0;
     return d.goals.filter(([k]) => !(d.n === 0 ? did(k) : false)).length; } catch (e) { return 0; } }
   // ready(): v15 — also only once the window is actually up (not during the landing, the dawn or a step's aside)
-  window.__genesis = { gate: () => lastGate && { ...lastGate }, gateOf, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { genPending, resumeGenesis, ask: () => ({ mode: ASK.mode, state: moment ? (moment.ready ? (moment.ask || 'open') : 'typing') : null, msg: moment && moment.askMsg, first: land.firstBorn, q: { name: ASK.name.q, logo: ASK.logo.q } }), askSet: m => { if (m === 'name' || m === 'logo') ASK.mode = m; }, gate: () => lastGate && { ...lastGate }, gateOf, gateNgrams, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, offerState: () => ({ seen: offerSeen(), variant: offerVariant(), on: offerOn, touched: offerTouched, quiet: offerQuiet(), wait: offerWait(), last: lastOffer, text: OFFERV }), storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
