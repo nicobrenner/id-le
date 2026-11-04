@@ -115,7 +115,8 @@
 .rvfloat{position:fixed;right:16px;bottom:16px;z-index:2147482050;width:min(360px,calc(100% - 32px));max-height:70vh;overflow:auto;background:#14121c;color:#ece6da;border:1px solid #ffffff22;border-radius:14px;padding:10px 12px;box-shadow:0 12px 40px #000a;font:15px var(--ui-font,system-ui)}`;
   document.head.appendChild(css);
   const thread = () => { const lab = $('#lab'); if (!lab) return null; return lab.classList.contains('ai') ? $('#ai-thread') : $('#lab-thread'); };
-  function openOperator() { const lab = $('#lab'); if (lab && !lab.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); } }
+  // the 📟 Operator is a floating window (v14, idle-opwin.js: __opwin); before it, a docked panel opened by #lab-toggle
+  function openOperator() { if (window.__opwin) return window.__opwin.open(); const lab = $('#lab'); if (lab && !lab.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); } }
   // where the lines go: the Operator's chat, or (no chat on this page) a small floating card
   function host() { const th = thread(); if (th) return th; let f = $('.rvfloat'); if (!f) { f = document.createElement('div'); f.className = 'rvfloat'; document.body.appendChild(f); } return f; }
   // to the bottom, but never past the top of the last letter (Nico's Chrome showed his message starting at its second line)
@@ -125,7 +126,8 @@
   const wait = ms => new Promise(r => setTimeout(r, FAST ? Math.min(ms, 30) : ms));
   function opSay(text) { const h = host(), d = document.createElement('div'); d.className = 'ai-row tiny rvop'; d.textContent = text; h.appendChild(d); scroll(h); return d; }
   // "…the HITL tab here 👉" ends with the 🌱 itself, in the chat (the top bar's 🌱 also lights up, but a panel may cover it)
-  function opPoint(text) { const d = opSay(text), b = document.createElement('button'); b.className = 'rvtabbtn'; b.textContent = '🌱 ' + TEAM.short; b.title = TEAM.name; b.addEventListener('click', () => toggleTab(true)); d.append(' ', b); return d; }
+  function opPoint(text) { const d = opSay(text); if (window.__opwin) return d;   // the cut-scene uncovers the 🌱 itself (v14); the button was for the docked panel
+    const b = document.createElement('button'); b.className = 'rvtabbtn'; b.textContent = '🌱 ' + TEAM.short; b.title = TEAM.name; b.addEventListener('click', () => toggleTab(true)); d.append(' ', b); return d; }
   // the Operator relays Nico's message: it types (its own dots), then the whole letter appears as one card, the top of it in view
   async function opTyping(ms) { const h = host(), ty = document.createElement('div'); ty.className = 'rvtyping'; ty.textContent = '📟 …'; h.appendChild(ty); scroll(h); await wait(ms); ty.remove(); }
   function letter(paras) { const h = host(), b = document.createElement('div'); b.className = 'ai-row rvletter';
@@ -373,6 +375,8 @@
   let lastHl = null;
   function highlight(ms = 4000) { const vis = x => x && x.offsetParent !== null && x.getBoundingClientRect().width > 0;
     const t = vis(hb) ? hb : vis($('#mMore')) ? $('#mMore') : null; lastHl = t ? t.id : null; if (!t) return null;
+    // v14: a cut-scene (idle-opwin.js): the Operator steps away, the ring and arrow play on the 🌱 (or ☰), it comes back, and the icon glows until clicked or for 2 minutes
+    if (window.__opwin && window.__opwin.highlight) { window.__opwin.highlight('#' + t.id, { cutscene: true }); return t.id; }
     const r = t.getBoundingClientRect(), pad = 6, d = document.createElement('div'); d.className = 'rvhl'; d.innerHTML = '<b>⬆</b>';
     d.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + 2 * pad}px;height:${r.height + 2 * pad}px`; document.body.appendChild(d); setTimeout(() => d.remove(), ms); return t.id; }
 

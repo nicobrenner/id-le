@@ -2268,7 +2268,8 @@ def t_reviews_invite(P):
         typing: document.body.innerText.includes('Nico is typing'), firstInView: lr.top >= hr.top - 1 && lr.top < hr.bottom, btns: [...document.querySelectorAll('.rvbtns button')].map(b => b.textContent), nico: document.querySelectorAll('.rvnico').length }; }""")
     need(seq["op"][-1] == "I have a message from Nico:" and seq["who"] == "📨 from Nico" and seq["lines"] == T["hello"][0] and not seq["typing"] and seq["nico"] == 0 and seq["firstInView"] and seq["btns"] == [T["yes"], T["no"]], f"the relayed letter: {seq}")
     pg.click(".rvbtns button.alt"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.includes('come join us'))", 10, P=P)
-    nn = pg.evaluate("() => ({ want: window.__reviews.text.notNow(false), knows: window.__reviews.test.knows(), line: [...document.querySelectorAll('.rvop')].pop().textContent, hl: window.__reviews.test.lastHighlight(), ring: !!document.querySelector('.rvhl'), inv: JSON.parse(localStorage.getItem('idle.invite')) })")
+    wait_for(pg, "() => !!document.querySelector('.opHi')", 5, P=P)   # the cut-scene's ring on the 🌱
+    nn = pg.evaluate("() => ({ want: window.__reviews.text.notNow(false), knows: window.__reviews.test.knows(), line: [...document.querySelectorAll('.rvop')].pop().textContent, hl: window.__reviews.test.lastHighlight(), ring: true, inv: JSON.parse(localStorage.getItem('idle.invite')) })")
     need(not nn["knows"] and nn["line"].startswith(nn["want"]) and "players who help decide what ships" in nn["line"] and nn["hl"] == "hitlBtn" and nn["ring"] and nn["inv"]["answer"] == "no", f"not now: {nn}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "invite-not-now.png"))
     n = lambda: pg.evaluate("() => document.querySelectorAll('.rvletter').length")
@@ -2318,7 +2319,9 @@ def t_reviews_tab(P):
     for k in ("ArrowRight", "ArrowUp", "ArrowLeft"): first.append(pg.evaluate("() => window.__reviews.state().current")); pg.keyboard.press(k); pg.wait_for_timeout(450)
     nxt = pg.evaluate("() => window.__reviews.state().current"); pg.evaluate("() => window.__reviews.close()")
     wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedSome(true)))", 10, P=P)
-    click(".rvop .rvtabbtn >> nth=-1"); wait_for(pg, "() => document.querySelectorAll('#hitl .rv').length >= 2", 10, P=P)   # the 🌱 in the Operator's line
+    wait_for(pg, "() => !window.__opwin.cutting()", 8, P=P); click("#hitlBtn"); wait_for(pg, "() => document.querySelectorAll('#hitl .rv').length >= 2", 10, P=P)
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__opwin.yielding() === '#hitl.on'", 3, P=P)
+    yl = pg.evaluate("() => window.__opwin.yielding()"); need(yl == "#hitl.on", f"the 🌱 tab must make the Operator step aside: {yl}")
     t1 = pg.evaluate("() => ({ txt: document.getElementById('hitl').innerText, resume: [...document.querySelectorAll('#hitl [data-open=logos]')].map(b => b.textContent) })")
     need("in the loop (vesting)" in t1["txt"] and "3 of 12 judged" in t1["txt"] and "0 of 8 judged" in t1["txt"] and t1["resume"] == ["resume ›"], f"the tab: {t1}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "hitl-tab.png"))
@@ -2444,6 +2447,33 @@ def t_founder_off(P):
         need(f["sec"] == want_ and (f["toc"] > 0) == want_, f"the pedia's Founders section (pedia.html{q}): {f}"); pg.close()
     P.clean()
     return "hidden: ?gift=founder, a personal link and an early world open nothing, no ⚙ row, no badge drawing, no pedia section; ?founder_test still opens the letter"
+
+
+def t_reviews_cutscene(P, phone=False):
+    """The 'here 👉' highlight is a cut-scene (idle-opwin.js): the Operator window shrinks away so it never covers the 🌱 (or ☰ on a
+    phone) while the ring plays, comes back open, and the icon keeps a soft glow: kept across a reload, cleared by a click, or when its
+    time is up."""
+    pg = _rv_page(P); pg.evaluate("() => { window.__reviews.join(); window.__opwin.open(); }"); pg.wait_for_timeout(600)
+    tid = pg.evaluate("() => window.__reviews.highlight()"); pg.wait_for_timeout(700)
+    mid = pg.evaluate("""t => { const a = document.getElementById('lab').getBoundingClientRect(), b = document.getElementById(t).getBoundingClientRect(), op = getComputedStyle(document.getElementById('lab'));
+      const hit = !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top) && +op.opacity > 0.05; return { cutting: window.__opwin.cutting(), hit, ring: !!document.querySelector('.opHi'), opacity: +op.opacity }; }""", tid)
+    need(tid in ("hitlBtn", "mMore") and mid["cutting"] and not mid["hit"] and mid["ring"], f"the cut-scene ({tid}): {mid}")
+    wait_for(pg, "() => !window.__opwin.cutting()", 8, P=P); pg.wait_for_timeout(500)
+    after = pg.evaluate("t => ({ open: window.__opwin.isOpen(), op: +getComputedStyle(document.getElementById('lab')).opacity, glow: window.__opwin.glowing(), cls: document.getElementById(t).classList.contains('opGlow') })", tid)
+    need(after["open"] and after["op"] > 0.9 and after["glow"] == "#" + tid and after["cls"], f"after the cut-scene: {after}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "cutscene-glow" + ("-phone" if phone else "") + ".png"))
+    pg.reload(); booted(pg); pg.wait_for_timeout(800)
+    kept = pg.evaluate("t => ({ glow: window.__opwin.glowing(), cls: document.getElementById(t).classList.contains('opGlow') })", tid)
+    need(kept["glow"] == "#" + tid and kept["cls"], f"the glow after a reload: {kept}")
+    pg.evaluate("t => document.getElementById(t).click()", tid); pg.wait_for_timeout(300)
+    gone = pg.evaluate("t => ({ glow: window.__opwin.glowing(), cls: document.getElementById(t).classList.contains('opGlow'), saved: localStorage.getItem('idle.opGlow') })", tid)
+    need(gone["glow"] is None and not gone["cls"] and gone["saved"] is None, f"a click clears the glow: {gone}")
+    pg.evaluate("t => { localStorage.setItem('idle.opGlow', JSON.stringify({ sel: '#' + t, until: Date.now() + 8000 })); }", tid); pg.reload(); booted(pg)
+    t1 = pg.evaluate("() => window.__opwin.glowing()"); left = pg.evaluate("() => JSON.parse(localStorage.getItem('idle.opGlow') || '{}').until - Date.now()")
+    pg.wait_for_timeout(max(0, (left or 0)) + 600); t2 = pg.evaluate("() => window.__opwin.glowing()")
+    need(t1 == "#" + tid and t2 is None, f"the glow's time limit: {t1} → {t2}")
+    pg.close(); P.clean()
+    return f"{'phone' if phone else 'desktop'}: the Operator shrinks off the {tid} (no overlap) while the ring plays, comes back open; glow kept across a reload, cleared by a click, and by its time limit"
 
 
 def t_reviews_phone(P):
@@ -3201,7 +3231,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews link", "reviews webkit", "founder off", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3276,6 +3306,8 @@ def main():
                 run("reviews", t_reviews, viewport={"width": 1280, "height": 800})
                 run("reviews cliff", t_reviews_cliff)
                 run("reviews tab", t_reviews_tab)
+                run("reviews cutscene", t_reviews_cutscene)
+                run("reviews cutscene phone", t_reviews_cutscene, True, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("reviews link", t_reviews_link)
                 run("founder off", t_founder_off)
                 run("reviews phone", t_reviews_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
