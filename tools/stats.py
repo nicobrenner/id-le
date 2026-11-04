@@ -127,9 +127,10 @@ def call(path, tok, raw=False, body=None):
 
 
 # the storyline's funnel (helper/worker.js 'sf': "arm|step" → browsers), in the order a player meets them
-SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done"]
+SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play"]
 SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
-            "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)"}
+            "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)",
+            "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground"}
 
 
 # the Founder gift (idle-founder.js), from the same once-per-browser moments ('fd_…'), summed over the storyline's arms
@@ -169,7 +170,7 @@ def sf_split(sf):
 
 # the story's logo A/B (idle-epoch0.js, Nov 3): the worker also files the moments from the logo on under 'lg:<arm>|step'
 LG_ARMS = {"c3": "C3 · Typed, dust", "crt": "C3-crt · Typed, CRT off"}
-LG_STEPS = [("shown", "saw the logo"), ("landing", "the dark"), ("operator", "the Operator"), ("lights", "lights on"), ("e1words", "words"), ("e1life", "life"), ("e1done", "Epoch 0 done"), ("end_shown", "end card")]
+LG_STEPS = [("shown", "saw the logo"), ("landing", "the dark"), ("operator", "the Operator"), ("lights", "lights on"), ("e1words", "words"), ("e1life", "life"), ("e1done", "Epoch 0 done"), ("e0_start1", "start Epoch 1"), ("e0_play", "the playground"), ("end_shown", "end card")]
 
 
 def lg_split(sfs):

@@ -157,7 +157,7 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
+const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
@@ -166,7 +166,7 @@ const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 
   'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested',
   // v3: the 🌱 HITL tab opened
   'rv_tab'];
-const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
+const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 // time per step (Nov 3): seconds of on-screen time since the moment before, per arm and moment: count, sum (for a mean) and buckets
 const SDB = ['<10s', '10-30s', '30-60s', '1-3m', '3-10m', '10m+'], sdBucket = v => v < 10 ? '<10s' : v < 30 ? '10-30s' : v < 60 ? '30-60s' : v < 180 ? '1-3m' : v < 600 ? '3-10m' : '10m+';
@@ -530,28 +530,33 @@ export class Presence {
     return json({ error: 'unknown' }, 404);
   }
 }
-const prMem = { table: null };
+const prMem = {};
 const presenceOn = env => env.PRESENCE_ON !== '0';
-async function prCall(env, path, init) {   // the Durable Object when bound, else this isolate's own table (local copies and tests)
-  if (env.PRESENCE) { const stub = env.PRESENCE.get(env.PRESENCE.idFromName('live')); return stub.fetch('https://presence' + path, init); }
-  const T = prMem.table || (prMem.table = new PresenceTable());
+// one table per site, in the same Durable Object namespace: staging (the Pages preview environment, IDLE_ENV=staging, or a staging.*
+// host) gets the instance named 'staging'; id-le.com keeps the instance it has used from the start, 'live'. Test visits on staging
+// never show in the live view of id-le.com, and the other way round
+const prTable = (env, req) => env.IDLE_ENV === 'staging' || /^staging\./.test(new URL(req.url).hostname) ? 'staging' : 'live';
+async function prCall(env, path, init, name = 'live') {   // the Durable Object when bound, else this isolate's own table (local copies and tests)
+  if (env.PRESENCE) { const stub = env.PRESENCE.get(env.PRESENCE.idFromName(name)); return stub.fetch('https://presence' + path, init); }
+  const T = prMem[name] || (prMem[name] = new PresenceTable());
   if (path === '/beat') { let q = null; try { q = JSON.parse(init.body); } catch (e) {} return json(T.beat(q, init.headers['X-Country'])); }
   return json(T.view());
 }
 async function liveKeyOk(req, env) {   // compares SHA-256 digests, so the comparison takes the same time whatever the key
-  const want = env.LIVE_KEY || '', got = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  // trimmed: a secret pasted from `cat file | pbcopy` carries the file's trailing newline (production, 11-03), which no header can match
+  const want = String(env.LIVE_KEY || '').trim(), got = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
   if (want.length < 24 || !got) return false;
   const d = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))), a = await d(want), b = await d(got);
   let x = 0; for (let i = 0; i < a.length; i++) x |= a[i] ^ b[i]; return x === 0;
 }
 async function presence(req, env, path) {
   if (path === '/lab/live') { if (req.method !== 'GET' || !(await liveKeyOk(req, env))) return json({ error: 'unknown path' }, 404);
-    const r = await prCall(env, '/view', { method: 'GET' }); return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }
+    const r = await prCall(env, '/view', { method: 'GET' }, prTable(env, req)); return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }
   if (!presenceOn(env)) return new Response(null, { status: 204 });   // the kill switch (PRESENCE_ON=0): beats are accepted and dropped
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
   const txt = await req.text(); if (txt.length > 700) return json({ error: 'too big' }, 413);
   const cc = req.cf && typeof req.cf.country === 'string' ? req.cf.country : '';
-  const r = await prCall(env, '/beat', { method: 'POST', body: txt, headers: { 'Content-Type': 'application/json', 'X-Country': cc } });
+  const r = await prCall(env, '/beat', { method: 'POST', body: txt, headers: { 'Content-Type': 'application/json', 'X-Country': cc } }, prTable(env, req));
   return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json' } });
 }
 
