@@ -168,6 +168,13 @@ out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visit
   const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.aa = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.aa || {})) a[k] = (a[k] || 0) + n; return a; }, {});
   out.aaInt = ds.reduce((a, d) => { for (const [k, n] of Object.entries((d.int || {}).aa || {})) a[k] = (a[k] || 0) + n; return a; }, {});
   out.aaBatches = ds.reduce((a, d) => a + (d.batches || 0), 0) - b0; }
+// engaged (Nov 4): { dd: arm }, { en: act, ar: arm }, { cb: arm, b: bucket }: counted per arm / act / bucket, never a batch; junk dropped; our checks apart
+{ const b0 = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.batches || 0), 0);
+  for (const p of [{ dd: 'story' }, { dd: 'none' }, { dd: 'evil' }, { en: 'cr_name', ar: 'story' }, { en: 'e0_done', ar: 'story' }, { en: 'hack', ar: 'story' }, { en: 'vote', ar: 'evil' },
+      { cb: 'play', b: 'd1' }, { cb: 'play', b: 'd99' }, { dd: 'play', u: 'launch-check' }, { en: 'vote', ar: 'play', u: 'launch-check' }]) await post('/lab/p', { v: 1, ...p });
+  const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)), sum = k => ds.reduce((a, d) => { for (const [x, n] of Object.entries(d[k] || {})) a[x] = (a[x] || 0) + n; return a; }, {});
+  out.en = { dd: sum('dd'), en: sum('en'), cb: sum('cb'), int: ds.reduce((a, d) => { const q = d.int || {}; for (const k of ['dd', 'en']) for (const [x, n] of Object.entries(q[k] || {})) a[k + ':' + x] = (a[k + ':' + x] || 0) + n; return a; }, {}),
+    batches: ds.reduce((a, d) => a + (d.batches || 0), 0) - b0 }; }
 // /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
 { out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
 // the storyline funnel (11-02): known moments only, counted by arm; the arm's visits and dwell under gv
@@ -430,6 +437,9 @@ def worker_unit():
     need(o["jeffy_train"] == 404 and o["jeffy_get_predict"] == 404, f"jeffy allowlist: train {o['jeffy_train']}, GET predict {o['jeffy_get_predict']}")
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
+    en = o.get("en") or {}
+    need(en.get("dd") == {"story": 1, "none": 1} and en.get("en") == {"story|cr_name": 1, "story|e0_done": 1} and en.get("cb") == {"play|d1": 1}
+         and en.get("int") == {"dd:play": 1, "en:play|vote": 1} and en.get("batches") == 0, f"engaged beacons: {en}")
     need(o.get("aa") == {"story": 1, "choose": 1, "play": 2} and o.get("aaInt") == {"play": 1} and o.get("aaBatches") == 0, f"arm beacon: aa {o.get('aa')}, internal {o.get('aaInt')}, batches {o.get('aaBatches')}")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
     need(o.get("sd") == {"story|lights": {"n": 2, "sum": 725, "b": {"10-30s": 1, "10m+": 1}}, "story|e1words": {"n": 1, "sum": 4, "b": {"<10s": 1}}}, f"time per step: {o.get('sd')}")
@@ -1102,7 +1112,9 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"u", "aa", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"u", "aa", "dd", "en", "ar", "cb", "b", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+TINY_BEACON = ("aa", "dd", "en", "cb")   # the arm and engaged beacons (idle-stats.js): not reports
+reports_of = lambda raw: [x for x in map(json.loads, raw) if not any(k in x for k in TINY_BEACON)]
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -1139,7 +1151,7 @@ def t_stats_v2(P):
     pg.evaluate("""() => { for (const t of ['reel_play', 'reel_end', 'chat']) dispatchEvent(new CustomEvent('idle:ev', { detail: { type: t, extra: {} } })); }""")
     pg.evaluate("() => window.__stats._send('3m')"); pg.wait_for_timeout(500)
     need(P.stats, "nothing was sent with ?statstest")
-    sent = [json.loads(b) for b in P.stats]
+    sent = reports_of(P.stats)
     need(sent[0].get("why") == "open" and sent[0].get("visit") == 1 and sent[0].get("v2") == 1, f"the first report must be the visit itself, sent soon after the page opens: {sent[0]}")
     keys = set().union(*[set(q) for q in sent])
     need(keys <= ALLOWED_STATS | {"why"}, f"payload keys outside the allowlist: {sorted(keys - ALLOWED_STATS - {'why'})}")
@@ -1192,7 +1204,7 @@ def t_stats_seen(P):
     HID = """window.__vis = 'hidden'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
       get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
     flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
-    def sent(): return [json.loads(b) for b in P.stats]
+    def sent(): return reports_of(P.stats)
     def did(): return set().union(*[set((q.get("x") or {}).get("did") or []) for q in sent()]) if P.stats else set()
     # 1. loaded in the background, closed unseen: nothing at all
     pg = P.ctx.new_page(); pg.on("pageerror", lambda e: P.errors.append(str(e)[:200])); pg.add_init_script(HID + " delete CanvasRenderingContext2D.prototype.roundRect;")
@@ -1228,7 +1240,7 @@ def t_stats_return(P):
     HID = """window.__vis = window.__vis || 'visible'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
       get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
     flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
-    def sent(): return [json.loads(b) for b in P.stats]
+    def sent(): return reports_of(P.stats)
     import datetime as _dt
     today = _dt.datetime.now(_dt.timezone.utc).date(); yday = (today - _dt.timedelta(days=1)).isoformat()
     # 1. time per step: the clock says 100 s of on-screen time so far and the last moment was at 75 s → the next moment took ~25 s
@@ -3095,14 +3107,14 @@ def t_stats_first(P):
         try:
             q = Q.open("/arena.html?statstest&test")
             if case == "coi":
-                q.wait_for_timeout(1200)
+                wait_for(q, "() => !!window.__stats", 40, every=0.1, P=P)
                 q.evaluate("() => { window.__coiReloading = true; window.__stats._send('leave'); }")   # what the replaced page does on pagehide
-                q.wait_for_timeout(300); before = len(P.stats)
-                need(before == 0, f"a page being replaced by the isolation reload must report nothing: {[json.loads(b) for b in P.stats]}")
+                q.wait_for_timeout(300); before = len(reports_of(P.stats))
+                need(before == 0, f"a page being replaced by the isolation reload must report nothing: {reports_of(P.stats)}")
                 q.goto(P.base + "/arena.html?statstest&test&_coi=1")
-            q.wait_for_timeout(4200)
+            wait_for(q, "() => !!window.__stats", 40, P=P); q.wait_for_timeout(4200)
             q.evaluate("() => window.__stats._send('3m')"); q.wait_for_timeout(500)
-            rows = [x for x in map(json.loads, P.stats) if "aa" not in x]
+            rows = reports_of(P.stats)
             visits = [x for x in rows if x.get("visit") == 1]
             need(len(visits) == 1, f"{case}: exactly one visit report per page load, got {len(visits)}: {[(x.get('bi'), x.get('why')) for x in rows]}")
             need(visits[0].get("bi") == 1, f"{case}: the visit rides in report #1: {[(x.get('bi'), x.get('why'), x.get('visit')) for x in rows]}")
@@ -3135,6 +3147,97 @@ def t_arm_stats(P):
         need(beacons.get(arm) == [{"v": 1, "aa": arm}], f"the {arm} arm sends one arm beacon with only v and aa: {beacons}")
     P.clean()
     return "visit reports carry their arm: " + ", ".join(f"{a} {len(r)} reports" for a, r in got.items())
+
+
+def t_engaged(P):
+    """Real engagement (Nov 4, Nico: "something that actually means a user saw this, clicked/interacted, and they want to participate"):
+    a browser's day is counted once ({dd: arm}); its first deliberate act today once ({en: act, ar: arm}), never passive viewing; a later
+    day than its first visit counts a come-back once ({cb: arm, b}); a reload the same day sends nothing again."""
+    P.stats.clear()
+    pg = P.open("/arena.html?statstest&test"); booted(pg)
+    sent = lambda: [json.loads(b) for b in P.stats]
+    t_end = time.time() + 30
+    while time.time() < t_end and not any("dd" in json.loads(b) for b in P.stats): pg.wait_for_timeout(300)
+    tiny = lambda: [{k: v for k, v in x.items() if k != "u"} for x in sent() if any(k in x for k in ("dd", "en", "cb"))]
+    need([x for x in tiny() if "dd" in x] == [{"v": 1, "dd": "none"}] and not [x for x in tiny() if "en" in x], f"one day beacon, no act yet: {tiny()}")
+    # passive: hovering, scrolling, opening the pedia link area → nothing
+    pg.mouse.move(400, 400); pg.mouse.wheel(0, 300); pg.wait_for_timeout(600)
+    need(not [x for x in tiny() if "en" in x], f"passive viewing is not engagement: {tiny()}")
+    # a deliberate act: a creature's card opened (the world's own 'feel' click) → one {en: cr_card}; a second act the same day → nothing more
+    pg.evaluate("() => window.__genHooks.log('feel', { who: 'x', what: 'click' })"); pg.wait_for_timeout(400)
+    pg.evaluate("() => window.__genHooks.log('rename', { from: 'a', to: 'b', by: 'you' })"); pg.wait_for_timeout(400)
+    en = [x for x in tiny() if "en" in x]
+    need(en == [{"v": 1, "en": "cr_card", "ar": "none"}], f"first deliberate act, once a day: {en}")
+    pg.reload(); booted(pg); pg.wait_for_timeout(2500)
+    need(len([x for x in tiny() if "dd" in x]) == 1 and len([x for x in tiny() if "en" in x]) == 1, f"a reload the same day sends nothing again: {tiny()}")
+    # the next day (the flags say yesterday, the first visit was yesterday): a day beacon, a come-back (d1); finishing Genesis is an act
+    pg.evaluate("""() => { const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      for (const k of ['idle.ddDay', 'idle.enDay', 'idle.cbDay']) localStorage.setItem(k, y); localStorage.setItem('idle.since', JSON.stringify({ d: y, k: 1 }));
+      const f = JSON.parse(localStorage.getItem('idle.funnel') || '{}'); delete f.e1done; localStorage.setItem('idle.funnel', JSON.stringify(f)); }""")
+    P.stats.clear(); pg.reload(); booted(pg)
+    t_end = time.time() + 30
+    while time.time() < t_end and not any("cb" in json.loads(b) for b in P.stats): pg.wait_for_timeout(300)
+    pg.evaluate("() => window.__funnel.mark('e1done')"); pg.wait_for_timeout(800)
+    t = tiny()
+    need([x for x in t if "dd" in x] == [{"v": 1, "dd": "none"}] and [x for x in t if "cb" in x] == [{"v": 1, "cb": "none", "b": "d1"}]
+         and [x for x in t if "en" in x] == [{"v": 1, "en": "e0_done", "ar": "none"}], f"next day: here, came back d1, finished Genesis: {t}")
+    pg.close(); P.clean()
+    return "day once; first act once (cr_card), not on passive viewing or a reload; next day: here + came back (d1) + finished Genesis"
+
+
+def t_engage_ask(P):
+    """The one-tap ask at EPOCH 0 COMPLETE (Nov 4): before [start Epoch 1] / [🛝], the Operator asks to name the first creature (three
+    chips, an input, skip); a chip renames it, skip closes it, the buttons stay usable throughout; the 'logo' mode offers the two openings
+    and logs a pick; on a phone the ask fits the screen."""
+    def moment(form, vp=None):
+        ctx = P.ctx.browser.new_context(viewport=vp or {"width": 1400, "height": 900}, has_touch=bool(vp), is_mobile=bool(vp)); Q = Page(ctx, P.base, P.stats)
+        pg = Q.open(form); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.wait_for_timeout(300); pg.keyboard.press("k")
+        return ctx, pg
+    out = []
+    # name: a chip renames the first newborn; the two ways on stay right there
+    ctx, pg = moment("/arena.html?story#epoch0done")
+    try:
+        wait_for(pg, "() => window.__genesis.ask().state === 'open' && !!document.querySelector('#genConsole .gask')", 150, P=P)
+        r = pg.evaluate("() => ({ chips: [...document.querySelectorAll('#genConsole [data-ask=chip]')].map(b => b.textContent), input: !!document.querySelector('#genAskName'), skip: !!document.querySelector('#genConsole [data-ask=skip]'), start: !!document.querySelector('#genConsole [data-gm=start]'), play: !!document.querySelector('#genConsole [data-gm=play]'), first: window.__genesis.ask().first })")
+        need(len(r["chips"]) == 3 and r["input"] and r["skip"] and r["start"] and r["play"] and r["first"], f"the ask, with the two ways on still there: {r}")
+        pg.click("#genConsole [data-ask=chip]"); pg.wait_for_timeout(500)
+        a = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), start: !!document.querySelector('#genConsole [data-gm=start]') })")
+        need(a["ask"]["state"] == "done" and r["chips"][0] in a["names"] and a["ask"]["first"] == r["chips"][0] and a["funnel"].get("e0_ask_name") and a["start"], f"a chip names the first creature: {a}")
+        out.append(f"name: '{r['chips'][0]}' → {r['first']} renamed")
+    finally:
+        ctx.close()
+    # skip: one tap, nothing renamed
+    ctx, pg = moment("/arena.html?at=epoch0done")
+    try:
+        wait_for(pg, "() => window.__genesis.ask().state === 'open'", 150, P=P)
+        first = pg.evaluate("() => window.__genesis.ask().first"); pg.click("#genConsole [data-ask=skip]"); pg.wait_for_timeout(400)
+        s2 = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), gask: !!document.querySelector('#genConsole .gask'), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}') })")
+        need(s2["ask"]["state"] == "done" and first in s2["names"] and not s2["gask"] and s2["funnel"].get("e0_ask_skip"), f"skip: {s2}")
+        out.append("skip ok")
+    finally:
+        ctx.close()
+    # logo mode: two openings, a pick is logged (and asks the logos review for one 'which one?' pair)
+    ctx, pg = moment("/arena.html?story#epoch0done")
+    try:
+        wait_for(pg, "() => !!window.__genesis && !!window.__genesis.askSet", 30, P=P); pg.evaluate("() => window.__genesis.askSet('logo')")
+        wait_for(pg, "() => window.__genesis.ask().state === 'open' && document.querySelectorAll('#genConsole [data-ask=pick]').length === 2", 150, P=P)
+        pg.click("#genConsole [data-ask=pick]"); pg.wait_for_timeout(500)
+        l = pg.evaluate("() => ({ ask: window.__genesis.ask(), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), pick: localStorage.getItem('idle.askLogo') })")
+        need(l["ask"]["state"] == "done" and l["funnel"].get("e0_ask_logo") and l["pick"] == "c3-typed-dust", f"logo pick: {l}")
+        out.append("logo pick ok")
+    finally:
+        ctx.close()
+    # phone: the ask fits the screen
+    ctx, pg = moment("/arena.html?at=epoch0done", {"width": 375, "height": 667})
+    try:
+        wait_for(pg, "() => window.__genesis.ask().state === 'open'", 150, P=P)
+        b = pg.evaluate("() => { const r = document.querySelector('#genConsole .gask').getBoundingClientRect(), i = document.querySelector('#genAskName').getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, ir: i.right, W: innerWidth, H: innerHeight, sx: document.documentElement.scrollWidth }; }")
+        need(b["l"] >= 0 and b["r"] <= b["W"] and b["ir"] <= b["W"] and b["sx"] <= b["W"] + 1, f"phone: the ask fits: {b}")
+        out.append("phone fits")
+    finally:
+        ctx.close()
+    P.clean()
+    return " · ".join(out)
 
 
 def t_story_arms(P):
@@ -3489,7 +3592,7 @@ def t_prod_gates(P, root):
         try:
             q = Q.open(f"/arena.html?arm={forced}")
             if want == "story":
-                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && (document.querySelector('#idleIntro').dataset.title === '1' || (window.__epoch0 && window.__epoch0.time && window.__epoch0.time() > 0))", 60)   # the title card, or the intro it auto-started after 2 s (Nov 4)
             elif want == "choose":
                 wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
             else:
@@ -3586,6 +3689,18 @@ def t_presence(P):
     finally:
         node.terminate()
         with contextlib.suppress(Exception): node.wait(5)
+
+
+def engaged_stats():
+    """tools/stats.py's engaged lines (Nov 4): per arm, engaged of here (%), first acts by label, came back"""
+    import importlib.util, io, contextlib
+    spec = importlib.util.spec_from_file_location("idle_stats_mod", os.path.join(ROOT, "tools", "stats.py")); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    days = {"2026-11-04": {"dd": {"story": 8, "none": 4}, "en": {"story|cr_name": 2, "story|e0_done": 1, "none|op_msg": 1}, "cb": {"none|d1": 2}}}
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf): m.engaged_lines(days)
+    t = buf.getvalue()
+    need("story   engaged: 3 of 8 browsers (38%)" in t and "named a creature 2" in t and "finished Genesis 1" in t and "none    engaged: 1 of 4 browsers (25%)" in t and "came back: 2 (d1 2)" in t, "engaged lines:\n" + t)
+    return t.strip().splitlines()[1][:120]
 
 
 def presence_privacy():
@@ -4223,7 +4338,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -4250,8 +4365,8 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"arm reload", "arm stats", "chooser", "conflict markers", "fresh load", "intent links", "js syntax", "presence", "prod gates", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "worker"}
-STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
+LAUNCH = {"engaged", "engage ask", "arm reload", "arm stats", "chooser", "conflict markers", "fresh load", "intent links", "js syntax", "presence", "prod gates", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "worker"}
+STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
           ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]

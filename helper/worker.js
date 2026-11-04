@@ -157,7 +157,7 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off',
+const SFSTEP = ['entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
@@ -171,7 +171,7 @@ const SFSTEP = ['entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_
   // slash commands (idle-slash.js): each command used at least once by this browser, and lines that named no command
   'sc_help', 'sc_operator', 'sc_card', 'sc_rename', 'sc_pedia', 'sc_settings', 'sc_story', 'sc_scientists', 'sc_roadmap', 'sc_hitl', 'sc_oracle', 'sc_music', 'sc_deck', 'sc_stats', 'sc_ocean', 'sc_find', 'sc_weather', 'sc_evolve', 'sc_rave', 'sc_spawn', 'sc_name', 'sc_unknown'];
 const ARM = g => g === 'story' || g === 'choose' || g === 'play' ? g : g === 'current' ? 'play' : 'none';   // v15: the storyline's three arms
-const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
+const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, bi: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 // time per step (Nov 3): seconds of on-screen time since the moment before, per arm and moment: count, sum (for a mean) and buckets
 const SDB = ['<10s', '10-30s', '30-60s', '1-3m', '3-10m', '10m+'], sdBucket = v => v < 10 ? '<10s' : v < 30 ? '10-30s' : v < 60 ? '30-60s' : v < 180 ? '1-3m' : v < 600 ? '3-10m' : '10m+';
@@ -184,13 +184,22 @@ const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 // tools/stats.py reads it from here. The page sends its tag with every report (p.u), so a page's later reports are caught too.
 const INTERNAL_TAGS = ['prod-check', 'launch-check', 'split-prod', 'split-staging', 'internal-check', 'internal-refcheck', 'hn-test', 'smoketest', 'statstest'];
 const AA_ARMS = ['story', 'choose', 'play'];
+// engaged (Nov 4): idle-stats.js's tiny daily beacons: { dd: arm } here today, { en: act, ar: arm } first deliberate act today,
+// { cb: arm, b: bucket } came back on a later day. Counted per arm (and act / bucket), once per browser per day by the page; never a batch
+const EN_ARMS = ['story', 'choose', 'play', 'none'];
+const EN_ACTS = ['op_msg', 'irc_msg', 'cr_talk', 'cr_card', 'cr_name', 'cr_feed', 'e0_done', 'vote', 'sci_sent', 'hitl_join', 'review', 'ask_name', 'ask_logo'];
+const enBeacon = (p, o) => { if (p.dd !== undefined) { if (EN_ARMS.includes(p.dd)) { o.dd = o.dd || {}; bump(o.dd, p.dd); } return true; }
+  if (p.en !== undefined) { if (EN_ACTS.includes(p.en) && EN_ARMS.includes(p.ar)) { o.en = o.en || {}; bump(o.en, p.ar + '|' + p.en); } return true; }
+  if (p.cb !== undefined) { if (EN_ARMS.includes(p.cb) && RBB.includes(p.b)) { o.cb = o.cb || {}; bump(o.cb, p.cb + '|' + p.b); } return true; }
+  return false; };
 const internalTag = t => typeof t === 'string' && (INTERNAL_TAGS.includes(t) || /^(internal|smoke)|-(check|test)$/.test(t));
 function addStats(p) {
   const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
   { const tag = typeof p.u === 'string' ? p.u : typeof p.utm === 'string' ? p.utm : null;
-    if (internalTag(tag)) { const q = d.int = d.int || { r: 0, v: 0, t: {} }; if (p.aa !== undefined) { if (AA_ARMS.includes(p.aa)) { q.aa = q.aa || {}; bump(q.aa, p.aa); } return; } q.r++; if (p.visit === 1) q.v++; if (UTM.test(tag) && (q.t[tag] != null || Object.keys(q.t).length < 20)) bump(q.t, tag); return; } }
+    if (internalTag(tag)) { const q = d.int = d.int || { r: 0, v: 0, t: {} }; if (enBeacon(p, q)) return; if (p.aa !== undefined) { if (AA_ARMS.includes(p.aa)) { q.aa = q.aa || {}; bump(q.aa, p.aa); } return; } q.r++; if (p.visit === 1) q.v++; if (UTM.test(tag) && (q.t[tag] != null || Object.keys(q.t).length < 20)) bump(q.t, tag); return; } }
   // the arm beacon (idle-stats.js armBeacon): { v, aa, u } only, once per browser: arm_assigned per arm, not a batch or a visit
   if (p.aa !== undefined) { if (AA_ARMS.includes(p.aa)) { d.aa = d.aa || {}; bump(d.aa, p.aa); } return; }
+  if (enBeacon(p, d)) return;
   d.batches++;
   // which report of its page load this is (1 = the first, 'v' = the one carrying the visit): batch 1s that go missing show up here (Nov 4)
   if (Number.isInteger(p.bi) && p.bi >= 1 && p.bi <= 500 && p.page !== 'pedia') { d.bi = d.bi || {}; bump(d.bi, p.bi >= 4 ? '4+' : String(p.bi)); if (p.visit === 1) bump(d.bi, 'v' + (p.bi >= 4 ? '4+' : p.bi)); }
@@ -245,7 +254,7 @@ function addStats(p) {
 // accumulator and the KV write alike, so every number is added up the same way wherever it is added
 function mergeStat(cur, add) {
     cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches;
-    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss', 'sf', 'bi', 'aa']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
+    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss', 'sf', 'bi', 'aa', 'dd', 'en', 'cb']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
     cur.secs = (cur.secs || 0) + add.secs; cur.v2visits = (cur.v2visits || 0) + (add.v2visits || 0);
     cur.pv = mergePv(cur.pv, add.pv);
     { const q = cur.x = cur.x || EMPTY_X(); for (const k of Object.keys(EMPTY_X())) { q[k] = q[k] || {}; for (const [a, n] of Object.entries((add.x || {})[k] || {})) if (n) (X_CAP[k] ? capped(q[k], a, n, X_CAP[k]) : bump(q[k], a, n)); } }
@@ -258,7 +267,7 @@ function mergeStat(cur, add) {
     cur.sd = cur.sd || {}; for (const [k, x] of Object.entries(add.sd || {})) { const c = cur.sd[k] = cur.sd[k] || { n: 0, sum: 0, b: {} }; c.n += x.n; c.sum += x.sum; for (const [b, n] of Object.entries(x.b)) bump(c.b, b, n); }
     cur.rb = cur.rb || {}; for (const [a, n] of Object.entries(add.rb || {})) if (n && (cur.rb[a] != null || Object.keys(cur.rb).length < 600)) bump(cur.rb, a, n);   // arm|cohort day|bucket (bounded: 5 arms x 400 days x 6)
     for (const [e, n] of Object.entries(add.err)) if (cur.err[e] || Object.keys(cur.err).length < 60) bump(cur.err, e, n);
-    if (add.int) { const q = cur.int = cur.int || { r: 0, v: 0, t: {} }; q.r += add.int.r; q.v += add.int.v; if (add.int.aa) { q.aa = q.aa || {}; for (const [a, n] of Object.entries(add.int.aa)) bump(q.aa, a, n); } for (const [a, n] of Object.entries(add.int.t || {})) if (q.t[a] != null || Object.keys(q.t).length < 20) bump(q.t, a, n); }
+    if (add.int) { const q = cur.int = cur.int || { r: 0, v: 0, t: {} }; q.r += add.int.r; q.v += add.int.v; if (add.int.aa) { q.aa = q.aa || {}; for (const [a, n] of Object.entries(add.int.aa)) bump(q.aa, a, n); } for (const k of ['dd', 'en', 'cb']) if (add.int[k]) { q[k] = q[k] || {}; for (const [a, n] of Object.entries(add.int[k])) bump(q[k], a, n); } for (const [a, n] of Object.entries(add.int.t || {})) if (q.t[a] != null || Object.keys(q.t).length < 20) bump(q.t, a, n); }
   return cur;
 }
 // Nov 4: the KV free tier allows 1,000 writes a day for the whole account, and one write per isolate batch (every 20 s while anyone
@@ -723,7 +732,10 @@ async function review(req, env, path, ip) {
   for (const p of pr.slice(0, 12)) { if (!Array.isArray(p) || p.length !== 2 || p[0] === p[1] || !c.items.includes(p[0]) || !c.items.includes(p[1])) return json({ error: 'a pair is two different items of this review' }, 400); pairs.push(p[0] + '>' + p[1]); }
   if (!Object.keys(scores).length && !pairs.length) return json({ error: 'score at least one, please' }, 400);
   const bk = typeof q.bkey === 'string' && BKEY.test(q.bkey) ? await bkHash(q.bkey) : null; if (!bk) return json({ error: 'a browser key is needed' }, 400);
-  let td = null; if (c.stage === 'team') { td = await teamDoc(env, c.team); if (!td.m[bk]) return json({ error: 'this review is for the team: join it first', team: c.team }, 403); }
+  // the one-tap ask at EPOCH 0 COMPLETE (Nov 4): a single 'which one?' pair between the two openings players actually saw, from anyone (no team)
+  const ASK_PAIR = ['c3-typed-dust', 'c3-typed-crt'];
+  const askOk = q && q.ask === 'e0' && rid === 'logos' && !Object.keys(scores).length && pairs.length === 1 && pairs[0].split('>').every(x => ASK_PAIR.includes(x));
+  let td = null; if (c.stage === 'team' && !askOk) { td = await teamDoc(env, c.team); if (!td.m[bk]) return json({ error: 'this review is for the team: join it first', team: c.team }, 403); }
   const a = await rvAgg(env, rid), mine = a.k[bk] || { i: [], p: [], t: 0 }, all = mine.i.includes('*');
   const newS = Object.entries(scores).filter(([k]) => !all && !mine.i.includes(k)), newP = pairs.filter(p => { const [x, y] = p.split('>'); return !mine.p.includes(p) && !mine.p.includes(y + '>' + x); });
   if (!newS.length && !newP.length) return json({ error: 'this browser already sent these', already: true }, 409);
