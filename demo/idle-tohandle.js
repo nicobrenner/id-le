@@ -17,7 +17,7 @@
   if (document.body) add(); else document.addEventListener('DOMContentLoaded', add, { once: true });
   const visible = el => { if (!el) return false; const s = getComputedStyle(el), r = el.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.3 && s.pointerEvents !== 'none' && r.width > 0 && r.height > 0; };
   const labOpen = () => { const l = $('#lab'); return !!(l && l.classList.contains('open')); };
-  function place() { add(); const open = labOpen(); b.hidden = open; if (open) return;
+  function place() { add(); const open = labOpen() || !!document.getElementById('idleIntro'); b.hidden = open; if (open) return;   // (v14: not over the intro and its skip ›)
     // sit just above the Operator's own button when it is there, otherwise in the corner
     const t = $('#lab-toggle'); if (visible(t)) { const r = t.getBoundingClientRect(); b.style.bottom = Math.max(12, innerHeight - r.top + 6) + 'px'; } else b.style.bottom = '12px'; }
   // tapping it: the Operator's window, and every menu the guided start had hidden
