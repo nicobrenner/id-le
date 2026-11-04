@@ -61,7 +61,7 @@
   const B4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]; let pat = null, patDark = null;
   const dither = (lvl, col) => { const c = document.createElement('canvas'); c.width = c.height = 4; const x = c.getContext('2d'); x.fillStyle = col; for (let i = 0; i < 16; i++) if (B4[i] < lvl) x.fillRect(i % 4, i >> 2, 1, 1); return g.createPattern(c, 'repeat'); };
   const rings = []; let key = '', last = 0, shown = false;
-  function frame(ts) { requestAnimationFrame(frame); if (ts - last < 33) return; last = ts; const L = active() ? ST[placeId()] : null, h = H();
+  function frame(ts) { requestAnimationFrame(frame); if (window.__worldHold) return; if (ts - last < 33) return; last = ts; const L = active() ? ST[placeId()] : null, h = H();
     if (!L) { if (shown) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); shown = false; } return; }
     const vs = h.viewSize(), cam = h.cam(), z = cam.z, x0 = cam.x - vs.w / 2 / z, y0 = cam.y - vs.h / 2 / z, cx = h.near(L.x, cam.x, h.space().W), cy = h.near(L.y, cam.y, h.space().H), RX = rx(L) * 1.15, RY = ry(L) * 1.15 + 30;
     const vis = cx + RX > x0 && cx - RX < x0 + vs.w / z && cy + RY > y0 && cy - RY < y0 + vs.h / z;

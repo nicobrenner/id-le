@@ -2764,6 +2764,27 @@ def t_title_card(P):
     return f"waits at the title ({w['t']:.2f} s), a key starts the messages, Esc marks skip:messages"
 
 
+def t_world_hold(P):
+    """The world waits for the story (Nov 4, Nico: "none of that should be visible, or have loaded at all"): from a story start until its
+    landing, window.__worldHold is set, the world has no creatures and its loops don't run (the fps meter, fed by the world's frame loop, stays
+    frozen); skipping the intro lands, lifts the hold, and the world's loops run again"""
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro')", 40, P=P)
+    pg.wait_for_timeout(3500)
+    a = pg.evaluate("() => ({ hold: !!window.__worldHold, n: window.__arena ? window.__arena.raw().length : -1, fps: (document.getElementById('fps') || {}).textContent || '' })")
+    pg.wait_for_timeout(2200)
+    b = pg.evaluate("() => ({ hold: !!window.__worldHold, fps: (document.getElementById('fps') || {}).textContent || '' })")
+    need(a["hold"] and b["hold"] and a["n"] == 0, f"during the intro the world should be held and empty: {a} {b}")
+    need(a["fps"] == b["fps"], f"the world's loops should not run during the intro (fps meter moved: {a['fps']!r} → {b['fps']!r})")
+    pg.keyboard.press("Escape")
+    wait_for(pg, "() => !window.__worldHold", 30, P=P)
+    c1 = pg.evaluate("() => (document.getElementById('fps') || {}).textContent || ''"); pg.wait_for_timeout(2500)
+    c2 = pg.evaluate("() => (document.getElementById('fps') || {}).textContent || ''")
+    need(c1 != c2, f"after the landing the world's loops should run again (fps meter {c1!r} → {c2!r})")
+    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    return "intro: held, 0 creatures, world loops idle; skip → landing → released, loops running"
+
+
 def t_title_auto(P):
     """The title card starts itself (Nov 4, HN: 19 of 26 story starts never pressed a key): with no key or tap for 2 s the intro starts muted
     (the audio stays suspended: no gesture yet), shows "🔊 tap for sound", keeps moving to the dark on its own clock with the logo drawn; a tap
@@ -3976,7 +3997,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("world hold", t_world_hold, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -4003,7 +4024,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+LAUNCH = {"world hold", "title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),

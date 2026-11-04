@@ -193,7 +193,7 @@
   // ---------- drawing: one canvas under the words, only what is in view ----------
   const cv = document.createElement('canvas'); cv.id = 'buildCv'; cv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:2'; H().floor.insertBefore(cv, H().floor.firstChild.nextSibling); g = cv.getContext('2d');   // let: picture() borrows the drawing code for a moment
   let key = '', last = 0, shown = false;
-  function frame(ts) { requestAnimationFrame(frame); if (ts - last < 66) return; last = ts; const S = active() ? ST[placeId()] : null, h = H();
+  function frame(ts) { requestAnimationFrame(frame); if (window.__worldHold) return; if (ts - last < 66) return; last = ts; const S = active() ? ST[placeId()] : null, h = H();
     const clear = () => { if (shown) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); shown = false; } };
     if (!S || (!S.objs.length && !S.structs.length)) return clear();
     const vs = h.viewSize(), cam = h.cam(), z = cam.z, x0 = cam.x - vs.w / 2 / z, y0 = cam.y - vs.h / 2 / z, x1 = x0 + vs.w / z, y1 = y0 + vs.h / z, inV = (x, y, m) => x + m > x0 && x - m < x1 && y + m > y0 && y - m < y1;

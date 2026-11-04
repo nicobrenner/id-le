@@ -7,6 +7,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-04
 
+**The world waits for the story (lazyworld).** Nico on `?story`: "none of that should be visible, or have loaded at all". Measured first: during a story start's intro the world already has 0 creatures and 0 words (genesis empties it), and no requests go out after load (the 11 MB ONNX wasm loads at boot either way: the Tiny Oracle is needed at the landing). What still ran was the world's loops on an empty world: the main sim/draw loop, the weather canvas, the minimap, the fps meter (which fed the quality governor), idle-build and idle-lake frames, and the cosmos canvas. Now genesis sets `window.__worldHold` from the story's start to its landing (cap 6 min; released on any error); those loops skip their work while it's set (the loading cover is still told the world is in place), the cosmos starts after the intro, and notices are held until the landing. Script time over the intro (4–34 s after load): desktop 0.79 → 0.45 s, phone 0.68 → 0.48 s; heap 6.9 → 6.4 MB. Option 1 (defer creating the world) would save nothing more: there's nothing in it during the intro. Test 'world hold' (launch tier).
+
+## 2026-11-04
+
 **The title card starts itself (HN, Nov 4).** On id-le.com, 19 of 26 story starts never pressed a key on the title card. Now the card waits 2 s (AUTO_MS), then the intro starts by itself, muted (no gesture yet, so the browser keeps the audio suspended), with a "🔊 tap for sound" chip bottom-centre; the first tap or key anywhere turns the sound on (it joins in sync: the film runs on performance.now(), never on the audio clock). A key or tap during the 2 s starts it with sound as before; Esc and "skip ›" still skip. Funnel: `title_auto` and `sound_on` (worker allowlist; stats.py prints them under the funnel). `?noauto` holds the card (tests). Labchat pace checked: no beat waits more than ~4 s without something happening (the longest hold is reading time on Doc's 108-character line, ~3.7 s), so unchanged. Test "title auto" (launch tier).
 
 ## 2026-11-04
