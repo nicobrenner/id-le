@@ -58,10 +58,29 @@ DATA = {
             "what are words", "life is hard", "light years", "words fail me", "light bulb jokes"]}
 # a few "other" items mention a step's word without asking for it (life is hard, light years…): the head must not advance on them
 
+# round 2 (11-04, after the launch: "let there be life" paraphrases almost always got the nudge, held-out recall 0.08): more ways to ask
+# for life, and more texts that only mention life/light/words without asking. Kept apart from DATA so round 1's train/held-out split is
+# reproducible; round 2 gets its own stratified split, and the held-out report covers both.
+DATA2 = {
+  "creatures": ["bring them to life", "make creatures", "let them live", "life please!", "create life", "let there be creatures!",
+                "bring life to it", "let there be life please", "let life begin", "life, please", "make some creatures", "create creatures",
+                "let the creatures come", "let creatures appear", "now life", "and now life", "let there be life now", "give it some life",
+                "add life", "spawn life", "let life in", "let there be some life", "let there be lifee", "let tehre be life", "let there be liffe",
+                "lett there be life", "let there be lief", "let ther be lif", "let there be live", "bring forth life", "bring forth creatures",
+                "let life appear", "wake the creatures", "let the first ones walk", "create the first creatures", "make the first creatures",
+                "let there be LIFE", "LET THERE BE LIFE", "let there be life :)", "ok let there be life"],
+  "other": ["get a life", "what is life", "life is good", "such is life", "life sucks", "i have no life", "life goals", "meaning of life",
+            "is there life on mars", "life after death", "what is a creature", "are creatures real", "creature comforts", "the creatures are scary",
+            "i don't want creatures", "no creatures please", "no life", "stop life", "kill all life", "end life", "life is a game",
+            "life of pi", "this is my life", "half life", "second life", "lifetime", "lifeguard", "live long and prosper", "live laugh love",
+            "i live in chile", "where do you live", "light switch", "lightweight", "highlight", "words of wisdom", "in other words",
+            "a word", "password", "crossword", "my words", "what light?", "is there life here?", "how do creatures eat", "will they die",
+            "do creatures sleep", "creatures?", "life?", "what's next", "next step", "continue"]}
 
-def labeled():
+
+def labeled(data=None):
     rows = []
-    for c, texts in DATA.items():
+    for c, texts in (data or DATA).items():
         for t in texts: rows.append((t, c))
     return rows
 
@@ -83,6 +102,29 @@ def extract(texts):
     finally:
         srv.shutdown()
     return res
+
+
+NG_B, NG_NS = 2048, (1, 2, 3, 4)
+
+
+def _units(t):
+    b = t.encode("utf-16-le"); return [b[i] | (b[i + 1] << 8) for i in range(0, len(b), 2)]
+
+
+def _fnv(units):
+    h = 0x811c9dc5
+    for u in units: h ^= u; h = (h * 0x01000193) & 0xffffffff
+    return h
+
+
+def ngrams(t, B=NG_B, ns=NG_NS):
+    """hashed character n-grams (1-4) + whole words over the lowercased, space-normalized text, L2-normalized. The same code runs in
+    idle-genesis.js (gateNgrams): UTF-16 code units, FNV-1a, modulo B. A learned feature map for the head, not a rule."""
+    t = " " + " ".join(t.lower().split()) + " "; u = _units(t); v = np.zeros(B)
+    for n in ns:
+        for i in range(len(u) - n + 1): v[_fnv(u[i:i + n]) % B] += 1
+    for w in t.split(): v[_fnv(_units("w:" + w)) % B] += 1
+    nrm = np.linalg.norm(v); return v / nrm if nrm > 0 else v
 
 
 def softmax(z): z = z - z.max(1, keepdims=True); e = np.exp(z); return e / e.sum(1, keepdims=True)
@@ -124,53 +166,131 @@ def metrics(P, y, thr):
     return out
 
 
+def split(y, frac=0.3, seed=24):
+    """stratified train / held-out indices (the round-1 procedure: same seed, same order)"""
+    rng = random.Random(seed); tr, te = [], []
+    for ci in range(len(CLASSES)):
+        ii = [i for i in range(len(y)) if y[i] == ci]; rng.shuffle(ii); k = max(1, round(len(ii) * frac)) if ii else 0; te += ii[:k]; tr += ii[k:]
+    return sorted(tr), sorted(te)
+
+
+def features(texts, reuse=True):
+    """features for every text; cached by text, so only new texts are run through the Tiny Oracle"""
+    cache = {}
+    if reuse and os.path.exists(CACHE):
+        try: cache = {f["t"]: f for f in json.load(open(CACHE))}
+        except Exception: cache = {}
+    missing = [t for t in dict.fromkeys(texts) if t not in cache]
+    if missing:
+        print(f"  extracting {len(missing)} new texts (cached {len(cache)})", flush=True)
+        for f in extract(missing): cache[f["t"]] = f
+        json.dump(list(cache.values()), open(CACHE, "w"))
+    return cache
+
+
+def train_raw(F, y, l2, epochs=800, lr=1.0, C=len(CLASSES)):
+    """multinomial logistic regression on already-scaled features (full batch, class-balanced)"""
+    n, d = F.shape; W = np.zeros((d, C)); b = np.zeros(C); Y = np.eye(C)[y]; cw = (n / (C * np.bincount(y, minlength=C).clip(1)))[y][:, None]
+    for _ in range(epochs):
+        P = softmax(F @ W + b); G_ = (P - Y) * cw / n; W -= lr * (F.T @ G_ + l2 * W); b -= lr * G_.sum(0)
+    return W, b
+
+
+def fit_oracle(l2):
+    """round 1's head: the Tiny Oracle's features only. Returns a linear map over [x (1024) | n-grams (B)] with zero n-gram weights."""
+    def fit(A, y):
+        W, b = train(A[:, :1024], y, l2=l2); return np.vstack([W, np.zeros((A.shape[1] - 1024, W.shape[1]))]), b
+    return fit
+
+
+def fit_comb(l2, alpha, k=64):
+    """round 2: the Tiny Oracle's features (top-k principal directions, standardized) + hashed character n-grams, one multinomial head;
+    folded back into one linear map over [x (1024) | n-grams (B)] so the page needs only w·[x, n] + b"""
+    def fit(A, y):
+        X, N = A[:, :1024], A[:, 1024:]; mu0 = X.mean(0); _, _, Vt = np.linalg.svd(X - mu0, full_matrices=False); V = Vt[:k].T
+        Z = (X - mu0) @ V; mu, sd = Z.mean(0), Z.std(0) + 1e-6; W1, b1 = train_raw(np.hstack([(Z - mu) / (sd * 8), N * alpha]), y, l2)
+        Wz = W1[:k] / (sd[:, None] * 8); Wx = V @ Wz; bx = b1 - (mu0 @ V) @ Wz - (mu / (sd * 8)) @ W1[:k]
+        return np.vstack([Wx, W1[k:] * alpha]), bx
+    return fit
+
+
+def oof_probs(fit, A, y, folds=5, seed=0):
+    rng = np.random.RandomState(seed); idx = rng.permutation(len(y)); P = np.zeros((len(y), len(CLASSES)))
+    for f in range(folds):
+        te = idx[f::folds]; tr = np.setdiff1d(idx, te); W, b = fit(A[tr], y[tr]); P[te] = predict(W, b, A[te])
+    return P
+
+
+def strict_thr(P, y, eps=0.01):
+    """per step: just above the highest out-of-fold score any other text got for that step (zero false advances on the folds, no cap below 1)"""
+    return {c: float(min(0.9999, (P[y != ci, ci].max() if (y != ci).any() else 0) + eps)) for ci, c in enumerate(CLASSES[:4])}
+
+
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--probe", nargs="*"); ap.add_argument("--reuse", action="store_true", help="reuse cached features")
+    ap = argparse.ArgumentParser(); ap.add_argument("--probe", nargs="*"); ap.add_argument("--fresh", action="store_true", help="re-extract every text")
     a = ap.parse_args()
     if a.probe:
         G = json.load(open(OUT)); r = extract(a.probe)
         for e in r:
-            p = predict(np.array(G["w"]).T, np.array(G["b"]), np.array([e["x"]]))[0]
-            print(f"{e['t']!r}: v4 head → {e['option']} {e['p']:.2f} | gate → " + ", ".join(f"{c} {p[i]:.2f}" for i, c in enumerate(CLASSES)))
+            x = np.concatenate([np.array(e["x"]), ngrams(e["t"])]); out = []
+            for st in CLASSES[:4]:
+                m = G["models"][G["step"][st]]; p = predict(np.array(m["w"]).T, np.array(m["b"]), x[None])[0]; ci = CLASSES.index(st)
+                out.append(f"{st} {p[ci]:.2f}{'✓' if p.argmax() == ci and p[ci] >= G['thr'][st] else ''}")
+            print(f"{e['t']!r}: v4 head → {e['option']} {e['p']:.2f} | gate per step → " + ", ".join(out))
         return
-    rows = labeled(); texts = [t for t, _ in rows]
-    if a.reuse and os.path.exists(CACHE): feats = json.load(open(CACHE))
-    else: feats = extract(texts); json.dump(feats, open(CACHE, "w"))
-    byT = {f["t"]: f for f in feats}
-    X = np.array([byT[t]["x"] for t, _ in rows], dtype=np.float64); y = np.array([CLASSES.index(c) for _, c in rows])
-    # stratified train / held-out split (30% held out)
-    rng = random.Random(24); tr, te = [], []
-    for ci in range(len(CLASSES)):
-        ii = [i for i in range(len(y)) if y[i] == ci]; rng.shuffle(ii); k = max(1, round(len(ii) * 0.3)); te += ii[:k]; tr += ii[k:]
-    tr, te = np.array(sorted(tr)), np.array(sorted(te))
-    # the L2 strength is picked on the training split only (cross-validated recall at zero false advances), never on the held-out texts
-    best = None
+    rows1 = labeled(DATA); seen = {t for t, _ in rows1}
+    rows2 = [(t, c) for t, c in labeled(DATA2) if t not in seen]; rows2 = list({t: (t, c) for t, c in rows2}.values())
+    byT = features([t for t, _ in rows1 + rows2], reuse=not a.fresh)
+    AX = lambda rows: np.array([np.concatenate([np.array(byT[t]["x"], dtype=np.float64), ngrams(t)]) for t, _ in rows])
+    A1, A2 = AX(rows1), AX(rows2); y1 = np.array([CLASSES.index(c) for _, c in rows1]); y2 = np.array([CLASSES.index(c) for _, c in rows2])
+    tr1, te1 = split(y1); tr2, te2 = split(y2, seed=25)
+    Atr = np.vstack([A1[tr1], A2[tr2]]); ytr = np.concatenate([y1[tr1], y2[tr2]]); Ate = np.vstack([A1[te1], A2[te2]]); yte = np.concatenate([y1[te1], y2[te2]])
+    tte = [rows1[i][0] for i in te1] + [rows2[i][0] for i in te2]
+    print(f"  data: round 1 {len(rows1)}, round 2 {len(rows2)} new; train {len(ytr)}, held out {len(yte)} (round 1's held-out {len(te1)} split kept)")
+    # candidates, chosen on the training split only (out-of-fold, strict zero false advances): one oracle-only head, one combined head
+    cands = {f"oracle l2={l2}": fit_oracle(l2) for l2 in (1e-3, 1e-2, 1e-1, 1.0)}
+    cands.update({f"comb a={al} l2={l2}": fit_comb(l2, al) for al in (2.0, 3.0, 5.0) for l2 in (3e-4, 1e-3, 3e-3)})
+    cv = {}
+    for name, fit in cands.items():
+        P = oof_probs(fit, Atr, ytr); t = strict_thr(P, ytr); m = metrics(P, ytr, t); cv[name] = (t, m)
+        print(f"  {name:22s} out-of-fold recall " + ", ".join(f"{c} {m[c]['tp']}/{m[c]['n_pos']}" for c in CLASSES[:4]))
+    rec = lambda n, c: cv[n][1][c]["tp"]
+    best_or = max((n for n in cv if n.startswith("oracle")), key=lambda n: (sum(rec(n, c) for c in CLASSES[:4]), n))
+    best_cb = max((n for n in cv if n.startswith("comb")), key=lambda n: (sum(rec(n, c) for c in CLASSES[:4]), n))
+    step = {c: (best_cb if rec(best_cb, c) >= rec(best_or, c) else best_or) for c in CLASSES[:4]}
+    thr = {c: cv[step[c]][0][c] for c in CLASSES[:4]}
+    print(f"  chosen: oracle head {best_or}, combined head {best_cb}; per step {step}")
+    # held-out: each step with its head, trained on the training split
+    fitted = {n: cands[n](Atr, ytr) for n in set(step.values())}
+    after = {}
+    for ci, c in enumerate(CLASSES[:4]):
+        W, b = fitted[step[c]]; P = predict(W, b, Ate); adv = (P[:, ci] >= thr[c]) & (P.argmax(1) == ci)
+        tp = int((adv & (yte == ci)).sum()); fp = int((adv & (yte != ci)).sum()); pos = int((yte == ci).sum())
+        after[c] = {"precision": round(tp / (tp + fp), 3) if tp + fp else None, "recall": round(tp / pos, 3), "tp": tp, "fp": fp, "n_pos": pos, "head": step[c]}
+        for i in np.where(adv & (yte != ci))[0]: print(f"  held-out FALSE ADVANCE ({c}): {tte[i]!r}")
+        for i in np.where(~adv & (yte == ci))[0]: print(f"  held-out missed ({c}): {tte[i]!r} → {CLASSES[int(P[i].argmax())]} {P[i].max():.3f}")
+    # before: round 1's method (oracle features, its looser thresholds capped at .99) trained on the same split, for a like-for-like line
+    bestb = None
     for l2 in (1e-3, 1e-2, 1e-1, 1.0, 3.0):
-        thr_, Pcv = pick_thresholds(X[tr], y[tr], l2=l2); m = metrics(Pcv, y[tr], thr_); score = sum(v["recall"] or 0 for v in m.values())
-        print(f"  l2 {l2:g}: cross-validated recall per step " + ", ".join(f"{c} {v['recall']}" for c, v in m.items()))
-        if best is None or score > best[0]: best = (score, l2, thr_)
-    _, L2, thr = best
-    W, b = train(X[tr], y[tr], l2=L2); Pte = predict(W, b, X[te])
-    for i, k in enumerate(te):
-        top = int(Pte[i].argmax()); adv = top < 4 and Pte[i, top] >= thr[CLASSES[top]]
-        if adv and top != y[k]: print(f"  held-out FALSE ADVANCE: {texts[k]!r} ({CLASSES[y[k]]}) → {CLASSES[top]} {Pte[i, top]:.3f}")
-        elif not adv and y[k] < 4: print(f"  held-out missed: {texts[k]!r} ({CLASSES[y[k]]}) → {CLASSES[top]} {Pte[i, top]:.3f}")
-    held = metrics(Pte, y[te], thr)
-    acc = float((Pte.argmax(1) == y[te]).mean())
-    # what the old path (the v4 heads, acting at ≥0.9 on world options; any guided step accepted after one nudge) did on the same held-out texts
-    WORLD = {"weather", "spawn", "rave_on", "rave_off", "disaster", "rename", "evolve", "look", "words", "first_creatures", "light", "music"}
-    old_act = [texts[i] for i in te if byT[texts[i]]["option"] in WORLD and byT[texts[i]]["p"] >= (0.5 if byT[texts[i]]["option"] == "look" else 0.9) and y[i] == CLASSES.index("other")]
-    # the final head: all data, the cross-validated thresholds
-    Wall, ball = train(X, y, l2=L2)
-    wach = byT["wachito"]
-    report = {"classes": CLASSES, "thr": thr, "l2": L2, "heldout": {"per_step": held, "accuracy": round(acc, 3), "n_train": int(len(tr)), "n_heldout": int(len(te)),
-              "old_v4_acted_on_other": old_act},
-              "wachito_v4": {"option": wach["option"], "p": round(wach["p"], 3), "top3": sorted(wach["probs"].items(), key=lambda kv: -kv[1])[:3]}}
-    json.dump({"classes": CLASSES, "w": Wall.T.round(6).tolist(), "b": ball.round(6).tolist(), "thr": thr, "d": int(X.shape[1]),
-               "heldout": report["heldout"], "note": "tools/genesis_gate.py: the Genesis gate over the Tiny Oracle's features (last token + mean)"}, open(OUT, "w"))
-    print(json.dumps(report, indent=1))
-    Pw = predict(Wall, ball, np.array([wach["x"]]))[0]
-    print("wachito → gate", {c: round(float(Pw[i]), 3) for i, c in enumerate(CLASSES)})
+        P = oof_probs(fit_oracle(l2), Atr, ytr); t = {c: float(min(0.99, max(0.5, P[ytr != ci, ci].max() + 0.02))) for ci, c in enumerate(CLASSES[:4])}
+        s_ = sum(metrics(P, ytr, t)[c]["recall"] for c in CLASSES[:4])
+        if bestb is None or s_ > bestb[0]: bestb = (s_, l2, t)
+    Wb, bb = fit_oracle(bestb[1])(Atr, ytr); before = metrics(predict(Wb, bb, Ate), yte, bestb[2])
+    print("\n  held-out per step (same texts): before = round 1's method, after = round 2")
+    for c in CLASSES[:4]:
+        b_, a_ = before[c], after[c]
+        print(f"   {c:<10} before {b_['tp']}/{b_['n_pos']} recall {b_['recall']}, false advances {b_['fp']}  →  after {a_['tp']}/{a_['n_pos']} recall {a_['recall']}, false advances {a_['fp']}  ({a_['head']})")
+    # the shipped heads: all data, the cross-validated thresholds
+    Aall = np.vstack([A1, A2]); yall = np.concatenate([y1, y2]); models = {}
+    for n in set(step.values()):
+        W, b = cands[n](Aall, yall); key = "oracle" if n.startswith("oracle") else "comb"
+        d = 1024 if key == "oracle" else W.shape[0]
+        models[key] = {"w": W[:d].T.round(5).tolist(), "b": b.round(5).tolist(), "d": d, "ngrams": key == "comb", "name": n}
+    stepkey = {c: ("oracle" if step[c].startswith("oracle") else "comb") for c in CLASSES[:4]}
+    held = {"per_step": after, "before_round1_method": before, "n_train": int(len(ytr)), "n_heldout": int(len(yte)), "n_round2": len(rows2)}
+    json.dump({"version": 2, "classes": CLASSES, "d": 1024, "ngram": {"B": NG_B, "ns": list(NG_NS)}, "models": models, "step": stepkey, "thr": thr,
+               "heldout": held, "note": "tools/genesis_gate.py round 2 (11-04): per step, the Tiny Oracle's features alone (oracle) or with hashed character n-grams (comb); a step advances when its head's top class is the step and its probability is at least thr"}, open(OUT, "w"))
+    print(json.dumps({"thr": thr, "step": stepkey}, indent=1), "\n  wrote", OUT, os.path.getsize(OUT), "bytes")
 
 
 if __name__ == "__main__":

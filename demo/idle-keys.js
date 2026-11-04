@@ -37,14 +37,17 @@
         SN.stop = function (when = 0) { const now = this.context.currentTime; if (this.__over || (this.__late && when < now)) { try { this.disconnect(); } catch (e) {} when = now; } return sp.call(this, Math.max(0, when)); };
       } catch (e) { console.warn('keys: audio', e); }
   };
-  if (key) {
-    // the sandbox: an in-memory localStorage for this page only (the player's real one is never read or written)
+  // the sandbox: an in-memory localStorage for this page only (the player's real one is never read or written)
+  function sandbox() {
     const m = new Map(), api = {
       getItem: k => m.has(String(k)) ? m.get(String(k)) : null, setItem: (k, v) => { m.set(String(k), String(v)); }, removeItem: k => { m.delete(String(k)); },
       clear: () => m.clear(), key: i => [...m.keys()][i] ?? null, get length() { return m.size; } };
     const mem = new Proxy(api, { get: (t, p) => p in t ? t[p] : (typeof p === 'string' && m.has(p) ? m.get(p) : undefined), has: (t, p) => p in t || m.has(String(p)),
       ownKeys: () => [...m.keys()], getOwnPropertyDescriptor: (t, p) => m.has(String(p)) ? { value: m.get(String(p)), enumerable: true, configurable: true } : undefined });
     try { Object.defineProperty(window, 'localStorage', { value: mem, configurable: true }); } catch (e) { console.warn('keys: no sandbox', e); }
+  }
+  if (key) {
+    sandbox();
     // the storyline and the test mode in the address (read by the game's modules as they load); the key stays in the hash
     try { const u = new URL(location.href); u.searchParams.set('story', ''); u.searchParams.set('fresh', ''); u.searchParams.delete('at');
       history.replaceState(null, '', u.pathname + u.search.replace(/=(?=&|$)/g, '') + '#' + key); } catch (e) {}
@@ -64,6 +67,14 @@
           window.__storyKey.started = true; el.remove(); go(); };
         addEventListener('keydown', start, true); el.addEventListener('pointerdown', start); };
       if (document.body) gate(); else document.addEventListener('DOMContentLoaded', gate, { once: true }); }
+  }
+
+  // ?offer=a|b|c|old (Nov 4, Nico on staging: his browser's saved storyline, mid-Genesis, opened the Operator with "let there be life" and the
+  // offer never came): the storyline offer is previewed in the same sandbox, on a fresh ready world (?fresh: nothing to disk, no stats), so
+  // the browser's own state (a story in progress, a pending step, an arm) never gets in the way, and its real world is never touched
+  else if (/^(a|b|c|old|v3)$/.test(Q.get('offer') || '')) {
+    sandbox(); window.__offerSandbox = true;
+    try { const u = new URL(location.href); u.searchParams.set('fresh', ''); history.replaceState(null, '', u.pathname + u.search.replace(/=(?=&|$)/g, '') + u.hash); } catch (e) {}
   }
 
   // the strip: every keyframe as a link (#keys, or ` toggles it; never while typing)

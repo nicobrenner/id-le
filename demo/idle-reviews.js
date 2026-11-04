@@ -420,7 +420,11 @@
   setInterval(() => { maybeInvite().catch(() => {}); }, 5000);
   setInterval(() => { teamStatus(); }, 60e3);
 
-  window.__reviews = { open, close, list, invite, join, team: { status: teamStatus, vested: () => !!(teamStatus() || {}).vested, member: () => !!team(), name: TEAM.name, id: TEAM.id },
+  // the one-tap ask at EPOCH 0 COMPLETE (idle-genesis.js): one 'which one?' pair between the two openings, counted in the logos review's totals,
+  // no team needed (the worker accepts exactly this pair with ask: 'e0'); once per browser
+  const askPick = (win, lose) => { try { if (localStorage.getItem('idle.askLogo')) return Promise.resolve(false); localStorage.setItem('idle.askLogo', win); } catch (e) {}
+    return api('/lab/review/logos', { bkey: bkey(), ask: 'e0', pairs: [[win, lose]] }).then(r => r.status === 200).catch(() => false); };
+  window.__reviews = { askPick, open, close, list, invite, join, team: { status: teamStatus, vested: () => !!(teamStatus() || {}).vested, member: () => !!team(), name: TEAM.name, id: TEAM.id },
     state: () => cur && { rid: cur.rid, view: cur.view, kind: cur.cfg && cur.cfg.kind, items: cur.cfg ? cur.cfg.items.slice() : [], queue: cur.queue ? cur.queue.slice() : [], i: cur.i, current: cur.queue ? cur.queue[cur.i] : null,
       rated: { ...((cur.mine && cur.mine.rated) || {}) }, pairs: ((cur.mine && cur.mine.pairs) || []).slice(), pair: cur.pair || null, playing: !!(cur.live && cur.live.playing && cur.live.playing()) },
     sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), tab: { open: () => toggleTab(true), close: () => toggleTab(false), isOpen: () => tabOpen }, highlight, arrive, nudge, hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },

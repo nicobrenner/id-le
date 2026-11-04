@@ -102,7 +102,7 @@ ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}<div class="ctx"><small>What's
       sending = true; render();
       try { const r = await fetch('/lab/oracle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, text, ctx }) }); const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.ok) throw new Error(j.error || ('the scientists are not answering (' + r.status + ')'));
-        const line = THANKS[Math.floor(Math.random() * THANKS.length)]; msg = '🧪 ' + line; draft = ''; kind = '';
+        const line = j.queued ? 'saved, will sync: the scientists will get it shortly' : THANKS[Math.floor(Math.random() * THANKS.length)]; msg = '🧪 ' + line; draft = ''; kind = '';
         if (window.__oracleSay) window.__oracleSay(line); emit('sent');
       } catch (er) { msg = String(er.message || er); }
       sending = false; render(); }

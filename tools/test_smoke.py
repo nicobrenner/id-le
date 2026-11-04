@@ -168,6 +168,13 @@ out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visit
   const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.aa = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.aa || {})) a[k] = (a[k] || 0) + n; return a; }, {});
   out.aaInt = ds.reduce((a, d) => { for (const [k, n] of Object.entries((d.int || {}).aa || {})) a[k] = (a[k] || 0) + n; return a; }, {});
   out.aaBatches = ds.reduce((a, d) => a + (d.batches || 0), 0) - b0; }
+// engaged (Nov 4): { dd: arm }, { en: act, ar: arm }, { cb: arm, b: bucket }: counted per arm / act / bucket, never a batch; junk dropped; our checks apart
+{ const b0 = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.batches || 0), 0);
+  for (const p of [{ dd: 'story' }, { dd: 'none' }, { dd: 'evil' }, { en: 'cr_name', ar: 'story' }, { en: 'e0_done', ar: 'story' }, { en: 'hack', ar: 'story' }, { en: 'vote', ar: 'evil' },
+      { cb: 'play', b: 'd1' }, { cb: 'play', b: 'd99' }, { dd: 'play', u: 'launch-check' }, { en: 'vote', ar: 'play', u: 'launch-check' }]) await post('/lab/p', { v: 1, ...p });
+  const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)), sum = k => ds.reduce((a, d) => { for (const [x, n] of Object.entries(d[k] || {})) a[x] = (a[x] || 0) + n; return a; }, {});
+  out.en = { dd: sum('dd'), en: sum('en'), cb: sum('cb'), int: ds.reduce((a, d) => { const q = d.int || {}; for (const k of ['dd', 'en']) for (const [x, n] of Object.entries(q[k] || {})) a[k + ':' + x] = (a[k + ':' + x] || 0) + n; return a; }, {}),
+    batches: ds.reduce((a, d) => a + (d.batches || 0), 0) - b0 }; }
 // /lab/p: the same reports under a plain name; a visit from a v2 page counts in v2visits (engagement v2's own denominator)
 { out.labp = (await post('/lab/p', { v: 1, visit: 1, v2: 1, dev: 'desktop' })).status; out.v2visits = [...env.STATS.m.values()].map(v => JSON.parse(v)).reduce((a, d) => a + (d.v2visits || 0), 0); }
 // the storyline funnel (11-02): known moments only, counted by arm; the arm's visits and dwell under gv
@@ -345,6 +352,78 @@ def pages_unit():
     return f"views {s['views']}, bots {o['bots']}, 1k/10k/100k uniques → {o['est']['1000']:.0f}/{o['est']['10000']:.0f}/{o['est']['100000']:.0f}, 401 through the worker → {e2e['uniques']}"
 
 
+KV_WRITES_TEST = r"""
+const realST = globalThis.setTimeout; const tick = () => new Promise(r => realST(r, 0));
+globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; }; globalThis.__statFlushNow = true;
+let NOW = Date.UTC(2026, 10, 5, 0, 0, 30); const realNow = Date.now; Date.now = () => NOW;
+const RealDate = Date; globalThis.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } };
+const M = await import(process.argv[2]), W = M.default;
+let failPut = 0;   // >0: the next KV puts throw like the free-tier cap does
+const kv = () => { const m = new Map(), puts = []; return { m, puts, get: async k => m.get(k) ?? null, put: async (k, v) => { if (failPut > 0) { failPut--; throw new Error('KV PUT failed: 429 Too Many Requests'); } puts.push(k); m.set(k, v); }, delete: async k => { m.delete(k); } }; };
+const store = () => { const m = new Map(); return { m, get: async k => m.has(k) ? structuredClone(m.get(k)) : undefined, put: async (k, v) => { m.set(k, structuredClone(v)); }, delete: async k => { m.delete(k); } }; };
+const inst = {}, NS = { idFromName: n => n, get: id => ({ fetch: (url, init) => (inst[id] = inst[id] || new M.Presence({ storage: store() }, {})).fetch(new Request(url, init)) }) };
+const run = async (env, n, every) => { const go = (path, body) => W.fetch(new Request('https://id-le.com' + path, { method: 'POST', body: JSON.stringify(body), headers: { 'CF-Connecting-IP': '9.9.9.' + (n % 200), 'Content-Type': 'application/json' } }), env, { waitUntil(p) { return p; } });
+  for (let i = 0; i < n; i++) { NOW += every; await go('/lab/stats', { v: 1, visit: 1, dev: 'desktop', feat: ['music'] }); await tick(); await tick(); } };
+const out = {};
+// the old path (no accumulator): one KV write per batch; with every report in its own 20-s window that is one write per report
+{ const env = { STATS: kv(), ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' }; await run(env, 300, 108e3); await new Promise(r => setTimeout(r)); out.oldPuts = env.STATS.puts.filter(k => k.startsWith('stats:')).length; }
+// the accumulator: 800 reports over a day (one every 108 s, like Nov 4's 781 batches) → KV written at most once an hour
+NOW = Date.UTC(2026, 10, 6, 0, 0, 30);
+const env = { STATS: kv(), PRESENCE: NS, ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' };
+await run(env, 790, 108e3);
+await tick(); await tick();
+const day = '2026-11-06', puts = env.STATS.puts.filter(k => k.startsWith('stats:'));
+out.newPuts = puts.length; out.shards = [...new Set(puts)];
+const kvVisits = [...env.STATS.m.entries()].filter(([k]) => k.startsWith('stats:' + day)).reduce((a, [, v]) => a + JSON.parse(v).visits, 0);
+const peek = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json();
+const pendVisits = Object.values(peek.acc || {}).reduce((a, r) => a + r.visits, 0) + Object.values(peek.lent || {}).reduce((a, r) => a + r.visits, 0);
+out.visitsTotal = kvVisits + pendVisits;
+// a KV write that fails after a take: nothing is lost (the lent copy goes back into the pile after 5 minutes and is written later)
+{ NOW += 61 * 60e3; failPut = 1; await run(env, 1, 1000); await tick(); await tick();
+  NOW += 6 * 60e3; await run(env, 1, 1000); NOW += 61 * 60e3; await run(env, 1, 1000); await tick(); await tick();
+  const kv2 = [...env.STATS.m.entries()].filter(([k]) => k.startsWith('stats:')).reduce((a, [, v]) => a + JSON.parse(v).visits, 0);
+  const pk = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json();
+  out.afterFailTotal = kv2 + Object.values(pk.acc || {}).reduce((a, r) => a + r.visits, 0) + Object.values(pk.lent || {}).reduce((a, r) => a + r.visits, 0); }
+// a player's 🧪 message while KV refuses writes: "saved, will sync", then written with the accumulator's next take
+{ failPut = 99; const r = await W.fetch(new Request('https://id-le.com/lab/oracle', { method: 'POST', body: JSON.stringify({ kind: 'idea', text: 'more crawlies please' }), headers: { 'CF-Connecting-IP': '7.7.7.7', 'Content-Type': 'application/json' } }), env, { waitUntil(p) { return p; } });
+  out.fbStatus = r.status; out.fbBody = await r.json(); failPut = 0;
+  NOW += 61 * 60e3; await run(env, 1, 1000); await tick(); await tick();
+  out.fbWritten = [...env.STATS.m.keys()].some(k => k.startsWith('fb:')); }
+// the engaged beacons through the accumulator (Nov 4: the deployed accumulator's older merge dropped dd/en/cb): they survive the
+// Durable Object's merge, and so does any newer flat count map ('zz', standing in for a key added later)
+{ const env2 = { STATS: kv(), PRESENCE: NS, ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' };
+  for (const b of [{ v: 1, dd: 'story' }, { v: 1, en: 'cr_card', ar: 'story' }, { v: 1, cb: 'none', b: 'd1' }]) { await W.fetch(new Request('https://id-le.com/lab/p', { method: 'POST', body: JSON.stringify(b), headers: { 'CF-Connecting-IP': '8.8.8.8', 'Content-Type': 'application/json' } }), env2, { waitUntil: p => p }); await tick(); await tick(); }
+  await NS.get('stats-live').fetch('https://presence/stats/add', { method: 'POST', body: JSON.stringify({ days: { '2026-11-09': { visits: 0, back: 0, ios: 0, batches: 0, secs: 0, safe: {}, ref: {}, utm: {}, m: {}, err: {}, pd: { visits: 0, back: 0, clips: 0, dev: {}, dw: {}, ref: {}, utm: {}, sec: {} }, zz: { a: 2 } } } }) });
+  const pk = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json(), all = Object.values(pk.acc || {});
+  const sum = k => all.reduce((a, r) => { for (const [x, n] of Object.entries(r[k] || {})) a[x] = (a[x] || 0) + n; return a; }, {});
+  out.accEngaged = { dd: sum('dd'), en: sum('en'), cb: sum('cb'), zz: sum('zz') }; }
+console.log(JSON.stringify(out));
+"""
+
+
+def kv_writes_unit():
+    """Nov 4 (KV free tier: 1,000 writes a day for the account): stats go through the accumulator (a Durable Object), KV is written at most
+    once an hour per day key, every visit is kept (KV + pending), a failed KV write loses nothing, a player's write refused by KV is queued
+    ("saved, will sync") and written later"""
+    tmp = tempfile.mkdtemp(prefix="idle-kvw-")
+    try:
+        shutil.copy(os.path.join(ROOT, "helper", "worker.js"), os.path.join(tmp, "worker.mjs"))
+        t = os.path.join(tmp, "t.mjs"); open(t, "w").write(KV_WRITES_TEST)
+        r = subprocess.run(["node", t, "file://" + os.path.join(tmp, "worker.mjs")], capture_output=True, text=True, timeout=120)
+        need(r.returncode == 0, (r.stderr or r.stdout)[-600:])
+        o = json.loads(r.stdout.strip().splitlines()[-1])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    need(o["oldPuts"] >= 250, f"the old path should write per batch: {o['oldPuts']} writes for 300 reports")
+    need(o["newPuts"] <= 25, f"the accumulator wrote KV {o['newPuts']} times in a day (≤ 25 expected)")
+    ae = o.get("accEngaged") or {}
+    need(ae.get("dd") == {"story": 1} and ae.get("en") == {"story|cr_card": 1} and ae.get("cb") == {"none|d1": 1} and ae.get("zz") == {"a": 2}, f"the engaged beacons (and any newer count map) must survive the accumulator: {ae}")
+    need(o["visitsTotal"] == 790, f"visits kept {o['visitsTotal']} != 790 (KV + pending)")
+    need(o["afterFailTotal"] == 793, f"after a failed KV write {o['afterFailTotal']} != 793")
+    need(o["fbStatus"] == 200 and o["fbBody"].get("queued") and o["fbWritten"], f"a refused 🧪 write: {o['fbStatus']} {o['fbBody']}, written later {o['fbWritten']}")
+    return f"a day of 790 reports: {o['newPuts']} KV writes (old path: {o['oldPuts']} for 300); every visit kept; a failed write recovered; a refused 🧪 queued and written"
+
+
 def worker_unit():
     tmp = tempfile.mkdtemp(prefix="idle-worker-")
     try:
@@ -368,6 +447,9 @@ def worker_unit():
     need(o["jeffy_train"] == 404 and o["jeffy_get_predict"] == 404, f"jeffy allowlist: train {o['jeffy_train']}, GET predict {o['jeffy_get_predict']}")
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
+    en = o.get("en") or {}
+    need(en.get("dd") == {"story": 1, "none": 1} and en.get("en") == {"story|cr_name": 1, "story|e0_done": 1} and en.get("cb") == {"play|d1": 1}
+         and en.get("int") == {"dd:play": 1, "en:play|vote": 1} and en.get("batches") == 0, f"engaged beacons: {en}")
     need(o.get("aa") == {"story": 1, "choose": 1, "play": 2} and o.get("aaInt") == {"play": 1} and o.get("aaBatches") == 0, f"arm beacon: aa {o.get('aa')}, internal {o.get('aaInt')}, batches {o.get('aaBatches')}")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
     need(o.get("sd") == {"story|lights": {"n": 2, "sum": 725, "b": {"10-30s": 1, "10m+": 1}}, "story|e1words": {"n": 1, "sum": 4, "b": {"<10s": 1}}}, f"time per step: {o.get('sd')}")
@@ -731,6 +813,24 @@ def booted(pg):
 
 
 # ---------------------------------------------------------------- browser checks
+def t_build_looks(P):
+    """building materials (crates, bricks, stones, rocks, racks, pillars) each have their own drawing, light and dark, normal and
+    Gloamhold: none is a plain one-colour box (Nov 4: stones and pillars fell through to a grey rounded rectangle that looked like a
+    broken creature in Nico's dark world)"""
+    pg = P.open("/arena.html?start=ready&test"); booted(pg)
+    wait_for(pg, "() => typeof window.__buildDrawObj === 'function'", 30, P=P)
+    r = pg.evaluate("""() => { const out = {}; for (const dark of [false, true]) for (const keep of [false, true]) for (const k of window.__buildObjKinds()) {
+        const c = document.createElement('canvas'); c.width = c.height = 120; const g = c.getContext('2d');
+        window.__buildDrawObj(g, { k, x: 60, y: 60 }, 60, 60, keep, dark);
+        const d = g.getImageData(0, 0, 120, 120).data, cols = new Set(); let lit = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 40) { lit++; cols.add((d[i] >> 4) + ',' + (d[i + 1] >> 4) + ',' + (d[i + 2] >> 4)); }
+        out[(dark ? 'dark ' : 'light ') + (keep ? 'keep ' : '') + k] = { lit, cols: cols.size }; } return out; }""")
+    flat = {k: v for k, v in r.items() if v["lit"] < 40 or v["cols"] < (2 if " keep " in k else 3)}   # Gloamhold is 1-bit: ink + paper
+    need(not flat, f"materials drawn as a plain box or not at all: {flat}")
+    P.clean()
+    return f"{len(r)} kind × look combinations, each with its own drawing (min colours {min(v['cols'] for v in r.values())})"
+
+
 def t_fresh_load(P):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 30)   # the starter world arrives a moment after boot
@@ -1003,12 +1103,22 @@ def t_genesis_gate(P):
     need(pg.evaluate("() => window.__genesis.gate().how") == "command", "the command did not advance as a command")
     # paraphrases and nonsense through the gate (no step run: the gate's own verdict against its threshold)
     probe = pg.evaluate("""async ts => { const H = await window.__idleAI.heads(), G = await window.__genesis.loadGate(), out = {};
-        for (const t of ts) { const r = await window.__oracle.classify(t, H, true), v = window.__genesis.gateOf(G, r.x); out[t] = { top: v.top, p: +v.p.toFixed(3), adv: v.top !== 'other' && v.p >= G.thr[v.top] }; } return out; }""",
-        ["asdf", "hello", "who are you?", "evolve the world", "life is hard", "light years"])
+        for (const t of ts) { const r = await window.__oracle.classify(t, H, true), v = window.__genesis.gateOf(G, r.x, t); out[t] = { top: v.top, p: +v.p.toFixed(3), adv: v.adv }; } return out; }""",
+        ["asdf", "hello", "who are you?", "evolve the world", "life is hard", "light years", "get a life", "what is life", "end life", "lights off"])
     false_adv = {t: v for t, v in probe.items() if v["adv"]}
     need(not false_adv, f"the gate would advance on chit-chat or nonsense: {false_adv}")
+    # round 2 (Nov 4): paraphrases of "let there be life" now get through the creatures step's head (n-grams + the Oracle's features)
+    life = pg.evaluate("""async ts => { const H = await window.__idleAI.heads(), G = await window.__genesis.loadGate(), out = {};
+        for (const t of ts) { const r = await window.__oracle.classify(t, H, true), v = window.__genesis.gateOf(G, r.x, t, 'creatures'); out[t] = { top: v.top, p: +v.p.toFixed(3), adv: v.adv.includes('creatures') }; } return out; }""",
+        ["bring them to life", "create life", "let there be creatures", "life is hard", "get a life"])
+    need(life["bring them to life"]["adv"] and not life["life is hard"]["adv"] and not life["get a life"]["adv"], f"the creatures step's gate: {life}")
+    # the page's n-grams must match tools/genesis_gate.py's exactly (UTF-16 units, FNV-1a)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import genesis_gate as GG
+    for t in ["Let there be LIFE!", "  bring   them to life ", "lumière 🌱 vida", "😀😀"]:
+        js = pg.evaluate("t => Array.from(window.__genesis.gateNgrams(t, 2048, [1, 2, 3, 4]))", t)
+        need(max(abs(a - b) for a, b in zip(js, GG.ngrams(t))) < 1e-9, f"n-gram features differ between the page and genesis_gate.py for {t!r}")
     P.clean()
-    return f"'wachito' ×2: no advance, no world tool, nudged, command typed back (gate {wach.get('top')} {wach.get('p')}, v4 {wach.get('v4')}); 'LIGHTS ON.' advanced; no false advance on {len(probe)} off-script probes"
+    return f"'wachito' ×2: no advance, no world tool, nudged, command typed back (gate {wach.get('top')} {wach.get('p')}, v4 {wach.get('v4')}); 'LIGHTS ON.' advanced; no false advance on {len(probe)} off-script probes; creatures step: " + ", ".join(f"{t} {'✓' if v['adv'] else '·'} {v['p']}" for t, v in life.items()) + "; page n-grams = genesis_gate.py"
 
 
 def t_tiny_genesis(P):
@@ -1037,7 +1147,9 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"u", "aa", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"u", "aa", "dd", "en", "ar", "cb", "b", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+TINY_BEACON = ("aa", "dd", "en", "cb")   # the arm and engaged beacons (idle-stats.js): not reports
+reports_of = lambda raw: [x for x in map(json.loads, raw) if not any(k in x for k in TINY_BEACON)]
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -1074,7 +1186,7 @@ def t_stats_v2(P):
     pg.evaluate("""() => { for (const t of ['reel_play', 'reel_end', 'chat']) dispatchEvent(new CustomEvent('idle:ev', { detail: { type: t, extra: {} } })); }""")
     pg.evaluate("() => window.__stats._send('3m')"); pg.wait_for_timeout(500)
     need(P.stats, "nothing was sent with ?statstest")
-    sent = [json.loads(b) for b in P.stats]
+    sent = reports_of(P.stats)
     need(sent[0].get("why") == "open" and sent[0].get("visit") == 1 and sent[0].get("v2") == 1, f"the first report must be the visit itself, sent soon after the page opens: {sent[0]}")
     keys = set().union(*[set(q) for q in sent])
     need(keys <= ALLOWED_STATS | {"why"}, f"payload keys outside the allowlist: {sorted(keys - ALLOWED_STATS - {'why'})}")
@@ -1127,7 +1239,7 @@ def t_stats_seen(P):
     HID = """window.__vis = 'hidden'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
       get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
     flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
-    def sent(): return [json.loads(b) for b in P.stats]
+    def sent(): return reports_of(P.stats)
     def did(): return set().union(*[set((q.get("x") or {}).get("did") or []) for q in sent()]) if P.stats else set()
     # 1. loaded in the background, closed unseen: nothing at all
     pg = P.ctx.new_page(); pg.on("pageerror", lambda e: P.errors.append(str(e)[:200])); pg.add_init_script(HID + " delete CanvasRenderingContext2D.prototype.roundRect;")
@@ -1163,7 +1275,7 @@ def t_stats_return(P):
     HID = """window.__vis = window.__vis || 'visible'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
       get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
     flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
-    def sent(): return [json.loads(b) for b in P.stats]
+    def sent(): return reports_of(P.stats)
     import datetime as _dt
     today = _dt.datetime.now(_dt.timezone.utc).date(); yday = (today - _dt.timedelta(days=1)).isoformat()
     # 1. time per step: the clock says 100 s of on-screen time so far and the last moment was at 75 s → the next moment took ~25 s
@@ -1866,6 +1978,225 @@ def t_story_keys_logo(P):
     P.clean()
     return " · ".join(out) + "; a stale idle-logos.js → the old logo, then the landing"
 
+
+def t_chips_playground(P):
+    """Quick actions always work (Nov 4, Nico: "some of the basic auto-actions/predefined on the operator chat, don't even work! those should
+    all work always"; "make it rain" had gone through the model and got "Yes, it is"): every ⚡ chip in the playground runs its action at once,
+    the same as typing its exact words; the /command chips run too"""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => { window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")   # ⚡, as a player opens it
+    try: wait_for(pg, "() => window.__opwin.tray().open && window.__opwin.tray().chips.includes('make it rain')", 10, P=P)
+    except Exception: raise AssertionError("tray: " + json.dumps(pg.evaluate("() => ({ tray: window.__opwin.tray(), gp: window.__genesis && window.__genesis.genPending && window.__genesis.genPending(), chip: window.__genesis && window.__genesis.chip && window.__genesis.chip(), st: window.__genesis && window.__genesis.state && window.__genesis.state(), tools: !document.getElementById('op-tools').hidden, opTray: localStorage.getItem('idle.opTray'), url: location.href, cls: document.documentElement.className })"))[:2500])
+    def tap(t):
+        pg.evaluate("t => { const b = [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === t); if (!b) throw new Error('no chip ' + t); b.click(); }", t)
+        pg.wait_for_timeout(700)
+    W = "() => window.__idleWorld.summary().weather.kind"
+    last = "() => { const r = [...document.querySelectorAll('#ai-thread .ai-row')].pop(); return r ? r.innerText : ''; }"
+    res = {}
+    tap("make it rain"); res["make it rain"] = pg.evaluate(W) == "bitrain" and "rain it is" in pg.evaluate(last)
+    tap("a sunny day"); res["a sunny day"] = pg.evaluate(W) == "clear" and "clear skies" in pg.evaluate(last)
+    n0 = pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length")
+    tap("add a new creature"); res["add a new creature"] = pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == n0 + 1 and "walked in" in pg.evaluate(last)
+    tap("start a rave"); res["start a rave"] = pg.evaluate("() => !!(window.__music && window.__music.rave())") and "dancing" in pg.evaluate(last)
+    tap("evolve a creature"); res["evolve a creature"] = "mutated" in pg.evaluate(last)
+    tap("what's happening?"); res["what's happening?"] = "creatures" in pg.evaluate(last) and "words" in pg.evaluate(last)
+    chips = pg.evaluate("() => window.__opwin.tray().chips")
+    pg.evaluate("() => { window.__opened = []; window.open = (u, n) => { window.__opened.push(String(u)); return null; }; }")
+    effect = {"/pedia": "() => window.__opened.some(u => /pedia/.test(u))", "/settings": "() => !!document.querySelector('#settings.on')",
+              "/scientists": "() => !!document.querySelector('#oracle.on')", "/story": "() => !!(document.querySelector('#genResume') || document.querySelector('#idleIntro') || document.querySelector('#genChoose') || window.__genesis.state())"}
+    for c in sorted([c for c in chips if c.startswith("/")], key=lambda c: c == "/story"):   # /story last: it starts the story
+        pg.evaluate("() => { document.querySelectorAll('#settings.on, #oracle.on').forEach(e => e.classList.remove('on')); window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")
+        wait_for(pg, f"() => window.__opwin.tray().chips.includes({json.dumps(c)})", 10, P=P)
+        tap(c); pg.wait_for_timeout(600)
+        res[c] = bool(pg.evaluate(effect.get(c, "() => true")))
+    if "/story" in res:   # /story started a story in this browser: back to a plain playground (no Genesis pending) for the typed check
+        pg.evaluate("() => { localStorage.removeItem('idle.genesis'); localStorage.removeItem('idle.gv'); }"); pg.close(); pg = P.open("/arena.html?fresh=1&test"); booted(pg); pg.evaluate("() => window.__opwin.open()")
+        need(not pg.evaluate("() => window.__genesis.genPending()"), "the typed check needs a playground without a pending Genesis")
+    # typed, exact words (any case, end punctuation): the same action
+    pg.evaluate("() => window.__idleWorld.setWeather('clear')")
+    pg.fill("#lab-text", "Make it rain."); pg.click("#lab-send"); pg.wait_for_timeout(700)
+    res["typed: Make it rain."] = pg.evaluate(W) == "bitrain"
+    bad = {k: v for k, v in res.items() if not v}
+    need(not bad, f"quick actions that did not work: {bad} (all: {res})")
+    # for the record: how the Tiny Operator's heads read the chips' words as free text (no longer needed: the exact words are commands)
+    heads = pg.evaluate("""async () => { const O = window.__oracle; for (let i = 0; i < 120 && !(O && O.ready); i++) await new Promise(r => setTimeout(r, 500)); if (!O || !O.ready) return null;
+      const H = await (await fetch('arena_instr_v4.json')).json(), out = {};
+      for (const t of ['make it rain', 'a sunny day', 'add a new creature', 'start a rave', 'evolve a creature', "what's happening?"]) { const r = await O.classify(t, H); out[t] = [r.option, +((r.probs[r.option] || 0).toFixed(2))]; }
+      return out; }""")
+    P.clean()
+    return "chips: " + ", ".join(k for k in res) + " → all worked; the heads on the same words as free text: " + json.dumps(heads)
+
+
+def t_chips_genesis(P):
+    """In Genesis the ⚡ tray offers no world action, also after a reload mid-Genesis (Nov 4, from Nico's screenshot: the console was gone after a
+    reload, the tray showed "make it rain" and the step gate refused it); the reload resumes Genesis on its pending step, words typed in"""
+    pg = P.open("/arena.html?story&noauto")
+    wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.waiting())", 40, P=P); pg.keyboard.press("k"); pg.wait_for_timeout(1500); pg.keyboard.press("Escape")
+    for _ in range(60):
+        pg.wait_for_timeout(1000)
+        if pg.evaluate("() => window.__genesis.ready()"): break
+        pg.mouse.click(400, 300)
+    snap = "() => ({ next: window.__genesis.next(), ready: window.__genesis.ready(), console: !!document.querySelector('#genConsole'), tray: window.__opwin.tray(), tools: !document.getElementById('op-tools').hidden, input: (document.getElementById('lab-text') || {}).value })"
+    pg.evaluate("() => localStorage.setItem('idle.opTray', '1')")
+    for step, say in (("light", "lights on"), ("words", "let there be words")):
+        wait_for(pg, f"() => window.__genesis.next() === '{step}' && window.__genesis.ready()", 120, P=P)
+        s0 = pg.evaluate(snap); need(not s0["tools"] and not s0["tray"]["chips"], f"{step}: no ⚡ and no chips in Genesis: {s0}")
+        pg.fill("#lab-text", say); pg.press("#lab-text", "Enter")
+    wait_for(pg, "() => window.__genesis.next() === 'creatures' && window.__genesis.ready()", 120, P=P)
+    pg.reload(wait_until="commit", timeout=60000)
+    wait_for(pg, "() => !!document.querySelector('#genConsole') && window.__genesis.next() === 'creatures'", 60, P=P); pg.wait_for_timeout(800)
+    s1 = pg.evaluate(snap)
+    need(s1["console"] and not s1["tools"] and not s1["tray"]["chips"] and s1["input"] == "let there be life", f"after a reload mid-Genesis: the console back, no ⚡, the words typed in: {s1}")
+    # a world chip's words typed in Genesis are not run (the gate nudges)
+    pg.fill("#lab-text", "make it rain"); pg.press("#lab-text", "Enter"); pg.wait_for_timeout(1500)
+    pg.fill("#lab-text", "make it rain"); pg.click("#lab-send"); pg.wait_for_timeout(1500)   # the send button too (phones)
+    need(pg.evaluate("() => window.__idleWorld.summary().weather.kind") != "bitrain", "Genesis: 'make it rain' must not change the weather")
+    pg.fill("#lab-text", "let there be life"); pg.press("#lab-text", "Enter")
+    wait_for(pg, "() => window.__arena.raw().filter(c => !c.lab).length >= 1", 60, P=P)
+    P.clean()
+    return f"Genesis: no ⚡ or chips at light/words; after a reload at life: console back, words typed in, no chips; 'make it rain' refused; life ran"
+
+def t_story_keys_logo(P):
+    """The logo keyframe, every way in (Nov 3, Nico: "https://staging.id-le.com/arena?logo=c3&fresh=#logo ... after pressing: black...
+    nothing no movement, no sound, no animation, no logo"): the pretty address with only a hash, ?at=, ?story#logo; each plays its arm's logo
+    (lit frames, the film's clock moving, the sound on), then lands. And a stale idle-logos.js (an older copy without the host API, as a
+    browser cache kept it) must not freeze the film: the old logo plays and it lands."""
+    LIT = """() => { const c = document.querySelector('#idleIntro canvas'); if (!c) return -1; const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4 * 53) if (d[i] + d[i + 1] + d[i + 2] > 150) n++; return n; }"""
+    out = []
+    for url, arm in (("/arena?logo=c3&fresh=#logo", "c3"), ("/arena.html?at=logo&logo=crt", "crt"), ("/arena.html?story&logo=c3#logo", "c3"), ("/arena?fresh=&logo=crt#logo", "crt")):
+        pg = P.open(url); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+        wait_for(pg, f"() => window.__funnel.reached().includes('lg_shown:{arm}')", 30, P=P)
+        t0 = pg.evaluate("() => window.__epoch0.time()"); lit = []
+        for _ in range(8): pg.wait_for_timeout(450); lit.append(pg.evaluate(LIT))
+        r = pg.evaluate("() => ({ t: window.__epoch0.time(), snd: window.__epoch0.sounding(), ready: !!window.__epoch0.logoOf(window.__epoch0.last), arm: window.__epoch0.last.logo.arm })")
+        need(r["arm"] == arm and r["ready"] and r["t"] > t0 + 2 and max(lit) > 20 and r["snd"], f"{url}: the logo should play (lit {lit}, clock {t0:.1f} → {r['t']:.1f}, sound {r['snd']}): {r}")
+        wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark'", 25, P=P)
+        out.append(f"{url} ({arm}, lit ≤{max(lit)})"); pg.close()
+    # a stale module (the version before the host API, as a 4-hour browser cache can keep it): the old logo, and on to the landing
+    old = subprocess.run(["git", "show", "61a04f2:demo/idle-logos.js"], cwd=ROOT, capture_output=True, text=True).stdout
+    need("byId" in old and "drawAt" not in old, "the stale module for the test")
+    P.ctx.route("**/idle-logos.js*", lambda route: route.fulfill(status=200, content_type="application/javascript", body=old))
+    try:
+        pg = P.open("/arena?logo=c3&fresh=#logo"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+        wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.last && window.__epoch0.time() > 0.2)", 30, P=P)
+        t0 = pg.evaluate("() => window.__epoch0.time()"); lit = []
+        for _ in range(8): pg.wait_for_timeout(450); lit.append(pg.evaluate(LIT))
+        r = pg.evaluate("() => ({ t: window.__epoch0.time(), logo: !!window.__epoch0.logoOf(window.__epoch0.last), stale: !!(window.IdleLogos && !window.IdleLogos.byId('c3-typed-dust').drawAt) })")
+        need(r["stale"] and not r["logo"] and r["t"] > t0 + 2 and max(lit) > 20, f"a stale idle-logos.js: the old logo should play, not black: lit {lit}, {r}")
+        wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark'", 25, P=P); pg.close()
+    finally:
+        P.ctx.unroute("**/idle-logos.js*")
+    P.clean()
+    return " · ".join(out) + "; a stale idle-logos.js → the old logo, then the landing"
+
+
+def t_chips_playground(P):
+    """Quick actions always work (Nov 4, Nico: "some of the basic auto-actions/predefined on the operator chat, don't even work! those should
+    all work always"; "make it rain" had gone through the model and got "Yes, it is"): every ⚡ chip in the playground runs its action at once,
+    the same as typing its exact words; the /command chips run too"""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => { window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")   # ⚡, as a player opens it
+    try: wait_for(pg, "() => window.__opwin.tray().open && window.__opwin.tray().chips.includes('make it rain')", 10, P=P)
+    except Exception: raise AssertionError("tray: " + json.dumps(pg.evaluate("() => ({ tray: window.__opwin.tray(), gp: window.__genesis && window.__genesis.genPending && window.__genesis.genPending(), chip: window.__genesis && window.__genesis.chip && window.__genesis.chip(), st: window.__genesis && window.__genesis.state && window.__genesis.state(), tools: !document.getElementById('op-tools').hidden, opTray: localStorage.getItem('idle.opTray'), url: location.href, cls: document.documentElement.className })"))[:2500])
+    def tap(t):
+        pg.evaluate("t => { const b = [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === t); if (!b) throw new Error('no chip ' + t); b.click(); }", t)
+        pg.wait_for_timeout(700)
+    W = "() => window.__idleWorld.summary().weather.kind"
+    last = "() => { const r = [...document.querySelectorAll('#ai-thread .ai-row')].pop(); return r ? r.innerText : ''; }"
+    res = {}
+    tap("make it rain"); res["make it rain"] = pg.evaluate(W) == "bitrain" and "rain it is" in pg.evaluate(last)
+    tap("a sunny day"); res["a sunny day"] = pg.evaluate(W) == "clear" and "clear skies" in pg.evaluate(last)
+    n0 = pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length")
+    tap("add a new creature"); res["add a new creature"] = pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == n0 + 1 and "walked in" in pg.evaluate(last)
+    tap("start a rave"); res["start a rave"] = pg.evaluate("() => !!(window.__music && window.__music.rave())") and "dancing" in pg.evaluate(last)
+    tap("evolve a creature"); res["evolve a creature"] = "mutated" in pg.evaluate(last)
+    tap("what's happening?"); res["what's happening?"] = "creatures" in pg.evaluate(last) and "words" in pg.evaluate(last)
+    chips = pg.evaluate("() => window.__opwin.tray().chips")
+    pg.evaluate("() => { window.__opened = []; window.open = (u, n) => { window.__opened.push(String(u)); return null; }; }")
+    effect = {"/pedia": "() => window.__opened.some(u => /pedia/.test(u))", "/settings": "() => !!document.querySelector('#settings.on')",
+              "/scientists": "() => !!document.querySelector('#oracle.on')", "/story": "() => !!(document.querySelector('#genResume') || document.querySelector('#idleIntro') || document.querySelector('#genChoose') || window.__genesis.state())"}
+    for c in sorted([c for c in chips if c.startswith("/")], key=lambda c: c == "/story"):   # /story last: it starts the story
+        pg.evaluate("() => { document.querySelectorAll('#settings.on, #oracle.on').forEach(e => e.classList.remove('on')); window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")
+        wait_for(pg, f"() => window.__opwin.tray().chips.includes({json.dumps(c)})", 10, P=P)
+        tap(c); pg.wait_for_timeout(600)
+        res[c] = bool(pg.evaluate(effect.get(c, "() => true")))
+    if "/story" in res:   # /story started a story in this browser: back to a plain playground (no Genesis pending) for the typed check
+        pg.evaluate("() => { localStorage.removeItem('idle.genesis'); localStorage.removeItem('idle.gv'); }"); pg.close(); pg = P.open("/arena.html?fresh=1&test"); booted(pg); pg.evaluate("() => window.__opwin.open()")
+        need(not pg.evaluate("() => window.__genesis.genPending()"), "the typed check needs a playground without a pending Genesis")
+    # typed, exact words (any case, end punctuation): the same action
+    pg.evaluate("() => window.__idleWorld.setWeather('clear')")
+    pg.fill("#lab-text", "Make it rain."); pg.click("#lab-send"); pg.wait_for_timeout(700)
+    res["typed: Make it rain."] = pg.evaluate(W) == "bitrain"
+    bad = {k: v for k, v in res.items() if not v}
+    need(not bad, f"quick actions that did not work: {bad} (all: {res})")
+    # for the record: how the Tiny Operator's heads read the chips' words as free text (no longer needed: the exact words are commands)
+    heads = pg.evaluate("""async () => { const O = window.__oracle; for (let i = 0; i < 120 && !(O && O.ready); i++) await new Promise(r => setTimeout(r, 500)); if (!O || !O.ready) return null;
+      const H = await (await fetch('arena_instr_v4.json')).json(), out = {};
+      for (const t of ['make it rain', 'a sunny day', 'add a new creature', 'start a rave', 'evolve a creature', "what's happening?"]) { const r = await O.classify(t, H); out[t] = [r.option, +((r.probs[r.option] || 0).toFixed(2))]; }
+      return out; }""")
+    P.clean()
+    return "chips: " + ", ".join(k for k in res) + " → all worked; the heads on the same words as free text: " + json.dumps(heads)
+
+
+def t_chips_genesis(P):
+    """In Genesis the ⚡ tray offers no world action, also after a reload mid-Genesis (Nov 4, from Nico's screenshot: the console was gone after a
+    reload, the tray showed "make it rain" and the step gate refused it); the reload resumes Genesis on its pending step, words typed in"""
+    pg = P.open("/arena.html?story&noauto")
+    wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.waiting())", 40, P=P); pg.keyboard.press("k"); pg.wait_for_timeout(1500); pg.keyboard.press("Escape")
+    for _ in range(60):
+        pg.wait_for_timeout(1000)
+        if pg.evaluate("() => window.__genesis.ready()"): break
+        pg.mouse.click(400, 300)
+    snap = "() => ({ next: window.__genesis.next(), ready: window.__genesis.ready(), console: !!document.querySelector('#genConsole'), tray: window.__opwin.tray(), tools: !document.getElementById('op-tools').hidden, input: (document.getElementById('lab-text') || {}).value })"
+    pg.evaluate("() => localStorage.setItem('idle.opTray', '1')")
+    for step, say in (("light", "lights on"), ("words", "let there be words")):
+        wait_for(pg, f"() => window.__genesis.next() === '{step}' && window.__genesis.ready()", 120, P=P)
+        s0 = pg.evaluate(snap); need(not s0["tools"] and not s0["tray"]["chips"], f"{step}: no ⚡ and no chips in Genesis: {s0}")
+        pg.fill("#lab-text", say); pg.press("#lab-text", "Enter")
+    wait_for(pg, "() => window.__genesis.next() === 'creatures' && window.__genesis.ready()", 120, P=P)
+    pg.reload(wait_until="commit", timeout=60000)
+    wait_for(pg, "() => !!document.querySelector('#genConsole') && window.__genesis.next() === 'creatures'", 60, P=P); pg.wait_for_timeout(800)
+    s1 = pg.evaluate(snap)
+    need(s1["console"] and not s1["tools"] and not s1["tray"]["chips"] and s1["input"] == "let there be life", f"after a reload mid-Genesis: the console back, no ⚡, the words typed in: {s1}")
+    # a world chip's words typed in Genesis are not run (the gate nudges)
+    pg.fill("#lab-text", "make it rain"); pg.press("#lab-text", "Enter"); pg.wait_for_timeout(1500)
+    pg.fill("#lab-text", "make it rain"); pg.click("#lab-send"); pg.wait_for_timeout(1500)   # the send button too (phones)
+    need(pg.evaluate("() => window.__idleWorld.summary().weather.kind") != "bitrain", "Genesis: 'make it rain' must not change the weather")
+    pg.fill("#lab-text", "let there be life"); pg.press("#lab-text", "Enter")
+    wait_for(pg, "() => window.__arena.raw().filter(c => !c.lab).length >= 1", 60, P=P)
+    P.clean()
+    return f"Genesis: no ⚡ or chips at light/words; after a reload at life: console back, words typed in, no chips; 'make it rain' refused; life ran"
+
+def t_prelife(P):
+    """No creature before life, also after a reload mid-Genesis (Nov 4, found by the greybox fork: a world restored at the life step showed a
+    creature). Reload at each pending step (light, words, life): 0 creatures for a few seconds after the resume; then life brings 3"""
+    cnt = "() => (window.__arena && window.__arena.raw ? window.__arena.raw().filter(c => !c.lab).length : -1)"
+    pg = P.open("/arena.html?story&noauto")
+    wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.waiting())", 60, P=P); pg.keyboard.press("k"); pg.wait_for_timeout(1500); pg.keyboard.press("Escape")
+    for _ in range(60):
+        pg.wait_for_timeout(1000)
+        if pg.evaluate("() => window.__genesis.ready()"): break
+        pg.mouse.click(400, 300)
+    seen = {}
+    for step, say in (("light", "lights on"), ("words", "let there be words"), ("creatures", None)):
+        wait_for(pg, f"() => window.__genesis.next() === '{step}' && window.__genesis.ready()", 120, P=P)
+        pg.wait_for_timeout(1500)
+        pg.reload(wait_until="commit", timeout=60000)
+        wait_for(pg, f"() => !!document.querySelector('#genConsole') && window.__genesis.next() === '{step}'", 90, P=P)
+        mx = 0
+        for _ in range(10):
+            pg.wait_for_timeout(500); mx = max(mx, pg.evaluate(cnt))
+        seen[step] = mx
+        need(mx == 0, f"after a reload with '{step}' pending: {mx} creature(s) before life ({seen})")
+        if say:
+            wait_for(pg, "() => window.__genesis.ready()", 60, P=P)
+            pg.fill("#lab-text", say); pg.press("#lab-text", "Enter")
+    wait_for(pg, "() => window.__genesis.ready()", 60, P=P)
+    pg.fill("#lab-text", "let there be life"); pg.press("#lab-text", "Enter")
+    wait_for(pg, f"() => ({cnt})() >= 3", 90, P=P)
+    pg.wait_for_timeout(8000); n = pg.evaluate(cnt)
+    P.clean()
+    return f"reloads at light/words/life: max creatures before life {seen}; life brought {n}"
 
 def t_story_keys(P, keys=None):
     """Keyframes (idle-keys.js, staging/local; Nico: "markers or key frames to go to either with # or & parameters in the url"): every key
@@ -2791,8 +3122,8 @@ def t_title_auto(P, parts=(1, 2, 3, 4)):
         pg.evaluate(SUSP); t0 = time.time()
         wait_for(pg, "() => !window.__epoch0.waiting()", 6, P=P); t_auto = time.time() - t0
         need(t_auto <= 2.6, f"the title card should start itself within ~2 s, took {t_auto:.1f} s")
-        a = pg.evaluate("""() => { const b = document.querySelector('#idleIntro .snd'), r = b && b.getBoundingClientRect();
-          return { auto: window.__epoch0.autoMuted(), chip: !!b && getComputedStyle(b).display !== 'none' && b.classList.contains('tap') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
+        a = pg.evaluate("""() => { const b = document.querySelector('#storySnd'), r = b && b.getBoundingClientRect();
+          return { auto: window.__epoch0.autoMuted(), chip: !!b && !b.classList.contains('gone') && b.classList.contains('chip') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
             state: window.__audio.ctx().state, f: window.__funnel.reached(), sounding: window.__epoch0.sounding() }; }""")
         need(a["auto"] and a["chip"] and a["state"] != "running" and not a["sounding"] and "title_auto" in a["f"], f"auto-start should be muted with the chip shown: {a}")
         t1 = pg.evaluate("() => window.__epoch0.time()"); s1 = pg.screenshot(); pg.wait_for_timeout(1500)
@@ -2812,8 +3143,9 @@ def t_title_auto(P, parts=(1, 2, 3, 4)):
         pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 6, P=P)
         pg.mouse.click(200, 200)
         wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding() && !window.__epoch0.autoMuted()", 10, P=P)
-        c = pg.evaluate("() => { const b = document.querySelector('#idleIntro .snd'); return { chipTap: !!b && b.classList.contains('tap'), shown: !!b && getComputedStyle(b).display !== 'none', f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
-        need(not c["chipTap"] and not c["shown"] and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and hide the chip (not pause): {c}")
+        pg.wait_for_timeout(1000)
+        c = pg.evaluate("() => { const b = document.querySelector('#storySnd'); return { chipTap: !!b && b.classList.contains('chip'), shown: !!b && !b.classList.contains('gone'), icon: b ? b.textContent : null, f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
+        need(not c["chipTap"] and c["shown"] and c["icon"] == "🔊" and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and shrink the chip into the 🔊 toggle (not pause): {c}")
         pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
     if 3 in parts:
         # 3. a key during the title card: starts at once, with sound, no chip
@@ -2832,6 +3164,67 @@ def t_title_auto(P, parts=(1, 2, 3, 4)):
         P.clean()
     if {2, 3, 4} & set(parts): said.append("tap → sound; key → sound; story arm auto-starts")
     return "; ".join(said)
+
+
+def t_speaker(P, phone=False):
+    """The sound toggle (Nov 4, Nico: "the 'tap for sound' message/prompt could animate/minimize to a speaker icon that stays at the bottom
+    left of the screen, like opposite/mirror of skip... and maybe it can stay there as a toggle too, so people can also turn it off"): the chip
+    shrinks after ~4 s into a bottom-left button that mirrors "skip ›"; a tap turns the sound on (🔊), another mutes it for real (the game's own
+    mute, kept in its setting), a third turns it back on in sync; it stays through the skip into the dark landing; phones: a 44 px target
+    clear of "skip ›" and the Operator"""
+    SUSP = "() => { try { const c = window.__audio && window.__audio.ctx(); if (c && c.state === 'running') c.suspend(); return true; } catch (e) { return false; } }"
+    RECT = """() => { const b = document.querySelector('#storySnd'), k = document.querySelector('#idleIntro .skip'), op = document.querySelector('#lab');
+      const R = e => { if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
+      const vis = e => !!e && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden' && +getComputedStyle(e).opacity > 0.05;
+      return { b: R(b), skip: vis(k) ? R(k) : null, op: vis(op) ? R(op) : null, cls: b ? b.className : null, icon: b ? b.textContent : null, on: b ? b.dataset.on : null, H: innerHeight, W: innerWidth,
+        muted: window.__audio.muted(), state: window.__audio.ctx().state, sounding: window.__epoch0.sounding(), f: window.__funnel.reached() }; }"""
+    over = lambda a, b: bool(a and b and a["l"] < b["r"] and b["l"] < a["r"] and a["t"] < b["b"] and b["t"] < a["b"])
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 150, P=P)
+    pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 15, P=P)
+    a = pg.evaluate(RECT)
+    need("chip" in a["cls"] and "gone" not in a["cls"] and "tap for sound" in a["icon"], f"the chip should show first: {a}")
+    pg.wait_for_timeout(4800)
+    b = pg.evaluate(RECT)
+    need("chip" not in b["cls"] and "gone" not in b["cls"] and b["icon"] in ("🔇", "🔊"), f"after ~4 s the chip should become the speaker button: {b}")
+    need(abs(b["b"]["l"] - 14) <= 2 and abs((b["H"] - b["b"]["b"]) - 14) <= 3, f"the speaker should sit at the bottom left (14 px): {b['b']} in {b['W']}x{b['H']}")
+    if b["skip"]:
+        need(abs(b["b"]["b"] - b["skip"]["b"]) <= 3 and abs((b["W"] - b["skip"]["r"]) - b["b"]["l"]) <= 3, f"it should mirror skip ›: speaker {b['b']}, skip {b['skip']}")
+        need(not over(b["b"], b["skip"]), f"it must not overlap skip ›: {b['b']} vs {b['skip']}")
+    if phone:
+        need(b["b"]["w"] >= 44 and b["b"]["h"] >= 44, f"a 44 px tap target on phones: {b['b']}")
+    else:
+        need(b["skip"] and abs(b["b"]["h"] - b["skip"]["h"]) <= 4, f"the same size as skip › on desktop: {b['b']} vs {b['skip']}")
+    # on
+    pg.click("#storySnd")
+    wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding()", 10, P=P); pg.wait_for_timeout(700)
+    c = pg.evaluate(RECT)
+    need(c["icon"] == "🔊" and not c["muted"] and "sound_on" in c["f"] and not pg.evaluate("() => window.__epoch0.paused()"), f"a tap should turn the sound on (🔊), without pausing: {c}")
+    # off: the game's own mute, kept in its setting; the film's sound stops
+    pg.click("#storySnd"); pg.wait_for_timeout(900)
+    d = pg.evaluate(RECT); saved = pg.evaluate("() => { try { return JSON.parse(localStorage.getItem('idle.audio') || 'null'); } catch (e) { return null; } }")
+    need(d["icon"] == "🔇" and d["muted"] and not d["sounding"] and d["state"] != "running" and "sound_off" in d["f"], f"a second tap should mute for real (gain 0, audio suspended): {d}")
+    need(saved and saved.get("muted") is True, f"the mute should be kept in the game's sound setting: {saved}")
+    # on again: back in sync
+    pg.click("#storySnd")
+    wait_for(pg, "() => !window.__audio.muted() && window.__audio.ctx().state === 'running' && window.__epoch0.sounding()", 10, P=P)
+    # skip into the dark landing: the toggle stays, and still mutes the game
+    pg.keyboard.press("Escape")
+    wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis && window.__genesis.landing && ['dark', 'arriving', 'sonar'].includes(window.__genesis.landing().phase)", 20, P=P)
+    pg.wait_for_timeout(3600)
+    e = pg.evaluate(RECT)
+    need(e["b"] and "gone" not in e["cls"], f"the toggle should stay into the dark landing: {e}")
+    pg.click("#storySnd"); pg.wait_for_timeout(500)
+    f = pg.evaluate(RECT)
+    need(f["muted"] and f["icon"] == "🔇", f"muting in the dark should mute the game: {f}")
+    if phone:
+        wait_for(pg, "() => { const op = document.querySelector('#lab'); return !!op && getComputedStyle(op).display !== 'none'; }", 60, P=P)
+        g = pg.evaluate(RECT)
+        need(not over(g["b"], g["op"]), f"the speaker must never sit under the Operator: {g['b']} vs {g['op']}")
+    if os.environ.get("IDLE_SHOTS"):
+        pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], f"speaker-{'phone' if phone else 'desktop'}-dark.png"))
+    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    return f"{'phone' if phone else 'desktop'}: chip → speaker at {b['b']['l']:.0f},{b['H'] - b['b']['b']:.0f} ({b['b']['w']:.0f}x{b['b']['h']:.0f}); on → off (muted, kept) → on; stays into the dark landing"
 
 
 def t_ios_sound(P, ios=True):
@@ -2982,14 +3375,14 @@ def t_stats_first(P):
         try:
             q = Q.open("/arena.html?statstest&test")
             if case == "coi":
-                q.wait_for_timeout(1200)
+                wait_for(q, "() => !!window.__stats", 40, every=0.1, P=P)
                 q.evaluate("() => { window.__coiReloading = true; window.__stats._send('leave'); }")   # what the replaced page does on pagehide
-                q.wait_for_timeout(300); before = len(P.stats)
-                need(before == 0, f"a page being replaced by the isolation reload must report nothing: {[json.loads(b) for b in P.stats]}")
+                q.wait_for_timeout(300); before = len(reports_of(P.stats))
+                need(before == 0, f"a page being replaced by the isolation reload must report nothing: {reports_of(P.stats)}")
                 q.goto(P.base + "/arena.html?statstest&test&_coi=1")
-            q.wait_for_timeout(4200)
+            wait_for(q, "() => !!window.__stats", 40, P=P); q.wait_for_timeout(4200)
             q.evaluate("() => window.__stats._send('3m')"); q.wait_for_timeout(500)
-            rows = [x for x in map(json.loads, P.stats) if "aa" not in x]
+            rows = reports_of(P.stats)
             visits = [x for x in rows if x.get("visit") == 1]
             need(len(visits) == 1, f"{case}: exactly one visit report per page load, got {len(visits)}: {[(x.get('bi'), x.get('why')) for x in rows]}")
             need(visits[0].get("bi") == 1, f"{case}: the visit rides in report #1: {[(x.get('bi'), x.get('why'), x.get('visit')) for x in rows]}")
@@ -3022,6 +3415,97 @@ def t_arm_stats(P):
         need(beacons.get(arm) == [{"v": 1, "aa": arm}], f"the {arm} arm sends one arm beacon with only v and aa: {beacons}")
     P.clean()
     return "visit reports carry their arm: " + ", ".join(f"{a} {len(r)} reports" for a, r in got.items())
+
+
+def t_engaged(P):
+    """Real engagement (Nov 4, Nico: "something that actually means a user saw this, clicked/interacted, and they want to participate"):
+    a browser's day is counted once ({dd: arm}); its first deliberate act today once ({en: act, ar: arm}), never passive viewing; a later
+    day than its first visit counts a come-back once ({cb: arm, b}); a reload the same day sends nothing again."""
+    P.stats.clear()
+    pg = P.open("/arena.html?statstest&test"); booted(pg)
+    sent = lambda: [json.loads(b) for b in P.stats]
+    t_end = time.time() + 30
+    while time.time() < t_end and not any("dd" in json.loads(b) for b in P.stats): pg.wait_for_timeout(300)
+    tiny = lambda: [{k: v for k, v in x.items() if k != "u"} for x in sent() if any(k in x for k in ("dd", "en", "cb"))]
+    need([x for x in tiny() if "dd" in x] == [{"v": 1, "dd": "none"}] and not [x for x in tiny() if "en" in x], f"one day beacon, no act yet: {tiny()}")
+    # passive: hovering, scrolling, opening the pedia link area → nothing
+    pg.mouse.move(400, 400); pg.mouse.wheel(0, 300); pg.wait_for_timeout(600)
+    need(not [x for x in tiny() if "en" in x], f"passive viewing is not engagement: {tiny()}")
+    # a deliberate act: a creature's card opened (the world's own 'feel' click) → one {en: cr_card}; a second act the same day → nothing more
+    pg.evaluate("() => window.__genHooks.log('feel', { who: 'x', what: 'click' })"); pg.wait_for_timeout(400)
+    pg.evaluate("() => window.__genHooks.log('rename', { from: 'a', to: 'b', by: 'you' })"); pg.wait_for_timeout(400)
+    en = [x for x in tiny() if "en" in x]
+    need(en == [{"v": 1, "en": "cr_card", "ar": "none"}], f"first deliberate act, once a day: {en}")
+    pg.reload(); booted(pg); pg.wait_for_timeout(2500)
+    need(len([x for x in tiny() if "dd" in x]) == 1 and len([x for x in tiny() if "en" in x]) == 1, f"a reload the same day sends nothing again: {tiny()}")
+    # the next day (the flags say yesterday, the first visit was yesterday): a day beacon, a come-back (d1); finishing Genesis is an act
+    pg.evaluate("""() => { const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      for (const k of ['idle.ddDay', 'idle.enDay', 'idle.cbDay']) localStorage.setItem(k, y); localStorage.setItem('idle.since', JSON.stringify({ d: y, k: 1 }));
+      const f = JSON.parse(localStorage.getItem('idle.funnel') || '{}'); delete f.e1done; localStorage.setItem('idle.funnel', JSON.stringify(f)); }""")
+    P.stats.clear(); pg.reload(); booted(pg)
+    t_end = time.time() + 30
+    while time.time() < t_end and not any("cb" in json.loads(b) for b in P.stats): pg.wait_for_timeout(300)
+    pg.evaluate("() => window.__funnel.mark('e1done')"); pg.wait_for_timeout(800)
+    t = tiny()
+    need([x for x in t if "dd" in x] == [{"v": 1, "dd": "none"}] and [x for x in t if "cb" in x] == [{"v": 1, "cb": "none", "b": "d1"}]
+         and [x for x in t if "en" in x] == [{"v": 1, "en": "e0_done", "ar": "none"}], f"next day: here, came back d1, finished Genesis: {t}")
+    pg.close(); P.clean()
+    return "day once; first act once (cr_card), not on passive viewing or a reload; next day: here + came back (d1) + finished Genesis"
+
+
+def t_engage_ask(P):
+    """The one-tap ask at EPOCH 0 COMPLETE (Nov 4): before [start Epoch 1] / [🛝], the Operator asks to name the first creature (three
+    chips, an input, skip); a chip renames it, skip closes it, the buttons stay usable throughout; the 'logo' mode offers the two openings
+    and logs a pick; on a phone the ask fits the screen."""
+    def moment(form, vp=None):
+        ctx = P.ctx.browser.new_context(viewport=vp or {"width": 1400, "height": 900}, has_touch=bool(vp), is_mobile=bool(vp)); Q = Page(ctx, P.base, P.stats)
+        pg = Q.open(form); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.wait_for_timeout(300); pg.keyboard.press("k")
+        return ctx, pg
+    out = []
+    # name: a chip renames the first newborn; the two ways on stay right there
+    ctx, pg = moment("/arena.html?story#epoch0done")
+    try:
+        wait_for(pg, "() => window.__genesis.ask().state === 'open' && !!document.querySelector('#genConsole .gask')", 150, P=P)
+        r = pg.evaluate("() => ({ chips: [...document.querySelectorAll('#genConsole [data-ask=chip]')].map(b => b.textContent), input: !!document.querySelector('#genAskName'), skip: !!document.querySelector('#genConsole [data-ask=skip]'), start: !!document.querySelector('#genConsole [data-gm=start]'), play: !!document.querySelector('#genConsole [data-gm=play]'), first: window.__genesis.ask().first })")
+        need(len(r["chips"]) == 3 and r["input"] and r["skip"] and r["start"] and r["play"] and r["first"], f"the ask, with the two ways on still there: {r}")
+        pg.click("#genConsole [data-ask=chip]"); pg.wait_for_timeout(500)
+        a = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), start: !!document.querySelector('#genConsole [data-gm=start]') })")
+        need(a["ask"]["state"] == "done" and r["chips"][0] in a["names"] and a["ask"]["first"] == r["chips"][0] and a["funnel"].get("e0_ask_name") and a["start"], f"a chip names the first creature: {a}")
+        out.append(f"name: '{r['chips'][0]}' → {r['first']} renamed")
+    finally:
+        ctx.close()
+    # skip: one tap, nothing renamed
+    ctx, pg = moment("/arena.html?at=epoch0done")
+    try:
+        wait_for(pg, "() => window.__genesis.ask().state === 'open'", 150, P=P)
+        first = pg.evaluate("() => window.__genesis.ask().first"); pg.click("#genConsole [data-ask=skip]"); pg.wait_for_timeout(400)
+        s2 = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), gask: !!document.querySelector('#genConsole .gask'), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}') })")
+        need(s2["ask"]["state"] == "done" and first in s2["names"] and not s2["gask"] and s2["funnel"].get("e0_ask_skip"), f"skip: {s2}")
+        out.append("skip ok")
+    finally:
+        ctx.close()
+    # logo mode: two openings, a pick is logged (and asks the logos review for one 'which one?' pair)
+    ctx, pg = moment("/arena.html?story#epoch0done")
+    try:
+        wait_for(pg, "() => !!window.__genesis && !!window.__genesis.askSet", 30, P=P); pg.evaluate("() => window.__genesis.askSet('logo')")
+        wait_for(pg, "() => window.__genesis.ask().state === 'open' && document.querySelectorAll('#genConsole [data-ask=pick]').length === 2", 150, P=P)
+        pg.click("#genConsole [data-ask=pick]"); pg.wait_for_timeout(500)
+        l = pg.evaluate("() => ({ ask: window.__genesis.ask(), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), pick: localStorage.getItem('idle.askLogo') })")
+        need(l["ask"]["state"] == "done" and l["funnel"].get("e0_ask_logo") and l["pick"] == "c3-typed-dust", f"logo pick: {l}")
+        out.append("logo pick ok")
+    finally:
+        ctx.close()
+    # phone: the ask fits the screen
+    ctx, pg = moment("/arena.html?at=epoch0done", {"width": 375, "height": 667})
+    try:
+        wait_for(pg, "() => window.__genesis.ask().state === 'open'", 150, P=P)
+        b = pg.evaluate("() => { const r = document.querySelector('#genConsole .gask').getBoundingClientRect(), i = document.querySelector('#genAskName').getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, ir: i.right, W: innerWidth, H: innerHeight, sx: document.documentElement.scrollWidth }; }")
+        need(b["l"] >= 0 and b["r"] <= b["W"] and b["ir"] <= b["W"] and b["sx"] <= b["W"] + 1, f"phone: the ask fits: {b}")
+        out.append("phone fits")
+    finally:
+        ctx.close()
+    P.clean()
+    return " · ".join(out)
 
 
 def t_story_arms(P):
@@ -3082,7 +3566,7 @@ def t_story_arms(P):
 def t_story_offer(P):
     """The storyline offer (returning players, the other arm): shown once per browser (remembered); accepting keeps the world as a snapshot
     and starts the story."""
-    pg = P.open("/arena.html?fresh=1&test&offer"); booted(pg)
+    pg = P.open("/arena.html?fresh=1&test&offer=old"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#storyOffer')", 30, P=P)
     t = pg.inner_text("#storyOffer"); need("storyline mode" in t and "snapshot" in t, f"the offer: {t!r}")
     again = pg.evaluate("() => { document.querySelector('#storyOffer').remove(); return window.__genesis.offer(); }")
@@ -3096,6 +3580,154 @@ def t_story_offer(P):
     need(n1 == n0 + 1 and "offer_shown" in f["f"] and "offer_accepted" in f["f"] and f["o"] == "accepted", f"accepting: a snapshot first, then the story: {n0}→{n1}, {f}")
     pg.keyboard.press("Escape"); P.clean()
     return f"shown once (remembered), accepted → snapshot ({n0}→{n1}) → the story"
+
+
+def t_story_offer_v2(P):
+    """The storyline offer v2 (Nov 4: v1 shown 22 times at load, accepted 0): variants a (timed card), b (card with a silent logo preview),
+    c (the Operator's line + a chip). Each waits for time on screen AND an interaction, never shows over an open panel, takes a snapshot first
+    when accepted, and 'later' asks once more days later, then never."""
+    out = []
+    for v in "abc":
+        pg = P.open(f"/arena.html?fresh=1&test&offer={v}&offerms=1500"); booted(pg)
+        pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.removeItem('idle.storyOffer'); localStorage.removeItem('idle.genesis'); }"); pg.reload(); booted(pg)
+        pg.wait_for_timeout(2500)
+        need(not pg.evaluate("() => !!document.querySelector('#storyOffer') || /Doc's story/.test(document.body.innerText)"), f"{v}: shown before any interaction")
+        pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(400)
+        pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        pg.wait_for_timeout(2000)
+        st = pg.evaluate("() => window.__genesis.offerState()")
+        need(st["last"] is None, f"{v}: shown over the open 🧪 panel: {st}")
+        pg.evaluate("() => { window.__feedback.close(); document.querySelectorAll('#ntf .np').forEach(n => n.remove()); }")   # a ?fresh toast shares the corner; the offer waits for toasts
+        if v == "c":
+            wait_for(pg, "() => [...document.querySelectorAll('#opTray .opc')].some(b => /start the story/.test(b.textContent))", 15, P=P)
+            txt = pg.evaluate("() => document.body.innerText")
+            need("Doc's story" in txt, f"c: the Operator's line: {txt[-300:]!r}")
+            go = "() => [...document.querySelectorAll('#opTray .opc')].find(b => /start the story/.test(b.textContent)).click()"
+        else:
+            try: wait_for(pg, "() => !!document.querySelector('#storyOffer')", 15, P=P)
+            except AssertionError: need(False, f"{v}: no card: {pg.evaluate('() => { const s = window.__genesis.offerState(); delete s.text; return s; }')}")
+            t = pg.inner_text("#storyOffer"); need("Doc's story" in t and ("snapshot" in t or "safe" in t), f"{v}: the card: {t!r}")
+            if v == "b":
+                wait_for(pg, "() => { const c = document.querySelector('#storyOffer canvas.pv'); return c && (+c.dataset.frames > 5 || c.dataset.still); }", 20, P=P)
+                lit = pg.evaluate("() => { const c = document.querySelector('#storyOffer canvas.pv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i+1] + d[i+2] > 120) n++; return { n, frames: +c.dataset.frames || 0, still: !!c.dataset.still }; }")
+                need(lit["n"] > 20, f"b: the preview draws nothing: {lit}")
+            go = "() => document.querySelector('#storyOffer .go').click()"
+        f0 = pg.evaluate("() => window.__funnel.reached()")
+        need("offer_shown" in f0 and f"offer_shown_{v}" in f0, f"{v}: funnel: {f0}")
+        n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+        pg.evaluate(go); wait_for(pg, "() => !!document.querySelector('#idleIntro')", 20, P=P)
+        n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+        f1 = pg.evaluate("() => ({ f: window.__funnel.reached(), s: JSON.parse(localStorage.getItem('idle.storyOffer2')) })")
+        need(n1 == n0 + 1 and f"offer_go_{v}" in f1["f"] and f1["s"]["ans"] == "accepted", f"{v}: accepted → snapshot then story: {n0}→{n1}, {f1}")
+        pg.keyboard.press("Escape"); P.clean(); out.append(f"{v} ✓")
+    # later: asks once more, days later, then never
+    pg = P.open("/arena.html?fresh=1&test&offer=a&offerms=0"); booted(pg)
+    pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.removeItem('idle.storyOffer'); localStorage.removeItem('idle.genesis'); }"); pg.reload(); booted(pg)
+    pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+    wait_for(pg, "() => !!document.querySelector('#storyOffer')", 15, P=P)
+    pg.click("#storyOffer .lt"); pg.wait_for_timeout(500)
+    r = pg.evaluate("""() => { const G = window.__genesis, o1 = JSON.parse(localStorage.getItem('idle.storyOffer2')), again = G.offer();
+      const o = JSON.parse(localStorage.getItem('idle.storyOffer2')); o.at = Date.now() - 4 * 864e5; localStorage.setItem('idle.storyOffer2', JSON.stringify(o));
+      document.querySelector('#storyOffer') && document.querySelector('#storyOffer').remove(); const second = G.offer(); document.querySelector('#storyOffer .lt').click();
+      const o2 = JSON.parse(localStorage.getItem('idle.storyOffer2')); o2.at = Date.now() - 40 * 864e5; localStorage.setItem('idle.storyOffer2', JSON.stringify(o2));
+      return { o1, again, second, third: (document.querySelector('#storyOffer') && document.querySelector('#storyOffer').remove(), G.offer()), n: o2.n }; }""")
+    need(r["o1"]["ans"] == "later" and r["o1"]["n"] == 1 and r["again"] is False and r["second"] is True and r["third"] is False and r["n"] == 2, f"later → once more days later → never: {r}")
+    # v1 browsers (shown at load before v2) get one more, better-timed ask
+    m = pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.setItem('idle.storyOffer', 'dismissed'); return window.__genesis.offerState().seen; }")
+    need(m["n"] == 1 and m["ans"] == "later", f"a v1 'dismissed' browser: {m}")
+    P.clean()
+    return " · ".join(out) + "; nothing before an interaction or over 🧪; later → once more after 3 days → never; v1 dismissals get one more ask"
+
+
+def t_offer_preview(P):
+    """?offer=a|b|c on staging/local is a returning player's world for previewing the offer (Nov 4, Nico: "?offer=a … even opened the whole
+    story"): a fresh browser draws no arm, no story starts, a hint says to click and wait, and the chosen offer appears after a click."""
+    out = []
+    for v in "abc":
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); ctx.add_init_script("Math.random = () => 0.01;")   # 0.01 would draw the story arm
+        Q = Page(ctx, P.base); pg = Q.open(f"/arena.html?offer={v}&offerms=2000")
+        wait_for(pg, "() => window.__restoredOrFresh", 60, P=Q); pg.wait_for_timeout(2500)
+        st = pg.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), black: document.documentElement.classList.contains('story-boot'), gv: localStorage.getItem('idle.gv'), story: !!(window.__genesis.state() && window.__genesis.state().mode === 'story' && window.__genesis.state().on), hint: (document.querySelector('#offerHint') || {}).textContent || '' })")
+        need(not st["intro"] and not st["black"] and not st["gv"] and not st["story"], f"{v}: a story started or an arm was drawn: {st}")
+        need("click anywhere" in st["hint"], f"{v}: the hint: {st}")
+        (pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))"))
+        pg.evaluate("() => document.querySelectorAll('#ntf .np').forEach(n => n.remove())")
+        if v == "c": wait_for(pg, "() => [...document.querySelectorAll('#opTray .opc')].some(b => /start the story/.test(b.textContent))", 25, P=Q)
+        else: wait_for(pg, "() => !!document.querySelector('#storyOffer.v" + v + "')", 25, P=Q)
+        txt = pg.evaluate("() => document.body.innerText")
+        need("3 minutes" in txt and "5 minutes" not in txt and not pg.evaluate("() => !!document.querySelector('#idleIntro') || !!document.querySelector('#offerHint')"), f"{v}: copy or state after the offer: {txt[-200:]!r}")
+        ctx.close(); out.append(v)
+    return "fresh browsers, ?offer=" + "/".join(out) + ": no arm, no story, the hint, then the offer (3 minutes)"
+
+
+def t_offer_sandbox(P):
+    """?offer=a|b|c on staging/local runs in a sandbox (Nov 4, Nico: his browser had a storyline paused before "let there be life": the
+    Operator opened with the step pre-typed and the offer never came; the hint said ~0 s): with a saved mid-Genesis story in the real
+    localStorage, the preview still shows the chosen offer after a click, no story or Operator step starts, the hint counts down honestly,
+    and the real localStorage is unchanged afterwards."""
+    ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); Q = Page(ctx, P.base)
+    k = Q.open("/arena.html?at=life"); k.wait_for_timeout(2500); k.keyboard.press("Space")
+    wait_for(k, "() => window.__genesis && window.__genesis.ready && window.__genesis.ready()", 120, P=Q)
+    dump = k.evaluate("() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const x = localStorage.key(i); o[x] = localStorage.getItem(x); } return o; }")
+    need(json.loads(dump.get("idle.genesis") or "{}").get("mode") == "story", f"no mid-Genesis state to plant: {list(dump)[:10]}"); ctx.close()
+    out = []
+    for v in "abc":
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); Q = Page(ctx, P.base)
+        r0 = Q.open("/privacy.html"); r0.evaluate("d => { localStorage.clear(); for (const [x, y] of Object.entries(d)) localStorage.setItem(x, y); }", dump); r0.close()
+        pg = Q.open(f"/arena.html?offer={v}&offerms=2500"); wait_for(pg, "() => window.__restoredOrFresh", 60, P=Q); pg.wait_for_timeout(2500)
+        st = pg.evaluate("() => ({ box: !!window.__offerSandbox, story: !!(window.__genesis.state() && window.__genesis.state().on && window.__genesis.state().mode === 'story'), intro: !!document.querySelector('#idleIntro'), typed: (document.querySelector('#lab-text') || {}).value || '', hint: (document.querySelector('#offerHint') || {}).textContent || '' })")
+        need(st["box"] and not st["story"] and not st["intro"] and "let there be" not in st["typed"], f"{v}: the saved story leaked into the preview: {st}")
+        need("click anywhere" in st["hint"] and "~0 s" not in st["hint"], f"{v}: the hint before a click: {st['hint']!r}")
+        pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        if v == "c": wait_for(pg, "() => [...document.querySelectorAll('#opTray .opc')].some(b => /start the story/.test(b.textContent))", 25, P=Q)
+        else: wait_for(pg, "() => !!document.querySelector('#storyOffer.v" + v + "')", 25, P=Q)
+        pg.close()
+        r1 = Q.open("/privacy.html"); after = r1.evaluate("() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const x = localStorage.key(i); o[x] = localStorage.getItem(x); } return o; }")
+        changed = [x for x in set(dump) | set(after) if dump.get(x) != after.get(x) and not x.startswith(("idle.stats", "idle.st", "idle.pedia", "idle.presence", "idle.since", "idle.activeMs", "idle.bkey"))]
+        need(not changed, f"{v}: the real localStorage changed: {changed[:8]}"); ctx.close(); out.append(v)
+    return "a saved mid-Genesis story: ?offer=" + "/".join(out) + " still shows the offer in a sandbox, the hint counts from the click, the real storage untouched"
+
+
+def t_offer_v3(P, phone=False):
+    """The storyline offer v3 (Nov 4, Nico picked b's logo preview, as a modal like the EPOCH 0 COMPLETE moment): a returning world gets a
+    centred modal on top of the guided start's tips (held while it's up), with the logo playing; ▶ play → snapshot + the story; not now → it
+    shrinks into ⚙ (☰ on a phone), the cut-scene rings it, it glows, and ⚙'s 📖 Storyline row lights up when ⚙ opens."""
+    seed = P.open("/arena.html?fresh=1&test&nofirst5"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=P); seed.close()
+    def show():
+        pg = P.open("/arena.html?offerms=1500"); booted(pg)
+        pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.removeItem('idle.storyOffer'); localStorage.removeItem('idle.genesis'); }")
+        pg.reload(); booted(pg); pg.wait_for_timeout(1500)
+        pg.evaluate("() => window.__first5 && window.__first5.startTrail([])"); pg.wait_for_timeout(1500)   # a guided-start tip on screen
+        pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        wait_for(pg, "() => !!document.querySelector('#offerModal')", 30, P=P); pg.wait_for_timeout(600)
+        return pg
+    pg = show()
+    r = pg.evaluate("""() => { const m = document.querySelector('#offerModal'), b = m.getBoundingClientRect(), c = m.querySelector('canvas.pv'), n = document.querySelector('#ntf'), at = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { cx: b.left + b.width / 2 - innerWidth / 2, cy: b.top + b.height / 2 - innerHeight / 2, w: b.width, in: b.left >= 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight,
+        top: !!(at && at.closest('#offerModal')), modal: window.__modal.up(), ntf: n ? getComputedStyle(n).visibility : 'none', bd: !!document.querySelector('#genModalBd'),
+        frames: c ? +c.dataset.frames || 0 : -1, text: m.innerText }; }""")
+    need(abs(r["cx"]) < 4 and abs(r["cy"]) < 4 and r["in"] and r["top"] and r["modal"] and r["bd"] and r["ntf"] == "hidden", f"the modal centred, on top, tips held: {r}")
+    need("doc" in r["text"].lower() and "3-minute" in r["text"] and "logo" not in r["text"].lower(), f"the copy: {r['text']!r}")
+    pg.wait_for_timeout(1200); need(pg.evaluate("() => +document.querySelector('#offerModal canvas.pv').dataset.frames || 0") > 10 or pg.evaluate("() => !!document.querySelector('#offerModal canvas.pv').dataset.still"), "the logo preview doesn't play")
+    f = pg.evaluate("() => window.__funnel.reached()"); need("offer_shown_v3" in f, f"funnel: {f}")
+    pg.click("#offerModal .lt"); wait_for(pg, "() => !!(window.__genesis.offerState().notNow)", 10, P=P); pg.wait_for_timeout(3500)
+    nn = pg.evaluate("() => ({ to: window.__genesis.offerState().notNow.to, glow: !!document.querySelector('.opGlow'), modal: !!document.querySelector('#offerModal'), f: window.__funnel.reached() })")
+    need(nn["to"] == ("mMore" if phone else "settingsBtn") and nn["glow"] and not nn["modal"] and "offer_later_v3" in nn["f"], f"not now → the cut-scene into ⚙ and a glow: {nn}")
+    if not phone:
+        pg.click("#settingsBtn"); wait_for(pg, "() => !!document.querySelector('#settings.on .row.offerHi')", 6, P=P)
+        need("Storyline" in pg.evaluate("() => document.querySelector('#settings.on .row.offerHi').textContent"), "⚙'s 📖 Storyline row lights up")
+    pg.close()
+    pg = show(); n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+    pg.click("#offerModal .go"); wait_for(pg, "() => !!document.querySelector('#idleIntro')", 20, P=P)
+    n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length"); f = pg.evaluate("() => window.__funnel.reached()")
+    need(n1 == n0 + 1 and "offer_go_v3" in f, f"▶ play → a snapshot, then the story: {n0}→{n1}, {f}")
+    pg.keyboard.press("Escape"); P.clean()
+    if not phone:   # the staging preview, in a fresh browser
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); Q = Page(ctx, P.base)
+        q = Q.open("/arena.html?offer=v3&offerms=1500"); wait_for(q, "() => window.__restoredOrFresh", 60, P=Q); q.wait_for_timeout(2000)
+        q.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        wait_for(q, "() => !!document.querySelector('#offerModal')", 25, P=Q); ctx.close()
+    return ("phone: " if phone else "") + f"centred on top of a tip (tips held), the logo plays; not now → {nn['to']} + glow" + ("" if phone else " + ⚙ row") + f"; play → snapshot ({n0}→{n1}) → story" + ("" if phone else "; ?offer=v3 preview")
 
 
 def t_story_v6(P):
@@ -3199,6 +3831,41 @@ def t_story_first_paint(P, root, phone=False):
             ctx.close()
     return f"{'phone' if phone else 'desktop'}: {sum(a for a, b in out_)} frames filmed, {sum(b for a, b in out_)} before the story's black, all black; choose and play unchanged"
 
+def t_intent_links(P, root):
+    """id-le.com (production hostname): every link with an explicit destination (arena.html's INTENT_PARAMS / INTENT_HASH, Nov 4: "?lab",
+    "?wiki=Octopus" loaded the story) skips the A/B/C draw: no arm, no title card, no story black; it goes where it says and is counted as
+    entry_<kind>. A plain address (only utm tags) still gets its arm. Math.random is pinned so a draw would land on the story arm."""
+    P.base, P.root = "https://id-le.com", root
+    links = [("/?lab&utm_source=x", "lab", "lab"), ("/#lab", "lab", "lab"), ("/?datalab", "lab", "lab"), ("/?start=ready", "start", "world"),
+             ("/?wiki=Octopus", "wiki", None), ("/?review=logos", "review", None), ("/?gift=founder", "gift", None), ("/?halloween", "halloween", "world"),
+             ("/?world=abc123", "world", "world"), ("/?intro=eerie", "intro", None), ("/#c=Crawly", "creature", "world"), ("/?utm_source=x", None, "story")]
+    out = []
+    for path, kind, dest in links:
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script("Math.random = () => 0.01;"); Q = Page(ctx, P.base); Q.root = root
+        try:
+            q = Q.open(path)
+            if dest == "story":
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            else:
+                wait_for(q, "() => !!window.__restoredOrFresh && !!window.__genesis", 40); q.wait_for_timeout(2500)
+            if dest == "lab": wait_for(q, "() => document.querySelector('#team') && document.querySelector('#team').classList.contains('on') && !!(window.__dlwalk && window.__dlwalk.active())", 40)
+            if dest == "world": wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+            x = q.evaluate("""() => { let f = {}; try { f = JSON.parse(localStorage.getItem('idle.funnel') || '{}') || {}; } catch (e) {}
+              const it = document.querySelector('#idleIntro'), st = window.__genesis.state && window.__genesis.state();
+              return { gv: localStorage.getItem('idle.gv'), entry: window.__intentEntry || null, title: !!(it && it.dataset.title === '1'), story: !!(st && st.on && st.mode === 'story'),
+                black: document.documentElement.classList.contains('story-boot'), offer: !!document.querySelector('#storyOffer'), marks: Object.keys(f).filter(k => k.startsWith('entry_')) }; }""")
+            if kind is None:
+                need(x["gv"] == "story" and x["title"] and not x["entry"], f"a plain address keeps getting its arm: {x}")
+            else:
+                need(x["gv"] is None and not x["title"] and not x["story"] and not x["black"] and not x["offer"] and x["entry"] == kind, f"{path}: no arm, no story, goes where it says: {x}")
+                q.wait_for_timeout(1200); m = q.evaluate("() => { try { return Object.keys(JSON.parse(localStorage.getItem('idle.funnel') || '{}')).filter(k => k.startsWith('entry_')); } catch (e) { return []; } }")
+                need(("entry_" + kind) in m, f"{path}: funnel entry_{kind} expected, got {m}")
+            out.append(f"{path} → {kind or 'arm story'}")
+        finally:
+            ctx.close()
+    return "; ".join(out)
+
+
 def t_prod_gates(P, root, parts=("site", "links", "arms")):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
     storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
@@ -3208,15 +3875,16 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
     if "site" in parts:
         seed = P.open("/arena.html?fresh=1&test"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=P); seed.close()
         pg = P.open("/arena.html"); booted(pg)   # a returning browser (it has a world): no arm, the world stays, the offer comes once
-        wait_for(pg, "() => !!document.querySelector('#storyOffer')", 40, P=P)
+        pg.wait_for_timeout(3000); pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        need(pg.evaluate("() => window.__genesis.offer()") is True, "the returning world gets the storyline offer (v3, after a click; its 75 s are skipped here)")
         r = pg.evaluate("""async () => { await document.fonts.ready; return { host: location.hostname, live: window.__genesis.storyLive(), void: !!window.__genesisVoid,
-          intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(), v: window.__genesis.variant(),
+          intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#offerModal'), founder: window.__founder.available(), v: window.__genesis.variant(),
           c: window.__arena.raw().filter(c => !c.lab).length,
           f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
           ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
         need(r["host"] == "id-le.com" and r["live"], f"not emulating production (or the story isn't live): {r}")
         need(r["offer"] and not r["void"] and not r["intro"] and r["v"] is None and r["c"] > 0, f"a returning world keeps its world and gets the offer: {r}")
-        pg.evaluate("() => document.querySelector('#storyOffer .x').click()"); pg.wait_for_timeout(500)
+        pg.evaluate("() => document.querySelector('#offerModal .lt').click()"); pg.wait_for_timeout(4000)   # not now: the modal goes into ⚙
         need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
         # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
         P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
@@ -3279,7 +3947,7 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
             try:
                 q = Q.open(f"/arena.html?arm={forced}")
                 if want == "story":
-                    wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+                    wait_for(q, "() => !!document.querySelector('#idleIntro') && (document.querySelector('#idleIntro').dataset.title === '1' || (window.__epoch0 && window.__epoch0.time && window.__epoch0.time() > 0))", 60)   # the title card, or the intro it auto-started after 2 s (Nov 4)
                 elif want == "choose":
                     wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
                 else:
@@ -3367,6 +4035,18 @@ def t_presence(P):
     finally:
         node.terminate()
         with contextlib.suppress(Exception): node.wait(5)
+
+
+def engaged_stats():
+    """tools/stats.py's engaged lines (Nov 4): per arm, engaged of here (%), first acts by label, came back"""
+    import importlib.util, io, contextlib
+    spec = importlib.util.spec_from_file_location("idle_stats_mod", os.path.join(ROOT, "tools", "stats.py")); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    days = {"2026-11-04": {"dd": {"story": 8, "none": 4}, "en": {"story|cr_name": 2, "story|e0_done": 1, "none|op_msg": 1}, "cb": {"none|d1": 2}}}
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf): m.engaged_lines(days)
+    t = buf.getvalue()
+    need("story   engaged: 3 of 8 browsers (38%)" in t and "named a creature 2" in t and "finished Genesis 1" in t and "none    engaged: 1 of 4 browsers (25%)" in t and "came back: 2 (d1 2)" in t, "engaged lines:\n" + t)
+    return t.strip().splitlines()[1][:120]
 
 
 def presence_privacy():
@@ -3988,7 +4668,7 @@ def browser_tests(a, out):
     """every browser check, in the order a single worker runs them: (name, fn, args, context options, engine)"""
     C, W = "chromium", "webkit"
     T = [
-        ("fresh load", t_fresh_load, (), {}), ("fresh slow", t_fresh_slow, (), {}), ("crash guard", t_crash_guard, (), {}),
+        ("fresh load", t_fresh_load, (), {}), ("build looks", t_build_looks, (), {}), ("fresh slow", t_fresh_slow, (), {}), ("crash guard", t_crash_guard, (), {}),
         ("camera desktop", t_camera, (), {}), ("panels", t_panels, (), {}), ("sound", t_sound, (), {}), ("haunted music", t_haunted, (), {}),
         ("stats", t_stats, (), {}), ("stats v2", t_stats_v2, (), {}), ("stats once", t_stats_once, (), {}), ("stats seen", t_stats_seen, (), {}),
         ("stats return", t_stats_return, (), {}), ("op stats", t_op_stats, (), {}), ("op actions", t_op_actions, (), {}), ("pedia stats", t_pedia_stats, (), {}),
@@ -4004,8 +4684,8 @@ def browser_tests(a, out):
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
-        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("chips playground", t_chips_playground, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -4017,7 +4697,7 @@ def browser_tests(a, out):
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
         ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
-        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
+        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
@@ -4032,10 +4712,10 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"title auto", "title auto tap", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "prod gates links", "prod gates arms", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
-STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
+LAUNCH = {"arm reload", "arm stats", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "worker"}
+STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
-          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
+          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
           ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
 # checks that pass the same assertions with the page's clock sped up (?timescale). Measured Nov 4 on 15 of the slowest at 5×: none got
 # meaningfully faster (they wait on the test's own fixed pauses and on the audio clock, which can't run faster) and 4 broke (story keys
