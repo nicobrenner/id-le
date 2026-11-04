@@ -1,6 +1,6 @@
 // idle-mobile.js: Id|le on a phone (#32). Only below 500 px wide; desktop is untouched.
 //  - the top bar keeps creatures, 🔔, studio and a ☰ that opens a sheet with everything else (labels, 44 px targets)
-//  - every window (advisor, deck, reels, drawer, trees, notices, card, creatures, studio, chat…) is a bottom sheet:
+//  - every window (advisor, deck, reels, drawer, trees, notices, card, creatures, studio, chat…) is a bottom sheet (the 📟 Operator's at most 45%, v14):
 //    full width, one at a time, ✕ or a swipe down closes it; dragging and remembered places stay desktop-only
 //  - a long press works where a right-click does (keep a copy, inspect)
 // Pinch zoom and the "start light on small screens" quality live in arena.html; the calm first minutes in idle-notify.js.
@@ -25,7 +25,8 @@
   #cline{display:none!important}
   #soundBtn,#sndMore,#lab-toggle,#rc-open{display:none!important}
   #advpanel,#dj,#reelpanel,#drawer,#trees,#settings,#ntfpanel,#conn,#team,#whisper,#objmenu,#sndpop{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;max-height:72dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;margin:0!important}
-  #herd,#studio,#lab{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;height:78dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;transform:translateY(105%)!important;transition:transform .22s!important;border:0!important}
+  #lab{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;height:45dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;transform:translateY(105%)!important;transition:transform .22s!important;border:0!important}
+  #herd,#studio{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;height:78dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;transform:translateY(105%)!important;transition:transform .22s!important;border:0!important}
   #herd.on,#studio.on,#lab.open{transform:none!important}
   #almanac{padding:0!important;align-items:flex-end!important}#almanac .bx{border-radius:16px 16px 0 0!important;max-height:88dvh;overflow:auto}
   #ntf{left:8px!important;right:8px;max-width:none!important;bottom:112px}
@@ -46,7 +47,7 @@
   // ---------- ☰ more: every top-bar button that isn't kept on the bar, plus the chats and sound
   const LABELS = { labBtn: ['🧪', 'data lab'], connBtn: ['🌐', 'connect'], snapBtn: ['📸', 'snapshot'], evolveWorldBtn: ['🌦', 'evolve'], reelsBtn: ['🎞', 'reels'], pediaBtn: ['📖', 'pedia'],
     djBtn: ['🎧', 'music'], advBtn: ['📊', 'advisor'], drawerBtn: ['🗄', 'drawer'], treesBtn: ['🌳', 'family trees'], almanacBtn: ['🌊', 'almanac'], keepDetail: ['🏰', 'detail'],
-    'rc-open': [(window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.icon : '💬', (window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.short : 'IRC'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': [(window.IDLE_NAMES || {}).oracle ? IDLE_NAMES.oracle.icon : '🔮', (window.IDLE_NAMES || {}).oracle ? IDLE_NAMES.oracle.short : 'Oracle'], soundBtn: ['🔊', 'sound'], sndMore: ['🎚', 'volume'] };
+    'rc-open': [(window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.icon : '💬', (window.IDLE_NAMES || {}).irc ? IDLE_NAMES.irc.short : 'IRC'], settingsBtn: ['⚙', 'settings'], 'lab-toggle': [(window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.icon : '📟', (window.IDLE_NAMES || {}).op ? IDLE_NAMES.op.short : 'Operator'], soundBtn: ['🔊', 'sound'], sndMore: ['🎚', 'volume'] };
   const KEEP = ['herdBtn', 'ntfBtn', 'studioBtn', 'mMore'];
   let sheet = null, more = null;
   function mount() {

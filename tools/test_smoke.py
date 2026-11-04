@@ -1433,7 +1433,7 @@ def t_genesis(P):
     out of order are still visible; enter on the pre-filled phrase builds the step; the glowing suggestion too; after four guided steps
     the guide ends and the normal UI fades in; a new consciousness keeps a snapshot; stats() reports the steps."""
     pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
-    wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
+    wait_for(pg, "() => !!(window.__genesis && document.querySelector('[data-gsay]'))", 40, P=P)
     st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), calm: document.documentElement.classList.contains('gen-calm'), lit: document.documentElement.classList.contains('gen-lit'), next: window.__genesis.next(), pre: (document.getElementById('lab-text') || {}).value, g: window.__genesis.state(), ab: window.__genesis.ab })"
     v0 = pg.evaluate(st)
     need(v0["c"] == 0 and v0["w"] == 0 and v0["v"] and v0["calm"], f"genesis should start empty, dark and calm: {v0}")
@@ -1455,7 +1455,7 @@ def t_genesis(P):
     wait_for(pg, "() => document.documentElement.classList.contains('gen-lit')", 20, P=P)
     wait_for(pg, "() => window.__genesis.next() === 'creatures' && document.getElementById('lab-text').value === 'bring life'", 10, P=P)
     # the glowing suggestion: life → alive (three steps), still calm while the guide runs
-    pg.click("#genConsole [data-gsay]"); wait_for(pg, "() => window.__arena.raw().filter(c => !c.lab).length >= 2 && window.__genesis.state().alive", 30, P=P)
+    pg.click("[data-gsay]"); wait_for(pg, "() => window.__arena.raw().filter(c => !c.lab).length >= 2 && window.__genesis.state().alive", 30, P=P)
     s3 = pg.evaluate(st)
     need(not s3["v"] and s3["calm"] and s3["next"] == "sky", f"three steps should make it alive while the guide still runs (calm), sky next: {s3}")
     # the fourth step (weather) ends the guide: the UI fades in, free chips appear, the pre-fill is gone
@@ -1490,7 +1490,7 @@ def t_story(P):
     pg.keyboard.press("Escape")
     # the landing (story v4): the dark first (the real view, very dark, only a far black hole; your lines), no Operator, no chips, no creatures; a click moves the lines on; Esc skips to the Operator
     wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 10, P=P)
-    v = pg.evaluate("() => ({ box: document.documentElement.classList.contains('gen-box'), con: !!document.querySelector('#genConsole [data-gsay]'), lab: !!(document.querySelector('#lab') && document.querySelector('#lab').classList.contains('open')), night: !!document.querySelector('#genNight'), handle: getComputedStyle(document.querySelector('#toHandle')).display, skip: !!document.querySelector('#genNightSkip') })")
+    v = pg.evaluate("() => ({ box: document.documentElement.classList.contains('gen-box'), con: !!document.querySelector('[data-gsay]'), lab: !!(document.querySelector('#lab') && document.querySelector('#lab').classList.contains('open')), night: !!document.querySelector('#genNight'), handle: getComputedStyle(document.querySelector('#toHandle')).display, skip: !!document.querySelector('#genNightSkip') })")
     need(not v["box"] and not v["con"] and not v["lab"] and v["night"] and v["skip"] and v["handle"] == "none", f"the dark should come first, without the Operator: {v}")
     ui = pg.evaluate("() => [...document.body.children].filter(e => !['arena', 'genNight', 'genNightSkip', 'genArrive', 'genBlack'].includes(e.id) && !/SCRIPT|STYLE/.test(e.tagName)).filter(e => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.05 && r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; }).map(e => e.id || e.tagName)")
     need(not ui, f"nothing of the UI while it's dark (story v5): {ui}")
@@ -1511,8 +1511,8 @@ def t_story(P):
     need(lnd["why"] == "skip", f"Esc should go straight to the Operator: {lnd}")
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genBackdrop')", 20, P=P)
     pg.click("#genConsole")   # a tap finishes the line being typed
-    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]')", 40, P=P)
-    w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.querySelector('#genConsole [data-gsay]').textContent, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
+    wait_for(pg, "() => !!document.querySelector('[data-gsay]')", 40, P=P)
+    w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.querySelector('[data-gsay]').textContent, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
     need(w["mode"] == "story" and w["pre"] == "lights on" and "lights on" in w["say"], f"the waking up should end on 'lights on', pre-filled: {w}")
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
     fs = pg.evaluate("() => { const l = document.querySelector('#genConsole .gw p, #genConsole .gl'), lab = document.querySelector('#lab'); return { fz: l ? getComputedStyle(l).fontSize : null, lh: l ? parseFloat(getComputedStyle(l).lineHeight) / parseFloat(getComputedStyle(l).fontSize) : 0, over: lab.scrollWidth - lab.clientWidth, fam: getComputedStyle(document.documentElement).getPropertyValue('--op-font').trim() }; }")
@@ -1529,12 +1529,13 @@ def t_story(P):
     # v13 (Nico: "there's a 'close' button at the top that doesn't do anything, just remove it… we also don't need this notice yet"): during Genesis no close, no Oracle caption
     ch = pg.evaluate("() => ({ close: getComputedStyle(document.querySelector('#lab-close')).display, cap: [...document.querySelectorAll('#lab-form small, #ai-oracle-link')].map(e => getComputedStyle(e).display), quiet: window.__audio.hushed(), hum: window.__genesis.gsound.humOn() })")
     need(ch["close"] == "none" and all(d == "none" for d in ch["cap"]) and ch["quiet"] and not ch["hum"], f"v13: during Genesis no close button, no Oracle caption, silence before the lights: {ch}")
-    pg.click("#genConsole [data-gsay]")
+    pg.click("[data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
-    line = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
-    need("we can see something" in line, f"the lights-on reaction line: {line!r}")
+    text_of = "() => (document.querySelector('#genConsole') || {}).innerText || ''"
+    line = pg.evaluate(text_of)
+    need("we can see something" in line, f"the lights-on reaction line: {line[:200]!r}")
     # v13 (Nico: "after sending lights on, the chat should disappear, there should be an animation of 'dawn til noon' of brightness, and then the
-    # operator window (not the sidebar), should appear again"): the window hidden through the dawn, the sky's brightness rising, the window back in the middle
+    # operator window (not the sidebar), should appear again"): the window hidden through the dawn, the sky's brightness rising, the window back
     lum = "() => { const c = document.querySelector('#genCosmos'), g = c.getContext('2d'), W = c.width, H = c.height; let s = 0, n = 0; for (let y = 0.05; y < 1; y += 0.15) for (let x = 0.05; x < 1; x += 0.15) { const d = g.getImageData(Math.floor(x * W), Math.floor(y * H), 1, 1).data; s += 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]; n++; } return s / n; }"
     ramp = []
     for k in range(9):
@@ -1542,13 +1543,17 @@ def t_story(P):
     lums = [r["lum"] for r in ramp if r["dawning"]]
     need(len(lums) >= 6 and all(b >= a - 2 for a, b in zip(lums, lums[1:])) and lums[-1] - lums[0] > 40, f"v13: the dawn's brightness should rise steadily, night to noon: {[round(x) for x in lums]}")
     need(all(r["op"] < 0.05 for r in ramp[2:6]) and all(r["hum"] for r in ramp), f"v13: the Operator's window hidden during the dawn, the hum on from the lights: {ramp}")
-    wait_for(pg, "() => !document.documentElement.classList.contains('gen-dawning') && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95 && document.documentElement.classList.contains('gen-box')", 8, P=P)
-    back = pg.evaluate("() => (document.querySelector('#genConsole .gl') || {}).textContent || ''")
-    need("we can see something" in back, f"v13: the window comes back in the middle with 'Nice!!': {back!r}")
-    fl = wait_for(pg, "() => window.__genesis.landing().flip && (() => { const f = window.__genesis.landing().flip, x = document.querySelector('#lab').getBoundingClientRect().left; return performance.now() - f.t0 > 250 && { ...f, mid: x }; })()", 12, P=P)
-    need(min(fl["from"]["x"], fl["to"]["x"]) + 5 < fl["mid"] < max(fl["from"]["x"], fl["to"]["x"]) - 5, f"the Operator flies from the middle to its dock (mid-flight between): {fl}")
-    wait_for(pg, "() => !document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genDay')", 10, P=P)
-    need("Operator" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "docked, the window still reads 📟 Operator (v10)")
+    # v14 (Nico: "the operator should always be a floating window, never a fixed sidebar chat"): it comes back floating, low and centred, already
+    # showing "Nice!!" and the next step; it never docks
+    wait_for(pg, "() => !document.documentElement.classList.contains('gen-dawning') && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 8, P=P)
+    fl = pg.evaluate("() => { const r = document.querySelector('#lab').getBoundingClientRect(), H = document.documentElement.classList; return { box: H.contains('gen-box'), float: H.contains('gen-float'), cx: r.left + r.width / 2, w: innerWidth, bot: innerHeight - r.bottom, h: r.height, text: document.querySelector('#genConsole').innerText }; }")
+    need(not fl["box"] and fl["float"] and abs(fl["cx"] - fl["w"] / 2) < 8 and 10 < fl["bot"] < 60 and "we can see something" in fl["text"] and "let there be words" in fl["text"], f"v14: after the dawn the window floats low and centred with 'Nice!!' and the next step: {fl}")
+    docked = []
+    for k in range(10):
+        docked.append(pg.evaluate("() => { const r = document.querySelector('#lab').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; }")); pg.wait_for_timeout(500)
+    need(len({tuple(d) for d in docked}) == 1, f"v14: the window must not move while it waits for the words: {docked}")
+    wait_for(pg, "() => !!document.querySelector('#genDay')", 10, P=P)
+    need("Operator" in pg.evaluate("() => document.querySelector('#lab-head b').textContent"), "the window reads 📟 Operator (v10)")
     gt1 = pg.evaluate("() => { const t = document.querySelector('#genTag'), r = t && t.getBoundingClientRect(); return t && { text: t.textContent, shown: getComputedStyle(t).display !== 'none', left: r.left, top: r.top }; }")
     need(gt1 and gt1["text"] == "consciousness 24 · epoch 0 · genesis" and gt1["shown"] and gt1["left"] < 40 and gt1["top"] < 40, f"after the lights: the tag at the world's top-left: {gt1}")
     day = pg.inner_text("#genDay")
@@ -1558,57 +1563,81 @@ def t_story(P):
     wait_for(pg, "() => window.__genesis.cosmos().bolts >= 1", 15, P=P); pg.wait_for_timeout(1300)   # a bolt, and the time its thunder used to take to start
     need(pg.evaluate("() => window.__ell") == 0, f"the cosmos still draws ovals: {pg.evaluate('() => window.__ell')}")
     need(pg.evaluate("() => window.__th") == 0, f"v11: the young universe's lightning still thunders: {pg.evaluate('() => window.__th')}")
-    # v10: the Operator's handle is the 📟, not a creature; one conversation (no "new"); the sidebar is only the Operator's chat
+    # v10: the Operator's handle is the 📟, not a creature; one conversation (no "new"); the window is only the Operator's chat
     hd = pg.evaluate("() => { const h = document.querySelector('#toHandle'); return { svg: !!h.querySelector('svg'), text: h.textContent, nw: !!document.querySelector('#ai-new'), bar: !!document.querySelector('#lab #ai-bar, #lab #ai-smart-btn') }; }")
-    need(not hd["svg"] and "📟" in hd["text"] and not hd["nw"] and not hd["bar"], f"no creature-like ghost, no 'new', no brain bar in the sidebar: {hd}")
+    need(not hd["svg"] and "📟" in hd["text"] and not hd["nw"] and not hd["bar"], f"no creature-like ghost, no 'new', no brain bar in the Operator's window: {hd}")
+    # v14: in Genesis the 🛠 tray is open, its one chip the step's command, the glowing button just above the input
+    tr = pg.evaluate("() => ({ tray: window.__opwin.tray(), inTray: !!document.querySelector('#opTray [data-gsay]'), inConsole: !!document.querySelector('#genConsole [data-gsay]'), above: (() => { const t = document.querySelector('#opTray'), f = document.querySelector('#lab-form'); return !!t && !!f && t.nextElementSibling === f; })() })")
+    need(tr["tray"]["open"] and tr["tray"]["chips"] == ["let there be words"] and tr["inTray"] and not tr["inConsole"] and tr["above"], f"v14: Genesis's command is the tray's chip, just above the input: {tr}")
     # v10 words: "let there be words", no topic, nothing fetched; no creature until "let there be life"
-    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])') && window.__genesis.next() === 'words'", 30, P=P)
-    ws = pg.evaluate("() => ({ say: document.querySelector('#genConsole [data-gsay]').textContent, alt: !!document.querySelector('#genConsole [data-galt]'), pre: document.getElementById('lab-text').value })")
+    wait_for(pg, "() => !!document.querySelector('[data-gsay]:not([disabled])') && window.__genesis.next() === 'words'", 30, P=P)
+    ws = pg.evaluate("() => ({ say: document.querySelector('[data-gsay]').textContent, alt: !!document.querySelector('#genConsole [data-galt]'), pre: document.getElementById('lab-text').value })")
     need(ws["say"] == "let there be words" and not ws["alt"] and ws["pre"] == "let there be words", f"v10: the words step is just 'let there be words': {ws}")
     n_out = len(P.outside); pg.evaluate("() => { window.__fetches = 0; const f = window.fetch; window.fetch = function (u, ...a) { if (/lab.fetch|wikipedia/.test(String(u))) window.__fetches++; return f.call(this, u, ...a); }; }")
     pg.evaluate("() => window.__genesis.say('let there be words about sport')")   # the player's own phrasing (Nico's case): still its own first words
     with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__genesis.state().steps.words", 10, P=P)
     if not pg.evaluate("() => !!window.__genesis.state().steps.words"):   # the Tiny Operator didn't build it (one nudge): the glowing suggestion
-        wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 30, P=P); pg.click("#genConsole [data-gsay]")
+        wait_for(pg, "() => !!document.querySelector('[data-gsay]:not([disabled])') && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 30, P=P); pg.click("[data-gsay]")
         wait_for(pg, "() => window.__genesis.state().steps.words", 30, P=P)
+    # v14: the window steps aside for the words, and the wind comes in with the chimes while the hum fades
+    wait_for(pg, "() => (window.__genesis.landing().aside || []).length >= 2", 10, P=P)
+    wo = pg.evaluate("() => window.__genesis.landing().aside")
+    need(wo[0]["on"] and not wo[1]["on"] and wo[1]["at"] - wo[0]["at"] >= 2000, f"v14: the window steps aside for the words, then comes back: {wo}")
     sp = pg.evaluate("() => ({ c: window.__arena.raw().filter(c => !c.lab).length, f: window.__fetches, kind: (window.__genHooks.words().map(w => w.text).join(' ').match(/sport/g) || []).length, next: window.__genesis.next() })")
     need(sp["c"] == 0 and sp["f"] == 0 and sp["kind"] == 0 and sp["next"] == "creatures", f"after words: no creature, nothing fetched, no 'sport' words: {sp}")
-    gs = pg.evaluate("() => ({ s: window.__genesis.gsound.state(), hum: window.__genesis.gsound.humOn(), hushed: window.__audio.hushed() })")
-    need(gs["s"]["ticks"] >= 8 and gs["hum"] and gs["hushed"], f"v13: the words tick in over the hum, the world still hushed: {gs}")
+    gs = pg.evaluate("() => ({ s: window.__genesis.gsound.state(), hum: window.__genesis.gsound.humOn(), hushed: window.__audio.hushed(), bed: window.__snd.bedOn(), bg: window.__music.state().bg.on })")
+    need(gs["s"]["ticks"] >= 8 and gs["s"]["wind"] and not gs["hum"] and not gs["hushed"] and gs["bed"] and not gs["bg"], f"v14: at the words the chimes, the wind (the ocean bed) in, the hum fading, no music yet: {gs}")
     sp2 = pg.evaluate("() => ({ spawn: window.__idleWorld.spawn('crawly'), first: null })")
     need(sp2["spawn"] is None and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, f"the world's spawn must refuse before the life step: {sp2}")
-    pg.wait_for_timeout(3000)
+    wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95 && !!document.querySelector('[data-gsay]:not([disabled])')", 10, P=P)
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "a creature appeared after the words, before 'let there be life'")
-    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 30, P=P)
-    lf = pg.evaluate("() => document.querySelector('#genConsole [data-gsay]').textContent"); need(lf == "let there be life", f"the life step: {lf!r}")
-    pg.click("#genConsole [data-gsay]")
-    wait_for(pg, "() => !!document.querySelector('#genFront')", 30, P=P)
-    front = pg.inner_text("#genFront")
-    need("EPOCH 0 COMPLETE" in front.upper() and "GAZETTE" in front.upper() and "ON TO EPOCH 1" in front.upper(), f"v11: the Epoch 0 complete front page: {front[:160]!r}")
-    # v12: the silence ends with Genesis: sound back and the background music fading in under the special edition; its panel stays locked
-    snd = pg.evaluate("() => ({ hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display, gs: window.__genesis.gsound.state(), hum: window.__genesis.gsound.humOn(), bed: window.__snd.bedOn() })")
-    need(snd["bed"] and snd["gs"]["life"] and snd["gs"]["hum"].get("fadeAt") and not snd["hum"] and snd["gs"]["life"]["at"] <= (snd["gs"]["hum"]["fadeAt"] or 0) + 50, f"v13: at life the hum fades under the music and the world's ambience (the ocean): {snd}")
-    need(not snd["hushed"] and snd["bg"] and snd["dj"] == "none", f"v12: at EPOCH 0 COMPLETE the music comes back (panel still locked): {snd}")
-    pg.click("#genFront button")
-    wait_for(pg, "() => (document.querySelector('#genDay') || {}).innerText && document.querySelector('#genDay').innerText.includes('EPOCH 1')", 10, P=P)
-    wip = pg.inner_text("#genDay"); need("WORDS" in wip and "work in progress" in wip, f"Epoch 1's card (words, coming) should say Id|le is a work in progress: {wip!r}")
+    lf = pg.evaluate("() => document.querySelector('[data-gsay]').textContent"); need(lf == "let there be life", f"the life step: {lf!r}")
+    pg.click("[data-gsay]")
+    # v14 (Nico: "1-3 lightning/thunder effects, creatures appear, (or maybe for each thunder 1 creature appears, total 3?), wait 1-3 seconds
+    # after the 3rd one, start background music.... and only after maybe 5-10 seconds of the user looking around, then pop the Epoch 1 thing")
+    lv = []
+    for k in range(60):
+        lv.append(pg.evaluate("() => ({ op: +getComputedStyle(document.querySelector('#lab')).opacity, c: window.__arena.raw().filter(c => !c.lab).length, s: window.__genesis.gsound.state(), look: document.documentElement.classList.contains('gen-look'), m: !!document.querySelector('#genConsole .gstamp'), t: performance.now() })")); pg.wait_for_timeout(250)
+        if lv[-1]["m"]: break
+    st = lv[-1]["s"]; strikes = st["strikes"]
+    need(len(strikes) == 3 and len({x["who"] for x in strikes}) == 3 and 1100 <= strikes[1]["at"] - strikes[0]["at"] <= 2000 and 1100 <= strikes[2]["at"] - strikes[1]["at"] <= 2000, f"v14: three strikes, one creature each, ~1.5 s apart: {strikes}")
+    need(len(st.get("thunder") or []) == 3 and all(x["peak"] < 0.5 for x in st["thunder"]), f"v14: a far thunder with each strike, quieter than the logo's: {st.get('thunder')}")
+    need(st["life"] and 1000 <= st["life"]["at"] - strikes[2]["at"] <= 3200, f"v14: the music 1–3 s after the third creature: {st['life']}, {strikes[2]}")
+    need(all(x["op"] < 0.2 for x in lv[:-1]) and any(x["look"] for x in lv), "v14: no window during the strikes and the look around")
+    lk = pg.evaluate("() => window.__genesis.landing().look")
+    need(lk and lk["end"] - strikes[2]["at"] >= 5000, f"v14: the Epoch moment comes at least 5 s after the last creature: {lk}, {strikes[2]}")
+    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gm=start]')", 20, P=P)
+    mo = pg.evaluate("() => ({ text: document.querySelector('#genConsole').innerText, box: document.documentElement.classList.contains('gen-box'), c: window.__arena.raw().filter(c => !c.lab).length, hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display, bed: window.__snd.bedOn() })")
+    need("EPOCH 0 COMPLETE" in mo["text"] and "great job" in mo["text"] and "next up: Epoch 1" in mo["text"] and "ready?" in mo["text"] and "start Epoch 1" in mo["text"] and "playground" in mo["text"] and mo["box"] and mo["c"] >= 3, f"v14: the Operator's Epoch 0 moment: {mo}")
+    need(not mo["hushed"] and mo["bg"] and mo["bed"] and mo["dj"] == "none", f"the music and the world's ambience on, the music panel still locked: {mo}")
+    need(not pg.evaluate("() => !!document.querySelector('#genFront')"), "v14: no Gazette at the end of Genesis")
+    # the playground asks first; stay goes back
+    pg.click("#genConsole [data-gm=play]"); wait_for(pg, "() => !!document.querySelector('#genConfirm')", 5, P=P)
+    cf = pg.evaluate("() => ({ q: document.querySelector('#genConfirm').innerText, y: window.__opwin.yielding() })")
+    need("are you sure" in cf["q"] and "stay in the story" in cf["q"] and cf["y"] == "#genConfirm", f"v14: the playground asks first, the Operator steps aside: {cf}")
+    pg.click("#genConfirm [data-c=stay]"); wait_for(pg, "() => !document.querySelector('#genConfirm') && !window.__opwin.yielding() && window.__genesis.mode() === 'story'", 5, P=P)
+    pg.click("#genConsole [data-gm=start]")
+    wait_for(pg, "() => !!document.querySelector('#genDay.end')", 10, P=P)
+    wip = pg.inner_text("#genDay"); need("WORDS" in wip and "work in progress" in wip.lower(), f"start Epoch 1 → Epoch 1's card (for now the end of what's built): {wip!r}")
     need(pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "after Genesis the tag reads epoch 1")
-    need(all(k in pg.evaluate("() => window.__funnel.reached()") for k in ("landing", "operator", "lights", "e1words", "e1life", "e1done")), "the funnel should have every Epoch 0 → Epoch 1 moment")
-    end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos() } }")
-    need(end["days"] and "0" in end["days"] and end["day"] == 1 and end["free"] and end["alive"] and end["c"] >= 2, f"after Genesis: Epoch 1 next, alive, free console: {end}")
+    need(all(k in pg.evaluate("() => window.__funnel.reached()") for k in ("landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1")), "the funnel should have every Epoch 0 moment, and start Epoch 1")
+    end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos(), box: document.documentElement.classList.contains('gen-box'), fl: document.documentElement.classList.contains('gen-float') } }")
+    need(end["days"] and "0" in end["days"] and end["day"] == 1 and end["free"] and end["alive"] and end["c"] >= 3 and not end["box"] and not end["fl"], f"after Genesis: Epoch 1 next, alive, the window back to floating: {end}")
     # v10/v11: the epochs unlock the UI; after Epoch 0 (Epoch 1 reached): creatures, IRC, notices; no data lab, no Gloamhold, no studio
     def shown(sel): return pg.evaluate(f"() => {{ const e = document.querySelector({sel!r}); return !!e && getComputedStyle(e).display !== 'none'; }}")
     un = pg.evaluate("() => window.__genesis.unlocks()")
     need(un["story"] and un["epoch"] == 1 and "data lab" in un["hidden"] and "gloamhold" in un["hidden"] and "creatures" not in un["hidden"], f"the unlock map at Epoch 1: {un}")
     need(shown("#herdBtn") and shown("#rc-open") and not shown("#labBtn") and not shown("#studioBtn") and not shown("#connBtn"), "Epoch 1: creatures and IRC shown; data lab, studio, connect hidden")
     need(pg.evaluate("() => [...document.querySelectorAll('#placesBar [data-kind=keep], #placesBar [data-kind=lab]')].every(e => getComputedStyle(e).display === 'none')"), "Gloamhold and data lab places hidden in the storyline")
-    # v10: the tour's last step is the Oracle: a line and a glowing 🔮 that opens the Oracle's lightbox
+    # v10: the tour's last step is the Oracle: a line and a glowing 🔮 that opens the Oracle's lightbox (the end card closed first: the Operator steps aside for it)
+    pg.click("#genDay .x"); wait_for(pg, "() => !document.querySelector('#genDay.end')", 5, P=P)
     wait_for(pg, "() => !!document.querySelector('#genConsole [data-goracle]')", 10, P=P)
     need(pg.evaluate("() => document.querySelector('#ai-thread').innerText.includes(window.__genesis.oracleLine)"), "the Operator should say the Oracle line")
+    pg.click("#toHandle"); wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 5, P=P)
     pg.click("#genConsole [data-goracle]"); pg.wait_for_timeout(300)
-    need(pg.evaluate("() => window.__oracleBox.isOpen() && !!document.querySelector('#oracleBox #ai-brain')"), "the tour's 🔮 should open the Oracle lightbox")
-    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
-    need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-goracle]')"), "once opened, the tour's 🔮 goes (the chat's footer link stays)")
+    need(pg.evaluate("() => window.__oracleBox.isOpen() && !!document.querySelector('#oracleBox #ai-brain') && window.__opwin.yielding() === '#oracleBox:not([hidden])'"), "the tour's 🔮 should open the Oracle lightbox, the Operator stepping aside")
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(500)
+    need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-goracle]')") and not pg.evaluate("() => window.__opwin.yielding()"), "once opened, the tour's 🔮 goes, and the Operator comes back")
     stuck_check(pg, P, "storyline")
     P.clean()
     return f"v13: the dawn (window hidden, brightness rising), hum → word chimes → music + ambience at life, no close or Oracle caption; v11: the dark's lines in order (no sound, is that a black…), silent lightning, Genesis = Epoch 0 (lights, words, life) → front page → Epoch 1 (soon); v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; {end['c']} creatures"
@@ -1679,21 +1708,21 @@ def t_story_keys(P):
         elif k == "operator":
             wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && window.__genesis.landing().why === 'key'", 30, P=P)
         elif k == "lights":
-            wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]') && window.__genesis.next() === 'light'", 30, P=P)
+            wait_for(pg, "() => !!document.querySelector('[data-gsay]') && window.__genesis.next() === 'light'", 30, P=P)
             need(pg.evaluate("() => document.querySelectorAll('#genConsole .gw p').length") == 5, "lights: the Operator's five opening lines, already said")
         elif k == "words":
-            wait_for(pg, "() => window.__genesis.next() === 'words' && !!document.querySelector('#genConsole [data-gsay]:not([disabled])') && !document.documentElement.classList.contains('gen-box')", 40, P=P)
+            wait_for(pg, "() => window.__genesis.next() === 'words' && !!document.querySelector('[data-gsay]:not([disabled])') && !document.documentElement.classList.contains('gen-box')", 40, P=P)
         elif k == "life":
-            wait_for(pg, "() => window.__genesis.next() === 'creatures' && !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 45, P=P)
+            wait_for(pg, "() => window.__genesis.next() === 'creatures' && !!document.querySelector('[data-gsay]:not([disabled])')", 45, P=P)
             need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0 and pg.evaluate("() => window.__genHooks.words().length") > 10, "life: words laid, nobody yet")
         elif k == "epoch0done":
-            wait_for(pg, "() => !!document.querySelector('#genFront')", 50, P=P)
-            need("EPOCH 0 COMPLETE" in pg.inner_text("#genFront").upper() and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") >= 2, "epoch0done: the Gazette, with life")
+            wait_for(pg, "() => !!document.querySelector('#genConsole [data-gm=start]')", 60, P=P)
+            need("EPOCH 0 COMPLETE" in pg.inner_text("#genConsole").upper() and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") >= 3, "epoch0done: the Operator's Epoch 0 moment, with life (v14)")
         elif k == "epoch1":
-            wait_for(pg, "() => { const d = document.querySelector('#genDay'); return !!d && d.innerText.includes('EPOCH 1') && !d.classList.contains('end'); }", 55, every=0.2, P=P)
-            need(not pg.evaluate("() => !!document.querySelector('#genFront')") and pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "epoch1: past the Gazette, the tag at epoch 1")
+            wait_for(pg, "() => { const d = document.querySelector('#genDay'); return !!d && d.innerText.includes('EPOCH 1'); }", 70, every=0.2, P=P)
+            need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-gm]')") and pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "epoch1: past the Epoch 0 moment (start Epoch 1), the tag at epoch 1")
         elif k == "end":
-            wait_for(pg, "() => !!document.querySelector('#genDay.end')", 55, P=P)
+            wait_for(pg, "() => !!document.querySelector('#genDay.end')", 70, P=P)
         got[k] = round(time.time() - t0, 1)
         need(not pg.evaluate("() => localStorage.getItem('arena.genomes') === 'REAL' || localStorage.getItem('idle.genesis') === 'REAL'"), f"{k}: the keyframe must not see the real localStorage")
         if k != "end": pg.close()
@@ -1706,7 +1735,8 @@ def t_story_keys(P):
     need(not pg.evaluate("() => !!document.querySelector('#genDay.end')"), "the roadmap closes the end card to its corner")
     pg.evaluate("() => window.__feedback.close()"); pg.click("#genDay [data-end=open]"); wait_for(pg, "() => !!document.querySelector('#genDay.end')", 5, P=P)
     pg.evaluate("() => document.querySelector('#genDay [data-end=github]').addEventListener('click', e => e.preventDefault())"); pg.click("#genDay [data-end=github]")
-    pg.click("#genDay [data-end=free]"); pg.wait_for_timeout(600)
+    pg.click("#genDay [data-end=free]"); wait_for(pg, "() => !!document.querySelector('#genConfirm')", 5, P=P)   # v14: the playground asks first
+    pg.click("#genConfirm [data-c=go]"); pg.wait_for_timeout(600)
     f = pg.evaluate("() => ({ mode: window.__genesis.mode(), un: window.__genesis.unlocks(), story: document.documentElement.classList.contains('gen-story'), day: !!document.querySelector('#genDay'), tag: !!document.querySelector('#genTag'), hushed: window.__audio.hushed(), lab: getComputedStyle(document.querySelector('#labBtn')).display, studio: getComputedStyle(document.querySelector('#studioBtn')).display, fun: window.__funnel.reached(), resume: window.__genesis.canResume(), thread: document.querySelector('#ai-thread').innerText })")
     need(f["mode"] == "free" and not f["un"]["story"] and not f["un"]["hidden"] and not f["story"] and not f["day"] and not f["tag"] and not f["hushed"] and f["lab"] != "none" and f["studio"] != "none", f"free-play should open everything and leave the story: {f}")
     need(all(x in f["fun"] for x in ("end_shown", "end_roadmap", "end_github", "end_free")) and f["resume"] and "welcome to the playground" in f["thread"], f"free-play: funnel moments, ⚙ can resume, the Operator's line: {f}")
@@ -2037,8 +2067,8 @@ def t_story_landing(P):
     son = wait_for(pg, "() => { const l = window.__genesis.landing(); return l.pings >= 2 && l.rimmed >= 1 && l; }", 15, P=P)
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
     pg.click("#genConsole")
-    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gsay]:not([disabled])')", 40, P=P)
-    pg.click("#genConsole [data-gsay]")
+    wait_for(pg, "() => !!document.querySelector('[data-gsay]:not([disabled])')", 40, P=P)
+    pg.click("[data-gsay]")
     wait_for(pg, "() => window.__genesis.cosmos().lit && !document.querySelector('#genNight')", 10, P=P)
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "lights on brings no creatures: life comes next")
     need(pg.evaluate("() => window.__audio.hushed()"), "still silent after lights on (until the music step)")
@@ -2070,7 +2100,7 @@ def t_never_stuck(P):
     """Never stuck: in the guided start (menus hidden), close the Operator and every guided widget; the Operator's 📟 is on screen,
     on top of everything, and tapping it reopens the Operator and brings back the menus (⚙ included). With the window open it hides."""
     pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
-    wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
+    wait_for(pg, "() => !!(window.__genesis && document.querySelector('[data-gsay]'))", 40, P=P)
     pg.wait_for_timeout(900)
     need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the 📟 should hide while the Operator's window is open")
     w, _ = stuck_check(pg, P, "guided start")
@@ -2635,13 +2665,103 @@ def t_chooser(P):
 def t_genesis_phone(P):
     """Phones: the same guide, the Operator as a sheet, the phrase pre-filled but NOT focused (no keyboard), a big ▶ to say it."""
     pg = P.open("/arena.html?genesis&start=guided&intro=0&test"); pg.set_viewport_size({"width": 390, "height": 844})
-    wait_for(pg, "() => !!(window.__genesis && document.querySelector('#genConsole [data-gsay]'))", 40, P=P)
-    st = pg.evaluate("() => ({ coarse: matchMedia('(pointer: coarse)').matches, focus: (document.activeElement || {}).id, pre: document.getElementById('lab-text').value, say: !!document.querySelector('#genConsole .say'), label: document.querySelector('#genConsole [data-gsay]').textContent })")
+    wait_for(pg, "() => !!(window.__genesis && document.querySelector('[data-gsay]'))", 40, P=P)
+    st = pg.evaluate("() => ({ coarse: matchMedia('(pointer: coarse)').matches, focus: (document.activeElement || {}).id, pre: document.getElementById('lab-text').value, say: !!document.querySelector('#genConsole .say'), label: document.querySelector('[data-gsay]').textContent })")
     need(st["coarse"], f"the phone context should have a coarse pointer: {st}")
     need(st["focus"] != "lab-text" and st["pre"] == "let there be light" and st["say"] and st["label"].startswith("▶"), f"phones: pre-filled, not focused, a big ▶: {st}")
-    pg.tap("#genConsole [data-gsay]"); wait_for(pg, "() => document.documentElement.classList.contains('gen-lit') && window.__genesis.next() === 'words'", 20, P=P)
+    pg.tap("[data-gsay]"); wait_for(pg, "() => document.documentElement.classList.contains('gen-lit') && window.__genesis.next() === 'words'", 20, P=P)
     P.clean()
     return f"pre-filled, not focused, ▶ '{st['label']}' → light"
+
+
+def t_story_phone_steps(P):
+    """v14 (Nico on a phone: "when I was about to tap let there be words, the window/bar changed under me"): after lights on, nothing that
+    can be tapped moves or resizes while it is shown (sampled every 100 ms), and the Operator's window is hidden during each animation."""
+    pg = P.open("/arena.html?at=lights")
+    wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+    wait_for(pg, "() => !!document.querySelector('[data-gsay]') && window.__genesis.next() === 'light'", 40, P=P)
+    pg.wait_for_timeout(600)
+    pg.tap("[data-gsay]")
+    js = """() => { const v = el => { if (!el) return null; const s = getComputedStyle(el), r = el.getBoundingClientRect(); let o = 1; for (let e = el; e; e = e.parentElement) o *= +getComputedStyle(e).opacity;
+      return s.display !== 'none' && s.visibility !== 'hidden' && o > 0.9 && r.width > 0 ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null; };
+      const t = document.querySelector('[data-gsay]:not([disabled])'); return { lab: v(document.querySelector('#lab')), tgt: v(t), next: window.__genesis.next(), t: performance.now() }; }"""
+    samples = []
+    for _ in range(140):
+        samples.append(pg.evaluate(js)); pg.wait_for_timeout(100)
+        if samples[-1]["next"] == "words" and len(samples) > 110: break
+    hidden = [s for s in samples[:20] if s["lab"] is None]
+    # and the words: tapped, the window steps aside, comes back with "let there be life", and stays put
+    wait_for(pg, "() => !!document.querySelector('[data-gsay]:not([disabled])') && window.__genesis.next() === 'words'", 20, P=P); pg.tap("[data-gsay]")
+    w0 = len(samples)
+    for _ in range(90):
+        samples.append(pg.evaluate(js)); pg.wait_for_timeout(100)
+        if samples[-1]["next"] == "creatures" and len(samples) - w0 > 70: break
+    hidden_w = [s for s in samples[w0:w0 + 15] if s["lab"] is None]
+    need(samples[-1]["tgt"] and samples[-1]["next"] == "creatures", f"phone: after the words the life chip should be up: {samples[-1]}")
+    moved = []
+    for a, b in zip(samples, samples[1:]):
+        if a["tgt"] and b["tgt"] and (a["tgt"] != b["tgt"] or a["lab"] != b["lab"]): moved.append((round(b["t"]), a["tgt"], b["tgt"], a["lab"], b["lab"]))
+        if a["tgt"] and b["tgt"] is None and b["lab"] and a["lab"] != b["lab"]: moved.append((round(b["t"]), "vanished", a["lab"], b["lab"]))
+    P.clean()
+    need(not moved, f"phone: the window/target moved while a tap target was shown: {moved[:4]}")
+    need(len(hidden) >= 15 and len(hidden_w) >= 12, f"phone: the window steps aside after each command (lights {len(hidden)}/20, words {len(hidden_w)}/15)")
+    return f"{len(samples)} samples over lights and words: the window hidden {len(hidden)}/20 and {len(hidden_w)}/15 after each command, nothing moved under a finger"
+
+
+def t_operator_float(P):
+    """v14 (Nico: "the operator should always be a floating window, never a fixed sidebar chat… during gameplay the user can toggle it from the
+    bottom right operator button"; "The roadmap loads under the Operator... it should maybe close the operator"; "a tools icon to toggle a
+    section rigth abovoe the chat input area, with predefined/templated/suggested… messages"): a floating window (not full height, off the
+    edges), dragged by its header and remembered; 🧪, the roadmap and the 🔮 Oracle hide it and give it back; the 🛠 tray of suggestions; no
+    Oracle caption under the input."""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.click("#lab-toggle"); wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 5, P=P)
+    R = "() => { const r = document.querySelector('#lab').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height, right: innerWidth - r.right, bottom: innerHeight - r.bottom, W: innerWidth, H: innerHeight, rad: parseFloat(getComputedStyle(document.querySelector('#lab')).borderTopLeftRadius) }; }"
+    r = pg.evaluate(R)
+    need(r["w"] <= 420 and r["h"] < r["H"] - 80 and r["right"] >= 8 and r["bottom"] >= 40 and r["rad"] >= 8, f"the Operator should float (not a full-height sidebar): {r}")
+    cap = pg.evaluate("() => [...document.querySelectorAll('#lab-form small, #ai-oracle-link')].map(e => getComputedStyle(e).display)")
+    need(all(d == "none" for d in cap), f"no Oracle caption under the input in the playground: {cap}")
+    # 🛠: closed by default; open → the Operator's real abilities as chips; a chip fills the input on a computer
+    t0 = pg.evaluate("() => window.__opwin.tray()"); need(not t0["open"], f"the tray starts closed in the playground: {t0}")
+    pg.click("#op-tools"); wait_for(pg, "() => window.__opwin.tray().open", 3, P=P)
+    t1 = pg.evaluate("() => ({ tray: window.__opwin.tray(), above: document.querySelector('#opTray').nextElementSibling === document.querySelector('#lab-form') })")
+    need(t1["above"] and "make it rain" in t1["tray"]["chips"] and "start a rave" in t1["tray"]["chips"] and "what's happening?" in t1["tray"]["chips"], f"the tray's chips: {t1}")
+    pg.click("#opTray [data-opc='0']"); pg.wait_for_timeout(200)
+    need(pg.evaluate("() => document.querySelector('#lab-text').value") == "make it rain", "a chip fills the input on a computer")
+    pg.evaluate("() => { document.querySelector('#lab-text').value = ''; window.__opSuggest = () => [{ text: 'generated one' }]; }"); pg.wait_for_timeout(700)
+    need(pg.evaluate("() => window.__opwin.tray().chips") == ["generated one"], "window.__opSuggest replaces the template chips (the hook for generated suggestions)")
+    pg.evaluate("() => { delete window.__opSuggest; }")
+    pg.click("#op-tools"); wait_for(pg, "() => !window.__opwin.tray().open", 3, P=P)
+    # 🧪 / the roadmap / the Oracle: the Operator steps aside, then comes back
+    out = []
+    for name, op, cl in (("🧪", "() => window.__feedback.open('tell')", "() => window.__feedback.close()"), ("roadmap", "() => window.__feedback.open('road')", "() => window.__feedback.close()"), ("oracle", "() => window.__oracleBox.open('test')", "() => window.__oracleBox.close()")):
+        pg.evaluate(op); wait_for(pg, "() => !!window.__opwin.yielding() && +getComputedStyle(document.querySelector('#lab')).opacity < 0.05", 4, P=P)
+        top = pg.evaluate("() => { const r = document.querySelector('#lab').getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!e && !!e.closest('#lab'); }")
+        need(not top, f"{name}: the Operator must not stay on top of it")
+        pg.evaluate(cl); wait_for(pg, "() => !window.__opwin.yielding() && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 4, P=P)
+        out.append(name)
+    # dragged by its header, remembered across a reload
+    hb = pg.evaluate("() => { const r = document.querySelector('#lab-head').getBoundingClientRect(); return { x: r.left + 30, y: r.top + r.height / 2 }; }")
+    pg.mouse.move(hb["x"], hb["y"]); pg.mouse.down(); pg.mouse.move(hb["x"] - 120, hb["y"] - 60, steps=6); pg.mouse.up()
+    r2 = pg.evaluate(R); need(abs((r2["right"] - r["right"]) - 120) < 6 and abs((r2["bottom"] - r["bottom"]) - 60) < 6, f"dragging the header moves the window: {r} → {r2}")
+    pg.reload(); booted(pg); pg.wait_for_timeout(800)
+    r3 = pg.evaluate(R); need(pg.evaluate("() => document.querySelector('#lab').classList.contains('open')") and abs(r3["right"] - r2["right"]) < 4 and abs(r3["bottom"] - r2["bottom"]) < 4, f"open and its place remembered after a reload: {r2} → {r3}")
+    P.clean()
+    return f"floating {round(r['w'])}×{round(r['h'])} (off the edges by {round(r['right'])}/{round(r['bottom'])} px), the tray ({len(t1['tray']['chips'])} chips, a hook), steps aside for {', '.join(out)}, dragged and remembered"
+
+
+def t_operator_float_phone(P):
+    """v14 on a phone: the Operator is a bottom sheet of at most ~45% of the screen; the 📟 opens it; a tray chip is sent at once."""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.click("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(400)
+    r = pg.evaluate("() => { const r = document.querySelector('#lab').getBoundingClientRect(); return { h: r.height, H: innerHeight, w: r.width, W: innerWidth, bottom: innerHeight - r.bottom }; }")
+    need(r["h"] <= r["H"] * 0.46 + 1 and abs(r["w"] - r["W"]) < 2 and abs(r["bottom"]) < 2, f"phone: a bottom sheet of at most 45%: {r}")
+    pg.evaluate("() => { window.__sent = []; window.addEventListener('click', e => { if (e.target && e.target.closest && e.target.closest('#lab-send')) window.__sent.push(document.querySelector('#lab-text').value); }, true); window.addEventListener('idle:optext', e => window.__sent.push('optext:' + e.detail.text)); }")
+    pg.tap("#op-tools"); wait_for(pg, "() => window.__opwin.tray().open", 3, P=P)
+    pg.tap("#opTray [data-opc='5']"); pg.wait_for_timeout(300)
+    sent = pg.evaluate("() => window.__sent"); need(sent[:1] == ["what's happening?"] and "optext:what's happening?" in sent, f"phone: a chip is sent at once (to the Operator): {sent}")
+    P.clean()
+    return f"a {round(100 * r['h'] / r['H'])}% sheet; a chip sends"
 
 
 def t_halloween(P):
@@ -2793,7 +2913,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2850,6 +2970,9 @@ def main():
                 run("story", t_story)
                 run("story migrate", t_story_migrate)
                 run("story keys", t_story_keys)
+                run("story phone steps", t_story_phone_steps, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
+                run("operator float", t_operator_float)
+                run("operator float phone", t_operator_float_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story end phone", t_story_end_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story v6", t_story_v6)
                 run("title card", t_title_card)
