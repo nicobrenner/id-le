@@ -799,7 +799,7 @@ def t_camera(P, phone=False):
 
 
 PANELS = [("herdBtn", "creatures"), ("studioBtn", "studio"), ("reelsBtn", "reels"), ("drawerBtn", "drawer"), ("advBtn", "advisor"), ("djBtn", "music deck"),
-          ("almanacBtn", "almanac"), ("treesBtn", "trees"), ("settingsBtn", "settings"), ("ntfBtn", "notices"), ("rc-open", "IRC"), ("lab-toggle", "Operator"), ("labBtn", "data lab")]
+          ("almanacBtn", "almanac"), ("treesBtn", "trees"), ("settingsBtn", "settings"), ("ntfBtn", "notices"), ("rc-open", "IRC"), ("toHandle", "Operator"), ("labBtn", "data lab")]
 VISIBLE = """() => [...document.querySelectorAll('body *')].filter(e => { if (!e.id || e.offsetParent === null && getComputedStyle(e).position !== 'fixed') return false; const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
   const w = Math.min(r.right, innerWidth) - Math.max(r.left, 0), h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);   // on screen, not just laid out (side panels slide in)
   return w > 120 && h > 80 && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && cs.display !== 'none'; }).map(e => e.id)"""
@@ -877,7 +877,7 @@ def t_operator(P):
     (v10: no brain bar, no 🧠, no "new"); 🔮 Oracle (footer link, /oracle, ⚙) opens the options in a lightbox; nothing covers the send row"""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     pg.wait_for_function("() => window.__oracle && window.__oracle.ready && window.__idleAI", timeout=90000)
-    pg.click("#lab-toggle"); pg.wait_for_timeout(500)
+    pg.click("#toHandle"); pg.wait_for_timeout(500)
     need(pg.evaluate("() => document.querySelector('#ai-brain').value") == "tiny", "the Tiny Operator is not the default brain on a static site")
     cases = [("make it foggy", "weather", "weather"), ("add a debugger", "spawn", "spawn"), ("fetch coffee", "creature", "creature"), ("how are you today", "none", None)]
     got = []
@@ -1577,8 +1577,8 @@ def t_story(P):
     need(lnd["why"] == "skip", f"Esc should go straight to the Operator: {lnd}")
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genBackdrop')", 20, P=P)
     pg.click("#genConsole")   # a tap finishes the line being typed
-    wait_for(pg, "() => !!document.querySelector('[data-gsay]')", 40, P=P)
-    w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.querySelector('[data-gsay]').textContent, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
+    wait_for(pg, "() => window.__genesis.ready()", 40, P=P)
+    w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.getElementById('lab-text').value, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
     need(w["mode"] == "story" and w["pre"] == "lights on" and "lights on" in w["say"], f"the waking up should end on 'lights on', pre-filled: {w}")
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
     fs = pg.evaluate("() => { const l = document.querySelector('#genConsole .gw p, #genConsole .gl'), lab = document.querySelector('#lab'); return { fz: l ? getComputedStyle(l).fontSize : null, lh: l ? parseFloat(getComputedStyle(l).lineHeight) / parseFloat(getComputedStyle(l).fontSize) : 0, over: lab.scrollWidth - lab.clientWidth, fam: getComputedStyle(document.documentElement).getPropertyValue('--op-font').trim() }; }")
@@ -1595,7 +1595,7 @@ def t_story(P):
     # v13 (Nico: "there's a 'close' button at the top that doesn't do anything, just remove it… we also don't need this notice yet"): during Genesis no close, no Oracle caption
     ch = pg.evaluate("() => ({ close: getComputedStyle(document.querySelector('#lab-close')).display, cap: [...document.querySelectorAll('#lab-form small, #ai-oracle-link')].map(e => getComputedStyle(e).display), quiet: window.__audio.hushed(), hum: window.__genesis.gsound.humOn() })")
     need(ch["close"] == "none" and all(d == "none" for d in ch["cap"]) and ch["quiet"] and not ch["hum"], f"v13: during Genesis no close button, no Oracle caption, silence before the lights: {ch}")
-    pg.click("[data-gsay]")
+    pg.focus("#lab-text"); pg.keyboard.press("Enter")
     wait_for(pg, "() => window.__genesis.cosmos().lit", 10, P=P)
     text_of = "() => (document.querySelector('#genConsole') || {}).innerText || ''"
     line = pg.evaluate(text_of)
@@ -1632,18 +1632,19 @@ def t_story(P):
     # v10: the Operator's handle is the 📟, not a creature; one conversation (no "new"); the window is only the Operator's chat
     hd = pg.evaluate("() => { const h = document.querySelector('#toHandle'); return { svg: !!h.querySelector('svg'), text: h.textContent, nw: !!document.querySelector('#ai-new'), bar: !!document.querySelector('#lab #ai-bar, #lab #ai-smart-btn') }; }")
     need(not hd["svg"] and "📟" in hd["text"] and not hd["nw"] and not hd["bar"], f"no creature-like ghost, no 'new', no brain bar in the Operator's window: {hd}")
-    # v14: in Genesis the 🛠 tray is open, its one chip the step's command, the glowing button just above the input
-    tr = pg.evaluate("() => ({ tray: window.__opwin.tray(), inTray: !!document.querySelector('#opTray [data-gsay]'), inConsole: !!document.querySelector('#genConsole [data-gsay]'), above: (() => { const t = document.querySelector('#opTray'), f = document.querySelector('#lab-form'); return !!t && !!f && t.nextElementSibling === f; })() })")
-    need(tr["tray"]["open"] and tr["tray"]["chips"] == ["let there be words"] and tr["inTray"] and not tr["inConsole"] and tr["above"], f"v14: Genesis's command is the tray's chip, just above the input: {tr}")
+    # v14 (Nico: "let's drop the predefined button (as long as the directions are clear, and the proper message/instruction is pre-typed...)"):
+    # in Genesis no command button or chip anywhere, the 🛠 tray closed, the step's words pre-typed in the input, which is on screen
+    tr = pg.evaluate("() => ({ tray: window.__opwin.tray(), gsay: document.querySelectorAll('[data-gsay]').length, pre: document.getElementById('lab-text').value, line: document.querySelector('#genConsole').innerText, inView: (() => { const r = document.getElementById('lab-text').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.height > 20; })() })")
+    need(not tr["tray"]["open"] and tr["gsay"] == 0 and tr["pre"] == "let there be words" and 'say "let there be words"' in tr["line"] and tr["inView"], f"v14: no button, the command pre-typed and said, the input on screen: {tr}")
     # v10 words: "let there be words", no topic, nothing fetched; no creature until "let there be life"
-    wait_for(pg, "() => !!document.querySelector('[data-gsay]:not([disabled])') && window.__genesis.next() === 'words'", 30, P=P)
-    ws = pg.evaluate("() => ({ say: document.querySelector('[data-gsay]').textContent, alt: !!document.querySelector('#genConsole [data-galt]'), pre: document.getElementById('lab-text').value })")
+    wait_for(pg, "() => window.__genesis.ready() && window.__genesis.next() === 'words'", 30, P=P)
+    ws = pg.evaluate("() => ({ say: document.getElementById('lab-text').value, alt: !!document.querySelector('#genConsole [data-galt]'), pre: document.getElementById('lab-text').value })")
     need(ws["say"] == "let there be words" and not ws["alt"] and ws["pre"] == "let there be words", f"v10: the words step is just 'let there be words': {ws}")
     n_out = len(P.outside); pg.evaluate("() => { window.__fetches = 0; const f = window.fetch; window.fetch = function (u, ...a) { if (/lab.fetch|wikipedia/.test(String(u))) window.__fetches++; return f.call(this, u, ...a); }; }")
     pg.evaluate("() => window.__genesis.say('let there be words about sport')")   # the player's own phrasing (Nico's case): still its own first words
     with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__genesis.state().steps.words", 10, P=P)
     if not pg.evaluate("() => !!window.__genesis.state().steps.words"):   # the Tiny Operator didn't build it (one nudge): the glowing suggestion
-        wait_for(pg, "() => !!document.querySelector('[data-gsay]:not([disabled])') && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 30, P=P); pg.click("[data-gsay]")
+        wait_for(pg, "() => window.__genesis.ready() && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 30, P=P); pg.focus("#lab-text"); pg.keyboard.press("Enter")
         wait_for(pg, "() => window.__genesis.state().steps.words", 30, P=P)
     # v14: the window steps aside for the words, and the wind comes in with the chimes while the hum fades
     wait_for(pg, "() => (window.__genesis.landing().aside || []).length >= 2", 10, P=P)
@@ -1655,10 +1656,10 @@ def t_story(P):
     need(gs["s"]["ticks"] >= 8 and gs["s"]["wind"] and not gs["hum"] and not gs["hushed"] and gs["bed"] and not gs["bg"], f"v14: at the words the chimes, the wind (the ocean bed) in, the hum fading, no music yet: {gs}")
     sp2 = pg.evaluate("() => ({ spawn: window.__idleWorld.spawn('crawly'), first: null })")
     need(sp2["spawn"] is None and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, f"the world's spawn must refuse before the life step: {sp2}")
-    wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95 && !!document.querySelector('[data-gsay]:not([disabled])')", 10, P=P)
+    wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95 && window.__genesis.ready()", 10, P=P)
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "a creature appeared after the words, before 'let there be life'")
-    lf = pg.evaluate("() => document.querySelector('[data-gsay]').textContent"); need(lf == "let there be life", f"the life step: {lf!r}")
-    pg.click("[data-gsay]")
+    lf = pg.evaluate("() => document.getElementById('lab-text').value"); need(lf == "let there be life", f"the life step: {lf!r}")
+    pg.focus("#lab-text"); pg.keyboard.press("Enter")
     # v14 (Nico: "1-3 lightning/thunder effects, creatures appear, (or maybe for each thunder 1 creature appears, total 3?), wait 1-3 seconds
     # after the 3rd one, start background music.... and only after maybe 5-10 seconds of the user looking around, then pop the Epoch 1 thing")
     lv = []
@@ -1775,12 +1776,12 @@ def t_story_keys(P):
         elif k == "operator":
             wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && window.__genesis.landing().why === 'key'", 30, P=P)
         elif k == "lights":
-            wait_for(pg, "() => !!document.querySelector('[data-gsay]') && window.__genesis.next() === 'light'", 30, P=P)
+            wait_for(pg, "() => window.__genesis.ready() && window.__genesis.next() === 'light'", 30, P=P)
             need(pg.evaluate("() => document.querySelectorAll('#genConsole .gw p').length") == 5, "lights: the Operator's five opening lines, already said")
         elif k == "words":
-            wait_for(pg, "() => window.__genesis.next() === 'words' && !!document.querySelector('[data-gsay]:not([disabled])') && !document.documentElement.classList.contains('gen-box')", 40, P=P)
+            wait_for(pg, "() => window.__genesis.next() === 'words' && window.__genesis.ready() && !document.documentElement.classList.contains('gen-box')", 40, P=P)
         elif k == "life":
-            wait_for(pg, "() => window.__genesis.next() === 'creatures' && !!document.querySelector('[data-gsay]:not([disabled])')", 45, P=P)
+            wait_for(pg, "() => window.__genesis.next() === 'creatures' && window.__genesis.ready()", 45, P=P)
             need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0 and pg.evaluate("() => window.__genHooks.words().length") > 10, "life: words laid, nobody yet")
         elif k == "epoch0done":
             wait_for(pg, "() => !!document.querySelector('#genConsole [data-gm=start]')", 60, P=P)
@@ -2134,8 +2135,8 @@ def t_story_landing(P):
     son = wait_for(pg, "() => { const l = window.__genesis.landing(); return l.pings >= 2 && l.rimmed >= 1 && l; }", 15, P=P)
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box')", 10, P=P)
     pg.click("#genConsole")
-    wait_for(pg, "() => !!document.querySelector('[data-gsay]:not([disabled])')", 40, P=P)
-    pg.click("[data-gsay]")
+    wait_for(pg, "() => window.__genesis.ready()", 40, P=P)
+    pg.focus("#lab-text"); pg.keyboard.press("Enter")
     wait_for(pg, "() => window.__genesis.cosmos().lit && !document.querySelector('#genNight')", 10, P=P)
     need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0, "lights on brings no creatures: life comes next")
     need(pg.evaluate("() => window.__audio.hushed()"), "still silent after lights on (until the music step)")
@@ -2787,19 +2788,19 @@ def t_story_phone_steps(P):
     can be tapped moves or resizes while it is shown (sampled every 100 ms), and the Operator's window is hidden during each animation."""
     pg = P.open("/arena.html?at=lights")
     wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
-    wait_for(pg, "() => !!document.querySelector('[data-gsay]') && window.__genesis.next() === 'light'", 40, P=P)
+    wait_for(pg, "() => window.__genesis.ready() && window.__genesis.next() === 'light'", 40, P=P)
     pg.wait_for_timeout(600)
-    pg.tap("[data-gsay]")
+    pg.tap("#lab-send")
     js = """() => { const v = el => { if (!el) return null; const s = getComputedStyle(el), r = el.getBoundingClientRect(); let o = 1; for (let e = el; e; e = e.parentElement) o *= +getComputedStyle(e).opacity;
       return s.display !== 'none' && s.visibility !== 'hidden' && o > 0.9 && r.width > 0 ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null; };
-      const t = document.querySelector('[data-gsay]:not([disabled])'); return { lab: v(document.querySelector('#lab')), tgt: v(t), next: window.__genesis.next(), t: performance.now() }; }"""
+      const t = window.__genesis.ready() ? document.querySelector('#lab-send') : null; return { lab: v(document.querySelector('#lab')), tgt: v(t), next: window.__genesis.next(), t: performance.now() }; }"""
     samples = []
     for _ in range(140):
         samples.append(pg.evaluate(js)); pg.wait_for_timeout(100)
         if samples[-1]["next"] == "words" and len(samples) > 110: break
     hidden = [s for s in samples[:20] if s["lab"] is None]
     # and the words: tapped, the window steps aside, comes back with "let there be life", and stays put
-    wait_for(pg, "() => !!document.querySelector('[data-gsay]:not([disabled])') && window.__genesis.next() === 'words'", 20, P=P); pg.tap("[data-gsay]")
+    wait_for(pg, "() => window.__genesis.ready() && window.__genesis.next() === 'words'", 20, P=P); pg.tap("#lab-send")
     w0 = len(samples)
     for _ in range(90):
         samples.append(pg.evaluate(js)); pg.wait_for_timeout(100)
@@ -2823,7 +2824,18 @@ def t_operator_float(P):
     edges), dragged by its header and remembered; 🧪, the roadmap and the 🔮 Oracle hide it and give it back; the 🛠 tray of suggestions; no
     Oracle caption under the input."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
-    pg.click("#lab-toggle"); wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 5, P=P)
+    one = pg.evaluate("() => [...document.querySelectorAll('#toHandle, #lab-toggle')].filter(e => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.3 && r.width > 0; }).map(e => e.id)")
+    need(one == ["toHandle"], f"exactly one Operator toggle, the square 📟: {one}")
+    # after closing it, the first 3 times, the 📟 glows (~6 s, or until hovered); not the 4th time
+    gl = []
+    for k in range(4):
+        pg.click("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(300)
+        pg.click("#lab-close"); pg.wait_for_timeout(700); gl.append(pg.evaluate("() => window.__toHandle.glowing()"))
+    need(gl == [True, True, True, False], f"the 📟 glows after the first three closes only: {gl}")
+    pg.evaluate("() => localStorage.setItem('idle.opCloses', '0')"); pg.click("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(300)
+    pg.click("#lab-close"); pg.wait_for_timeout(700); need(pg.evaluate("() => window.__toHandle.glowing()"), "the 📟 glows again (counter reset)")
+    pg.hover("#toHandle"); pg.wait_for_timeout(150); need(not pg.evaluate("() => window.__toHandle.glowing()"), "hovering the 📟 stops its glow")
+    pg.click("#toHandle"); wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 5, P=P)
     R = "() => { const r = document.querySelector('#lab').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height, right: innerWidth - r.right, bottom: innerHeight - r.bottom, W: innerWidth, H: innerHeight, rad: parseFloat(getComputedStyle(document.querySelector('#lab')).borderTopLeftRadius) }; }"
     r = pg.evaluate(R)
     need(r["w"] <= 420 and r["h"] < r["H"] - 80 and r["right"] >= 8 and r["bottom"] >= 40 and r["rad"] >= 8, f"the Operator should float (not a full-height sidebar): {r}")
@@ -2876,6 +2888,40 @@ def t_operator_float_phone(P):
     sent = pg.evaluate("() => window.__sent"); need(sent[:1] == ["what's happening?"] and "optext:what's happening?" in sent, f"phone: a chip is sent at once (to the Operator): {sent}")
     P.clean()
     return f"a {round(100 * r['h'] / r['H'])}% sheet; a chip sends"
+
+
+
+def t_story_input_visible(P):
+    """v14 (Nico: "this last operator's chat box input is under the fold"): through Genesis (the Operator's opening, lights, words, life, the
+    Epoch 0 moment), whenever the Operator's window is shown its input is fully on screen and inside the window, on a computer and on two
+    phones (375×667, 390×844), and on a 375×420 screen (a phone with its keyboard up)."""
+    js = """() => { const lab = document.querySelector('#lab'), t = document.querySelector('#lab-text'), L = lab.getBoundingClientRect(), r = t.getBoundingClientRect(); let o = 1; for (let e = lab; e; e = e.parentElement) o *= +getComputedStyle(e).opacity;
+      return { shown: lab.classList.contains('open') && o > 0.9, ok: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth && r.top >= L.top - 1 && r.bottom <= L.bottom + 1 && r.height > 16,
+        r: [Math.round(r.top), Math.round(r.bottom)], L: [Math.round(L.top), Math.round(L.bottom)], H: innerHeight, step: window.__genesis.next(), m: !!(window.__genesis.moment() || {}).ready }; }"""
+    out = []
+    for vw in ({"width": 1400, "height": 900}, {"width": 375, "height": 667}, {"width": 390, "height": 844}, {"width": 375, "height": 420}):
+        ctx = P.ctx.browser.new_context(viewport=vw, is_mobile=vw["width"] < 500, has_touch=vw["width"] < 500); Q = Page(ctx, P.base)
+        try:
+            pg = Q.open("/arena.html?at=lights"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30); pg.keyboard.press("k")
+            shown, bad, steps, seen = 0, [], set(), {}
+            for _ in range(400):
+                x = pg.evaluate(js)
+                if x["shown"]:
+                    shown += 1; st = x["step"] or ("moment" if x["m"] else "?"); steps.add(st); seen[st] = seen.get(st, 0) + 1
+                    if not x["ok"]: bad.append(x)
+                    # each step seen a few times on screen: send its pre-typed words as a player would
+                    if x["step"] and seen[st] >= 3 and pg.evaluate("() => window.__genesis.ready()"):
+                        if vw["width"] < 500: pg.tap("#lab-send")
+                        else: pg.focus("#lab-text"); pg.keyboard.press("Enter")
+                        seen[st] = -999
+                if x["m"]: break
+                pg.wait_for_timeout(200)
+            need(not bad and shown >= 10 and {"light", "words", "creatures", "moment"} <= steps, f"{vw['width']}×{vw['height']}: the input off screen or outside the window ({len(bad)} of {shown} shown samples, steps {sorted(map(str, steps))}): {bad[:3]}")
+            out.append(f"{vw['width']}×{vw['height']} ({shown})")
+        finally:
+            ctx.close()
+    P.clean()
+    return "the input on screen at every Genesis step: " + ", ".join(out)
 
 
 def t_halloween(P):
@@ -3028,7 +3074,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3087,6 +3133,7 @@ def main():
                 run("story migrate", t_story_migrate)
                 run("story keys", t_story_keys)
                 run("story phone steps", t_story_phone_steps, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
+                run("story input visible", t_story_input_visible)
                 run("operator float", t_operator_float)
                 run("operator float phone", t_operator_float_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story end phone", t_story_end_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
