@@ -5,7 +5,7 @@
 // Reads GET /lab/live every 2.5 s while this page is visible, with the creator's key (Authorization: Bearer …, kept in this browser's
 // localStorage); without it the server answers 404. The data is what idle-presence.js beats: coarse, anonymous, in memory for a minute.
 (() => {
-  const KEY = 'idle.liveKey', EVERY = 2500, $ = s => document.querySelector(s);
+  const KEY = 'idle.liveKey', EVERY = 2500, $ = s => document.querySelector(s), esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const MODE = { story: ['storyline', css('--s-story')], free: ['playground · from nothing', css('--s-free')], ready: ['playground · ready world', css('--s-ready')], world: ['plain world', css('--s-world')] };
   // countries: the three with most players get the categorical hues (fixed slot order, by count at the moment they first appear), the rest grey
@@ -15,7 +15,9 @@
   const PGLYPH = { operator: '📟', card: '🪪', creatures: '🐾', studio: '🎨', music: '🎵', lab: '🧬', advisor: '🧭', almanac: '📅', drawer: '🗄', trees: '🌳', reels: '🎞', settings: '⚙', feedback: '🧪', oracle: '🔮', review: '⭐', irc: '💬' };
   const DEV = { phone: '📱', tablet: '📱', desktop: '🖥' };
   let key = ''; try { key = localStorage.getItem(KEY) || ''; } catch (e) {}
-  let by = 'mode', data = null, failing = 0, ccSlot = {};
+  let by = 'mode', data = null, failing = 0, ccSlot = {}, refSlot = {};
+  const REF_TOP = 8;   // the chart shows the eight sites that brought most people; the rest are folded into 'other' (in the chart only)
+  const PAGEG = { pedia: '📖', privacy: '🔒' };
   const nodes = new Map();   // alias → { x, y, vx, vy, r, born, gone, d }
 
   // ---------- the key ----------
@@ -42,11 +44,12 @@
   const cv = $('#cv'), g = cv.getContext('2d'), stage = $('#stage'); let W = 0, Hh = 0, dpr = 1;
   const resize = () => { dpr = Math.min(2, devicePixelRatio || 1); W = stage.clientWidth; Hh = stage.clientHeight; cv.width = W * dpr; cv.height = Hh * dpr; };
   addEventListener('resize', resize); resize();
-  const groupOf = p => by === 'mode' ? p.mode : (p.cc || 'XX');
-  const colorOf = p => by === 'mode' ? (MODE[p.mode] || MODE.world)[1] : (ccSlot[p.cc] != null ? CC_SLOTS[ccSlot[p.cc]] : OTHER);
-  const labelOf = k => by === 'mode' ? (MODE[k] || MODE.world)[0] : k === 'XX' ? 'unknown' : k;
+  const refOf = p => p.ref || 'other';
+  const groupOf = p => by === 'mode' ? p.mode : by === 'ref' ? (refSlot[refOf(p)] != null ? refOf(p) : 'elsewhere') : (p.cc || 'XX');
+  const colorOf = p => by === 'mode' ? (MODE[p.mode] || MODE.world)[1] : by === 'ref' ? (refSlot[refOf(p)] != null ? CC_SLOTS[refSlot[refOf(p)]] : OTHER) : (ccSlot[p.cc] != null ? CC_SLOTS[ccSlot[p.cc]] : OTHER);
+  const labelOf = k => by === 'mode' ? (MODE[k] || MODE.world)[0] : by === 'ref' ? (k === 'elsewhere' ? 'other sites' : k) : k === 'XX' ? 'unknown' : k;
   const radius = p => Math.min(30, 9 + 5 * Math.log2(1 + (p.t || 0) / 30));
-  const glyphOf = p => (p.p && p.p[0] && PGLYPH[p.p[0]]) || (p.mode === 'story' ? (p.step === 'epoch' ? 'E' + p.ep : GLYPH[p.step] || '') : '');
+  const glyphOf = p => (p.page && PAGEG[p.page]) || (p.p && p.p[0] && PGLYPH[p.p[0]]) || (p.mode === 'story' ? (p.step === 'epoch' ? 'E' + p.ep : GLYPH[p.step] || '') : '');
   let anchors = {};
   function layoutGroups() {   // groups sit on an ellipse around the middle, biggest first; one group sits in the middle
     const count = {}; for (const n of nodes.values()) if (!n.gone) count[groupOf(n.d)] = (count[groupOf(n.d)] || 0) + 1;
@@ -60,6 +63,10 @@
     const cc = data.tot && data.tot.cc || {}, top = Object.keys(cc).filter(k => k !== 'XX').sort((a, b) => cc[b] - cc[a]).slice(0, 3);
     for (const k of Object.keys(ccSlot)) if (!top.includes(k)) delete ccSlot[k];
     for (const k of top) if (ccSlot[k] == null) { const used = new Set(Object.values(ccSlot)); const s = [0, 1, 2].find(i => !used.has(i)); if (s != null) ccSlot[k] = s; }
+    // the same for the sites people came from (the three that brought most people right now keep their hue)
+    const rf = data.tot && data.tot.ref || {}, rtop = Object.keys(rf).filter(k => k !== 'other').sort((a, b) => rf[b] - rf[a] || a.localeCompare(b)).slice(0, 3);
+    for (const k of Object.keys(refSlot)) if (!rtop.includes(k)) delete refSlot[k];
+    for (const k of rtop) if (refSlot[k] == null) { const used = new Set(Object.values(refSlot)); const s = [0, 1, 2].find(i => !used.has(i)); if (s != null) refSlot[k] = s; }
     for (const p of data.players || []) { seen.add(p.a); const n = nodes.get(p.a);
       if (n) { n.d = p; n.gone = 0; }
       else { const a = anchors[groupOf(p)] || { x: W / 2, y: Hh / 2 }; nodes.set(p.a, { x: a.x + (Math.random() - 0.5) * 80, y: a.y + (Math.random() - 0.5) * 80, vx: 0, vy: 0, r: 0, born: now, gone: 0, d: p }); } }
@@ -109,6 +116,8 @@
     const p = hover.d, row = (k, v) => `<div><span>${k}</span><span>${v}</span></div>`;
     tip.innerHTML = `<b>player ${p.a}</b>` + row('mode', (MODE[p.mode] || MODE.world)[0] + (p.mode === 'story' && p.arm !== 'none' ? ' (' + p.arm + ' arm)' : ''))
       + (p.mode === 'story' ? row('where', p.step === 'epoch' ? 'epoch ' + p.ep : STEP[p.step] || '–') : '')
+      + row('page', p.page === 'pedia' ? '📖 the Id|le-pedia' : p.page === 'privacy' ? '🔒 privacy' : 'the game')
+      + row('came from', esc(refOf(p)) + (p.tag ? ' · ' + esc(p.tag) : ''))
       + row('in game', fmt(p.t)) + row('online here', fmt(p.since)) + row('country', p.cc === 'XX' ? 'unknown' : p.cc) + row('device', (DEV[p.dev] || '') + ' ' + p.dev)
       + row('panels', p.p && p.p.length ? p.p.map(k => (PGLYPH[k] || '') + ' ' + k).join(', ') : 'none') + row('creatures', p.cr || '–') + row('been before', p.back ? 'yes' : 'first visit');
     tip.style.display = 'block'; const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -120,7 +129,8 @@
     document.querySelectorAll('#ctl button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); if (data) { layoutGroups(); legend(); } }));
   function legend() { const L = $('#legend');
     if (by === 'mode') L.innerHTML = Object.values(MODE).map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('');
-    else { const ks = Object.keys(ccSlot).sort((a, b) => ccSlot[a] - ccSlot[b]); L.innerHTML = ks.map(k => `<span><i style="background:${CC_SLOTS[ccSlot[k]]}"></i>${k}</span>`).join('') + `<span><i style="background:${OTHER}"></i>other countries</span>`; }
+    else { const slot = by === 'ref' ? refSlot : ccSlot, ks = Object.keys(slot).sort((a, b) => slot[a] - slot[b]);
+      L.innerHTML = ks.map(k => `<span><i style="background:${CC_SLOTS[slot[k]]}"></i>${esc(k)}</span>`).join('') + `<span><i style="background:${OTHER}"></i>${by === 'ref' ? 'other sites' : 'other countries'}</span>`; }
     L.innerHTML += `<span style="color:var(--muted)">size: time in game · glyph: what they’re doing</span>`; }
 
   // ---------- side charts ----------
@@ -141,10 +151,13 @@
       const s = series[series.length - 1]; x.fillStyle = css('--s-story'); x.beginPath(); x.arc(at(s.m), base - s.on * sc, 4, 0, Math.PI * 2); x.fill();
       x.fillStyle = css('--ink2'); x.textAlign = 'left'; x.fillText('max ' + max, 2, 10); }
   }
+  const foldRef = o => { const ks = Object.keys(o || {}).filter(k => o[k] > 0).sort((a, b) => o[b] - o[a] || a.localeCompare(b)), out = {};
+    ks.forEach((k, i) => { if (i < REF_TOP - 1 || ks.length <= REF_TOP) out[k] = (out[k] || 0) + o[k]; else out.other = (out.other || 0) + o[k]; }); return out; };
   function charts() { const T = data.tot || {};
     spark($('#spOn'), data.hist || [], {}); spark($('#spAL'), data.hist || [], { split: true });
+    bars($('#bRef'), foldRef(T.ref), k => esc(k)); bars($('#bPage'), T.page, k => (PAGEG[k] || '🎮') + ' ' + k);
     bars($('#bStep'), T.step, k => STEP[k] || k); bars($('#bPanel'), T.panel, k => (PGLYPH[k] || '') + ' ' + k); bars($('#bCc'), T.cc, k => k === 'XX' ? 'unknown' : k);
     bars($('#bDev'), T.dev, k => (DEV[k] || '') + ' ' + k); bars($('#bMode'), T.mode, k => (MODE[k] || MODE.world)[0]); }
-  window.__live = { state: () => ({ online: data ? data.online : null, nodes: [...nodes.values()].filter(n => !n.gone).map(n => n.d.a), by, key: !!key }) };
+  window.__live = { _nodes: () => [...nodes.values()].filter(n => !n.gone).map(n => ({ a: n.d.a, x: n.x, y: n.y })), state: () => ({ online: data ? data.online : null, nodes: [...nodes.values()].filter(n => !n.gone).map(n => n.d.a), by, key: !!key }) };
   poll();
 })();

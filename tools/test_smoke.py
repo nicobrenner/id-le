@@ -212,18 +212,26 @@ out.rate_61st = last;
   out.gift = { letter: g1.letter, label: JSON.stringify(g1).includes('private'), claimed0: g1.claimed, c1: c1.ok, writes: w1 - w0, c2: c2.already, claimed1: g2.claimed,
     unknown: (await go('/lab/gift/zzzzzzzzzzzzzzzzzzzzzzzz')).status, revoked: (await go('/lab/gift/revokedrevokedrevokedr')).status, bad: (await go('/lab/gift/AB')).status }; }
 // presence (11-03): beats from fixed lists only, held in memory (no KV write), dropped 60 s after the last beat, "bye" removes at once;
-// the creator's view needs the key (404 otherwise); production (no IDLE_ENV, with STATS) accepts beats and drops them
+// the creator's view needs the key (404 otherwise); the kill switch (PRESENCE_ON=0) accepts beats and drops them
 { const M = await import(process.argv[2]); const P = {};
   const id1 = 'a1b2c3d4e5f60718', id2 = '0011223344556677', puts0 = env.STATS.puts.length + env.WORLDS.puts.length;
   const beat = (b, ip = '4.4.4.4') => go('/lab/here', { method: 'POST', body: JSON.stringify(b) }, ip);
-  P.prod = (await beat({ v: 1, id: id1, dev: 'desktop', mode: 'world' })).status;
-  env.IDLE_ENV = 'staging'; env.LIVE_KEY = 'k'.repeat(40);
+  env.PRESENCE_ON = '0'; P.prod = (await beat({ v: 1, id: id1, dev: 'desktop', mode: 'world' })).status; delete env.PRESENCE_ON;   // the kill switch
+  env.LIVE_KEY = 'k'.repeat(40);
   const live = async (k) => go('/lab/live', k === undefined ? {} : { headers: { 'CF-Connecting-IP': '4.4.4.4', Authorization: 'Bearer ' + k } });
   P.view_before_prod_beat = (await (await live('k'.repeat(40))).json()).online;
   P.b1 = await (await beat({ v: 1, id: id1, dev: 'phone', mode: 'story', arm: 'story', step: 'words', ep: 0, p: ['operator', 'evil', 'card', 'operator'], cr: '0-12', t: 42.4, back: 1, text: 'hello world', name: 'Doc' })).json();
   P.b2 = await (await beat({ v: 1, id: id2, dev: 'toaster', mode: 'hack', step: 'words', ep: 3, p: 'music', cr: 'lots', t: -5 })).json();
   P.bad = await (await beat({ v: 1, id: 'not-hex' })).json();
-  P.big = (await go('/lab/here', { method: 'POST', body: 'x'.repeat(700) })).status;
+  P.big = (await go('/lab/here', { method: 'POST', body: 'x'.repeat(800) })).status;
+  // where they came from: a site's name only (never a path or a query), a cleaned campaign tag, the page; anything else falls back
+  const id3 = 'ffeeddccbbaa9988', id4 = '1234567890abcdef', id5 = 'abcdefabcdefabcd';
+  await beat({ v: 1, id: id3, page: 'pedia', mode: 'world', ref: 'news.ycombinator.com', tag: 'hn-test' });
+  await beat({ v: 1, id: id4, page: 'admin', mode: 'world', ref: 'evil.com/path?q=secret', tag: 'Bad Tag!' });
+  await beat({ v: 1, id: id5, mode: 'world', ref: 'a'.repeat(61) + '.com', tag: 'x'.repeat(25) });
+  { const w = await (await live('k'.repeat(40))).json(), f = a => w.players.find(x => x.a === a.slice(0, 6));
+    P.ref3 = f(id3); P.ref4 = f(id4); P.ref5 = f(id5); P.ref_tot = w.tot.ref; P.page_tot = w.tot.page; P.ref_leak = /path|secret|Bad Tag/.test(JSON.stringify(w));
+    for (const i of [id3, id4, id5]) await beat({ v: 1, id: i, bye: 1 }); }
   P.nokey = (await live()).status; P.wrong = (await live('wrong')).status; P.short = (env.LIVE_KEY = 'short', (await live('short')).status); env.LIVE_KEY = 'k'.repeat(40);
   const v = await (await live('k'.repeat(40))).json(); P.online = v.online;
   P.p1 = v.players.find(x => x.a === id1.slice(0, 6)); P.p2 = v.players.find(x => x.a === id2.slice(0, 6)); P.tot = v.tot; P.hist = v.hist.length ? v.hist[v.hist.length - 1] : null;
@@ -238,7 +246,7 @@ out.rate_61st = last;
   // the Durable Object class answers the same beat and view
   const D = new M.Presence({}, {}); const r1 = await (await D.fetch(new Request('https://presence/beat', { method: 'POST', body: JSON.stringify({ v: 1, id: id1, mode: 'ready' }), headers: { 'X-Country': 'CL' } }))).json();
   const r2 = await (await D.fetch(new Request('https://presence/view'))).json(); P.do = { ok: r1.ok, online: r2.online, cc: r2.players[0] && r2.players[0].cc, mode: r2.players[0] && r2.players[0].mode };
-  delete env.IDLE_ENV; delete env.LIVE_KEY; out.presence = P; }
+  delete env.LIVE_KEY; out.presence = P; }
 // reviews (11-03, v2): team stage (403 before joining), join once, per-item and per-pair dedupe by browser key (nothing new → 409, no
 // writes), notes private, team contributions counted, the order hint, totals with like-rate and Bradley-Terry only when shown, closed → 410
 { const K1 = 'abcdefghijklmnopqrstuvwxyz', K2 = 'zyxwvutsrqponmlkjihgfedcba', P = (b, ip) => post('/lab/review/logos', b, ip || '7.7.7.1');
@@ -379,13 +387,17 @@ def worker_unit():
     egx = {k: v for k, v in o["eg"].items() if v and (k.startswith("reels") or k.startswith("errs"))}
     need(egx == {"reels:1-5": 1, "errs:1": 1}, f"v2 buckets {egx}")
     pr = o["presence"]
-    need(pr["prod"] == 204 and pr["view_before_prod_beat"] == 0, f"production must accept and drop beats: {pr['prod']}, then online {pr['view_before_prod_beat']}")
+    need(pr["prod"] == 204 and pr["view_before_prod_beat"] == 0, f"with the kill switch (PRESENCE_ON=0) beats must be accepted and dropped: {pr['prod']}, then online {pr['view_before_prod_beat']}")
     need(pr["b1"].get("ok") and pr["b2"].get("ok") and pr["bad"].get("ok") is False and pr["big"] == 413, f"beats: {pr['b1']} {pr['b2']} bad id {pr['bad']} too big {pr['big']}")
     need(pr["nokey"] == 404 and pr["wrong"] == 404 and pr["short"] == 404, f"the live view without the right key must be 404: none {pr['nokey']}, wrong {pr['wrong']}, a short server key {pr['short']}")
     p1, p2 = pr["p1"] or {}, pr["p2"] or {}
     need(pr["online"] == 2 and p1.get("mode") == "story" and p1.get("step") == "words" and p1.get("ep") == 0 and p1.get("p") == ["operator", "card"] and p1.get("cr") == "0-12" and p1.get("t") == 42 and p1.get("back") == 1 and p1.get("dev") == "phone", f"story beat: {p1}")
     need(p2.get("mode") == "world" and p2.get("dev") == "desktop" and p2.get("step") is None and p2.get("ep") is None and p2.get("p") == [] and p2.get("cr") is None and p2.get("t") == 0, f"junk must fall back or drop: {p2}")
-    need(set(p1) <= {"a", "since", "t", "cc", "dev", "mode", "arm", "step", "ep", "p", "cr", "back"} and not pr["full_id"] and not pr["leak"], f"the view must hold only coarse fields (no full id, text or address): {sorted(p1)}, id {pr['full_id']}, leak {pr['leak']}")
+    r3, r4, r5 = pr["ref3"] or {}, pr["ref4"] or {}, pr["ref5"] or {}
+    need((r3.get("page"), r3.get("ref"), r3.get("tag")) == ("pedia", "news.ycombinator.com", "hn-test"), f"a pedia reader from HN: {r3}")
+    need((r4.get("page"), r4.get("ref"), r4.get("tag")) == ("game", "other", None) and (r5.get("ref"), r5.get("tag")) == ("other", None) and not pr["ref_leak"], f"a path, a 65-char name and a bad tag must not pass: {r4} {r5}, leak {pr['ref_leak']}")
+    need(pr["ref_tot"].get("news.ycombinator.com") == 1 and pr["page_tot"].get("pedia") == 1, f"came-from totals {pr['ref_tot']}, pages {pr['page_tot']}")
+    need(set(p1) <= {"a", "since", "t", "cc", "dev", "mode", "arm", "step", "ep", "p", "cr", "back", "page", "ref", "tag"} and not pr["full_id"] and not pr["leak"], f"the view must hold only coarse fields (no full id, text or address): {sorted(p1)}, id {pr['full_id']}, leak {pr['leak']}")
     need(pr["tot"]["mode"] == {"story": 1, "world": 1} and pr["tot"]["panel"] == {"operator": 1, "card": 1} and pr["tot"]["step"] == {"words": 1}, f"totals {pr['tot']}")
     need(pr["hist"] and pr["hist"]["arr"] >= 2, f"arrivals this minute: {pr['hist']}")
     need(pr["after_bye"] == 1 and pr["kv_writes"] == 0, f"bye must remove at once ({pr['after_bye']} left) and presence never writes KV ({pr['kv_writes']} writes)")
@@ -610,14 +622,14 @@ class Page:
         need(not self.console, f"{what} console errors: " + " | ".join(self.console[:3]))
         need(not self.warns, f"{what} switched a feature off: " + " | ".join(self.warns[:3]))
 
-    def open(self, path):
+    def open(self, path, referer=None):
         pg = self.ctx.new_page()
         pg.on("pageerror", lambda e: self.errors.append(str(e)[:200]))
         pg.on("console", self._console)
         def nav(fr):   # the service worker reloads the page once (cross-origin isolation): errors from the first document were from a page being replaced
             if fr == pg.main_frame and (self.errors or self.console or self.warns): self.before_reload += self.errors + self.console + self.warns; self.errors.clear(); self.console.clear(); self.warns.clear()
         pg.on("framenavigated", nav)
-        pg.goto(self.base + path, wait_until="load")
+        pg.goto(self.base + path, wait_until="load", referer=referer)
         return pg
 
 
@@ -2576,10 +2588,17 @@ def t_prod_gates(P, root):
       f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
       ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
     need(r["host"] == "id-le.com" and not r["live"], f"not emulating production: {r}")
-    # presence: off on id-le.com (PRESENCE_ON_PROD), even with stats live and a forced beat
-    pz = P.open("/arena.html"); booted(pz); pz.wait_for_timeout(4000)
-    pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on, sent: window.__presence.beat() })"); pz.close()
-    need(pr["stats"] and not pr["on"] and pr["sent"] is False and not P.here, f"presence beat on production: {pr}, {len(P.here)} beats")
+    # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
+    need(not P.here, f"a ?fresh page beat on production: {P.here[:1]}")
+    pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
+    wait_for(pz, "() => window.__presence && window.__presence.state().running", 20, P=P)
+    pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on })"); pz.evaluate("() => window.__presence.bye()"); pz.close()
+    beats = [json.loads(b) for b in P.here if b]
+    need(pr["stats"] and pr["on"] and beats, f"presence must beat on production: {pr}, {len(beats)} beats")
+    need(all(set(b) <= {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye", "page", "ref", "tag"} for b in beats), f"a production beat outside the allowlist: {beats[:1]}")
+    full = [b for b in beats if not b.get("bye")][0]
+    need(full.get("page") == "game" and full.get("ref") == "reddit.com" and full.get("tag") == "prod-check" and "WebGames" not in json.dumps(beats), f"production beat: {full}")
+    P.here.clear()
     need(not r["void"] and not r["intro"] and not r["offer"] and not r["founder"], f"story/offer/founder visible on production: {r}")
     need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
     pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
@@ -2636,8 +2655,8 @@ def t_presence(P):
             except OSError: time.sleep(0.2)
         P.helper = f"http://127.0.0.1:{port}"
         tabs = []
-        for i in range(2):
-            pg = P.open("/arena.html?statstest&test"); booted(pg)
+        for i in range(2):   # the first comes from a Hacker News link with a campaign tag
+            pg = P.open("/arena.html?statstest&test" + ("&utm_source=HN-Test" if i == 0 else ""), referer="https://news.ycombinator.com/item?id=4242" if i == 0 else None); booted(pg)
             wait_for(pg, "() => window.__presence && window.__presence.state().running", 20, P=P); tabs.append(pg)
         ids = {json.loads(b)["id"] for b in P.here if b}
         need(len(ids) == 2, f"two tabs, {len(ids)} ids beating ({len(P.here)} requests, first {P.here[:1]!r}, state {tabs[0].evaluate('() => window.__presence.state()')})")
@@ -2648,6 +2667,21 @@ def t_presence(P):
         wait_for(lv, "() => window.__live.state().online === 2 && window.__live.state().nodes.length === 2", 20, P=P)
         tip = lv.evaluate("() => document.querySelector('#bMode').textContent + '|' + document.querySelector('#bCc').textContent")
         need("plain world" in tip and "CL" in tip, f"side charts: {tip}")
+        # came from: the hover card and the chart show the site's name and the tag, never the link's path
+        hn = next((json.loads(b) for b in P.here if b and '"news.ycombinator.com"' in b), None)
+        need(hn and hn.get("ref") == "news.ycombinator.com" and hn.get("tag") == "hn-test" and hn.get("page") == "game" and "item" not in json.dumps(hn), f"the HN tab's beat: {hn}")
+        card = ""
+        for _ in range(6):
+            pos = lv.evaluate("(a) => { const n = window.__live._nodes().find(n => n.a === a), b = document.querySelector('#cv').getBoundingClientRect(); return n ? { x: b.left + n.x, y: b.top + n.y } : null; }", hn["id"][:6])
+            if pos: lv.mouse.move(pos["x"], pos["y"]); lv.wait_for_timeout(120); card = lv.evaluate("() => getComputedStyle(document.querySelector('#tip')).display === 'block' ? document.querySelector('#tip').innerText : ''")
+            if "news.ycombinator.com" in card: break
+            lv.wait_for_timeout(400)
+        need("came from" in card and "news.ycombinator.com · hn-test" in card and "the game" in card and "item" not in card, f"hover card: {card!r}")
+        refs = lv.evaluate("() => document.querySelector('#bRef').textContent + '|' + document.querySelector('#bPage').textContent")
+        need("news.ycombinator.com" in refs and "direct" in refs and "game" in refs, f"came-from and pages charts: {refs}")
+        lv.click('#ctl button[data-by=ref]'); lv.wait_for_timeout(300)
+        need("news.ycombinator.com" in lv.evaluate("() => document.querySelector('#legend').textContent"), "colour by came from: the legend has no news.ycombinator.com")
+        lv.click('#ctl button[data-by=mode]')
         tabs[1].evaluate("() => window.__presence.bye()"); tabs[1].goto("about:blank")   # what pagehide does (a beacon sent from an unloading page never reaches the test's routes)
         try: wait_for(lv, "() => window.__live.state().online === 1", 20, P=P)
         except AssertionError: raise AssertionError(f"no bye: {[b for b in P.here if 'bye' in b]}, live {lv.evaluate('() => window.__live.state()')}")
@@ -2664,7 +2698,12 @@ def t_presence(P):
         g.goto(P.base + "/arena.html?statstest&test"); booted(g); g.wait_for_timeout(4000)
         gpc = g.evaluate("() => ({ on: window.__presence.state().on, stats: window.__settings.statsLive() })")
         need(not off["on"] and off["sent"] is False and not gpc["on"] and gpc["stats"] and len(P.here) == n0, f"stats off {off}, GPC {gpc}, beats sent meanwhile {len(P.here) - n0}")
-        bad = [b for b in P.here if b and set(json.loads(b)) - {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye"}]
+        # the pedia beats too, as the pedia (live.html never does)
+        pd = P.open("/pedia.html?statstest"); wait_for(pd, "() => window.__presence && window.__presence.state().running", 30, P=P)
+        pb = [json.loads(b) for b in P.here[n0:] if b and '"pedia"' in b]
+        need(pb and pb[0].get("page") == "pedia" and pb[0].get("ref") == "direct", f"the pedia's beat: {pb[:1]}"); pd.evaluate("() => window.__presence.bye()"); pd.close()
+        need(not lv.evaluate("() => !!window.__presence"), "the live view must not beat")
+        bad = [b for b in P.here if b and set(json.loads(b)) - {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye", "page", "ref", "tag"}]
         need(not bad, f"a beat carried a field outside the list: {bad[:1]}")
         for x in (pg, g): x.close()
         P.clean()
@@ -2672,6 +2711,20 @@ def t_presence(P):
     finally:
         node.terminate()
         with contextlib.suppress(Exception): node.wait(5)
+
+
+def presence_privacy():
+    """privacy.html#presence lists exactly what a presence beat carries: one item per field idle-presence.js sends (the country is said
+    separately, as the server adds it), and the fields the page sends are exactly those"""
+    html = open(os.path.join(DEMO, "privacy.html"), encoding="utf-8").read()
+    sec = re.search(r'<h2 id="presence">.*?</ul>(.*?)<h2', html, re.S); need(sec, "privacy.html has no #presence section")
+    items = re.findall(r"<li>(.*?)</li>", re.search(r'<h2 id="presence">.*?<ul>(.*?)</ul>', html, re.S).group(1), re.S)
+    want = {"id": "random number", "dev": "phone, tablet or desktop", "mode": "how you're playing", "p": "panels are open", "cr": "how many creatures",
+            "t": "seconds ago", "back": "been here before", "page": "which page", "ref": "where the visit came from", "tag": "campaign tag"}
+    for k, phrase in want.items(): need(any(phrase in i for i in items), f"privacy #presence doesn't list {k} ({phrase!r})")
+    need(len(items) == len(want), f"privacy #presence lists {len(items)} items, the beat has {len(want)} fields")
+    need("never the full address, its path or its query" in html and "at most 60 characters" in html and "country" in sec.group(1), "the came-from item must say: name only, never the path or the query, at most 60 characters; and the country added by the server")
+    return f"{len(items)} items, one per field; came-from is the name only"
 
 
 def t_chooser(P):
@@ -2841,6 +2894,7 @@ def main():
     want = lambda name: a.k.lower() in name.lower()
     print("static checks")
     if want("js syntax"): check("js syntax", js_syntax)
+    if want("presence privacy"): check("presence privacy: what a beat carries", presence_privacy)
     if want("conflict markers"): check("conflict markers", no_conflict_markers)
     if want("fontgen"): check("fontgen", fontgen_round)
     if want("gift tool"): check("gift tool: personal gift links", gift_tool_unit)
