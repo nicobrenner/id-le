@@ -1686,7 +1686,7 @@ def t_story(P):
     # v10: the tour's last step is the Oracle: a line and a glowing 🔮 that opens the Oracle's lightbox (the end card closed first: the Operator steps aside for it)
     pg.click("#genDay .x"); wait_for(pg, "() => !document.querySelector('#genDay.end')", 5, P=P)
     wait_for(pg, "() => !!document.querySelector('#genConsole [data-goracle]')", 10, P=P)
-    need(pg.evaluate("() => document.querySelector('#ai-thread').innerText.includes(window.__genesis.oracleLine)"), "the Operator should say the Oracle line")
+    need(pg.evaluate("() => document.querySelector('#ai-thread').textContent.includes(window.__genesis.oracleLine)"), "the Operator should say the Oracle line")
     pg.click("#toHandle"); wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 5, P=P)
     pg.click("#genConsole [data-goracle]"); pg.wait_for_timeout(300)
     need(pg.evaluate("() => window.__oracleBox.isOpen() && !!document.querySelector('#oracleBox #ai-brain') && window.__opwin.yielding() === '#oracleBox:not([hidden])'"), "the tour's 🔮 should open the Oracle lightbox, the Operator stepping aside")
