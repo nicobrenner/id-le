@@ -2835,6 +2835,43 @@ def t_hint_phone(P):
     return "hint and skip › clear of the dock at 375×667"
 
 
+def t_arm_reload(P):
+    """Nov 4 launch bug: the service worker's one-time isolation reload (?_coi=1) can reload a first visit right after genesis boot() saved
+    S (n: 1); story-arm newcomers then landed in the chooser. A reload before any story progress must keep each arm's first screen: story →
+    the title card (never the chooser), choose → the chooser, play → the playground with at most one welcome; funnel moments stay once."""
+    out = []
+    for arm in ("story", "choose", "play"):
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)
+        try:
+            q = Q.open(f"/arena.html?arm={arm}&test")
+            if arm == "story":
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            elif arm == "choose":
+                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
+            else:
+                booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+            saved = q.evaluate("() => JSON.parse(localStorage.getItem('idle.genesis') || 'null')")
+            q.goto(P.base + f"/arena.html?arm={arm}&test&_coi=1")   # the isolation reload, before any story progress
+            if arm == "story":
+                wait_for(q, "() => (!!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1') || !!document.querySelector('#genChoose')", 40)
+                r = q.evaluate("() => ({ title: !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1', chooser: !!document.querySelector('#genChoose'), f: window.__funnel.reached() })")
+                need(r["title"] and not r["chooser"], f"story arm after a reload: the title card, not the chooser: {r} (saved before the reload: {saved})")
+            elif arm == "choose":
+                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40); q.wait_for_timeout(800)
+                n = q.evaluate("() => document.querySelectorAll('#genChoose').length"); need(n == 1, f"choose arm after a reload: one chooser, got {n}")
+            else:
+                booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+                r = q.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), chooser: !!document.querySelector('#genChoose'), void: !!window.__genesisVoid })")
+                need(not r["intro"] and not r["chooser"] and not r["void"], f"play arm after a reload: the playground: {r}")
+            st = q.evaluate("() => JSON.parse(localStorage.getItem('idle.funnel') || '{}')")
+            need(all(v == 1 for v in st.values()), f"funnel moments stay once after a reload: {st}")
+            out.append(arm)
+        finally:
+            ctx.close()
+    P.clean()
+    return "after the isolation reload: " + ", ".join(out) + " keep their first screen"
+
+
 def t_story_arms(P):
     """The storyline's A/B/C (v15, Nico: "A: user goes into storyline mode, B: user sees choice screen, C: user goes directly to playground"),
     off by default: a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=choose gets the chooser (📖 / 🛝);
@@ -3729,7 +3766,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "genesis gate", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "reviews fresh", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "arm reload", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "genesis gate", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "reviews fresh", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3807,6 +3844,7 @@ def main():
                 run("title card", t_title_card)
                 run("hint phone", t_hint_phone)
                 run("story arms", t_story_arms)
+                run("arm reload", t_arm_reload)
                 run("story offer", t_story_offer)
                 run("never stuck", t_never_stuck)
                 run("founder", t_founder)
