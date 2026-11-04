@@ -2467,6 +2467,9 @@ def t_ios_sound(P, ios=True):
     wait_for(pg, "() => !!window.__titleHint", 10, P=P)
     h = pg.evaluate("() => window.__titleHint")
     need("silent switch" in h and "best with sound" in h, f"the title card's hint: {h}")
+    if os.environ.get("IDLE_SHOTS"): pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], "ios-title-hint.png"))
+    b = pg.evaluate("() => window.__titleHintBox")
+    need(b["fs"] >= 16 and b["maxW"] <= b["W"] - 32, f"the title card's hint must be ≥ 16 px and fit inside a 16 px margin: {b}")
     pg.touchscreen.tap(190, 400); pg.wait_for_timeout(800)
     s1 = pg.evaluate("() => window.__iosMedia.state()")
     need(s1["ios"] and s1["session"] == "playback" and not s1["fallback"], f"audioSession should be 'playback' with no fallback: {s1}")
@@ -2478,12 +2481,15 @@ def t_ios_sound(P, ios=True):
     s2 = pg.evaluate("() => ({ m: window.__iosMedia.state(), toast: !!window.__iosToastShown, muted: window.__audio.muted() })")
     need(s2["m"]["session"] is None and s2["m"]["fallback"] and s2["m"]["playing"], f"the silent <audio> should play after the tap: {s2}")
     need(s2["toast"], f"the playground's one-time hint should show: {s2}")
+    if os.environ.get("IDLE_SHOTS"): pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], "ios-toast.png"))
+    tb = pg.evaluate("() => { const t = document.getElementById('iosHintToast'); if (!t) return null; const r = t.getBoundingClientRect(), cs = getComputedStyle(t); return { fs: parseFloat(cs.fontSize), l: r.left, r: r.right, W: innerWidth, b: r.bottom, H: innerHeight }; }")
+    need(tb and tb["fs"] >= 16 and tb["l"] >= 15.5 and tb["r"] <= tb["W"] - 15.5 and tb["b"] <= tb["H"], f"the playground toast must be ≥ 16 px and inside the screen with a 16 px margin: {tb}")
     pg.evaluate("() => window.__audio.setMuted(true)"); pg.wait_for_timeout(300)
     s3 = pg.evaluate("() => window.__iosMedia.state()")
     need(not s3["playing"], f"muting Id|le pauses the silent <audio>: {s3}")
     pg.evaluate("() => window.__audio.setMuted(false)")
     P.clean()
-    return f"hint '{h}'; audioSession → playback; fallback <audio> plays, pauses on mute; playground toast once"
+    return f"hint '{h}' at {b['fs']} px in {b['lines']} lines; toast {tb['fs']:.0f} px; audioSession → playback; fallback <audio> plays, pauses on mute; playground toast once"
 
 
 FONT_LAYOUT_JS = """async () => { await document.fonts.ready;

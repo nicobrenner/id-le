@@ -442,7 +442,11 @@
     if (on) { g.font = `700 ${Math.round(clamp(big * 0.3, 15, 26))}px ${MONO}`; g.fillStyle = AMB; g.fillText(port || matchMedia('(pointer: coarse)').matches ? 'TAP TO START' : 'PRESS ANY KEY TO START', W / 2, H * 0.66); }
     // iPhones and iPads only (Nov 3: the silent switch mutes the web's sound and no page can read it): a quiet two-line hint under it
     const hint = window.__iosHint && window.__iosHint();
-    if (hint) { const fs = Math.round(clamp(big * 0.17, 11, 15)); g.font = `${fs}px ${MONO}`; g.fillStyle = DIM; hint.forEach((l, i) => g.fillText(l, W / 2, H * 0.66 + fs * (2.4 + i * 1.5)));
+    // readable on a phone (Nico: "pretty small, hard to read"): 16–18 px, light on the dark card, wrapped to the screen with a 16 px margin
+    if (hint) { const fs = Math.round(clamp(W / 24, 16, 18)), lh = fs * 1.4, maxW = W - 32; g.font = `${fs}px ${SUBF}`;
+      const lines = []; hint.forEach((l, i) => { let cur = ''; l.split(' ').forEach(w => { const t = cur ? cur + ' ' + w : w; if (cur && g.measureText(t).width > maxW) { lines.push([cur, i]); cur = w; } else cur = t; }); if (cur) lines.push([cur, i]); });
+      const y0 = H * 0.66 + Math.round(clamp(big * 0.3, 15, 26)) + fs * 1.2; window.__titleHintBox = { fs, lines: lines.length, maxW: Math.max(...lines.map(([l]) => g.measureText(l).width)), W };
+      lines.forEach(([l, i], k) => { g.fillStyle = i === 0 ? '#ffd9a8' : '#eef5f8'; g.fillText(l, W / 2, y0 + k * lh); });
       if (!window.__titleHint) { window.__titleHint = hint.join(' · '); try { localStorage.setItem('idle.iosHint', '1'); } catch (e) {} } }
     g.restore(); overlay(g, W, H, 0.8); }
   // the signature purr (Nico: "a 'signature purring sound' that matches the animation on the | of id|le… like the logo of a console when it
