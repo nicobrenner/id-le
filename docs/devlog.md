@@ -34,6 +34,7 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 - `?offer=a|b|c|old` forces one on staging/local (after 10 s on screen + an interaction; `&offerms=N` sets the wait). `OFFER_PROD = 'old'` keeps v1 on id-le.com until Nico picks; `OFFER_TEST = 'a'` is the staging default.
 - Funnel: `offer_shown`/`offer_accepted` as before, plus `offer_shown_x`, `offer_go_x`, `offer_later_x` per variant (worker allowlist; stats.py prints a line per variant).
 - Test 'story offer v2' (each variant: nothing before an interaction or over an open 🧪 panel, the card or the Operator's line, b's preview draws, accepting → snapshot → the story; later → once more after 3 days → never; v1 dismissals get one more ask). 'story offer' now forces v1 with `?offer=old`.
+- Fix (Nico: "?offer=a … even opened the whole story"): on staging/local `?offer=a|b|c` is a returning player's preview: no arm is drawn (arena.html <head> and `variant()`), no guided start, the ready world loads, and a yellow hint says "offer x preview: click anywhere, it appears in ~10 s". Copy: "about 3 minutes" (measured ~3.5 min to EPOCH 0 COMPLETE). Test 'offer preview' (fresh browser per variant whose random draw would be the story arm).
 
 ## 2026-11-04
 

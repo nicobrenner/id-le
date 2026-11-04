@@ -3268,6 +3268,27 @@ def t_story_offer_v2(P):
     return " · ".join(out) + "; nothing before an interaction or over 🧪; later → once more after 3 days → never; v1 dismissals get one more ask"
 
 
+def t_offer_preview(P):
+    """?offer=a|b|c on staging/local is a returning player's world for previewing the offer (Nov 4, Nico: "?offer=a … even opened the whole
+    story"): a fresh browser draws no arm, no story starts, a hint says to click and wait, and the chosen offer appears after a click."""
+    out = []
+    for v in "abc":
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); ctx.add_init_script("Math.random = () => 0.01;")   # 0.01 would draw the story arm
+        Q = Page(ctx, P.base); pg = Q.open(f"/arena.html?offer={v}&offerms=2000")
+        wait_for(pg, "() => window.__restoredOrFresh", 60, P=Q); pg.wait_for_timeout(2500)
+        st = pg.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), black: document.documentElement.classList.contains('story-boot'), gv: localStorage.getItem('idle.gv'), story: !!(window.__genesis.state() && window.__genesis.state().mode === 'story' && window.__genesis.state().on), hint: (document.querySelector('#offerHint') || {}).textContent || '' })")
+        need(not st["intro"] and not st["black"] and not st["gv"] and not st["story"], f"{v}: a story started or an arm was drawn: {st}")
+        need("click anywhere" in st["hint"], f"{v}: the hint: {st}")
+        (pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))"))
+        pg.evaluate("() => document.querySelectorAll('#ntf .np').forEach(n => n.remove())")
+        if v == "c": wait_for(pg, "() => [...document.querySelectorAll('#opTray .opc')].some(b => /start the story/.test(b.textContent))", 25, P=Q)
+        else: wait_for(pg, "() => !!document.querySelector('#storyOffer.v" + v + "')", 25, P=Q)
+        txt = pg.evaluate("() => document.body.innerText")
+        need("3 minutes" in txt and "5 minutes" not in txt and not pg.evaluate("() => !!document.querySelector('#idleIntro') || !!document.querySelector('#offerHint')"), f"{v}: copy or state after the offer: {txt[-200:]!r}")
+        ctx.close(); out.append(v)
+    return "fresh browsers, ?offer=" + "/".join(out) + ": no arm, no story, the hint, then the offer (3 minutes)"
+
+
 def t_story_v6(P):
     """Story v6: ?intro=epoch0 is retired (it goes to the storyline); the logo keeps its pipe, cycling colours, then cuts to black; the
     'conscious' label is never under the dialog (desktop and phone); between the intro and the dark nothing of the world or the UI shows,
@@ -4202,7 +4223,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
