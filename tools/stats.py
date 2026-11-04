@@ -141,7 +141,7 @@ def call(path, tok, raw=False, body=None):
 SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play", "e0_tap", "ch_story", "ch_play", "pw_shown", "pw_story", "st_resume", "st_restart"]
 SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
             "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)",
-            "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground", "e0_tap": "tapped a creature in the look-around",
+            "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground", "e0_tap": "tapped a creature in the look-around", "entry_lab": "link: ?lab (data lab)", "entry_start": "link: ?start=…", "entry_wiki": "link: ?wiki= (a Wikipedia world)", "entry_review": "link: ?review=", "entry_gift": "link: ?gift=", "entry_halloween": "link: ?halloween", "entry_world": "link: a shared world", "entry_intro": "link: ?intro=", "entry_creature": "link: #c= (a creature)", "entry_recover": "link: #recover",
             "ch_story": "chooser: the storyline", "ch_play": "chooser: the playground", "pw_shown": "playground welcome shown", "pw_story": "playground welcome: started the story",
             "st_resume": "⚙ storyline: resumed", "title_auto": "title card auto-started", "sound_on": "turned the sound on", "st_restart": "⚙ storyline: restarted"}
 
