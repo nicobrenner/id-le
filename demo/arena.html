@@ -1575,13 +1575,33 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   // so the audio graph costs nothing. Remembered in idle.audio. Sound is ON by default (Nico, Halloween night: "it makes a huge difference
   // in the vibe"): browsers start audio only after a gesture, so the first tap/key/click anywhere starts it with a 3 s fade-in. Only a choice
   // the player made (🔊, the popover's switch) is kept as muted: st.explicit marks it; older saved states without it get the new default.
+  // iPhones and iPads (Nov 3, Nico: no sound at all in Safari and Chrome on his iPhone 12 mini: the ring/silent switch was on): iOS mutes
+  // Web Audio in silent mode but not media playback, and no API tells a page where the switch is. So the page asks to be treated as media:
+  // navigator.audioSession.type = 'playback' (Safari 16.4+), or on older iOS a tiny silent looping <audio> started on the first gesture.
+  // Id|le's own 🔊 mute and volume still silence everything (the silent element pauses while muted). A hint on the title card (and a one-time
+  // toast in the playground) says where to look. Trade-off: as 'playback', Id|le's sound pauses other apps' audio (music) while it plays.
+  const IOS = (() => { const ua = navigator.userAgent || ''; return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints | 0) > 1); })();
+  window.__isIOS = () => IOS;
+  window.__iosHint = () => !IOS ? null : ['🔊 best with sound', 'no sound? check your ' + (/iPad/.test(navigator.userAgent) || !/iPhone|iPod/.test(navigator.userAgent) ? 'iPad' : 'iPhone') + "'s silent switch"];
+  const IOSMedia = (() => { let el = null, wantOn = false;
+    const wav = () => { const n = 400, b = new Uint8Array(44 + n), v = new DataView(b.buffer), w = (o, t) => [...t].forEach((c, i) => b[o + i] = c.charCodeAt(0));   // 50 ms of 8-bit silence at 8 kHz
+      w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44);
+      let s = ''; b.forEach(x => s += String.fromCharCode(x)); return 'data:audio/wav;base64,' + btoa(s); };
+    const session = () => { try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {} return !!navigator.audioSession; };
+    return { session, on() { if (!IOS) return; if (session()) return; wantOn = true; try { if (!el) { el = document.createElement('audio'); el.id = 'iosMediaKeep'; el.src = wav(); el.loop = true; el.setAttribute('playsinline', ''); el.setAttribute('x-webkit-airplay', 'deny'); el.preload = 'auto'; }
+        if (el.paused) { const p = el.play(); if (p && p.catch) p.catch(() => {}); } } catch (e) {} },
+      off() { wantOn = false; try { if (el && !el.paused) el.pause(); } catch (e) {} }, state: () => ({ ios: IOS, session: navigator.audioSession ? navigator.audioSession.type : null, fallback: !!el, playing: !!(el && !el.paused) }) }; })();
+  window.__iosMedia = IOSMedia;
   const Master = (() => { const K = 'idle.audio', AC = window.AudioContext || window.webkitAudioContext; let ctx = null, out = null, game = null, fxOut = null, sus = 0, faded = false, hushG = null, hushed = false;
     const st = (() => { let s = null; try { s = JSON.parse(localStorage.getItem(K) || 'null'); } catch (e) {} if (s) { s = Object.assign({ muted: true, vol: 0.9, fx: true }, s); if (!s.explicit) s.muted = false; return s; }
       return { muted: false, vol: 0.5, fx: true }; })();
     const save = () => { try { localStorage.setItem(K, JSON.stringify(st)); } catch (e) {} };
-    function get() { if (!ctx) { ctx = new AC(); out = ctx.createGain(); out.gain.value = (st.muted || (!faded && ctx.state !== 'running')) ? 0 : st.vol; hushG = ctx.createGain(); hushG.gain.value = hushed ? 0 : 1; game = ctx.createGain(); game.connect(hushG); hushG.connect(out); out.connect(ctx.destination); fxOut = ctx.createGain(); fxOut.connect(game); if (st.muted) ctx.suspend(); } return ctx; }
+    function get() { if (!ctx) { if (IOS) IOSMedia.session(); ctx = new AC(); out = ctx.createGain(); out.gain.value = (st.muted || (!faded && ctx.state !== 'running')) ? 0 : st.vol; hushG = ctx.createGain(); hushG.gain.value = hushed ? 0 : 1; game = ctx.createGain(); game.connect(hushG); hushG.connect(out); out.connect(ctx.destination); fxOut = ctx.createGain(); fxOut.connect(game); if (st.muted) ctx.suspend(); } return ctx; }
     function apply(tc = 0.03) { if (!ctx) return; const now = ctx.currentTime; clearTimeout(sus); out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(out.gain.value, now); out.gain.setTargetAtTime(st.muted ? 0 : st.vol, now, tc);   // short ramps: no clicks
-      if (st.muted) sus = setTimeout(() => { if (st.muted && ctx.state === 'running') ctx.suspend(); }, 300); else if (ctx.state !== 'running') ctx.resume(); }
+      if (st.muted) { IOSMedia.off(); sus = setTimeout(() => { if (st.muted && ctx.state === 'running') ctx.suspend(); }, 300); } else { IOSMedia.on(); if (ctx.state !== 'running') ctx.resume(); } }
+    // the playground's one-time hint (the title card carries it in the storyline): once per browser, on the first sound, iPhones and iPads only
+    function iosToast() { if (!IOS) return; try { if (localStorage.getItem('idle.iosHint')) return; if (document.querySelector('#idleIntro') || window.__genesisVoid) return; localStorage.setItem('idle.iosHint', '1'); } catch (e) { return; }
+      setTimeout(() => { try { window.__notify && window.__notify({ kind: 'system', text: window.__iosHint().join(' · '), ttl: 5000 }); window.__iosToastShown = true; } catch (e) {} }, 600); }
     const changed = () => { save(); apply(); try { dispatchEvent(new CustomEvent('idle:audio', { detail: { ...st } })); } catch (e) {} };
     const api = { hush(on) { hushed = !!on; if (hushG && ctx) { const t = ctx.currentTime; hushG.gain.cancelScheduledValues(t); hushG.gain.setValueAtTime(hushG.gain.value, t); hushG.gain.setTargetAtTime(hushed ? 0 : 1, t, hushed ? 0.15 : 0.8); } }, hushed: () => hushed,
       // out(): the game's sounds (the storyline's hush holds them at 0); storyOut(): the storyline intro's own sound, at the player's volume and mute, past the hush
@@ -1589,7 +1609,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       ctx: get, out: () => (get(), game), storyOut: () => (get(), out), fxOut: () => (get(), fxOut), muted: () => st.muted, vol: () => st.vol, fx: () => st.fx, fxOn: () => st.fx && !st.muted,
       setMuted(m) { st.muted = !!m; st.explicit = true; if (!m) get(); changed(); logEvent('sound', { on: !m }); }, toggle() { this.setMuted(!st.muted); return !st.muted; },
       setVol(v) { st.vol = Math.max(0, Math.min(1, +v)); if (st.muted && st.vol > 0) st.muted = false; if (!st.muted) get(); changed(); }, setFx(on) { st.fx = !!on; changed(); },
-      resume() { if (st.muted) return; get(); const fadeIn = () => { if (faded || st.muted) return; faded = true; const t = ctx.currentTime; out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(0, t); out.gain.setTargetAtTime(st.vol, t, 1.0); };   // the first start fades in over ~3 s
+      resume() { if (st.muted) return; get(); IOSMedia.on(); const fadeIn = () => { if (faded || st.muted) return; faded = true; iosToast(); const t = ctx.currentTime; out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(0, t); out.gain.setTargetAtTime(st.vol, t, 1.0); };   // the first start fades in over ~3 s
         if (ctx.state !== 'running') ctx.resume().then(fadeIn, () => {}); else fadeIn(); },   // only ever wakes the audio when not muted
       wantSound() { if (st.muted) { this.setMuted(false); try { window.__notify && window.__notify({ kind: 'system', text: '🔊 sound on (it was muted: the 🔊 top right mutes everything)', ttl: 5000 }); } catch (e) {} } else this.resume(); } };
     ['pointerdown', 'keydown', 'touchend'].forEach(t => addEventListener(t, () => api.resume(), true));   // browsers start audio only after a gesture

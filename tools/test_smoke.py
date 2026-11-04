@@ -2450,6 +2450,42 @@ def t_title_card(P):
     return f"waits at the title ({w['t']:.2f} s), a key starts the messages, Esc marks skip:messages"
 
 
+def t_ios_sound(P, ios=True):
+    """iPhones (Nov 3: the silent switch muted everything for Nico): the page asks iOS to treat its sound as media (audioSession 'playback',
+    or a silent looping <audio> on older iOS), a hint under "tap to start", and a one-time toast in the playground; desktop gets none of it"""
+    if not ios:
+        pg = P.open("/arena.html?story&test")
+        wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+        pg.wait_for_timeout(800)
+        d = pg.evaluate("() => ({ ios: window.__isIOS(), hint: window.__iosHint(), shown: window.__titleHint || null })")
+        need(not d["ios"] and d["hint"] is None and d["shown"] is None, f"no iOS hint on desktop: {d}"); P.clean()
+        return "desktop: no hint, no media session"
+    # 1) the title card's hint, and audioSession set to playback on the first tap (the API stubbed: WebKit builds differ)
+    P.ctx.add_init_script("try { Object.defineProperty(navigator, 'audioSession', { value: { type: 'auto' }, configurable: true }); } catch (e) {}")
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+    wait_for(pg, "() => !!window.__titleHint", 10, P=P)
+    h = pg.evaluate("() => window.__titleHint")
+    need("silent switch" in h and "best with sound" in h, f"the title card's hint: {h}")
+    pg.touchscreen.tap(190, 400); pg.wait_for_timeout(800)
+    s1 = pg.evaluate("() => window.__iosMedia.state()")
+    need(s1["ios"] and s1["session"] == "playback" and not s1["fallback"], f"audioSession should be 'playback' with no fallback: {s1}")
+    pg.close()
+    # 2) older iOS (no audioSession): the silent <audio> starts on the first tap, pauses on mute; the playground's one-time toast
+    P.ctx.add_init_script("try { Object.defineProperty(navigator, 'audioSession', { value: undefined, configurable: true }); } catch (e) {} try { localStorage.removeItem('idle.iosHint'); } catch (e) {}")
+    pg = P.open("/arena.html?fresh=1"); booted(pg)
+    pg.touchscreen.tap(190, 400); pg.wait_for_timeout(1500)
+    s2 = pg.evaluate("() => ({ m: window.__iosMedia.state(), toast: !!window.__iosToastShown, muted: window.__audio.muted() })")
+    need(s2["m"]["session"] is None and s2["m"]["fallback"] and s2["m"]["playing"], f"the silent <audio> should play after the tap: {s2}")
+    need(s2["toast"], f"the playground's one-time hint should show: {s2}")
+    pg.evaluate("() => window.__audio.setMuted(true)"); pg.wait_for_timeout(300)
+    s3 = pg.evaluate("() => window.__iosMedia.state()")
+    need(not s3["playing"], f"muting Id|le pauses the silent <audio>: {s3}")
+    pg.evaluate("() => window.__audio.setMuted(false)")
+    P.clean()
+    return f"hint '{h}'; audioSession → playback; fallback <audio> plays, pauses on mute; playground toast once"
+
+
 FONT_LAYOUT_JS = """async () => { await document.fonts.ready;
   const vis = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
   const over = [...document.querySelectorAll('button, .chip, .pchip, #lab-head, #genConsole .gl')].filter(vis).filter(e => e.scrollWidth - e.clientWidth > 1).map(e => (e.id || e.className || e.tagName) + (e.id ? '' : ':' + (e.textContent || '').replace(/\\d+/g, '#').trim().slice(0, 18)));
@@ -2914,7 +2950,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3006,9 +3042,19 @@ def main():
                 run("fonts phone", t_fonts_phone, is_mobile=True, has_touch=True)
                 run("presence", t_presence, service_workers="block")   # requests a service worker makes itself pass by the test routes
                 run("prod gates", t_prod_gates, out, service_workers="block")
+                run("ios sound desktop", t_ios_sound, False)
                 if a.full: run("fps", t_fps)
             finally:
                 ch.close()
+            if want("ios sound"):
+                wk = p.webkit.launch(headless=not a.headed)
+                try:
+                    dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
+                    ctx = wk.new_context(**dev, service_workers="block"); P = Page(ctx, base)
+                    try: check("ios sound", t_ios_sound, P)
+                    finally: ctx.close()
+                finally:
+                    wk.close()
             if any(want(n) for n in ("camera phone", "zoom shapes phone", "pedia phone", "pedia halloween phone", "lab card phone")):
                 wk = p.webkit.launch(headless=not a.headed)
                 try:
