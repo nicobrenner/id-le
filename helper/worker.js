@@ -470,8 +470,8 @@ async function gift(req, env, path, ip) {
 // by one Durable Object (Presence, deployed as its own small Worker: helper/presence/) and dropped 60 s after the last beat; nothing is
 // written to storage. Without the binding (local copies, tests) the table lives in this isolate's memory instead.
 // /live (demo/live.html) reads it with a secret key (env.LIVE_KEY, a wrangler secret); without the key the read answers 404.
-// Off on id-le.com until Nico's go: the page doesn't beat there (PRESENCE_ON_PROD in idle-presence.js), and the server takes beats
-// only on staging (IDLE_ENV=staging), when PRESENCE_ON=1, or without a STATS namespace (local).
+// On id-le.com since Nico's go (11-03; PRESENCE_ON_PROD in idle-presence.js). The server takes beats everywhere unless PRESENCE_ON=0,
+// a kill switch that needs no deploy (an environment variable on the Pages project): then beats are accepted and dropped.
 const PR = { dev: ['phone', 'tablet', 'desktop'], mode: ['story', 'free', 'ready', 'world'], arm: ['story', 'current', 'none'],
   step: ['intro', 'dark', 'lights', 'words', 'life', 'genesis-done', 'epoch', 'end'],
   panel: ['music', 'studio', 'lab', 'advisor', 'almanac', 'drawer', 'trees', 'reels', 'operator', 'creatures', 'irc', 'card', 'settings', 'feedback', 'oracle', 'review'],
@@ -518,7 +518,7 @@ export class Presence {
   }
 }
 const prMem = { table: null };
-const presenceOn = env => env.IDLE_ENV === 'staging' || env.PRESENCE_ON === '1' || !env.STATS;
+const presenceOn = env => env.PRESENCE_ON !== '0';
 async function prCall(env, path, init) {   // the Durable Object when bound, else this isolate's own table (local copies and tests)
   if (env.PRESENCE) { const stub = env.PRESENCE.get(env.PRESENCE.idFromName('live')); return stub.fetch('https://presence' + path, init); }
   const T = prMem.table || (prMem.table = new PresenceTable());
@@ -534,7 +534,7 @@ async function liveKeyOk(req, env) {   // compares SHA-256 digests, so the compa
 async function presence(req, env, path) {
   if (path === '/lab/live') { if (req.method !== 'GET' || !(await liveKeyOk(req, env))) return json({ error: 'unknown path' }, 404);
     const r = await prCall(env, '/view', { method: 'GET' }); return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }
-  if (!presenceOn(env)) return new Response(null, { status: 204 });   // production, until Nico's go: beats are accepted and dropped
+  if (!presenceOn(env)) return new Response(null, { status: 204 });   // the kill switch (PRESENCE_ON=0): beats are accepted and dropped
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
   const txt = await req.text(); if (txt.length > 700) return json({ error: 'too big' }, 413);
   const cc = req.cf && typeof req.cf.country === 'string' ? req.cf.country : '';

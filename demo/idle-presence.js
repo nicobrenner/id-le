@@ -1,7 +1,7 @@
 // idle-presence.js: "I'm here", for the creator's live view (/live, 11-03). While this tab is visible it tells /lab/here about every
 // 20 s that it is open, and "bye" when it closes; the server keeps that in memory for a minute and never writes it down (helper/worker.js,
 // "presence"). Only when anonymous stats are live (⚙; never on a local copy or in a ?fresh test) and the browser doesn't ask not to be
-// tracked (Global Privacy Control, Do Not Track). Off on id-le.com until Nico's go (PRESENCE_ON_PROD).
+// tracked (Global Privacy Control, Do Not Track). On id-le.com since Nico's go on 11-03 (PRESENCE_ON_PROD).
 // What one beat carries, all from fixed lists:
 //   id      a random id made when this page loaded, kept in this tab's memory only (never stored; a reload makes a new one)
 //   dev     phone, tablet or desktop
@@ -18,7 +18,7 @@
 // Never: words, messages, names, world content, keys. The server adds the country (Cloudflare's guess from the address; the address
 // itself is not kept).
 (() => {
-  const PRESENCE_ON_PROD = false;   // the beat on id-le.com: switched on with Nico's go
+  const PRESENCE_ON_PROD = true;   // the beat on id-le.com (Nico, 11-03: "'a go to switch the live view on for id-le.com.' go please")
   const H = location.hostname, prod = /^(www\.)?id-le\.com$/.test(H) || H === 'id-le.pages.dev';
   const PATH = location.pathname, PAGE = /^\/pedia(\.html)?$/.test(PATH) ? 'pedia' : /^\/privacy(\.html)?$/.test(PATH) ? 'privacy' : /^\/live(\.html)?$/.test(PATH) ? null : 'game';
   if (!PAGE) return;   // the live view doesn't count itself

@@ -203,12 +203,12 @@ out.rate_61st = last;
   out.gift = { letter: g1.letter, label: JSON.stringify(g1).includes('private'), claimed0: g1.claimed, c1: c1.ok, writes: w1 - w0, c2: c2.already, claimed1: g2.claimed,
     unknown: (await go('/lab/gift/zzzzzzzzzzzzzzzzzzzzzzzz')).status, revoked: (await go('/lab/gift/revokedrevokedrevokedr')).status, bad: (await go('/lab/gift/AB')).status }; }
 // presence (11-03): beats from fixed lists only, held in memory (no KV write), dropped 60 s after the last beat, "bye" removes at once;
-// the creator's view needs the key (404 otherwise); production (no IDLE_ENV, with STATS) accepts beats and drops them
+// the creator's view needs the key (404 otherwise); the kill switch (PRESENCE_ON=0) accepts beats and drops them
 { const M = await import(process.argv[2]); const P = {};
   const id1 = 'a1b2c3d4e5f60718', id2 = '0011223344556677', puts0 = env.STATS.puts.length + env.WORLDS.puts.length;
   const beat = (b, ip = '4.4.4.4') => go('/lab/here', { method: 'POST', body: JSON.stringify(b) }, ip);
-  P.prod = (await beat({ v: 1, id: id1, dev: 'desktop', mode: 'world' })).status;
-  env.IDLE_ENV = 'staging'; env.LIVE_KEY = 'k'.repeat(40);
+  env.PRESENCE_ON = '0'; P.prod = (await beat({ v: 1, id: id1, dev: 'desktop', mode: 'world' })).status; delete env.PRESENCE_ON;   // the kill switch
+  env.LIVE_KEY = 'k'.repeat(40);
   const live = async (k) => go('/lab/live', k === undefined ? {} : { headers: { 'CF-Connecting-IP': '4.4.4.4', Authorization: 'Bearer ' + k } });
   P.view_before_prod_beat = (await (await live('k'.repeat(40))).json()).online;
   P.b1 = await (await beat({ v: 1, id: id1, dev: 'phone', mode: 'story', arm: 'story', step: 'words', ep: 0, p: ['operator', 'evil', 'card', 'operator'], cr: '0-12', t: 42.4, back: 1, text: 'hello world', name: 'Doc' })).json();
@@ -237,7 +237,7 @@ out.rate_61st = last;
   // the Durable Object class answers the same beat and view
   const D = new M.Presence({}, {}); const r1 = await (await D.fetch(new Request('https://presence/beat', { method: 'POST', body: JSON.stringify({ v: 1, id: id1, mode: 'ready' }), headers: { 'X-Country': 'CL' } }))).json();
   const r2 = await (await D.fetch(new Request('https://presence/view'))).json(); P.do = { ok: r1.ok, online: r2.online, cc: r2.players[0] && r2.players[0].cc, mode: r2.players[0] && r2.players[0].mode };
-  delete env.IDLE_ENV; delete env.LIVE_KEY; out.presence = P; }
+  delete env.LIVE_KEY; out.presence = P; }
 // reviews (11-03, v2): team stage (403 before joining), join once, per-item and per-pair dedupe by browser key (nothing new → 409, no
 // writes), notes private, team contributions counted, the order hint, totals with like-rate and Bradley-Terry only when shown, closed → 410
 { const K1 = 'abcdefghijklmnopqrstuvwxyz', K2 = 'zyxwvutsrqponmlkjihgfedcba', P = (b, ip) => post('/lab/review/logos', b, ip || '7.7.7.1');
@@ -376,7 +376,7 @@ def worker_unit():
     egx = {k: v for k, v in o["eg"].items() if v and (k.startswith("reels") or k.startswith("errs"))}
     need(egx == {"reels:1-5": 1, "errs:1": 1}, f"v2 buckets {egx}")
     pr = o["presence"]
-    need(pr["prod"] == 204 and pr["view_before_prod_beat"] == 0, f"production must accept and drop beats: {pr['prod']}, then online {pr['view_before_prod_beat']}")
+    need(pr["prod"] == 204 and pr["view_before_prod_beat"] == 0, f"with the kill switch (PRESENCE_ON=0) beats must be accepted and dropped: {pr['prod']}, then online {pr['view_before_prod_beat']}")
     need(pr["b1"].get("ok") and pr["b2"].get("ok") and pr["bad"].get("ok") is False and pr["big"] == 413, f"beats: {pr['b1']} {pr['b2']} bad id {pr['bad']} too big {pr['big']}")
     need(pr["nokey"] == 404 and pr["wrong"] == 404 and pr["short"] == 404, f"the live view without the right key must be 404: none {pr['nokey']}, wrong {pr['wrong']}, a short server key {pr['short']}")
     p1, p2 = pr["p1"] or {}, pr["p2"] or {}
@@ -2534,10 +2534,17 @@ def t_prod_gates(P, root):
       f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
       ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
     need(r["host"] == "id-le.com" and not r["live"], f"not emulating production: {r}")
-    # presence: off on id-le.com (PRESENCE_ON_PROD), even with stats live and a forced beat
-    pz = P.open("/arena.html"); booted(pz); pz.wait_for_timeout(4000)
-    pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on, sent: window.__presence.beat() })"); pz.close()
-    need(pr["stats"] and not pr["on"] and pr["sent"] is False and not P.here, f"presence beat on production: {pr}, {len(P.here)} beats")
+    # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
+    need(not P.here, f"a ?fresh page beat on production: {P.here[:1]}")
+    pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
+    wait_for(pz, "() => window.__presence && window.__presence.state().running", 20, P=P)
+    pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on })"); pz.evaluate("() => window.__presence.bye()"); pz.close()
+    beats = [json.loads(b) for b in P.here if b]
+    need(pr["stats"] and pr["on"] and beats, f"presence must beat on production: {pr}, {len(beats)} beats")
+    need(all(set(b) <= {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye", "page", "ref", "tag"} for b in beats), f"a production beat outside the allowlist: {beats[:1]}")
+    full = [b for b in beats if not b.get("bye")][0]
+    need(full.get("page") == "game" and full.get("ref") == "reddit.com" and full.get("tag") == "prod-check" and "WebGames" not in json.dumps(beats), f"production beat: {full}")
+    P.here.clear()
     need(not r["void"] and not r["intro"] and not r["offer"] and not r["founder"], f"story/offer/founder visible on production: {r}")
     need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
     pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
