@@ -168,6 +168,8 @@ def sf_split(sf):
             o["skips"][step[5:]] = o["skips"].get(step[5:], 0) + n
         elif step.startswith("fd_"):
             o.setdefault("fd", {})[step[3:]] = o.setdefault("fd", {}).get(step[3:], 0) + n
+        elif step.startswith("rv_"):
+            o.setdefault("rv", {})[step[3:]] = o.setdefault("rv", {}).get(step[3:], 0) + n
         elif step.startswith("sc_"):
             o.setdefault("sc", {})[step[3:]] = o.setdefault("sc", {}).get(step[3:], 0) + n
         elif step.startswith("end_"):
@@ -178,6 +180,16 @@ def sf_split(sf):
             o["steps"][step] = o["steps"].get(step, 0) + n
     return out
 
+
+
+# ⭐ reviews and the Humans in the Loop (idle-reviews.js), per arm: the invitation, the answers, the decks, the swipes
+RV_STEPS = [("invite", "invited"), ("in", "I'm in"), ("notnow", "not now"), ("pledge", "pledge"), ("open_link", "opened by a link"), ("open_lab", "opened in the game"),
+            ("open_end", "opened from the end card"), ("play", "played an item"), ("nah", "✕"), ("like", "✓"), ("love", "★"), ("more", "kept going"), ("done", "done"),
+            ("h2h", "which one?"), ("sent", "finished a review"), ("tab", "opened 🌱"), ("vested", "vested")]
+
+
+def rv_line(rv):
+    return ", ".join(f"{lab} {rv.get(k, 0)}" for k, lab in RV_STEPS if rv.get(k))
 
 
 # the story's logo A/B (idle-epoch0.js, Nov 3): the worker also files the moments from the logo on under 'lg:<arm>|step'
@@ -484,6 +496,8 @@ def main():
                 print(f"           skipped at: " + ", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in sorted(o["skips"].items(), key=lambda kv: -kv[1])))
             if o["offer"]:
                 print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
+            if o.get("rv"):
+                print("           ⭐ reviews: " + rv_line(o["rv"]))
             if o.get("end"):
                 en = o["end"]; print(f"           end of what's built: shown {en.get('shown', 0)}, roadmap {en.get('roadmap', 0)}, GitHub {en.get('github', 0)}, the playground {en.get('free', 0)}")
         sc = sc_total(sfs)
