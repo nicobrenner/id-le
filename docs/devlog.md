@@ -5,6 +5,18 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+
+## 2026-11-04 (offer v2, staging)
+
+**The storyline offer v2: three variants for Nico to pick from (staging only; id-le.com keeps v1).** On id-le.com the v1 card (shown 20 s after load to returning players) was shown 22 times and accepted 0: they come back for their world. v2 (`idle-genesis.js`):
+- All variants wait for the player to be active in their world: on screen ≥ 75 s (`OFFERV.activeS`) **and** one interaction (a click in the world, the top bar, a card or the minimap), at a quiet moment (no panel, popup, modal, toast, typing or Operator cut-scene). Accepting takes a snapshot first (`newUniverse('story')`). "later" asks once more after 3 days, then never (`idle.storyOffer2`: asks, last ask, variant, answer); a v1 dismissal counts as the first ask.
+- **a**: the card with clearer words ("✦ new: Doc's story … About 5 minutes. Your world stays safe") and [ ▶ play the story ] [ later ].
+- **b**: a compact card with a silent 6 s loop of the story's own logo (this browser's logo arm, drawn by `idle-logos.js` on a small canvas; a still if it can't load or with reduced motion), one line "new: Doc's story — 5 minutes, your world stays safe", same buttons.
+- **c**: the floating Operator says two lines, with chips [ 📖 start the story ] [ maybe later ]; unanswered after 2 min counts as later.
+- `?offer=a|b|c|old` forces one on staging/local (after 10 s on screen + an interaction; `&offerms=N` sets the wait). `OFFER_PROD = 'old'` keeps v1 on id-le.com until Nico picks; `OFFER_TEST = 'a'` is the staging default.
+- Funnel: `offer_shown`/`offer_accepted` as before, plus `offer_shown_x`, `offer_go_x`, `offer_later_x` per variant (worker allowlist; stats.py prints a line per variant).
+- Test 'story offer v2' (each variant: nothing before an interaction or over an open 🧪 panel, the card or the Operator's line, b's preview draws, accepting → snapshot → the story; later → once more after 3 days → never; v1 dismissals get one more ask). 'story offer' now forces v1 with `?offer=old`.
+
 ## 2026-11-04
 
 **The title card starts itself (HN, Nov 4).** On id-le.com, 19 of 26 story starts never pressed a key on the title card. Now the card waits 2 s (AUTO_MS), then the intro starts by itself, muted (no gesture yet, so the browser keeps the audio suspended), with a "🔊 tap for sound" chip bottom-centre; the first tap or key anywhere turns the sound on (it joins in sync: the film runs on performance.now(), never on the audio clock). A key or tap during the 2 s starts it with sound as before; Esc and "skip ›" still skip. Funnel: `title_auto` and `sound_on` (worker allowlist; stats.py prints them under the funnel). `?noauto` holds the card (tests). Labchat pace checked: no beat waits more than ~4 s without something happening (the longest hold is reading time on Doc's 108-character line, ~3.7 s), so unchanged. Test "title auto" (launch tier).
