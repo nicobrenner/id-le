@@ -73,15 +73,17 @@
   const LIGHTS_ON = 'Nice!! we can see something now at least';
   // the epochs (Nico, story v3: "10 epochs, not 6–7 days"; v11: "should it be Epoch0 that they first beat? and they move on to Epoch1"):
   // Epoch 0 · Genesis is the intro, the dark landing, lights on, words and first life, and it is the player's first win (its Gazette);
-  // Epoch 1 · Words (tokens, a vocabulary: storyline-script.md section D) and Epochs 2–9 are coming soon. S.day is the epoch reached
+  // Epoch 1 · Attention, 2 · Feelings, 3 · Words (v16 order; storyline-script.md section D) and the rest are coming soon. S.day is the epoch reached
   // (0 until Genesis is done), S.days[n] when epoch n was done. Saves from before v11 counted Genesis's words and life as "Epoch 1":
   // load() shifts them down by one (S.ev = 2), so a save that finished the old Epoch 1 has Epoch 0 done.
   const DAYS = [
     { n: 0, title: 'genesis', goals: [['light', 'lights on'], ['words', 'words for a floor'], ['creatures', 'first life']], teaches: 'the Operator, light, words, creatures',
       front: { head: 'Epoch 0: lights, a floor, and somebody on it', body: 'Lights came on in a brand-new consciousness. Words fell and became a floor, and before long two creatures crawled out of one of them. Witnesses describe them as "surprised".' },
       line: 'epoch zero done. it has light, a floor and somebody on it. next: words' },
-    { n: 1, title: 'words', goals: [], teaches: '' },
-    ...[2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ n, title: 'coming soon', goals: [], teaches: '' }))];
+    // v16 (Nico: "About Epoch1, let's do: 2,3,1"): Epoch 1 · Attention (meet the creatures: tap one, read its mind, name it, feed it),
+    // Epoch 2 · Feelings, Epoch 3 · Words; the UNLOCK table is unchanged (the same tools at the same moments)
+    { n: 1, title: 'attention', goals: [], teaches: '' }, { n: 2, title: 'feelings', goals: [], teaches: '' }, { n: 3, title: 'words', goals: [], teaches: '' },
+    ...[4, 5, 6, 7, 8, 9].map(n => ({ n, title: 'coming soon', goals: [], teaches: '' }))];
   const dayOf = n => DAYS.find(d => d.n === n);
   // what the storyline shows, epoch by epoch (v10, Nico: "only show the other controls/panels as the user goes through the Epochs and
   // 'unlocks' access to the different features"; script section D). One row per feature: the epoch that unlocks it, what it hides until
@@ -744,7 +746,8 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
   // us on Github: ... / Free-play"): the first epoch that isn't built yet opens as a card in the middle (S.endOpen) with the three ways on;
   // closed (×, the roadmap, GitHub) it is the small corner card, whose "what's next ›" opens it again. Free-play leaves the storyline.
   const END = { head: 'work in progress', line: "that's as far as the story goes, for now. the scientists are building the next epochs, one at a time",
-    help: 'you can help: vote on what comes next, or build it with us', free: () => `welcome to ${PG().short}. everything is open now, and it is your consciousness, Doc` };
+    help: 'you can help: vote on what comes next, or build it with us', free: () => `welcome to ${PG().short}. everything is open now, and it is your consciousness, Doc`,
+    back: 'whenever you want the story back: 📖 back to the story in 🛠, or ⚙ → 📖 Storyline' };   // v16: the way back, said
   { const c4 = document.createElement('style'); c4.textContent = `html:root #genDay.end.end{left:50%!important;top:50%!important;bottom:auto!important;right:auto!important;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));min-width:0;max-width:none;max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box;padding:20px 22px 16px;z-index:2147482400;background:#0a0b16f7;box-shadow:0 24px 90px #000c,0 0 0 1px #6b7cff55}
 #genDay.end .eb{display:inline-block;font:700 10px/1 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.16em;text-transform:uppercase;color:#ffcf7a;border:1px solid #ffcf7a88;border-radius:4px;padding:4px 7px;margin-bottom:10px}
 #genDay.end .dt{font:700 22px/1.15 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.08em;color:#fff;opacity:1;margin-bottom:4px}
@@ -773,6 +776,8 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
       b.addEventListener('click', e => { e.stopPropagation(); const l = $('#lab'); if (!l) return; const on = !l.classList.contains('chk-open'); l.classList.toggle('chk-open', on); b.setAttribute('aria-expanded', on ? 'true' : 'false'); });
       const t = $('#op-tools') || $('#lab-close'); if (t) head.insertBefore(b, t); else head.appendChild(b); }
     if (!b) return; b.textContent = '✅ ' + n; if (b.dataset.n && +b.dataset.n < parseInt(n)) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 1700); } b.dataset.n = parseInt(n); }
+  // a closed end card shrinks toward the ✅ in the Operator's title bar when it's on screen, otherwise toward the 📟 (shrinkEnd)
+  window.__epochTarget = () => { for (const sel of ['#op-check', '#toHandle']) { const e = $(sel); if (e && !e.hidden && getComputedStyle(e).visibility !== 'hidden' && e.getBoundingClientRect().width) return e; } return null; };
   function renderDay() { if (!storyMode()) { const g = $('#genDay'); if (g) g.remove(); checkBtn(false); return; } tag(); const d = dayOf(S.day || 0); if (!d) return; let el = $('#genDay');
     const ok = k => S.days && S.days[d.n] ? true : (d.n === 0 ? did(k) : false), soon = d.n > 0 && !builtNext(d.n), end = soon && !!S.endOpen;
     // the Genesis checklist always lives in ✅; a later epoch's card goes there once the player closes it (never lost: manager v15 item 6)
@@ -791,21 +796,74 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
 <div class="en">${esc(PG().short)} opens every part of Id|le now and keeps this consciousness as it is. when Epoch ${d.n} ships, ⚙ settings takes you back into the story.</div>`;
     else el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">${title}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
       (soon ? `<div class="wip">coming soon · Id|le is a work in progress · <a data-end="open">what's next ›</a></div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
-    el.querySelector('.x').onclick = () => { if (end) { S.endOpen = false; save(); renderDay(); } else if (inop) { const l = $('#lab'); if (l) l.classList.remove('chk-open'); } else { S.dayIn = S.dayIn || {}; S.dayIn[d.n] = 1; save(); renderDay(); } };
+    el.querySelector('.x').onclick = () => { if (end) { shrinkEnd(); S.endOpen = false; save(); renderDay(); } else if (inop) { const l = $('#lab'); if (l) l.classList.remove('chk-open'); } else { S.dayIn = S.dayIn || {}; S.dayIn[d.n] = 1; save(); renderDay(); } };
     el.querySelectorAll('[data-end]').forEach(b => b.addEventListener('click', e => endChoice(b.dataset.end, e))); }
   function showEnd() { if (!storyMode() || !S || S.endOpen || builtNext(S.day || 0)) return; S.endOpen = true; S.endAt = S.endAt || now(); save(); mark('end_shown'); renderDay();
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_end', extra: { epoch: S.day || 0 } } })); } catch (e) {} }
   function endChoice(k, e) {
     if (k === 'open') { S.endOpen = true; save(); renderDay(); return; }
-    if (k === 'roadmap') { mark('end_roadmap'); S.endOpen = false; save(); renderDay(); try { window.__feedback && window.__feedback.open('road', null, null, 'end'); } catch (er) {} return; }
+    if (k === 'roadmap') { mark('end_roadmap'); shrinkEnd(); S.endOpen = false; save(); renderDay(); try { window.__feedback && window.__feedback.open('road', null, null, 'end'); } catch (er) {} return; }
     if (k === 'github') { mark('end_github'); return; }   // the link opens in a new tab; the card stays
     if (k === 'free') confirmPlay(go => { if (go) { mark('end_free'); freePlay(); } }); }
   // free-play: every feature now, the same world; the storyline can be picked up again from ⚙ (resumeStory)
   function freePlay() { if (!S) return; S.mode = 'free'; S.fp = now(); S.endOpen = false; S.free = S.free || now(); save(); silence(false); cls('gen-calm', 0); cls('gen-hush', 0);
-    const g = $('#genDay'); if (g) g.remove(); applyUnlocks(); tag(); say(END.free()); { const l = $('#lab'); if (l && !l.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); } }   // v14: the Operator's window says it
+    const g = $('#genDay'); if (g) g.remove(); applyUnlocks(); tag(); say(END.free()); setTimeout(() => say(END.back), 1200); { const l = $('#lab'); if (l && !l.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); } }   // v14: the Operator's window says it
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_free', extra: { epoch: S.day || 0 } } })); } catch (e) {} }
   const canResume = () => !!(S && S.on && S.fp && S.mode === 'free' && storyLive());
   function resumeStory() { if (!canResume()) return false; S.mode = 'story'; delete S.fp; save(); applyUnlocks(); renderDay(); renderConsole(); return true; }
+  // ---------- the centred cards are modal (v16, Nico: "sometimes at the bottom a notification might show up about a new reel, if I tap that, it
+  // seems like it might open the reel, but behind the lightbox of the epoch1... it shouldn't"): while the Epoch 0 moment or the end card is up,
+  // html.gen-modal: a backdrop absorbs taps outside it, toasts and notices are held (window.__notify queues them, shown when it closes), and
+  // other features ask window.__modal.up() before opening anything (the HITL invite, the iPhone hint). The ways out: × (the card shrinks into the
+  // 📟, so the player sees where it went), 🗺 the roadmap and 🛝 the playground (they close it first), ⭐ GitHub (a new tab; the card stays)
+  const MODAL = { held: [], shown: 0 }; let origNotify = null;
+  const modalUp = () => !!(moment || (S && S.endOpen && document.querySelector('#genDay.end')));
+  function modalSync() { const up = modalUp(); cls('gen-modal', up); let bd = $('#genModalBd');
+    if (up && !moment && !bd) { bd = document.createElement('div'); bd.id = 'genModalBd'; document.body.appendChild(bd); } else if ((!up || moment) && bd) bd.remove();
+    if (!up && MODAL.held.length && origNotify) { const h = MODAL.held.splice(0); h.forEach((a, i) => setTimeout(() => { try { origNotify(...a); MODAL.shown++; } catch (e) {} }, 500 + i * 700)); } }
+  function wrapNotify() { const n = window.__notify; if (!n || n.__held) return; const w = (...a) => { if (modalUp()) { MODAL.held.push(a); return null; } return n(...a); }; Object.assign(w, n); w.__held = true; origNotify = n; window.__notify = w; }
+  ['pointerdown', 'click', 'touchstart'].forEach(t => document.addEventListener(t, e => { if (!document.documentElement.classList.contains('gen-modal')) return;
+    if (e.target.closest && e.target.closest('#genDay.end, #lab, #genConfirm, #genResume, #oracle, #stagingRibbon')) return;
+    e.stopPropagation(); if (t !== 'touchstart') e.preventDefault(); }, true));
+  setInterval(() => { wrapNotify(); modalSync(); }, 400);
+  window.__modal = { up: modalUp, held: () => MODAL.held.length, shown: () => MODAL.shown };
+  // where a closed card goes (v15's ✅ checklist in the Operator may point it elsewhere: window.__epochTarget); the 📟 by default
+  function shrinkEnd() { const el = $('#genDay.end'); if (!el) return; const a = el.getBoundingClientRect(); let t = null; try { t = window.__epochTarget && window.__epochTarget(); } catch (e) {}
+    t = t || ($('#toHandle') && !$('#toHandle').hidden ? $('#toHandle') : $('#lab-head')); const b = t ? t.getBoundingClientRect() : { left: innerWidth - 40, top: innerHeight - 40, width: 24, height: 24 };
+    const g = document.createElement('div'); g.id = 'genShrink'; Object.assign(g.style, { left: a.left + 'px', top: a.top + 'px', width: a.width + 'px', height: a.height + 'px' }); document.body.appendChild(g);
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2), k = Math.max(0.05, b.width / a.width);
+    try { g.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(${k})`, opacity: 0.2 }], { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 10 : 520, easing: 'cubic-bezier(.4,0,.2,1)' }).onfinish = () => g.remove(); } catch (e) { g.remove(); }
+    land.shrink = { to: t && t.id, at: now() }; const h = $('#toHandle'); if (h) { h.classList.add('glow'); setTimeout(() => h.classList.remove('glow'), 2600); } }
+  { const c6 = document.createElement('style'); c6.textContent = `#genModalBd{position:fixed;inset:0;z-index:2147482390;background:#02030a8c;backdrop-filter:blur(2px)}
+html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:hidden!important}
+#genShrink{position:fixed;z-index:2147482450;border-radius:12px;background:#0a0b16f0;box-shadow:0 0 0 1px #6b7cff88,0 10px 40px #000a;pointer-events:none;transform-origin:center}`; document.head.appendChild(c6); }
+
+  // ---------- ⚙ 📖 Storyline (v16, Nico: "after going through the story all the way to Epoch1, I clicked to go to the playground... but then it's
+  // not clear how to go back. And when I clicked the Story button in the settings, it took me all the way to the start of the story.. even though
+  // I had already completed it... so, like Netflix shows maybe, it should ask: [Restart story mode] [Resume play (Epoch1 - Unamed)]"): one row;
+  // with no story yet it starts one; with progress (finished or not) it asks: resume where it was, or restart (the world kept as a snapshot)
+  const RESUME = { title: '📖 the storyline', resume: l => `▶ resume (${l})`, restart: '↺ restart the story', note: 'restarting keeps this world as a snapshot first' };
+  const storyProgress = () => !!(S && S.on && (S.mode === 'story' || S.fp) && (S.tc || (S.steps && Object.keys(S.steps).length)));
+  function worldName() { try { const f = JSON.parse(localStorage.getItem('idle.first5') || 'null'); if (f && f.named) return String(f.named); } catch (e) {} try { const w = H() && H().world(); if (w && w.name) return String(w.name); } catch (e) {} return 'unnamed'; }
+  const progressOf = () => `Epoch ${epochNow()} · ${worldName()}`;
+  function storyRow() { if (!storyLive()) return false; if (!storyProgress()) { newUniverse('story'); return 'start'; } storyModal(); return 'modal'; }
+  function storyModal() { if ($('#genResume')) return; const el = document.createElement('div'); el.id = 'genResume'; el.setAttribute('role', 'dialog');
+    el.innerHTML = `<div class="cb"><b>${esc(RESUME.title)}</b><div class="rp">consciousness 24 · ${esc(progressOf())}</div><div class="cr"><button data-r="resume">${esc(RESUME.resume(progressOf()))}</button><button data-r="restart">${esc(RESUME.restart)}</button></div><small>${esc(RESUME.note)}</small><button class="x" data-r="close" title="close">×</button></div>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b && e.target !== el) return; el.remove(); const k = b ? b.dataset.r : 'close'; if (k === 'resume') resumeAt(); if (k === 'restart') { mark('st_restart'); newUniverse('story'); } }); }
+  { const c5 = document.createElement('style'); c5.textContent = `#genResume{position:fixed;inset:0;z-index:2147482700;display:flex;align-items:center;justify-content:center;padding:16px;background:#02030ab8;backdrop-filter:blur(2px)}
+#genResume .cb{position:relative;width:min(420px,100%);padding:20px 22px 16px;border-radius:16px;background:#0a0b16f7;color:#e9ecff;box-shadow:0 24px 90px #000c,0 0 0 1px #6b7cff55;font:14px/1.45 var(--ui-font,system-ui)}
+#genResume b{display:block;font:700 18px var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.06em}#genResume .rp{margin:6px 0 14px;font:13px var(--term-font,ui-monospace,Menlo,monospace);opacity:.8}
+#genResume .cr{display:flex;flex-direction:column;gap:8px}#genResume .cr button{font:600 14px var(--ui-font,system-ui);padding:11px 14px;border-radius:12px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;cursor:pointer;text-align:left}
+#genResume .cr button[data-r=resume]{background:#3a46c8;border-color:#cfd6ff}#genResume small{display:block;margin-top:10px;opacity:.6;font-size:11.5px}#genResume .x{position:absolute;right:10px;top:8px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:16px}`; document.head.appendChild(c5); }
+  // resume: back into the story where it was (today: Genesis done → Epoch 1's card, the end of what's built); the world is kept as a snapshot first
+  function resumeAt() { if (!S) return false; try { H() && H().snapshot('before resuming the story ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); } catch (e) {}
+    S.mode = 'story'; S.on = true; delete S.fp; save(); mark('st_resume'); applyUnlocks(); tag(); renderConsole();
+    if (genesisDone() && !builtNext(S.day || 0)) { S.endOpen = false; showEnd(); } else renderDay();
+    try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_resume', extra: { epoch: S.day || 0 } } })); } catch (e) {} return true; }
+  // the playground's way back (v16): the 🛠 tray's chip and /story (idle-opwin.js asks for it)
+  window.__storyBack = () => (!storyMode() && storyProgress() && storyLive()) ? { text: '📖 back to the story', act: () => storyRow() } : null;
+
   // the story's silence ends with Genesis (manager, v12: "a story player must not stay silent once Epoch 0 is beaten"): the master comes
   // back and the background music fades in under the Gazette's special edition, a small reward. Only the sound: the music panel (its
   // controls) still waits for its epoch in UNLOCK. A player who muted Id|le stays muted (the master keeps the mute).
@@ -827,7 +885,7 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
   // DRAFT: every word below is a draft for Nico.
   const MOMENT = { draft: true, stamp: 'EPOCH 0 COMPLETE',
     lines: ["great job! you've seeded the consciousness with the basic elements it needs to evolve",
-      "let's keep going. next up: Epoch 1 · Words. you'll teach it its first vocabulary: pick what it reads, and watch your creatures turn text into the tokens they eat",
+      "let's keep going. next up: Epoch 1 · Attention. you'll get to know your creatures: what they notice, what they think, what they want",
       'ready?'],
     start: 'start Epoch 1', play: () => PG().icon + ' ' + PG().short,
     confirm: { q: 'are you sure? the story will wait for you. you can always come back from ⚙', stay: 'stay in the story', go: () => 'go to ' + PG().short } };
@@ -839,7 +897,7 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
       for (let i = 1; i <= line.length; i += 3) { wakeTyping = line.slice(0, i); renderConsole(); await sleep(22); }
       wakeTyping = ''; wakeShown.push(line); renderConsole(); await sleep(Math.min(1200, 380 + line.length * 10)); }
     wakeBusy = false; moment.ready = true; renderConsole(); try { MOMENT.lines.forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {} }
-  function leaveMoment() { moment = null; wakeShown = []; cls('gen-box', 0); const bd = $('#genBackdrop'); if (bd) bd.remove(); }
+  function leaveMoment() { moment = null; setTimeout(modalSync, 0); wakeShown = []; cls('gen-box', 0); const bd = $('#genBackdrop'); if (bd) bd.remove(); }
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#genConsole [data-gm]'); if (!b || !moment || !moment.ready) return;
     if (b.dataset.gm === 'start') { mark('e0_start1'); aside(1); setTimeout(() => { leaveMoment(); closeOp(); aside(0); endGuide(false); renderDay(); if (!builtNext(1)) showEnd(); else renderConsole(); }, 450); return; }
     if (b.dataset.gm === 'play') confirmPlay(go => { if (!go) return; mark('e0_play'); aside(1); setTimeout(() => { leaveMoment(); aside(0); endGuide(false); freePlay(); }, 450); }); });
@@ -922,7 +980,7 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
   const WELCOME = { draft: true, lines: ['welcome to the playground: every feature is open, play however you like',
       "here you get to try new features, new creatures and all the cutting-edge things Id|le's consciousness is dreaming up",
       "there's also a story, if you want one: Doc's training run, epoch by epoch"],
-    chip: '📖 start the story', after: 'you can always switch from ⚙ → 📖 Storyline mode', note: '📖 Storyline mode is in ⚙', ms: 20000, afterTap: 1500, gap: 1400 };
+    chip: '📖 start the story', after: 'you can always switch from ⚙ → 📖 Storyline (or type /story)', note: '📖 Storyline is in ⚙', ms: 20000, afterTap: 1500, gap: 1400 };
   const PW = 'idle.playWelcome';
   function playWelcome() { let st = null; try { st = localStorage.getItem(PW); } catch (e) {} if (st || variant() !== 'play' || storyMode() || window.__genesisVoid || document.querySelector('#idleIntro')) return false;
     const O = window.__opwin; if (!O) return false; try { localStorage.setItem(PW, 'shown'); localStorage.getItem(OFFER) || localStorage.setItem(OFFER, 'welcome'); } catch (e) {} mark('pw_shown');
@@ -958,6 +1016,6 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
   function pending() { try { if (!storyMode() || !S || !S.on) return 0; const d = dayOf(S.day || 0); if (!d || (S.days && S.days[d.n]) || (d.n > 0 && !builtNext(d.n))) return 0;
     return d.goals.filter(([k]) => !(d.n === 0 ? did(k) : false)).length; } catch (e) { return 0; } }
   // ready(): v15 — also only once the window is actually up (not during the landing, the dawn or a step's aside)
-  window.__genesis = { arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();

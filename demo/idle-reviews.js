@@ -381,7 +381,7 @@
     d.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + 2 * pad}px;height:${r.height + 2 * pad}px`; document.body.appendChild(d); setTimeout(() => d.remove(), ms); return t.id; }
 
   // ---------- when: the link at once; otherwise after 2 minutes in the game, never during the intro or Genesis, one message at a time ----------
-  const busy = () => !window.__restoredOrFresh || document.documentElement.classList.contains('booting') || !!document.querySelector('#idleIntro') || !!window.__genesisVoid || !!window.__traveling || !!window.__storyKey
+  const busy = () => !!(window.__modal && window.__modal.up()) || !window.__restoredOrFresh || document.documentElement.classList.contains('booting') || !!document.querySelector('#idleIntro') || !!window.__genesisVoid || !!window.__traveling || !!window.__storyKey
     || (() => { try { const u = window.__genesis && window.__genesis.unlocks && window.__genesis.unlocks(); return !!(u && u.story && u.epoch < 1); } catch (e) { return false; } })() || !!cur || delivering || !!$('#founderLetter,#founderLab');
   const Q = new URLSearchParams(location.search), want = Q.get('review');
   let t0 = Date.now(), auto = !Q.has('test') || Q.has('invite');   // automated tests turn it on themselves (__reviews.test.auto)
