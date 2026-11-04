@@ -5,6 +5,18 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+
+## 2026-11-04 (offer v2, staging)
+
+**The storyline offer v2: three variants for Nico to pick from (staging only; id-le.com keeps v1).** On id-le.com the v1 card (shown 20 s after load to returning players) was shown 22 times and accepted 0: they come back for their world. v2 (`idle-genesis.js`):
+- All variants wait for the player to be active in their world: on screen ≥ 75 s (`OFFERV.activeS`) **and** one interaction (a click in the world, the top bar, a card or the minimap), at a quiet moment (no panel, popup, modal, toast, typing or Operator cut-scene). Accepting takes a snapshot first (`newUniverse('story')`). "later" asks once more after 3 days, then never (`idle.storyOffer2`: asks, last ask, variant, answer); a v1 dismissal counts as the first ask.
+- **a**: the card with clearer words ("✦ new: Doc's story … About 5 minutes. Your world stays safe") and [ ▶ play the story ] [ later ].
+- **b**: a compact card with a silent 6 s loop of the story's own logo (this browser's logo arm, drawn by `idle-logos.js` on a small canvas; a still if it can't load or with reduced motion), one line "new: Doc's story — 5 minutes, your world stays safe", same buttons.
+- **c**: the floating Operator says two lines, with chips [ 📖 start the story ] [ maybe later ]; unanswered after 2 min counts as later.
+- `?offer=a|b|c|old` forces one on staging/local (after 10 s on screen + an interaction; `&offerms=N` sets the wait). `OFFER_PROD = 'old'` keeps v1 on id-le.com until Nico picks; `OFFER_TEST = 'a'` is the staging default.
+- Funnel: `offer_shown`/`offer_accepted` as before, plus `offer_shown_x`, `offer_go_x`, `offer_later_x` per variant (worker allowlist; stats.py prints a line per variant).
+- Test 'story offer v2' (each variant: nothing before an interaction or over an open 🧪 panel, the card or the Operator's line, b's preview draws, accepting → snapshot → the story; later → once more after 3 days → never; v1 dismissals get one more ask). 'story offer' now forces v1 with `?offer=old`.
+
 ## 2026-11-04
 
 **Genesis gate, round 2 (branch gate2).** After the launch, paraphrases of "let there be life" almost always got the nudge (round 1's held-out recall for that step: 0.08). Added 49 new labeled phrasings for life and 38 near-miss negatives ("get a life", "end life", "what is life", "lights off"…), kept apart from round 1's data so its split stays reproducible. Per step, the head is now either the Tiny Oracle's features alone (light) or those plus hashed character n-grams (1–4 + words, FNV-1a over UTF-16 units, the same code in Python and the page) in one learned multinomial head (words, creatures, sky); thresholds are strict (just above the highest out-of-fold score of any other text, no cap). Held-out (102 texts, the same texts for both rows): light 9/12 with 1 false advance ("what's the light") → 6/12 with 0; words 6/12 → 6/12; **creatures 10/23 with 1 false advance ("end life") → 14/23 with 0**; sky 2/6 → 2/6. Test 'genesis gate' adds 4 near-miss probes, a creatures-step probe ("bring them to life", "create life", "let there be creatures" advance; "life is hard", "get a life" don't) and a page/Python n-gram parity check. genesis_gate.json is now 185 KB (v2: per-step heads).

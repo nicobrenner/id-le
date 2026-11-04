@@ -3071,7 +3071,7 @@ def t_story_arms(P):
 def t_story_offer(P):
     """The storyline offer (returning players, the other arm): shown once per browser (remembered); accepting keeps the world as a snapshot
     and starts the story."""
-    pg = P.open("/arena.html?fresh=1&test&offer"); booted(pg)
+    pg = P.open("/arena.html?fresh=1&test&offer=old"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#storyOffer')", 30, P=P)
     t = pg.inner_text("#storyOffer"); need("storyline mode" in t and "snapshot" in t, f"the offer: {t!r}")
     again = pg.evaluate("() => { document.querySelector('#storyOffer').remove(); return window.__genesis.offer(); }")
@@ -3085,6 +3085,63 @@ def t_story_offer(P):
     need(n1 == n0 + 1 and "offer_shown" in f["f"] and "offer_accepted" in f["f"] and f["o"] == "accepted", f"accepting: a snapshot first, then the story: {n0}→{n1}, {f}")
     pg.keyboard.press("Escape"); P.clean()
     return f"shown once (remembered), accepted → snapshot ({n0}→{n1}) → the story"
+
+
+def t_story_offer_v2(P):
+    """The storyline offer v2 (Nov 4: v1 shown 22 times at load, accepted 0): variants a (timed card), b (card with a silent logo preview),
+    c (the Operator's line + a chip). Each waits for time on screen AND an interaction, never shows over an open panel, takes a snapshot first
+    when accepted, and 'later' asks once more days later, then never."""
+    out = []
+    for v in "abc":
+        pg = P.open(f"/arena.html?fresh=1&test&offer={v}&offerms=1500"); booted(pg)
+        pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.removeItem('idle.storyOffer'); localStorage.removeItem('idle.genesis'); }"); pg.reload(); booted(pg)
+        pg.wait_for_timeout(2500)
+        need(not pg.evaluate("() => !!document.querySelector('#storyOffer') || /Doc's story/.test(document.body.innerText)"), f"{v}: shown before any interaction")
+        pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(400)
+        pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        pg.wait_for_timeout(2000)
+        st = pg.evaluate("() => window.__genesis.offerState()")
+        need(st["last"] is None, f"{v}: shown over the open 🧪 panel: {st}")
+        pg.evaluate("() => { window.__feedback.close(); document.querySelectorAll('#ntf .np').forEach(n => n.remove()); }")   # a ?fresh toast shares the corner; the offer waits for toasts
+        if v == "c":
+            wait_for(pg, "() => [...document.querySelectorAll('#opTray .opc')].some(b => /start the story/.test(b.textContent))", 15, P=P)
+            txt = pg.evaluate("() => document.body.innerText")
+            need("Doc's story" in txt, f"c: the Operator's line: {txt[-300:]!r}")
+            go = "() => [...document.querySelectorAll('#opTray .opc')].find(b => /start the story/.test(b.textContent)).click()"
+        else:
+            try: wait_for(pg, "() => !!document.querySelector('#storyOffer')", 15, P=P)
+            except AssertionError: need(False, f"{v}: no card: {pg.evaluate('() => { const s = window.__genesis.offerState(); delete s.text; return s; }')}")
+            t = pg.inner_text("#storyOffer"); need("Doc's story" in t and ("snapshot" in t or "safe" in t), f"{v}: the card: {t!r}")
+            if v == "b":
+                wait_for(pg, "() => { const c = document.querySelector('#storyOffer canvas.pv'); return c && (+c.dataset.frames > 5 || c.dataset.still); }", 20, P=P)
+                lit = pg.evaluate("() => { const c = document.querySelector('#storyOffer canvas.pv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i+1] + d[i+2] > 120) n++; return { n, frames: +c.dataset.frames || 0, still: !!c.dataset.still }; }")
+                need(lit["n"] > 20, f"b: the preview draws nothing: {lit}")
+            go = "() => document.querySelector('#storyOffer .go').click()"
+        f0 = pg.evaluate("() => window.__funnel.reached()")
+        need("offer_shown" in f0 and f"offer_shown_{v}" in f0, f"{v}: funnel: {f0}")
+        n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+        pg.evaluate(go); wait_for(pg, "() => !!document.querySelector('#idleIntro')", 20, P=P)
+        n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+        f1 = pg.evaluate("() => ({ f: window.__funnel.reached(), s: JSON.parse(localStorage.getItem('idle.storyOffer2')) })")
+        need(n1 == n0 + 1 and f"offer_go_{v}" in f1["f"] and f1["s"]["ans"] == "accepted", f"{v}: accepted → snapshot then story: {n0}→{n1}, {f1}")
+        pg.keyboard.press("Escape"); P.clean(); out.append(f"{v} ✓")
+    # later: asks once more, days later, then never
+    pg = P.open("/arena.html?fresh=1&test&offer=a&offerms=0"); booted(pg)
+    pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.removeItem('idle.storyOffer'); localStorage.removeItem('idle.genesis'); }"); pg.reload(); booted(pg)
+    pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+    wait_for(pg, "() => !!document.querySelector('#storyOffer')", 15, P=P)
+    pg.click("#storyOffer .lt"); pg.wait_for_timeout(500)
+    r = pg.evaluate("""() => { const G = window.__genesis, o1 = JSON.parse(localStorage.getItem('idle.storyOffer2')), again = G.offer();
+      const o = JSON.parse(localStorage.getItem('idle.storyOffer2')); o.at = Date.now() - 4 * 864e5; localStorage.setItem('idle.storyOffer2', JSON.stringify(o));
+      document.querySelector('#storyOffer') && document.querySelector('#storyOffer').remove(); const second = G.offer(); document.querySelector('#storyOffer .lt').click();
+      const o2 = JSON.parse(localStorage.getItem('idle.storyOffer2')); o2.at = Date.now() - 40 * 864e5; localStorage.setItem('idle.storyOffer2', JSON.stringify(o2));
+      return { o1, again, second, third: (document.querySelector('#storyOffer') && document.querySelector('#storyOffer').remove(), G.offer()), n: o2.n }; }""")
+    need(r["o1"]["ans"] == "later" and r["o1"]["n"] == 1 and r["again"] is False and r["second"] is True and r["third"] is False and r["n"] == 2, f"later → once more days later → never: {r}")
+    # v1 browsers (shown at load before v2) get one more, better-timed ask
+    m = pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.setItem('idle.storyOffer', 'dismissed'); return window.__genesis.offerState().seen; }")
+    need(m["n"] == 1 and m["ans"] == "later", f"a v1 'dismissed' browser: {m}")
+    P.clean()
+    return " · ".join(out) + "; nothing before an interaction or over 🧪; later → once more after 3 days → never; v1 dismissals get one more ask"
 
 
 def t_story_v6(P):
@@ -3986,7 +4043,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
