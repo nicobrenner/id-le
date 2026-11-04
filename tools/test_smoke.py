@@ -3173,14 +3173,20 @@ def t_v15_creatures(P):
 
 def t_operator_top(P, phone=False):
     """v15 (Nico: "the operator is also on top of the minimap... should we move the operator to the top, maybe next to the bell?", "the "Send"
-    button … should be on the righ side", "instead of a tools icon, use the ⚡️ icon"): the 📟 sits right after 🔔, the window opens below it and
+    button … should be on the righ side", "instead of a tools icon, use the ⚡️ icon"); v16: the 📟 sits in the top bar right after ⚙ (phones: before ☰), the window opens below it and
     never covers the minimap, ☰ / 🔔's panel hide it, Send is the right-most control of the input row, ⚡ toggles the quick actions."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg); pg.wait_for_timeout(1500)
     pg.evaluate("() => { document.documentElement.classList.remove('gen-calm'); }"); pg.wait_for_timeout(800)
-    pos = pg.evaluate("""() => { const b = document.querySelector('#ntfBtn'), h = document.querySelector('#toHandle'), rb = b && b.getBoundingClientRect(), rh = h.getBoundingClientRect();
-      const bv = !!(b && rb.width && getComputedStyle(b).visibility !== 'hidden'); return { bell: bv ? [rb.left, rb.right, rb.top] : null, h: [rh.left, rh.top, rh.width], iw: innerWidth }; }""")
-    if pos["bell"]: need(abs(pos["h"][0] - pos["bell"][1]) < 16 and abs(pos["h"][1] - pos["bell"][2]) < 16, f"the 📟 sits right after 🔔: {pos}")
-    else: need(pos["h"][1] < 20 and pos["h"][0] < 60, f"no 🔔 on screen: the 📟 sits in the top-left corner: {pos}")
+    # v16 (Nico: "I thought it was going to float to the right of the settings icon"): the 📟 is a button IN the top bar, right after ⚙
+    # (phones: right before ☰), vertically centred on the bar's buttons
+    pos = pg.evaluate("""() => { const h = document.querySelector('#toHandle'), bar = document.querySelector('#topbar'), set = document.querySelector('#settingsBtn'), more = document.querySelector('#mMore');
+      const vis = e => !!(e && e.getBoundingClientRect().width && getComputedStyle(e).display !== 'none'); const rh = h.getBoundingClientRect();
+      const ref = vis(set) ? set : more, rr = ref.getBoundingClientRect();
+      return { inBar: h.parentElement === bar, prev: h.previousElementSibling && h.previousElementSibling.id, next: h.nextElementSibling && h.nextElementSibling.id,
+        setVis: vis(set), dx: rh.left - rr.right, dxMore: rr.left - rh.right, dy: Math.abs((rh.top + rh.height / 2) - (rr.top + rr.height / 2)), h: [rh.left, rh.top, rh.width] }; }""")
+    need(pos["inBar"], f"the 📟 is inside the top bar: {pos}")
+    if pos["setVis"]: need(pos["prev"] == "settingsBtn" and -2 <= pos["dx"] < 16 and pos["dy"] < 4, f"the 📟 sits right after ⚙, aligned: {pos}")
+    else: need(pos["next"] == "mMore" and -2 <= pos["dxMore"] < 16 and pos["dy"] < 4, f"phone: the 📟 sits right before ☰, aligned: {pos}")
     pg.click("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(700)
     g = pg.evaluate("""() => { const r = e => { const x = e && e.getBoundingClientRect(); return x && x.width ? [x.left, x.top, x.right, x.bottom] : null; };
       const lab = r(document.querySelector('#lab')), mm = document.querySelector('#minimap'), m = mm && mm.offsetParent ? r(mm) : null, h = r(document.querySelector('#toHandle'));
