@@ -7,6 +7,16 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+
+## 2026-11-04 (offer v3)
+
+**The storyline offer v3: b's logo preview, as a modal (staging; the default for id-le.com once Nico gives the go).** Nico, on a/b/c: "by far the b option was the best in terms of engagement, as it shows the logo animation… it should be more like a modal, more similar to what the Epoch finish notice is. If the user dismisses it… a little animation/'cut-scene' to let the user know where it is after dismissal"; c's "ask is not very clear"; a and b waited behind the guided start's step cards.
+- `#offerModal` (idle-genesis.js): centred, the EPOCH 0 moment's stamp ("📖 NEW: DOC'S STORY"), the story's logo playing silently on a 560×200 canvas (this browser's logo arm; a still with reduced motion), one line (draft in `OFFERV.v3`: "a 3-minute story about how this consciousness began. your world stays safe (it's saved as a snapshot first)"), [ ▶ play the story ] [ not now ].
+- It is a modal (`__modal.up()`): a backdrop, the guided start's tips and every toast held until it closes (they come back after). It outranks the tips: it waits only for an open panel, a card or typing (not for toasts).
+- not now: the modal shrinks into ⚙ (☰ on a phone), the Operator's cut-scene rings it with "📖 Storyline lives in ⚙", it glows for 2 minutes, and the next time ⚙ opens (within 10 min) its 📖 Storyline row lights up. "later" rules as before (once more after 3 days, then never).
+- Eligibility unchanged (returning players; 75 s on screen + a click). `OFFER_PROD = 'v3'` and `OFFER_TEST = 'v3'`; `?offer=old|a|b|c|v3` previews any of them on staging (sandboxed). Funnel: `offer_shown_v3`, `offer_go_v3`, `offer_later_v3`.
+- Tests: 'offer v3' and 'offer v3 phone' (centred, on top of a tip, tips held, the logo plays, not now → ⚙ / ☰ + glow + ⚙'s row, play → snapshot → story, the `?offer=v3` preview in a fresh browser); 'prod gates' now triggers the offer after a click (its 75 s skipped) and checks the modal.
+
 ## 2026-11-04
 
 **The grey boxes were stones and pillars, not creatures.** Nico's staging screenshots showed grey rounded rectangles scattered over a dark world. They are building materials: `idle-build.js` `drawObj` had normal-mode drawings for crates, bricks, rocks and racks only; stones and pillars (and any unknown kind) fell through to `rr(...); fillStyle = dark ? '#555' : '#bbb'`, a flat box, striking in dark mode. Same code on id-le.com; it has nothing to do with the crash guard's light mode or the world hold. Now a stone is a rounded pebble with a crack and "01", a pillar a fluted column with a capital and base, and an unknown kind a labelled crate. Test 'build looks' (launch tier): every kind × light/dark × normal/Gloamhold draws ≥ 3 colours (≥ 2 in 1-bit Gloamhold); on the old code it fails exactly on stone and pillar (1 colour). Sheets: Desktop idle-trailers/greybox-before.png, greybox-after.png.

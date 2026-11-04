@@ -3657,6 +3657,48 @@ def t_offer_sandbox(P):
     return "a saved mid-Genesis story: ?offer=" + "/".join(out) + " still shows the offer in a sandbox, the hint counts from the click, the real storage untouched"
 
 
+def t_offer_v3(P, phone=False):
+    """The storyline offer v3 (Nov 4, Nico picked b's logo preview, as a modal like the EPOCH 0 COMPLETE moment): a returning world gets a
+    centred modal on top of the guided start's tips (held while it's up), with the logo playing; ▶ play → snapshot + the story; not now → it
+    shrinks into ⚙ (☰ on a phone), the cut-scene rings it, it glows, and ⚙'s 📖 Storyline row lights up when ⚙ opens."""
+    seed = P.open("/arena.html?fresh=1&test&nofirst5"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=P); seed.close()
+    def show():
+        pg = P.open("/arena.html?offerms=1500"); booted(pg)
+        pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.removeItem('idle.storyOffer'); localStorage.removeItem('idle.genesis'); }")
+        pg.reload(); booted(pg); pg.wait_for_timeout(1500)
+        pg.evaluate("() => window.__first5 && window.__first5.startTrail([])"); pg.wait_for_timeout(1500)   # a guided-start tip on screen
+        pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        wait_for(pg, "() => !!document.querySelector('#offerModal')", 30, P=P); pg.wait_for_timeout(600)
+        return pg
+    pg = show()
+    r = pg.evaluate("""() => { const m = document.querySelector('#offerModal'), b = m.getBoundingClientRect(), c = m.querySelector('canvas.pv'), n = document.querySelector('#ntf'), at = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { cx: b.left + b.width / 2 - innerWidth / 2, cy: b.top + b.height / 2 - innerHeight / 2, w: b.width, in: b.left >= 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight,
+        top: !!(at && at.closest('#offerModal')), modal: window.__modal.up(), ntf: n ? getComputedStyle(n).visibility : 'none', bd: !!document.querySelector('#genModalBd'),
+        frames: c ? +c.dataset.frames || 0 : -1, text: m.innerText }; }""")
+    need(abs(r["cx"]) < 4 and abs(r["cy"]) < 4 and r["in"] and r["top"] and r["modal"] and r["bd"] and r["ntf"] == "hidden", f"the modal centred, on top, tips held: {r}")
+    need("doc" in r["text"].lower() and "3-minute" in r["text"] and "logo" not in r["text"].lower(), f"the copy: {r['text']!r}")
+    pg.wait_for_timeout(1200); need(pg.evaluate("() => +document.querySelector('#offerModal canvas.pv').dataset.frames || 0") > 10 or pg.evaluate("() => !!document.querySelector('#offerModal canvas.pv').dataset.still"), "the logo preview doesn't play")
+    f = pg.evaluate("() => window.__funnel.reached()"); need("offer_shown_v3" in f, f"funnel: {f}")
+    pg.click("#offerModal .lt"); wait_for(pg, "() => !!(window.__genesis.offerState().notNow)", 10, P=P); pg.wait_for_timeout(3500)
+    nn = pg.evaluate("() => ({ to: window.__genesis.offerState().notNow.to, glow: !!document.querySelector('.opGlow'), modal: !!document.querySelector('#offerModal'), f: window.__funnel.reached() })")
+    need(nn["to"] == ("mMore" if phone else "settingsBtn") and nn["glow"] and not nn["modal"] and "offer_later_v3" in nn["f"], f"not now → the cut-scene into ⚙ and a glow: {nn}")
+    if not phone:
+        pg.click("#settingsBtn"); wait_for(pg, "() => !!document.querySelector('#settings.on .row.offerHi')", 6, P=P)
+        need("Storyline" in pg.evaluate("() => document.querySelector('#settings.on .row.offerHi').textContent"), "⚙'s 📖 Storyline row lights up")
+    pg.close()
+    pg = show(); n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+    pg.click("#offerModal .go"); wait_for(pg, "() => !!document.querySelector('#idleIntro')", 20, P=P)
+    n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length"); f = pg.evaluate("() => window.__funnel.reached()")
+    need(n1 == n0 + 1 and "offer_go_v3" in f, f"▶ play → a snapshot, then the story: {n0}→{n1}, {f}")
+    pg.keyboard.press("Escape"); P.clean()
+    if not phone:   # the staging preview, in a fresh browser
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); Q = Page(ctx, P.base)
+        q = Q.open("/arena.html?offer=v3&offerms=1500"); wait_for(q, "() => window.__restoredOrFresh", 60, P=Q); q.wait_for_timeout(2000)
+        q.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        wait_for(q, "() => !!document.querySelector('#offerModal')", 25, P=Q); ctx.close()
+    return ("phone: " if phone else "") + f"centred on top of a tip (tips held), the logo plays; not now → {nn['to']} + glow" + ("" if phone else " + ⚙ row") + f"; play → snapshot ({n0}→{n1}) → story" + ("" if phone else "; ?offer=v3 preview")
+
+
 def t_story_v6(P):
     """Story v6: ?intro=epoch0 is retired (it goes to the storyline); the logo keeps its pipe, cycling colours, then cuts to black; the
     'conscious' label is never under the dialog (desktop and phone); between the intro and the dark nothing of the world or the UI shows,
@@ -3800,15 +3842,16 @@ def t_prod_gates(P, root):
     P.base, P.root = "https://id-le.com", root
     seed = P.open("/arena.html?fresh=1&test"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=P); seed.close()
     pg = P.open("/arena.html"); booted(pg)   # a returning browser (it has a world): no arm, the world stays, the offer comes once
-    wait_for(pg, "() => !!document.querySelector('#storyOffer')", 40, P=P)
+    pg.wait_for_timeout(3000); pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+    need(pg.evaluate("() => window.__genesis.offer()") is True, "the returning world gets the storyline offer (v3, after a click; its 75 s are skipped here)")
     r = pg.evaluate("""async () => { await document.fonts.ready; return { host: location.hostname, live: window.__genesis.storyLive(), void: !!window.__genesisVoid,
-      intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(), v: window.__genesis.variant(),
+      intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#offerModal'), founder: window.__founder.available(), v: window.__genesis.variant(),
       c: window.__arena.raw().filter(c => !c.lab).length,
       f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
       ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
     need(r["host"] == "id-le.com" and r["live"], f"not emulating production (or the story isn't live): {r}")
     need(r["offer"] and not r["void"] and not r["intro"] and r["v"] is None and r["c"] > 0, f"a returning world keeps its world and gets the offer: {r}")
-    pg.evaluate("() => document.querySelector('#storyOffer .x').click()"); pg.wait_for_timeout(500)
+    pg.evaluate("() => document.querySelector('#offerModal .lt').click()"); pg.wait_for_timeout(4000)   # not now: the modal goes into ⚙
     need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
     # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
     P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
@@ -4603,7 +4646,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("chips playground", t_chips_playground, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("chips playground", t_chips_playground, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),

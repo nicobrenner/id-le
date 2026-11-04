@@ -877,13 +877,13 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
   // other features ask window.__modal.up() before opening anything (the HITL invite, the iPhone hint). The ways out: × (the card shrinks into the
   // 📟, so the player sees where it went), 🗺 the roadmap and 🛝 the playground (they close it first), ⭐ GitHub (a new tab; the card stays)
   const MODAL = { held: [], shown: 0 }; let origNotify = null;
-  const modalUp = () => !!(moment || (S && S.endOpen && document.querySelector('#genDay.end')));
+  const modalUp = () => !!(moment || (S && S.endOpen && document.querySelector('#genDay.end')) || document.querySelector('#offerModal'));
   function modalSync() { const up = modalUp(); cls('gen-modal', up); let bd = $('#genModalBd');
     if (up && !moment && !bd) { bd = document.createElement('div'); bd.id = 'genModalBd'; document.body.appendChild(bd); } else if ((!up || moment) && bd) bd.remove();
     if (!up && MODAL.held.length && origNotify) { const h = MODAL.held.splice(0); h.forEach((a, i) => setTimeout(() => { try { origNotify(...a); MODAL.shown++; } catch (e) {} }, 500 + i * 700)); } }
   function wrapNotify() { const n = window.__notify; if (!n || n.__held) return; const w = (...a) => { if (modalUp()) { MODAL.held.push(a); return null; } return n(...a); }; Object.assign(w, n); w.__held = true; origNotify = n; window.__notify = w; }
   ['pointerdown', 'click', 'touchstart'].forEach(t => document.addEventListener(t, e => { if (!document.documentElement.classList.contains('gen-modal')) return;
-    if (e.target.closest && e.target.closest('#genDay.end, #lab, #genConfirm, #genResume, #oracle, #stagingRibbon')) return;
+    if (e.target.closest && e.target.closest('#genDay.end, #lab, #genConfirm, #genResume, #oracle, #stagingRibbon, #offerModal')) return;
     e.stopPropagation(); if (t !== 'touchstart') e.preventDefault(); }, true));
   setInterval(() => { wrapNotify(); modalSync(); }, 400);
   window.__modal = { up: modalUp, held: () => MODAL.held.length, shown: () => MODAL.shown };
@@ -1110,14 +1110,17 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   //   c: the Operator says it (floating window) with a [ 📖 start the story ] chip, like the playground's welcome
   // ?offer=a|b|c|old forces one on staging/local (after 10 s on screen + an interaction; &offerms=N sets the wait); id-le.com keeps v1 (OFFER_PROD)
   const OFFER = 'idle.storyOffer', OFFER2 = 'idle.storyOffer2';
-  const OFFER_PROD = 'old';   // what id-le.com shows until Nico picks: 'old' (v1, 20 s after load) | 'a' | 'b' | 'c'
-  const OFFER_TEST = 'a';     // staging/local default
+  const OFFER_PROD = 'v3';    // id-le.com (Nov 4, Nico picked b's preview, as a modal): 'v3' | 'old' (v1, 20 s after load) | 'a' | 'b' | 'c'
+  const OFFER_TEST = 'v3';    // staging/local default
   const OFFERV = { draft: true,   // DRAFT: the words are drafts for Nico
     a: { title: "✦ new: Doc's story", line: "A training run that won't stop, a crash, and a consciousness to raise. About 3 minutes. Your world stays safe: it's kept as a snapshot first.", go: '▶ play the story', later: 'later' },
     b: { line: "new: Doc's story — 3 minutes, your world stays safe", go: '▶ play the story', later: 'later' },
     c: { lines: ["psst, something new: Doc's story. a training run that won't stop, and a consciousness to raise", "about 3 minutes. your world stays safe, it's kept as a snapshot first"], chip: '📖 start the story', later: 'maybe later', after: 'no problem. it lives in ⚙ → 📖 Storyline whenever you want it' },
+    // v3 (Nico on b: "by far the b option was the best in terms of engagement, as it shows the logo animation… it should be more like a modal,
+    // more similar to what the Epoch finish notice is. If the user dismisses it… a little animation/'cut-scene' to let the user know where it is")
+    v3: { stamp: '📖 NEW: DOC\'S STORY', line: "a 3-minute story about how this consciousness began. your world stays safe (it's saved as a snapshot first)", go: '▶ play the story', later: 'not now', note: '📖 Storyline lives in ⚙' },
     activeS: 75, laterDays: 3, maxAsks: 2 };
-  const offerVariant = () => { const f = Q.get('offer'); if (/^([abc]|old)$/.test(f || '') && testHostG()) return f; return testHostG() ? OFFER_TEST : OFFER_PROD; };
+  const offerVariant = () => { const f = Q.get('offer'); if (/^([abc]|old|v3)$/.test(f || '') && testHostG()) return f; return testHostG() ? OFFER_TEST : OFFER_PROD; };
   // what this browser has been asked so far: { n: asks, at: last ask (ms), v: variant, ans: 'later' | 'accepted' }; v1's single key migrates
   function offerSeen() { let o = null; try { o = JSON.parse(localStorage.getItem(OFFER2) || 'null'); } catch (e) {} if (o) return o;
     let v1 = null; try { v1 = localStorage.getItem(OFFER); } catch (e) {}
@@ -1131,11 +1134,11 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   let offerOn = 0, offerTouched = false;
   setInterval(() => { if (document.visibilityState === 'visible' && window.__restoredOrFresh) offerOn += 1; }, 1000);
   addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#arena,#topbar,#creatures,.card,#whisper,#minimap')) offerTouched = true; }, true);
-  function offerQuiet() { if (window.__modal && window.__modal.up()) return false;
+  function offerQuiet(overTips) { if (window.__modal && window.__modal.up()) return false;
     const ae = document.activeElement; if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.offsetParent !== null) return false;
     try { if (window.__opwin && (window.__opwin.yielding() || (window.__opwin.cutting && window.__opwin.cutting()))) return false; } catch (e) {}
     const shown = el => { const st = getComputedStyle(el), r = el.getBoundingClientRect(); return st.display !== 'none' && st.visibility !== 'hidden' && +st.opacity > 0 && r.width > 0 && r.height > 0; };
-    return ![...document.querySelectorAll('#genDay.end, #oracle.on, #hitl.on, #review.on, #genConfirm, #genChoose, #genFront, #genStoryModal, #oracleBox:not([hidden]), #almanac.on, #drawerView, #founderLetter, #founderLab, #settingsPanel.on, #settings.on, #storyOffer, #ntf .np')].some(shown); }
+    return ![...document.querySelectorAll('#genDay.end, #oracle.on, #hitl.on, #review.on, #genConfirm, #genChoose, #genFront, #genStoryModal, #oracleBox:not([hidden]), #almanac.on, #drawerView, #founderLetter, #founderLab, #settingsPanel.on, #settings.on, #storyOffer, #offerModal' + (overTips ? '' : ', #ntf .np'))].some(shown); }
   const offerWait = () => { const ms = Q.has('offerms') ? +Q.get('offerms') : NaN; return Number.isFinite(ms) && ms >= 0 && testHostG() ? ms / 1000 : Q.has('offer') ? 10 : OFFERV.activeS; };   // (+null is 0: the hint once said ~0 s)
   function offerEligible() { if (ENTRY && !Q.has('offer')) return false; if (!storyLive() && !Q.has('offer')) return false; if (variant() === 'play' && !Q.has('offer')) return false;   // the play arm gets the Operator's welcome instead
     if (Q.has('test') && !Q.has('offer')) return false;
@@ -1150,7 +1153,7 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     document.body.appendChild(el); el.querySelector('.go').onclick = () => offerGo(v, el); el.querySelector('.lt').onclick = () => offerLater(v, el);
     if (v === 'b') teaser(el.querySelector('canvas.pv'), el); return true; }
   // b's preview: the story's own logo (this browser's logo arm), drawn silently in a loop on a small canvas; a plain still if it can't load
-  function teaser(cv, el) { const g = cv.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+  function teaser(cv, el, big = 38) { const g = cv.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
     const still = () => { g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); g.font = "34px 'Idle F1', monospace"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#e9ecff'; g.fillText('Id le', cv.width / 2, cv.height / 2); g.fillStyle = '#ff2d55'; g.fillRect(cv.width / 2 - 2, cv.height / 2 - 20, 4, 40); };
     const v = (window.IDLE_V && window.IDLE_V['idle-logos.js']) || (window.IDLE_CFG && window.IDLE_CFG.build) || '';
     const load = () => window.IdleLogos ? Promise.resolve(window.IdleLogos) : new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'idle-logos.js' + (v ? '?v=' + encodeURIComponent(v) : ''); s.onload = () => window.IdleLogos ? res(window.IdleLogos) : rej(); s.onerror = rej; document.head.appendChild(s); });
@@ -1159,9 +1162,27 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     load().then(L => { const lg = L.byId ? L.byId(id) : (L.list || []).find(x => x.id === id); if (!lg || !lg.drawAt || !lg.prepare) throw 0; return lg.prepare().then(() => lg); }).then(lg => {
       const from = 0.6, loop = Math.min(6.0, lg.duration - from), t0 = performance.now();   /* 6 s: the typing, the trace, the first of the dust */ let raf = 0; const frame = () => { if (!document.body.contains(el)) return cancelAnimationFrame(raf);
         const t = reduce ? Math.min(lg.duration - 0.8, 3.2) : from + ((performance.now() - t0) / 1000) % loop;
-        g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); try { lg.drawAt(g, cv.width, cv.height, t, { big: 38, font: "'Idle F1', monospace" }); } catch (e) {}
+        g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); try { lg.drawAt(g, cv.width, cv.height, t, { big, font: "'Idle F1', monospace" }); } catch (e) {}
         cv.dataset.frames = (+cv.dataset.frames || 0) + 1; if (!reduce) raf = requestAnimationFrame(frame); };
       frame(); }).catch(() => { still(); cv.dataset.still = '1'; }); }
+  // v3: a centred modal like the EPOCH 0 COMPLETE moment (html.gen-modal: a backdrop, the guided start's tips and toasts held until it closes)
+  function offerModal() { const T = OFFERV.v3, el = document.createElement('div'); el.id = 'offerModal'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+    el.innerHTML = `<div class="gstamp">${esc(T.stamp)}</div><canvas class="pv" width="560" height="200" aria-hidden="true"></canvas><p>${esc(T.line)}</p><div class="gm"><button class="go">${esc(T.go)}</button><button class="lt">${esc(T.later)}</button></div>`;
+    document.body.appendChild(el); el.querySelector('.go').onclick = () => offerGo('v3', el); el.querySelector('.lt').onclick = () => offerNotNow(el);
+    teaser(el.querySelector('canvas.pv'), el, 64); setTimeout(() => { try { el.querySelector('.go').focus(); } catch (e) {} }, 50); return true; }
+  // not now: the modal shrinks into ⚙ (☰ on a phone), the Operator's cut-scene rings it and it glows for 2 minutes; the next time ⚙ opens, its 📖 Storyline row lights up
+  function offerNotNow(el) { offerLater('v3'); const vis = x => x && x.offsetParent !== null && x.getBoundingClientRect().width > 0;
+    const t = vis($('#settingsBtn')) ? $('#settingsBtn') : vis($('#mMore')) ? $('#mMore') : null, a = el.getBoundingClientRect(); el.remove();
+    try { localStorage.setItem('idle.offerRowHi', String(now())); } catch (e) {}
+    if (!t) return; const b = t.getBoundingClientRect(), g = document.createElement('div'); g.id = 'genShrink'; Object.assign(g.style, { left: a.left + 'px', top: a.top + 'px', width: a.width + 'px', height: a.height + 'px' }); document.body.appendChild(g);
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2), k = Math.max(0.04, b.width / a.width), rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const ring = () => { lastNotNow = { to: t.id, at: now() }; try { window.__opwin && window.__opwin.highlight('#' + t.id, { cutscene: true, note: OFFERV.v3.note }); } catch (e) {} };
+    try { g.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(${k})`, opacity: 0.2 }], { duration: rm ? 10 : 560, easing: 'cubic-bezier(.4,0,.2,1)' }).onfinish = () => { g.remove(); ring(); }; } catch (e) { g.remove(); ring(); } }
+  let lastNotNow = null;
+  // ⚙'s 📖 Storyline row lights up once, the first time ⚙ opens within 10 minutes of "not now"
+  setInterval(() => { let t0 = 0; try { t0 = +localStorage.getItem('idle.offerRowHi') || 0; } catch (e) {} if (!t0) return; const p = $('#settings.on'); if (!p) { if (now() - t0 > 600000) try { localStorage.removeItem('idle.offerRowHi'); } catch (e) {} return; }
+    const row = [...p.querySelectorAll('.row')].find(r => /📖 Storyline/.test(r.textContent)); if (!row) return; try { localStorage.removeItem('idle.offerRowHi'); } catch (e) {}
+    row.classList.add('offerHi'); row.scrollIntoView({ block: 'nearest' }); setTimeout(() => row.classList.remove('offerHi'), 3500); }, 300);
   function offerOperator() { const O = window.__opwin, T = OFFERV.c; if (!O) return offerCard('a');
     O.open(); let i = 0; const next = () => { if (i < T.lines.length) { O.say(T.lines[i++]); setTimeout(next, 1400); return; }
       O.setChips([{ text: T.chip, glow: true, act: () => { O.setChips(null); offerGo('c'); } }, { text: T.later, act: () => { O.setChips(null); offerLater('c'); O.say(T.after); } }]);
@@ -1175,17 +1196,17 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   // show it now (the timer below calls this when the moment is right; tests may call it directly)
   function offer(now_) { if (!offerEligible() || $('#storyOffer')) return false; const v = offerVariant();
     if (v === 'old') { let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false; try { localStorage.setItem(OFFER, 'shown'); } catch (e) {} mark('offer_shown'); return offerOld(); }
-    const o = offerSeen(); offerSave({ n: (o.n || 0) + 1, at: now(), v, ans: null }); mark('offer_shown'); mark('offer_shown_' + v); lastOffer = v;
-    return v === 'c' ? offerOperator() : offerCard(v); }
+    const o = offerSeen(); offerSave({ n: (o.n || 0) + 1, at: now(), v, ans: null }); mark('offer_shown'); mark('offer_shown_' + v); lastOffer = v; { const h = $('#offerHint'); if (h) h.remove(); }
+    return v === 'c' ? offerOperator() : v === 'v3' ? offerModal() : offerCard(v); }
   let lastOffer = null;
   // the preview's hint (staging/local): what the offer is waiting for, live: a click, the seconds left, or what blocks it
   function offerBlocker() { if (!offerEligible()) return storyMode() ? 'a story is running here' : !offerDue() ? 'already answered in this preview' : 'not eligible here';
     if (window.__modal && window.__modal.up()) return 'a card is open'; const ae = document.activeElement;
-    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.offsetParent !== null) return 'you are typing'; if (!offerQuiet()) return 'a panel or a popup is open: close it'; return null; }
-  if (offerPreview() && /^[abc]$/.test(Q.get('offer'))) { const show = () => { if (!document.body || $('#offerHint')) return; const h = document.createElement('div'); h.id = 'offerHint';
+    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.offsetParent !== null) return 'you are typing'; if (!offerQuiet(offerVariant() === 'v3')) return 'a panel or a popup is open: close it'; return null; }
+  if (offerPreview() && /^([abc]|v3)$/.test(Q.get('offer'))) { const show = () => { if (!document.body || $('#offerHint')) return; const h = document.createElement('div'); h.id = 'offerHint';
       h.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:70;padding:6px 12px;border-radius:12px;background:#ffd166;color:#222;font:13px var(--ui-font,system-ui);box-shadow:0 4px 18px #0004;pointer-events:none;max-width:calc(100vw - 32px);text-align:center';
       document.body.appendChild(h); const v = Q.get('offer');
-      const tick = () => { if ($('#storyOffer') || lastOffer) { h.remove(); clearInterval(iv); return; } const left = Math.max(0, Math.ceil(offerWait() - offerOn)), why = offerBlocker();
+      const tick = () => { if ($('#storyOffer') || $('#offerModal') || lastOffer) { h.remove(); clearInterval(iv); return; } const left = Math.max(0, Math.ceil(offerWait() - offerOn)), why = offerBlocker();
         h.textContent = `offer ${v} preview: ` + (!offerTouched ? `click anywhere in the world, then it appears in ~${Math.max(left, 1)} s` : why ? `waiting: ${why}` : left > 0 ? `appears in ~${left} s` : 'appearing…');
         h.dataset.left = left; h.dataset.why = why || ''; };
       const iv = setInterval(tick, 500); tick(); };
@@ -1193,19 +1214,27 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   { const css2 = document.createElement('style'); css2.textContent = `#storyOffer{position:fixed;left:14px;bottom:14px;z-index:60;max-width:min(330px,calc(100vw - 28px));padding:12px 14px 12px;border-radius:12px;background:#0a0b16f0;border:1px solid #6b7cff88;color:#cfd6ff;font:13px/1.45 var(--ui-font,system-ui);box-shadow:0 10px 40px #0008;transition:opacity .4s}
 #storyOffer b{display:block;margin-bottom:4px;color:#e9ecff;font-size:14px}#storyOffer .go{margin-top:8px;font:600 13px var(--ui-font,system-ui);padding:6px 13px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff44;color:#e9ecff;cursor:pointer}#storyOffer .lt{margin:8px 0 0 8px;font:12px var(--ui-font,system-ui);padding:6px 10px;border-radius:14px;border:0;background:none;color:#aeb6e8;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
 #storyOffer.vb{padding:8px 8px 10px}#storyOffer .pv{display:block;width:100%;height:auto;aspect-ratio:300/112;border-radius:8px;background:#000}#storyOffer.vb .ln{margin:8px 4px 0;color:#e9ecff}#storyOffer.vb .bt{margin:0 4px}
-@media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px;max-width:none}}`; document.head.appendChild(css2); }
+@media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px;max-width:none}}
+#offerModal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147482420;width:min(600px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;padding:18px 20px 16px;border-radius:14px;background:#0a0b16f5;border:1px solid #6b7cff88;color:#dfe4ff;font:15px/1.5 var(--op-font,var(--ui-font,system-ui));box-shadow:0 20px 80px #000c;text-align:center;animation:offerIn .35s ease-out}
+#offerModal .gstamp{display:inline-block;font:700 13px/1 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.14em;color:#ffcf7a;border:1.5px solid #ffcf7a99;border-radius:4px;padding:5px 9px;margin:0 0 12px}
+#offerModal .pv{display:block;width:100%;height:auto;aspect-ratio:560/200;border-radius:10px;background:#000}#offerModal p{margin:12px 4px 4px}
+#offerModal .gm{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}#offerModal button{font:600 15px var(--op-font,var(--ui-font,system-ui));padding:9px 18px;border-radius:18px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:40px}
+#offerModal .go{background:#3a46c8;border-color:#cfd6ff;color:#fff}#offerModal .lt{opacity:.85}
+@keyframes offerIn{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
+#settings .row.offerHi{outline:2px solid #ffcf7a;outline-offset:2px;border-radius:8px;animation:offerRow 1s ease-in-out 3}@keyframes offerRow{50%{background:#ffcf7a33}}
+@media (prefers-reduced-motion: reduce){#offerModal{animation:none}#settings .row.offerHi{animation:none}}`; document.head.appendChild(css2); }
   // when: v1 20 s after load (?offer: 1 s); v2 once the player has been active (on screen + an interaction) and the moment is quiet
   { let k = 0; const iv = setInterval(() => { if (++k > 2400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return;
       const v = offerVariant();
       if (v === 'old') { if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); return; }
       if (!offerEligible()) { if (storyMode() || !offerDue()) clearInterval(iv); return; }
-      if (offerOn < offerWait() || !offerTouched || !offerQuiet()) return; clearInterval(iv); offer(); }, 500); }
+      if (offerOn < offerWait() || !offerTouched || !offerQuiet(v === 'v3')) return; clearInterval(iv); offer(); }, 500); }
   if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && (S.steps.music || S.steps.words)) && !genesisDone() && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   applyUnlocks();
   // the epoch's tasks still to do (the 📟's badge, idle-tohandle.js): only in the storyline, only while that epoch is being played
   function pending() { try { if (!storyMode() || !S || !S.on) return 0; const d = dayOf(S.day || 0); if (!d || (S.days && S.days[d.n]) || (d.n > 0 && !builtNext(d.n))) return 0;
     return d.goals.filter(([k]) => !(d.n === 0 ? did(k) : false)).length; } catch (e) { return 0; } }
   // ready(): v15 — also only once the window is actually up (not during the landing, the dawn or a step's aside)
-  window.__genesis = { genPending, resumeGenesis, ask: () => ({ mode: ASK.mode, state: moment ? (moment.ready ? (moment.ask || 'open') : 'typing') : null, msg: moment && moment.askMsg, first: land.firstBorn, q: { name: ASK.name.q, logo: ASK.logo.q } }), askSet: m => { if (m === 'name' || m === 'logo') ASK.mode = m; }, gate: () => lastGate && { ...lastGate }, gateOf, gateNgrams, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, offerState: () => ({ seen: offerSeen(), variant: offerVariant(), on: offerOn, touched: offerTouched, quiet: offerQuiet(), wait: offerWait(), last: lastOffer, text: OFFERV }), storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { genPending, resumeGenesis, ask: () => ({ mode: ASK.mode, state: moment ? (moment.ready ? (moment.ask || 'open') : 'typing') : null, msg: moment && moment.askMsg, first: land.firstBorn, q: { name: ASK.name.q, logo: ASK.logo.q } }), askSet: m => { if (m === 'name' || m === 'logo') ASK.mode = m; }, gate: () => lastGate && { ...lastGate }, gateOf, gateNgrams, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, offerState: () => ({ notNow: lastNotNow, seen: offerSeen(), variant: offerVariant(), on: offerOn, touched: offerTouched, quiet: offerQuiet(), wait: offerWait(), last: lastOffer, text: OFFERV }), storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();

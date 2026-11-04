@@ -72,7 +72,7 @@
   // ?offer=a|b|c|old (Nov 4, Nico on staging: his browser's saved storyline, mid-Genesis, opened the Operator with "let there be life" and the
   // offer never came): the storyline offer is previewed in the same sandbox, on a fresh ready world (?fresh: nothing to disk, no stats), so
   // the browser's own state (a story in progress, a pending step, an arm) never gets in the way, and its real world is never touched
-  else if (/^(a|b|c|old)$/.test(Q.get('offer') || '')) {
+  else if (/^(a|b|c|old|v3)$/.test(Q.get('offer') || '')) {
     sandbox(); window.__offerSandbox = true;
     try { const u = new URL(location.href); u.searchParams.set('fresh', ''); history.replaceState(null, '', u.pathname + u.search.replace(/=(?=&|$)/g, '') + u.hash); } catch (e) {}
   }
