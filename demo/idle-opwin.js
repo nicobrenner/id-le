@@ -49,7 +49,9 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   // Genesis has no chips (v14, Nico: "let's drop the predefined button"): its command is pre-typed in the input; the tray stays closed there
   // the 🔮 chip only in the playground (v15, Nico: "let's just hide it in storyline for now... only on freeplay")
   const inStory = () => document.documentElement.classList.contains('gen-story');
-  function templateChips(c) { if (genChip()) return []; return override ? override.slice() : TEMPLATES.filter(x => !(x.act === 'oracle' && inStory())); }
+  // plus a few slash commands that take nothing (idle-slash.js: IdleSlash.list('operator'), already filtered by the storyline's unlocks): /music, /stats…
+  const slashChips = () => { try { const L = window.IdleSlash && window.IdleSlash.list ? window.IdleSlash.list('operator') : []; return L.filter(x => !x.args && !['help', 'operator', 'oracle'].includes(x.name)).slice(0, 4).map(x => ({ text: '/' + x.name, slash: 1 })); } catch (e) { return []; } };
+  function templateChips(c) { if (genChip()) return []; return override ? override.slice() : TEMPLATES.filter(x => !(x.act === 'oracle' && inStory())).concat(slashChips()); }
   // the tray is open by default in Genesis (its chip is the step's glowing button), closed elsewhere unless the player opened it
   let userOpen = null; try { userOpen = localStorage.getItem('idle.opTray'); } catch (e) {}
   const trayOpen = () => genChip() ? false : override ? true : userOpen === '1';
