@@ -4,6 +4,13 @@ What we built, what we measured, and what surprised us. Newest first. Each entry
 Numbers come from tests on copies of Nico's world (headless, one browser at a time) unless marked otherwise.
 
 
+## 2026-11-04
+
+**⭐ Reviews on id-le.com (Nov 4).** Nico: "https://staging.id-le.com/?review=logos love it!! so good... you decide when to show it to users on each mode at the appropriate time, would love to have feedback by morning :)". `ON_PROD = true` in idle-reviews.js; the Founder gift stays off; totals stay private (showTotals off).
+- **When the invitation comes by itself**, once per browser, never during the intro, Genesis, a modal, a cut-scene or an open panel, never while typing: the storyline only after the end of what's built (its card closed, or the 🗺 roadmap it opened closed), or 20 s into the playground its 🛝 leads to; the playground and a returning player's plain world after 3 minutes on screen and one interaction (a click in the world or the top bar), at a quiet moment. Links (`?review=…`) at once. "not now": once more a day later, never a third time.
+- **Stats:** the rv_* moments print per arm under the storyline funnel (tools/stats.py: invited, I'm in, not now, opened, ✕ ✓ ★, done, which one?, 🌱).
+- Tests: 'reviews timing' (stubbed storyline state, fake clock: Genesis no; before / during the end card no; after it yes; roadmap open no; 🛝 after 20 s; playground 3 min + a touch, not while typing or with 🧪 open; then the message really comes), 'prod gates' (reviews on, the link relays Nico's message, 🌱 and the ⭐ tab there, Founder off).
+
 ## 2026-11-03
 
 **The storyline's A/B/C (off; staging and local only).** Nico: "maybe we need to do A/B/C testing... A: user goes into storyline mode, B: user sees choice screen, C: user goes directly to playground (they get some notice/modal telling them they are on freeplay and that they can switch to story mode if they want (maybe the operator can tell them that on the first visit, offer them a quick action they can click...))".
