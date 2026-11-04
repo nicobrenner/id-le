@@ -1937,8 +1937,9 @@ def t_chips_playground(P):
     all work always"; "make it rain" had gone through the model and got "Yes, it is"): every ⚡ chip in the playground runs its action at once,
     the same as typing its exact words; the /command chips run too"""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
-    pg.evaluate("() => { window.__opwin.open(); localStorage.setItem('idle.opTray', '1'); window.__opwin.refresh(); }")
-    wait_for(pg, "() => window.__opwin.tray().open && window.__opwin.tray().chips.includes('make it rain')", 10, P=P)
+    pg.evaluate("() => { window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")   # ⚡, as a player opens it
+    try: wait_for(pg, "() => window.__opwin.tray().open && window.__opwin.tray().chips.includes('make it rain')", 10, P=P)
+    except Exception: raise AssertionError("tray: " + json.dumps(pg.evaluate("() => ({ tray: window.__opwin.tray(), gp: window.__genesis && window.__genesis.genPending && window.__genesis.genPending(), chip: window.__genesis && window.__genesis.chip && window.__genesis.chip(), st: window.__genesis && window.__genesis.state && window.__genesis.state(), tools: !document.getElementById('op-tools').hidden, opTray: localStorage.getItem('idle.opTray'), url: location.href, cls: document.documentElement.className })"))[:2500])
     def tap(t):
         pg.evaluate("t => { const b = [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === t); if (!b) throw new Error('no chip ' + t); b.click(); }", t)
         pg.wait_for_timeout(700)
@@ -1953,14 +1954,20 @@ def t_chips_playground(P):
     tap("evolve a creature"); res["evolve a creature"] = "mutated" in pg.evaluate(last)
     tap("what's happening?"); res["what's happening?"] = "creatures" in pg.evaluate(last) and "words" in pg.evaluate(last)
     chips = pg.evaluate("() => window.__opwin.tray().chips")
-    for c in [c for c in chips if c.startswith("/")]:
-        before = pg.evaluate("() => location.href + '|' + document.querySelectorAll('.on, [open]').length")
-        tap(c); pg.wait_for_timeout(500)
-        res[c] = pg.evaluate("() => location.href + '|' + document.querySelectorAll('.on, [open]').length") != before or c in ("/story",)
-        pg.keyboard.press("Escape"); pg.evaluate("() => { document.querySelectorAll('#settings.on, #oracle.on').forEach(e => e.classList.remove('on')); }")
+    pg.evaluate("() => { window.__opened = []; window.open = (u, n) => { window.__opened.push(String(u)); return null; }; }")
+    effect = {"/pedia": "() => window.__opened.some(u => /pedia/.test(u))", "/settings": "() => !!document.querySelector('#settings.on')",
+              "/scientists": "() => !!document.querySelector('#oracle.on')", "/story": "() => !!(document.querySelector('#genResume') || document.querySelector('#idleIntro') || document.querySelector('#genChoose') || window.__genesis.state())"}
+    for c in sorted([c for c in chips if c.startswith("/")], key=lambda c: c == "/story"):   # /story last: it starts the story
+        pg.evaluate("() => { document.querySelectorAll('#settings.on, #oracle.on').forEach(e => e.classList.remove('on')); window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")
+        wait_for(pg, f"() => window.__opwin.tray().chips.includes({json.dumps(c)})", 10, P=P)
+        tap(c); pg.wait_for_timeout(600)
+        res[c] = bool(pg.evaluate(effect.get(c, "() => true")))
+    if "/story" in res:   # /story started a story in this browser: back to a plain playground (no Genesis pending) for the typed check
+        pg.evaluate("() => { localStorage.removeItem('idle.genesis'); localStorage.removeItem('idle.gv'); }"); pg.close(); pg = P.open("/arena.html?fresh=1&test"); booted(pg); pg.evaluate("() => window.__opwin.open()")
+        need(not pg.evaluate("() => window.__genesis.genPending()"), "the typed check needs a playground without a pending Genesis")
     # typed, exact words (any case, end punctuation): the same action
     pg.evaluate("() => window.__idleWorld.setWeather('clear')")
-    pg.fill("#lab-text", "Make it rain."); pg.press("#lab-text", "Enter"); pg.wait_for_timeout(700)
+    pg.fill("#lab-text", "Make it rain."); pg.click("#lab-send"); pg.wait_for_timeout(700)
     res["typed: Make it rain."] = pg.evaluate(W) == "bitrain"
     bad = {k: v for k, v in res.items() if not v}
     need(not bad, f"quick actions that did not work: {bad} (all: {res})")
@@ -1995,6 +2002,7 @@ def t_chips_genesis(P):
     need(s1["console"] and not s1["tools"] and not s1["tray"]["chips"] and s1["input"] == "let there be life", f"after a reload mid-Genesis: the console back, no ⚡, the words typed in: {s1}")
     # a world chip's words typed in Genesis are not run (the gate nudges)
     pg.fill("#lab-text", "make it rain"); pg.press("#lab-text", "Enter"); pg.wait_for_timeout(1500)
+    pg.fill("#lab-text", "make it rain"); pg.click("#lab-send"); pg.wait_for_timeout(1500)   # the send button too (phones)
     need(pg.evaluate("() => window.__idleWorld.summary().weather.kind") != "bitrain", "Genesis: 'make it rain' must not change the weather")
     pg.fill("#lab-text", "let there be life"); pg.press("#lab-text", "Enter")
     wait_for(pg, "() => window.__arena.raw().filter(c => !c.lab).length >= 1", 60, P=P)

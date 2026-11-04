@@ -336,7 +336,9 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
       return `${c.creatures ?? 'some'} creatures, ${c.words ?? 'lots of'} words, ${w}` + (r.mood ? `. the mood: ${r.mood}` : ''); } },
   };
   QUICK["what's happening"] = QUICK["what's happening?"]; QUICK['whats happening'] = QUICK["what's happening?"];
-  const quickOf = t => QUICK[QK(t)] || QUICK[QK(t) + '?'] || null;
+  // not while Genesis is pending (the storyline's guide owns the input there: only the step advances, nothing changes the world)
+  const genPend = () => { try { return !!(window.__genesis && window.__genesis.genPending && window.__genesis.genPending()); } catch (e) { return false; } };
+  const quickOf = t => genPend() ? null : (QUICK[QK(t)] || QUICK[QK(t) + '?'] || null);
   let quickBusy = false;
   async function quick(t, from) { const q = quickOf(t); if (!q || quickBusy) return null; quickBusy = true;
     try { add('you', t); const el = chip(q.tag); let res; try { res = await q.run(); } catch (e) { res = { error: String(e.message || e) }; }
@@ -360,7 +362,9 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     finally { busy = false; spin.remove(); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_done', extra: { brain: cfg.brain, tools: toolN > tools0, error: !!turnErr } } })); } catch (e) {} }
   }
   // take over the lab's send button and Cmd+Enter while an AI brain is chosen; the relay keeps the arena's own path
-  sendBtn.addEventListener('click', e => { if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
-  text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
+  // a quick action's exact words run as the action whatever the brain (the relay's own path included)
+  const quickFirst = e => { const t = text.value.trim(); if (!quickOf(t)) return false; e.stopImmediatePropagation(); e.preventDefault(); text.value = ''; quick(t, 'typed'); return true; };
+  sendBtn.addEventListener('click', e => { if (quickFirst(e)) return; if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
+  text.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing && quickFirst(e)) return; if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
   window.__idleAI = { quick, quickOf, quickList: () => Object.keys(QUICK), cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: (t, opts) => tinyTurn(t, opts), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
 })();
