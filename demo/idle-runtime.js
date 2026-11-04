@@ -18,8 +18,18 @@ const PLAYGROUND_NAME = 'the playground', PLAYGROUND_ICON = '🛝';
 window.IDLE_NAMES = { irc: { icon: '💬', short: 'IRC', long: 'IRC · Id|le Relay Chat', sub: 'the world and its creatures talking' }, op: { icon: '📟', short: 'Operator', sub: 'the Tiny Operator (TO): the chat that runs the world' }, oracle: { icon: '🔮', short: 'Oracle', sub: 'bring your own AI: it can change this world, even its code' }, play: { icon: PLAYGROUND_ICON, short: PLAYGROUND_NAME, sub: 'every feature, free play, your own worlds' } };
 // the storyline's funnel (Nico: "measuring/tracking the funnel"): each moment a browser reaches, once, with no time and no ID; which arm
 // of the story A/B it is in comes from idle.gv (idle-genesis.js). idle-stats.js sends the new ones (only when anonymous stats are on).
-window.__funnel = (() => { const K = 'idle.funnel'; let m = {}; try { m = JSON.parse(localStorage.getItem(K) || '{}') || {}; } catch (e) {}
-  return { mark: step => { if (!step || m[step]) return; m[step] = 1; try { localStorage.setItem(K, JSON.stringify(m)); } catch (e) {} try { dispatchEvent(new CustomEvent('idle:funnel', { detail: { step } })); } catch (e) {} },
+// time per step (Nov 3): each moment also keeps the seconds of on-screen time since the moment before it (idle.funnelDt), counted on an
+// active clock that only runs while the page is visible and carries over reloads (idle.activeMs); the stats send it once, as seconds
+window.__funnel = (() => { const K = 'idle.funnel', KD = 'idle.funnelDt', KA = 'idle.activeMs', KL = 'idle.funnelAt'; let m = {}, dt = {}; try { m = JSON.parse(localStorage.getItem(K) || '{}') || {}; dt = JSON.parse(localStorage.getItem(KD) || '{}') || {}; } catch (e) {}
+  let base = 0; try { base = +localStorage.getItem(KA) || 0; } catch (e) {}
+  let on = document.hidden ? 0 : performance.now(), acc = 0;   // this page load's visible ms so far (acc) and since when it's been visible (on)
+  const active = () => base + acc + (on ? performance.now() - on : 0), keep = () => { try { localStorage.setItem(KA, String(Math.round(active()))); } catch (e) {} };
+  addEventListener('visibilitychange', () => { if (document.hidden) { if (on) acc += performance.now() - on; on = 0; keep(); } else if (!on) on = performance.now(); });
+  addEventListener('pagehide', keep); setInterval(() => { if (!document.hidden) keep(); }, 5000);
+  return { mark: step => { if (!step || m[step]) return; m[step] = 1; const a = active(); let last = null; try { last = localStorage.getItem(KL); } catch (e) {}
+      if (last !== null && /^\d+$/.test(last)) dt[step] = Math.max(0, Math.round((a - +last) / 1000));
+      try { localStorage.setItem(K, JSON.stringify(m)); localStorage.setItem(KD, JSON.stringify(dt)); localStorage.setItem(KL, String(Math.round(a))); } catch (e) {} try { dispatchEvent(new CustomEvent('idle:funnel', { detail: { step } })); } catch (e) {} },
+    durations: () => ({ ...dt }), active,
     reached: () => Object.keys(m), arm: () => { try { const v = localStorage.getItem('idle.gv'); return v === 'story' || v === 'current' ? v : null; } catch (e) { return null; } } }; })();
 (() => {
   // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) leaves its
