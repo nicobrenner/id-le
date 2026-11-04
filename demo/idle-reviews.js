@@ -32,27 +32,43 @@
   // the team: Humans in the Loop (Nico, 11-03: "I like Humans in the Loop"). Every word about it is made from this one line.
   // name: the team ("one of the Humans in the Loop"); member: the status before (vesting) / ✓; id: the server's key (keep it if it's ever renamed)
   const TEAM = { id: 'loop', name: 'Humans in the Loop', short: 'HITL', member: 'in the loop' };   // short: for tight spaces like ⚙ (Nico: "Humans in the Loop/HITL 👩🏻‍💻👨🏿‍💻")   // another name later: change name/short/member here (keep the id), e.g. { name: 'Reviewers', short: 'the Reviewers', member: 'Reviewer' }
-  const DRAFT_END = 'to be the logo that opens the story, for everyone who plays after you 🙌';   // DRAFT: Nico's message stopped at "…the default logo animation for the story that"
+  const DRAFT_END = 'to be the logo that opens the story, for everyone who plays after you 🙌';   // DRAFT (Nico kept it): his message stopped at "…the default logo animation for the story that"
   const TEXT = {
     operator: 'I have a message from Nico:',
-    from: 'Nico',
-    // Nico's own lines (11-03), as he wrote them; each inner list is one paragraph, each string one line
+    from: '📨 from Nico',   // v3 (Nico: "I don't want to appear as typing inside that chat… It should just be TinyOperator/Operator relaying the message from me"): a relayed letter, one card
+    // Nico's own lines (11-03), as he wrote them; each inner list is one paragraph, each string one line. hello: the same for every review
     hello: [["Hi, thank you for giving Id|le a shot ✌️", "It's been fun building it", "And there's still so much more to do", "Wanna help?"]],
     yes: "I'm in ✌️", no: 'not now',
-    after: [["Awesome!"], ["This is a big decision, so I didn't want", "to make it by myself"], ["We have some incredible logo animation options", "they are all so good, I can't really choose 1"],
-      ["So I'm counting on you, to check them out, vote", "and leave comments with what you like the most"], ["Based on your votes, we'll pick one winner", DRAFT_END]],
+    // what comes after "I'm in": one per review (v3: the logo text was shown for every review)
+    after: {
+      logos: [["Awesome!"], ["This is a big decision, so I didn't want", "to make it by myself"], ["We have some incredible logo animation options", "they are all so good, I can't really choose 1"],
+        ["So I'm counting on you, to check them out, vote", "and leave comments with what you like the most"], ["Based on your votes, we'll pick one winner", DRAFT_END]],
+      // DRAFT (in Nico's voice, for him to rewrite)
+      fonts: [["Awesome!"], ["Id|le writes with its own fonts", "grown from a genome, letter by letter"], ["some read beautifully, some are… experiments", "and I can't tell anymore which ones feel like Id|le"],
+        ["So I'm counting on you, to swipe through them, vote", "and tell me which ones you'd keep"], ["The favourites become the voices of the game 🙌"]],
+      // DRAFT: any other review
+      other: rv => [["Awesome!"], [`This one is about ${rv.title}`, "and I'd love your eyes on it"], ["So I'm counting on you, to check them out, vote", "and leave comments with what you like the most"]],
+    },
     go: 'check them out ›',
-    notNow: 'no problem. maybe another time ✌️',
+    // Nico (v3): "if the user says 'not now', Operator should say: 'All good. If you ever change your mind, just come join us at the HITL team here..'"
+    notNow: `all good. if you ever change your mind, just come join us at the ${TEAM.short} team here 👉`,
+    // Nico (v3): "after closing the reviews… 'Excellent, [I see you already liked some]/[I'll give you some more time to review]. You can always go back to the HITL tab/section here'"
+    closedSome: `excellent, I see you already liked some. you can always go back to the ${TEAM.short} tab here 👉`,
+    closedNone: `excellent, I'll give you some more time to review. you can always go back to the ${TEAM.short} tab here 👉`,
     // the pledge, after "I'm in" (DRAFT)
     pledge: { title: `🌱 you're one of the ${TEAM.name} now`, ask: 'what we’ll ask: a few quick reviews now and then (a minute or two: swipe, pick, a word if you like)',
       // DRAFT
       get: `what you get: a say in what ships, a 🌱 ${TEAM.member} badge, and your name on the ${TEAM.name} list when you're vested (if you want it)`,
       cliff: `the cliff: ${CLIFF_DAYS} days and ${CLIFF_REVIEWS} reviews. until then you’re ${TEAM.member} (vesting); after it, ${TEAM.member} ✓ for good` },
-    another: rv => `Nico has another one for the ${TEAM.name}: ${rv.title}`, open: 'open ›', later: 'later',
+    // a member (a link, or a new review): one line and a button, never the deck taking over by itself
+    another: rv => `Nico has a review for the ${TEAM.short} team: ${rv.title}`, open: 'open ›', later: 'later',
     publicAsk: rv => [[`the ${TEAM.name} narrowed ${rv.title} down to ${rv.n}`, 'help pick the winner?']], publicYes: 'sure ›',
     vested: `you're vested: ${TEAM.member} ✓. thank you for sticking around 🌱`,
     thanks: 'thank you!! Nico reads every one 🧪',
     short: TEAM.short,
+    // the 🌱 tab (DRAFT)
+    tab: { title: `🌱 ${TEAM.name} (${TEAM.short})`, open: 'open reviews', past: 'sent', none: 'nothing to review right now. thank you!', pitch: `a few players help Nico decide what ships: quick reviews now and then, swipe and pick. want in?`, join: 'join ›',
+      judged: (n, of) => `${n} of ${of} judged`, start: 'start ›', resume: 'resume ›', again: 'see it ›', picks: 'your ★' },
   };
 
   const INVITE_AFTER = 120e3, ASK_AGAIN_AFTER = 24 * 3600e3;
@@ -86,27 +102,30 @@
 
   // ---------- the Operator's chat: lines, Nico's quoted bubble, buttons ----------
   const css = document.createElement('style');
-  css.textContent = `.ai-row.rvnico{background:#e03a3e14;border-left:3px solid #e03a3e;margin-right:6%!important;font-family:var(--op-font,var(--ui-font,system-ui))}.ai-row.rvnico .who{font-size:12px;opacity:.7;margin-bottom:4px}
-.ai-row.rvnico p{margin:0 0 8px}.ai-row.rvnico p:last-child{margin:0}.ai-row.rvnico span{display:block}.rvtyping{font-size:12px;opacity:.6;margin:2px 0 6px 4px;font-style:italic}
+  css.textContent = `.ai-row.rvletter{background:#fffaf0;color:#2a2622;border:1px solid #e8dcc4;border-left:3px solid #e03a3e;border-radius:4px 12px 12px 4px;margin:4px 6% 8px 0!important;box-shadow:0 2px 8px #0002;font-family:var(--op-font,var(--ui-font,system-ui))}.ai-row.rvletter .who{font-size:12px;opacity:.7;margin-bottom:6px;letter-spacing:.02em}
+.ai-row.rvletter p{margin:0 0 8px}.ai-row.rvletter p:last-child{margin:0}.ai-row.rvletter span{display:block}@media (prefers-color-scheme:dark){.ai-row.rvletter{background:#2a2520;color:#f3ead9;border-color:#4a4036}}.rvtyping{font-size:12px;opacity:.6;margin:2px 0 6px 4px;font-style:italic}
 .rvbtns{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}.rvbtns button{border:1px solid #e03a3e;background:#e03a3e;color:#fff;border-radius:16px;padding:7px 14px;font:600 14px var(--ui-font,system-ui);cursor:pointer}
 .rvbtns button.alt{background:none;color:inherit;border-color:#8886}.rvbtns button[disabled]{opacity:.45;cursor:default}
-.rvpledge{border:1px solid #8886;border-radius:12px;padding:10px 12px;margin:6px 0 8px;background:#61bb4614;font-size:14px;line-height:1.45}.rvpledge b{display:block;margin-bottom:4px}.rvpledge div{margin:3px 0;opacity:.9}
+  .rvtabbtn{font:600 13px var(--ui-font,system-ui);border:1px solid #61bb46;background:#61bb4622;color:inherit;border-radius:12px;padding:2px 9px;cursor:pointer;margin-left:2px}.rvpledge{border:1px solid #8886;border-radius:12px;padding:10px 12px;margin:6px 0 8px;background:#61bb4614;font-size:14px;line-height:1.45}.rvpledge b{display:block;margin-bottom:4px}.rvpledge div{margin:3px 0;opacity:.9}
 .rvfloat{position:fixed;right:16px;bottom:16px;z-index:2147482050;width:min(360px,calc(100% - 32px));max-height:70vh;overflow:auto;background:#14121c;color:#ece6da;border:1px solid #ffffff22;border-radius:14px;padding:10px 12px;box-shadow:0 12px 40px #000a;font:15px var(--ui-font,system-ui)}`;
   document.head.appendChild(css);
   const thread = () => { const lab = $('#lab'); if (!lab) return null; return lab.classList.contains('ai') ? $('#ai-thread') : $('#lab-thread'); };
   function openOperator() { const lab = $('#lab'); if (lab && !lab.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); } }
   // where the lines go: the Operator's chat, or (no chat on this page) a small floating card
   function host() { const th = thread(); if (th) return th; let f = $('.rvfloat'); if (!f) { f = document.createElement('div'); f.className = 'rvfloat'; document.body.appendChild(f); } return f; }
-  const scroll = h => { try { h.scrollTop = 1e9; } catch (e) {} };
+  // to the bottom, but never past the top of the last letter (Nico's Chrome showed his message starting at its second line)
+  let pin = null;
+  const scroll = h => { try { const top0 = h.scrollTop; h.scrollTop = 1e9; if (pin && pin.isConnected && h.contains(pin)) { const d = pin.getBoundingClientRect().top - h.getBoundingClientRect().top; if (d < 8) h.scrollTop = Math.max(top0, h.scrollTop + d - 8); } } catch (e) {} };
   let FAST = false;
   const wait = ms => new Promise(r => setTimeout(r, FAST ? Math.min(ms, 30) : ms));
   function opSay(text) { const h = host(), d = document.createElement('div'); d.className = 'ai-row tiny rvop'; d.textContent = text; h.appendChild(d); scroll(h); return d; }
-  async function nicoSay(paras, bubble) { const h = host(); let b = bubble;
-    if (!b) { b = document.createElement('div'); b.className = 'ai-row rvnico'; b.innerHTML = `<div class="who">✉️ ${esc(TEXT.from)}</div>`; h.appendChild(b); }
-    for (const para of paras) { const p = document.createElement('p'); b.appendChild(p);
-      for (const line of para) { const ty = document.createElement('div'); ty.className = 'rvtyping'; ty.textContent = TEXT.from + ' is typing…'; h.appendChild(ty); scroll(h);
-        await wait(500 + Math.min(1400, line.length * 28)); ty.remove(); const s = document.createElement('span'); s.textContent = line; p.appendChild(s); scroll(h); await wait(220); } }
-    return b; }
+  // "…the HITL tab here 👉" ends with the 🌱 itself, in the chat (the top bar's 🌱 also lights up, but a panel may cover it)
+  function opPoint(text) { const d = opSay(text), b = document.createElement('button'); b.className = 'rvtabbtn'; b.textContent = '🌱 ' + TEAM.short; b.title = TEAM.name; b.addEventListener('click', () => toggleTab(true)); d.append(' ', b); return d; }
+  // the Operator relays Nico's message: it types (its own dots), then the whole letter appears as one card, the top of it in view
+  async function opTyping(ms) { const h = host(), ty = document.createElement('div'); ty.className = 'rvtyping'; ty.textContent = '📟 …'; h.appendChild(ty); scroll(h); await wait(ms); ty.remove(); }
+  function letter(paras) { const h = host(), b = document.createElement('div'); b.className = 'ai-row rvletter';
+    b.innerHTML = `<div class="who">${esc(TEXT.from)}</div>` + paras.map(p => `<p>${p.map(l => `<span>${esc(l)}</span>`).join('')}</p>`).join('');
+    h.appendChild(b); pin = b; scroll(h); return b; }
   function buttons(list) { return new Promise(res => { const h = host(), d = document.createElement('div'); d.className = 'rvbtns';
     d.innerHTML = list.map((x, i) => `<button data-i="${i}" class="${x.alt ? 'alt' : ''}">${esc(x.label)}</button>`).join(''); h.appendChild(d); scroll(h);
     d.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.disabled) return; d.querySelectorAll('button').forEach(x => { x.disabled = true; }); res(+b.dataset.i); }); }); }
@@ -116,21 +135,24 @@
   // ---------- the invitation (once per browser; "not now" asks again once, a day later at the soonest) ----------
   let delivering = false;
   const inv = () => ld(INV, {}) || {};
-  async function invite(rid = 'logos', how = 'auto') {
+  const afterFor = (rid, rv) => TEXT.after[rid] || TEXT.after.other(rv || { title: rid });
+  async function invite(rid = 'logos', how = 'auto', rv = null) {
     if (delivering) return false; delivering = true; openOperator(); await wait(how === 'link' ? 300 : 700);
-    try { const I = inv(); I.asks = (I.asks || 0) + 1; I.last = now(); sv(INV, I); mark('rv_invite');
-      opSay(TEXT.operator); await wait(500); const bub = await nicoSay(TEXT.hello);
+    try { const I = inv(); I.asks = (I.asks || 0) + 1; I.last = now(); I.rid = rid; sv(INV, I); mark('rv_invite');
+      await opTyping(700); opSay(TEXT.operator); await opTyping(500); letter(TEXT.hello);
       const pick = await buttons([{ label: TEXT.yes }, { label: TEXT.no, alt: true }]);
-      if (pick === 1) { const J = inv(); J.answer = 'no'; sv(INV, J); mark('rv_notnow'); opSay(TEXT.notNow); return false; }
-      const J = inv(); J.answer = 'yes'; sv(INV, J); join();
-      await nicoSay(TEXT.after, bub); await wait(400); pledge();
+      if (pick === 1) { const J = inv(); J.answer = 'no'; sv(INV, J); mark('rv_notnow'); await opTyping(400); opPoint(TEXT.notNow); highlight(); return false; }
+      const J = inv(); J.answer = 'yes'; sv(INV, J); join(); paintTab();
+      await opTyping(500); letter(afterFor(rid, rv)); await wait(300); pledge();
       const go = await buttons([{ label: TEXT.go }]); delivering = false; if (go === 0) open(rid, how === 'link' ? 'link' : 'invite'); return true;
     } finally { delivering = false; } }
-  async function offerAnother(rv) { if (delivering) return; delivering = true; openOperator(); await wait(600);
+  // a member: one Operator line and [open ›] (never the deck by itself); a public review for a non-member: a short relayed note
+  async function nudge(rv, how = 'auto') { if (delivering) return; delivering = true; openOperator(); await wait(500);
     try { const all = sentAll(); all[rv.rid] = all[rv.rid] || { rated: {}, pairs: [] }; all[rv.rid].asked = now(); sv(SENT, all);
-      if (rv.stage === 'public' && !team()) { opSay(TEXT.operator); await wait(400); await nicoSay(TEXT.publicAsk(rv)); const p = await buttons([{ label: TEXT.publicYes }, { label: TEXT.later, alt: true }]); delivering = false; if (p === 0) open(rv.rid, 'invite'); }
-      else { opSay(TEXT.another(rv)); const p = await buttons([{ label: TEXT.open }, { label: TEXT.later, alt: true }]); delivering = false; if (p === 0) open(rv.rid, 'invite'); }
+      if (rv.stage === 'public' && !team()) { await opTyping(500); opSay(TEXT.operator); letter(TEXT.publicAsk(rv)); const p = await buttons([{ label: TEXT.publicYes }, { label: TEXT.later, alt: true }]); delivering = false; if (p === 0) open(rv.rid, 'invite'); }
+      else { await opTyping(500); opSay(TEXT.another(rv)); const p = await buttons([{ label: TEXT.open }, { label: TEXT.later, alt: true }]); delivering = false; if (p === 0) open(rv.rid, how === 'link' ? 'link' : 'invite'); }
     } finally { delivering = false; } }
+  const offerAnother = rv => nudge(rv);
 
   // ---------- reviews: the list, a config ----------
   let listC = null, listT = 0;
@@ -223,7 +245,7 @@
     mark('rv_open_' + (from === 'link' ? 'link' : from === 'end' ? 'end' : 'lab'));
     const cfg = await getCfg(rid); if (!cur || cur.rid !== rid) return false;
     if (!cfg) { cur.msg = 'this review doesn’t exist (or it has closed)'; paint(); return false; }
-    if (cfg.stage === 'team' && !team()) { close(); invite(rid, from === 'link' ? 'link' : 'lab'); return false; }
+    if (cfg.stage === 'team' && !team()) { close(); invite(rid, from === 'link' ? 'link' : 'lab', { rid, title: cfg.title, n: cfg.items.length }); return false; }
     const P = PLUGINS[cfg.kind]; if (!P) { cur.msg = 'this kind of review isn’t in this version of Id|le yet'; paint(); return false; }
     try { await P.load(); } catch (e) { cur.msg = String(e.message || e); paint(); return false; }
     if (!cur || cur.rid !== rid) return false;
@@ -231,7 +253,11 @@
     Object.assign(cur, { cfg: { ...cfg, items }, P, mine, queue: orderOf(items.filter(id => !(id in (mine.rated || {}))), cfg.order), i: 0, view: 'card' });
     if (!cur.queue.length) cur.view = 'end';
     paint(); return true; }
-  function close() { if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true); cur = null; el.classList.remove('on'); el.innerHTML = ''; hushGame(false);
+  function close() { if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true);
+    // opened from the Operator's message (or a link): it says where to find the reviews again, and the 🌱 lights up
+    const after = (cur.from === 'invite' || cur.from === 'link') && cur.cfg ? (Object.keys((cur.mine && cur.mine.rated) || {}).length ? TEXT.closedSome : TEXT.closedNone) : null;
+    cur = null; el.classList.remove('on'); el.innerHTML = ''; hushGame(false); paintTab();
+    if (after) setTimeout(async () => { openOperator(); await opTyping(400); opPoint(after); highlight(); }, 250);
     if (/[?&]review=/.test(location.search)) try { const u = new URL(location.href); u.searchParams.delete('review'); history.replaceState(history.state, '', u); } catch (e) {} }
   const ACT = { nah: 1, like: 3, love: 5 };
   function paint() {
@@ -239,7 +265,7 @@
     const total = c ? c.items.length : 0, done = c && cur.mine ? Object.keys(cur.mine.rated || {}).length : 0;
     const top = `<div class="top"><b>⭐ ${esc((c && c.title) || cur.rid)}</b><span class="prog">${c ? `${Math.min(done + 1, total)} / ${total}` : ''}</span>${ts ? `<span class="tm" title="${esc(ts.detail)}">🌱 ${esc(ts.label)}</span>` : '<span class="tm"></span>'}<button class="x" data-a="close" title="close (esc)">✕</button></div>`;
     if (cur.view === 'msg') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><p>${esc(cur.msg)}</p></div></div></div>`; return; }
-    if (cur.view === 'check') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>${cur.judged} judged ✓</h3><p>${done} of ${total} so far. thank you!</p><div class="btns"><button data-a="more">keep going</button><button class="alt" data-a="done">done</button></div></div></div></div>`; return; }
+    if (cur.view === 'check') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>${done} judged ✓</h3><p>${done} of ${total} so far. thank you!</p><div class="btns"><button data-a="more">keep going</button><button class="alt" data-a="done">done</button></div></div></div></div>`; return; }
     if (cur.view === 'end') { const st = teamStatus();
       el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>thank you!!</h3><p>${esc(TEXT.thanks)}</p>${st ? `<p>🌱 ${esc(st.label)} · ${esc(st.detail)}</p>` : ''}<div class="btns"><button data-a="close">back to my world</button></div></div></div></div>`; return; }
     if (cur.view === 'h2h') { const [a, b] = cur.pair; el.innerHTML = `<div class="box">${top}<div class="h2q">which one?</div><div class="deck h2h"><section class="card" data-item="${esc(a)}"></section><section class="card" data-item="${esc(b)}"></section></div>
@@ -255,7 +281,7 @@
     const ta = el.querySelector('textarea[data-note]'); if (ta && ta.value.trim()) cur.pending.notes[id] = ta.value.trim().slice(0, 300);
     cur.pending.scores[id] = v; cur.mine.rated = cur.mine.rated || {}; cur.mine.rated[id] = v; saveMine(); cur.judged++; addContrib(1); mark('rv_' + act); cur.note = false;
     const card = el.querySelector('.deck .card'), next = () => { cur.flying = false; if (!cur) return; cur.i++; if (Object.keys(cur.pending.scores).length >= 3) flush();
-      const left = cur.queue.length - cur.i; if (!left) return finish(); if (cur.judged % 6 === 0) { cur.view = 'check'; flush(); } paint(); };
+      const left = cur.queue.length - cur.i; if (!left) return finish(); if (Object.keys(cur.mine.rated).length % 6 === 0) { cur.view = 'check'; flush(); } paint(); };   // every 6 judged in all (a resumed deck counts what came before)
     if (card && !RM) { cur.flying = true; const dx = act === 'nah' ? -1 : act === 'like' ? 1 : 0, dy = act === 'love' ? -1 : 0; card.style.transition = 'transform .28s ease-in, opacity .28s'; card.style.transform = `translate(${dx * 120}%, ${dy * 110}%) rotate(${dx * 18}deg)`; card.style.opacity = '0'; setTimeout(next, 280); } else next(); }
   function saveMine() { const all = sentAll(); all[cur.rid] = { ...(all[cur.rid] || {}), rated: cur.mine.rated, pairs: cur.mine.pairs || [] }; sv(SENT, all); }
   // after "done" (or the last item): "which one?" between this browser's two favourites (★ first), then the thanks
@@ -301,12 +327,60 @@
     if (cur.view !== 'card') return; const k = { ArrowLeft: 'nah', ArrowRight: 'like', ArrowUp: 'love' }[e.key];
     if (k) { e.preventDefault(); e.stopPropagation(); judge(k); } else if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); cur.live && cur.live.play(); } }, true);
 
+  // ---------- 🌱 the HITL tab (v3, Nico: "do we have a Reviewer's tab? or a HITL's 🌱 tab where they can check the current/pending and past
+  // reviews?"): next to 🧪 in the top bar (on a phone, in its ☰ sheet like the other top-bar buttons). Open reviews with their progress
+  // (a deck closed half-way resumes where it was), the sent ones with your ★, your status; for non-members, the invitation to join.
+  const tcss = document.createElement('style');
+  tcss.textContent = `#hitl{position:fixed;right:16px;top:56px;z-index:2147482060;width:340px;max-width:calc(100% - 24px);max-height:calc(100% - 80px);overflow:auto;display:none;background:var(--panel,#fffdf8f4);color:inherit;border:1px solid #8885;border-radius:12px;box-shadow:0 10px 32px #0005;font:13px var(--ui-font,system-ui);padding:10px 12px}
+#hitl.on{display:block}#hitl .hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}#hitl .hd b{flex:1;font-size:13px}#hitl .x{border:0;background:none;color:inherit;cursor:pointer;font-size:14px}
+#hitl .st{padding:7px 9px;border-radius:9px;background:#61bb4618;margin:4px 0 8px;line-height:1.4}#hitl h4{margin:10px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.65}
+#hitl .rv{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #8882}#hitl .rv div{flex:1}#hitl .rv b{display:block;font-size:12.5px}#hitl .rv small{opacity:.7}
+#hitl button.go{font:inherit;font-size:12px;border:0;background:#e03a3e;color:#fff;border-radius:12px;padding:4px 11px;cursor:pointer}#hitl button.go.alt{background:none;color:inherit;border:1px solid #8886}
+#hitl .bar{height:4px;border-radius:2px;background:#8883;margin-top:3px;overflow:hidden}#hitl .bar i{display:block;height:100%;background:#61bb46}
+@media (prefers-color-scheme:dark){#hitl{background:var(--panel,#1d1f26f4)}}@media (max-width:500px){#hitl{position:fixed;left:0;right:0;top:auto;bottom:0;width:auto;max-width:none;max-height:76dvh;border-radius:16px 16px 0 0}}
+.rvhl{position:fixed;z-index:2147482090;pointer-events:none;border-radius:50%;box-shadow:0 0 0 3px #61bb46,0 0 18px 6px #61bb4688;animation:rvhl 0.9s ease-in-out infinite}.rvhl b{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:6px;font-size:22px;color:#61bb46;text-shadow:0 1px 4px #000a;animation:rvarr .9s ease-in-out infinite}
+@keyframes rvhl{50%{box-shadow:0 0 0 6px #61bb46,0 0 26px 10px #61bb4655}}@keyframes rvarr{50%{margin-top:12px}}@media (prefers-reduced-motion:reduce){.rvhl,.rvhl b{animation:none}}`;
+  document.head.appendChild(tcss);
+  const tab = document.createElement('div'); tab.id = 'hitl'; tab.setAttribute('role', 'dialog'); tab.setAttribute('aria-label', TEAM.name); document.body.appendChild(tab);
+  const hb = document.createElement('button'); hb.id = 'hitlBtn'; hb.title = `${TEAM.name} (${TEAM.short}): your reviews`; hb.textContent = '🌱';
+  const mountHb = () => { if (hb.isConnected) return; const bar = $('#topbar'), o = $('#oracleBtn'); if (!bar || !o) return setTimeout(mountHb, 300); o.before(hb, ' '); };
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', mountHb); else mountHb();
+  // in the storyline the 🌱 appears with 🧪 (the epochs unlock 🧪; idle-genesis.js UNLOCK)
+  setInterval(() => { const o = $('#oracleBtn'); if (o) hb.style.display = getComputedStyle(o).display === 'none' ? 'none' : ''; }, 1500);
+  let tabOpen = false; hb.addEventListener('click', () => toggleTab());
+  function toggleTab(on) { tabOpen = on ?? !tabOpen; tab.classList.toggle('on', tabOpen); hb.classList.toggle('on', tabOpen); if (tabOpen) { try { window.__feedback && window.__feedback.close(); } catch (e) {} mark('rv_tab'); paintTab(); } }
+  async function paintTab() { if (!tabOpen) return; const st = teamStatus(), rvs = await list(), all = sentAll(), member = !!team();
+    const row = r => { const m = all[r.rid] || {}, n = Object.keys(m.rated || {}).length, pct = Math.round(n / Math.max(1, r.n) * 100);
+      return `<div class="rv"><div><b>${esc(r.title || r.rid)}</b><small>${esc(TEXT.tab.judged(n, r.n))}</small><div class="bar"><i style="width:${pct}%"></i></div></div><button class="go" data-open="${esc(r.rid)}">${esc(n ? TEXT.tab.resume : TEXT.tab.start)}</button></div>`; };
+    const pastRow = r => { const m = all[r.rid] || {}, loves = Object.keys(m.rated || {}).filter(k => m.rated[k] >= 5);
+      return `<div class="rv"><div><b>${esc(r.title || r.rid)} ✓</b><small>${loves.length ? esc(TEXT.tab.picks) + ': ' + loves.map(esc).join(', ') : esc(TEXT.tab.judged(Object.keys(m.rated || {}).length, r.n))}</small></div><button class="go alt" data-open="${esc(r.rid)}">${esc(TEXT.tab.again)}</button></div>`; };
+    const mine = rvs.filter(r => member || r.stage === 'public'), open = mine.filter(r => !(all[r.rid] && all[r.rid].done)), past = rvs.filter(r => all[r.rid] && all[r.rid].done);
+    tab.innerHTML = `<div class="hd"><b>${esc(TEXT.tab.title)}</b><button class="x" data-a="close" title="close">✕</button></div>`
+      + (st ? `<div class="st">🌱 <b>${esc(st.label)}</b><br><small>${esc(st.detail)}</small></div>` : `<div class="st">${esc(TEXT.tab.pitch)}<br><button class="go" data-a="join" style="margin-top:6px">${esc(TEXT.tab.join)}</button></div>`)
+      + `<h4>${esc(TEXT.tab.open)}</h4>` + (open.length ? open.map(row).join('') : `<small>${esc(TEXT.tab.none)}</small>`)
+      + (past.length ? `<h4>${esc(TEXT.tab.past)}</h4>` + past.map(pastRow).join('') : ''); }
+  tab.addEventListener('click', async e => { const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.a === 'close') return toggleTab(false);
+    if (b.dataset.a === 'join') { toggleTab(false); const rvs = await list(), first = rvs.find(r => r.stage === 'team' && !(sentAll()[r.rid] && sentAll()[r.rid].done)) || rvs[0]; return invite(first ? first.rid : 'logos', 'tab', first); }
+    if (b.dataset.open) { toggleTab(false); return open(b.dataset.open, 'tab'); } });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && tabOpen) toggleTab(false); });
+  // the 🌱 lights up for ~4 s: a pulsing ring and an arrow (on a phone, where the top bar folds into ☰, the ☰)
+  let lastHl = null;
+  function highlight(ms = 4000) { const vis = x => x && x.offsetParent !== null && x.getBoundingClientRect().width > 0;
+    const t = vis(hb) ? hb : vis($('#mMore')) ? $('#mMore') : null; lastHl = t ? t.id : null; if (!t) return null;
+    const r = t.getBoundingClientRect(), pad = 6, d = document.createElement('div'); d.className = 'rvhl'; d.innerHTML = '<b>⬆</b>';
+    d.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + 2 * pad}px;height:${r.height + 2 * pad}px`; document.body.appendChild(d); setTimeout(() => d.remove(), ms); return t.id; }
+
   // ---------- when: the link at once; otherwise after 2 minutes in the game, never during the intro or Genesis, one message at a time ----------
   const busy = () => !window.__restoredOrFresh || document.documentElement.classList.contains('booting') || !!document.querySelector('#idleIntro') || !!window.__genesisVoid || !!window.__traveling || !!window.__storyKey
     || (() => { try { const u = window.__genesis && window.__genesis.unlocks && window.__genesis.unlocks(); return !!(u && u.story && u.epoch < 1); } catch (e) { return false; } })() || !!cur || delivering || !!$('#founderLetter,#founderLab');
   const Q = new URLSearchParams(location.search), want = Q.get('review');
   let t0 = Date.now(), auto = !Q.has('test') || Q.has('invite');   // automated tests turn it on themselves (__reviews.test.auto)
-  if (want) { const w0 = Date.now(); const tick = () => { if (busy() && Date.now() - w0 < 90e3) return setTimeout(tick, 400); open(want, 'link'); }; setTimeout(tick, 300); auto = false; }
+  // the link (?review=<rid>): never the deck by itself (v3: Safari opened it at once because that browser had already joined). A non-member
+  // gets Nico's invitation for that review; a member (or anyone, for a public review) gets one Operator line and [open ›]
+  async function arrive(rid) { const cfg = await getCfg(rid); if (!cfg) return; const rv = { rid, title: cfg.title, n: cfg.items.length, stage: cfg.stage, team: cfg.team };
+    if (cfg.stage === 'team' && !team()) return invite(rid, 'link', rv); return nudge(rv, 'link'); }
+  if (want) { const w0 = Date.now(); const tick = () => { if (busy() && Date.now() - w0 < 90e3) return setTimeout(tick, 400); arrive(String(want).toLowerCase()); }; setTimeout(tick, 300); auto = false; }
   async function maybeInvite() { if (!auto || busy() || Date.now() - t0 < INVITE_AFTER) return; const I = inv();
     if (!team()) {
       if (I.answer === 'yes') return;
@@ -321,7 +395,7 @@
   window.__reviews = { open, close, list, invite, join, team: { status: teamStatus, vested: () => !!(teamStatus() || {}).vested, member: () => !!team(), name: TEAM.name, id: TEAM.id },
     state: () => cur && { rid: cur.rid, view: cur.view, kind: cur.cfg && cur.cfg.kind, items: cur.cfg ? cur.cfg.items.slice() : [], queue: cur.queue ? cur.queue.slice() : [], i: cur.i, current: cur.queue ? cur.queue[cur.i] : null,
       rated: { ...((cur.mine && cur.mine.rated) || {}) }, pairs: ((cur.mine && cur.mine.pairs) || []).slice(), pair: cur.pair || null, playing: !!(cur.live && cur.live.playing && cur.live.playing()) },
-    sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },
+    sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), tab: { open: () => toggleTab(true), close: () => toggleTab(false), isOpen: () => tabOpen }, highlight, arrive, nudge, hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },
     badge: () => { const s = teamStatus(), rids = Object.keys(sentAll()).filter(k => sentAll()[k].done); return s || rids.length ? { rids, status: s } : null; }, plugins: () => Object.keys(PLUGINS),
-    text: TEXT, test: { fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) t0 = Date.now() - since; }, delivering: () => delivering, done: rid => reviewDone(rid) } };
+    text: TEXT, test: { fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) t0 = Date.now() - since; }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl } };
 })();
