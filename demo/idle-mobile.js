@@ -25,7 +25,7 @@
   #cline{display:none!important}
   #soundBtn,#sndMore,#lab-toggle,#rc-open{display:none!important}
   #advpanel,#dj,#reelpanel,#drawer,#trees,#settings,#ntfpanel,#conn,#team,#whisper,#objmenu,#sndpop{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;max-height:72dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;margin:0!important}
-  #lab{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;height:45dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;transform:translateY(105%)!important;transition:transform .22s!important;border:0!important}
+  #lab{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:var(--kb,0px)!important;width:100%!important;max-width:100%!important;height:45dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;transform:translateY(105%)!important;transition:transform .22s!important;border:0!important}
   #herd,#studio{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;max-width:100%!important;height:78dvh!important;border-radius:16px 16px 0 0!important;box-sizing:border-box!important;z-index:10001!important;transform:translateY(105%)!important;transition:transform .22s!important;border:0!important}
   #herd.on,#studio.on,#lab.open{transform:none!important}
   #almanac{padding:0!important;align-items:flex-end!important}#almanac .bx{border-radius:16px 16px 0 0!important;max-height:88dvh;overflow:auto}
@@ -62,7 +62,7 @@
   function render() {
     const ids = [...$('#topbar').children].filter(el => el.tagName === 'BUTTON' && el.id && !KEEP.includes(el.id)).map(el => el.id);
     if ($('#keepDetail') && !$('#arena.keep')) ids.splice(ids.indexOf('keepDetail'), 1);
-    for (const extra of ['lab-toggle', 'rc-open', 'soundBtn', 'sndMore']) if (document.getElementById(extra)) ids.push(extra);
+    for (const extra of ['rc-open', 'soundBtn', 'sndMore']) if (document.getElementById(extra)) ids.push(extra);   // (v14: the Operator's only toggle is the 📟)
     const wx = ($('#weatherLabel') || {}).textContent || '', fps = ($('#fps') || {}).textContent || '';
     sheet.innerHTML = `<span class="mgrab"></span><div class="mh"><b>Id|le</b><small>${esc(wx)}${wx && fps ? ' · ' : ''}${esc(fps)}</small><button class="mx" title="close">✕</button></div><div class="mg">` +
       ids.map(id => { const el = document.getElementById(id), L = LABELS[id] || [el.textContent.trim().slice(0, 2), (el.title || id).split(':')[0].slice(0, 16)];

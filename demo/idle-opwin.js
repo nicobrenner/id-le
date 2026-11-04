@@ -1,5 +1,7 @@
 // idle-opwin.js: the 📟 Operator is always a floating window (v14, Nico: "the operator should always be a floating window, never a fixed
 // sidebar chat. It can appear/fade/animate during storyline, during gameplay the user can toggle it from the bottom right operator button").
+//  - one toggle (Nico: "there are still 2 operator buttons... just keep the square one"): the 📟 (idle-tohandle.js); the old pill #lab-toggle stays
+//    in the page, hidden, only as the switch other scripts click
 //  - desktop: a window above the bottom-right corner, dragged by its header, its place remembered (idle.opPos); phones: a bottom sheet that
 //    never covers more than ~45% of the screen (idle-mobile.js). Open/closed is remembered as before (arena.labOpen).
 //  - it steps aside for every lightbox ("The roadmap loads under the Operator... it should maybe close the operator"): while 🧪 / the
@@ -13,7 +15,7 @@
   const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const phone = () => matchMedia('(max-width: 500px)').matches, coarse = () => matchMedia('(pointer: coarse)').matches;
   const css = document.createElement('style');
-  css.textContent = `html.op-yield #lab{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+  css.textContent = `#lab-toggle{display:none!important}html.op-yield #lab{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
 #lab-form small,#ai-oracle-link{display:none!important}
 @media (min-width:501px){#lab-head{cursor:grab;user-select:none}#lab-head.drag{cursor:grabbing}html:is(.gen-box,.gen-float) #lab-head{cursor:default}}
 #op-tools{margin-left:auto;margin-right:6px;font-size:14px;line-height:1;padding:3px 8px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer}
@@ -39,10 +41,11 @@
   const genChip = () => { try { return window.__genesis && window.__genesis.chip ? window.__genesis.chip() : null; } catch (e) { return null; } };
   const ctx = () => { const g = genChip(); return { genesis: !!g, step: g && g.step, phone: phone() }; };
   let override = null;   // __opwin.setChips(): chips another feature puts in the tray for a while (reviews, the playground's welcome…)
-  function templateChips(c) { const g = genChip(); if (g) return g.say ? [{ text: g.say, gsay: true, glow: true, disabled: !!g.busy }] : []; return override ? override.slice() : TEMPLATES.slice(); }
+  // Genesis has no chips (v14, Nico: "let's drop the predefined button"): its command is pre-typed in the input; the tray stays closed there
+  function templateChips(c) { if (genChip()) return []; return override ? override.slice() : TEMPLATES.slice(); }
   // the tray is open by default in Genesis (its chip is the step's glowing button), closed elsewhere unless the player opened it
   let userOpen = null; try { userOpen = localStorage.getItem('idle.opTray'); } catch (e) {}
-  const trayOpen = () => genChip() || override ? true : userOpen === '1';
+  const trayOpen = () => genChip() ? false : override ? true : userOpen === '1';
   let sig = '';
   async function render(force) { const c = ctx(); let chips = null;
     if (!c.genesis && !override && typeof window.__opSuggest === 'function') { try { chips = await window.__opSuggest(c); } catch (e) { chips = null; } }
@@ -73,6 +76,8 @@
   const end = () => { if (!drag) return; drag = null; head.classList.remove('drag'); try { localStorage.setItem(POS, JSON.stringify(pos)); } catch (e) {} };
   head.addEventListener('pointerup', end); head.addEventListener('pointercancel', end);
   addEventListener('resize', applyPos); applyPos();
+  // the on-screen keyboard (phones): the sheet rides above it, so the input is never under it (--kb: the keyboard's height)
+  { const vv = window.visualViewport; if (vv) { const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h + 'px'); }; vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); kb(); } }
 
   // ---------- stepping aside for lightboxes (never stacked underneath one)
   const OVER = ['#oracle.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront'];

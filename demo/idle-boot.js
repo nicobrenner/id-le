@@ -440,6 +440,10 @@
     g.font = `700 ${big}px ${MONO}`; g.fillStyle = '#e9f6ff'; g.shadowColor = CY; g.shadowBlur = 24; g.fillText('ø Id|le OS', W / 2, H * 0.42); g.shadowBlur = 0;
     g.font = `${Math.round(big * 0.24)}px ${MONO}`; g.fillStyle = DIM; g.fillText('v 0/67 · lab-07', W / 2, H * 0.42 + big * 0.75);
     if (on) { g.font = `700 ${Math.round(clamp(big * 0.3, 15, 26))}px ${MONO}`; g.fillStyle = AMB; g.fillText(port || matchMedia('(pointer: coarse)').matches ? 'TAP TO START' : 'PRESS ANY KEY TO START', W / 2, H * 0.66); }
+    // iPhones and iPads only (Nov 3: the silent switch mutes the web's sound and no page can read it): a quiet two-line hint under it
+    const hint = window.__iosHint && window.__iosHint();
+    if (hint) { const fs = Math.round(clamp(big * 0.17, 11, 15)); g.font = `${fs}px ${MONO}`; g.fillStyle = DIM; hint.forEach((l, i) => g.fillText(l, W / 2, H * 0.66 + fs * (2.4 + i * 1.5)));
+      if (!window.__titleHint) { window.__titleHint = hint.join(' · '); try { localStorage.setItem('idle.iosHint', '1'); } catch (e) {} } }
     g.restore(); overlay(g, W, H, 0.8); }
   // the signature purr (Nico: "a 'signature purring sound' that matches the animation on the | of id|le… like the logo of a console when it
   // loads"): a warm low tone, amplitude-modulated like an engine idling (the pipe's throb), opening up, then a soft chime as the pipe settles.
