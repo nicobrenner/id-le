@@ -268,6 +268,13 @@ function mergeStat(cur, add) {
     cur.rb = cur.rb || {}; for (const [a, n] of Object.entries(add.rb || {})) if (n && (cur.rb[a] != null || Object.keys(cur.rb).length < 600)) bump(cur.rb, a, n);   // arm|cohort day|bucket (bounded: 5 arms x 400 days x 6)
     for (const [e, n] of Object.entries(add.err)) if (cur.err[e] || Object.keys(cur.err).length < 60) bump(cur.err, e, n);
     if (add.int) { const q = cur.int = cur.int || { r: 0, v: 0, t: {} }; q.r += add.int.r; q.v += add.int.v; if (add.int.aa) { q.aa = q.aa || {}; for (const [a, n] of Object.entries(add.int.aa)) bump(q.aa, a, n); } for (const k of ['dd', 'en', 'cb']) if (add.int[k]) { q[k] = q[k] || {}; for (const [a, n] of Object.entries(add.int[k])) bump(q[k], a, n); } for (const [a, n] of Object.entries(add.int.t || {})) if (q.t[a] != null || Object.keys(q.t).length < 20) bump(q.t, a, n); }
+    // any other flat count map (a key added after this code was deployed, e.g. the engaged beacons' dd/en/cb, Nov 4): summed as is, so the
+    // accumulator (the presence Worker's own copy of this function, redeployed only when its class changes) never drops a new number
+    { const known = new Set(['visits', 'back', 'ios', 'safe', 'batches', 'secs', 'v2visits', 'pv', 'x', 'pd', 'ref', 'utm', 'm', 'sd', 'rb', 'err', 'int', 'writes', 'tok',
+        'dev', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss', 'sf', 'bi', 'aa', 'dd', 'en', 'cb']);
+      const flat = o => o && typeof o === 'object' && !Array.isArray(o) && Object.values(o).every(n => typeof n === 'number');
+      for (const [k, v] of Object.entries(add)) if (!known.has(k) && flat(v) && Object.keys(v).length <= 200) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(v)) if (n) bump(cur[k], a, n); }
+      if (add.int) for (const [k, v] of Object.entries(add.int)) if (!['r', 'v', 't', 'aa', 'dd', 'en', 'cb'].includes(k) && flat(v)) { const q = cur.int; q[k] = q[k] || {}; for (const [a, n] of Object.entries(v)) if (n) bump(q[k], a, n); } }
   return cur;
 }
 // Nov 4: the KV free tier allows 1,000 writes a day for the whole account, and one write per isolate batch (every 20 s while anyone
