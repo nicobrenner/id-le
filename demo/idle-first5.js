@@ -24,9 +24,9 @@
   // the trail, in order; `ready` holds a step back until it makes sense (no reel yet, no Gazette pill yet)
   const HW_URL = 'https://en.wikipedia.org/wiki/Halloween';
   const STEPS = [
-    { k: 'card', text: () => `This is a small world, and it is alive. <b>Click a creature</b> to open its card: how it feels, what it wants, who its friends are.`, who: () => meta().friends && meta().friends[0] },
+    { k: 'card', text: () => `This is a small consciousness, and it is alive. <b>Click a creature</b> to open its card: how it feels, what it wants, who its friends are.`, who: () => meta().friends && meta().friends[0] },
     // Halloween night only (window.__halloween): grow the world from Wikipedia's Halloween page (Nico, 10-31)
-    ...(window.__halloween && window.__halloween.on() ? [{ k: 'hwwiki', text: () => `🎃 Tonight only: let the world <b>grow from Wikipedia's Halloween page</b>. Press <b>grow it ›</b>, or paste <code>${HW_URL}</code> into 🎛 studio → Feed the world.`, kind: 'trail' }] : []),
+    ...(window.__halloween && window.__halloween.on() ? [{ k: 'hwwiki', text: () => `🎃 Tonight only: let it <b>grow from Wikipedia's Halloween page</b>. Press <b>grow it ›</b>, or paste <code>${HW_URL}</code> into 🎛 studio → Feed the world.`, kind: 'trail' }] : []),
     // right-click (long-press on phones) anything: a menu of what can happen to it and who does it (the key stays 'keep' for the stats)
     { k: 'keep', text: () => `<b>Right-click a word</b> (long-press on a phone): pick what should happen to it and who does it, e.g. <b>fetch</b>, and a creature walks over and brings it. The same menu keeps a copy in your 🗄 drawer.`, kind: 'trail', go: () => { try { window.__rclick && window.__rclick.demo(); } catch (e) {} } },
     { k: 'name', text: () => `Every creature can carry a name you choose. Open a card and <b>type over its name</b>.`, who: () => meta().counter || (live()[0] || {}).name },
@@ -34,7 +34,7 @@
     { k: 'dream', text: () => `${mn(sleeperName())} is asleep. Open its card: the mind tab becomes <b>dream 💤</b>.`, who: () => sleeperName() },
     { k: 'gazette', text: () => `The 📰 <b>Id|le Gazette</b> reports firsts, records and disasters. Open <b>🔔</b> and press <b>go ›</b> on one to see where it happened.`, ready: () => gazetteSeen(), kind: 'trail' },
     { k: 'weather', text: () => `Weather changes their mood. Open <b>🎛 studio</b> and try another weather (storms scare the timid ones).`, kind: 'trail', go: () => { const b = $('#studioBtn'); if (b) b.click(); } },
-    { k: 'reel', text: () => `The world made its first <b>memory reel</b> out of what they lived through. Open 🎞 and play it.`, ready: () => reelCount() > 0, go: () => { const b = $('#reelsBtn'); if (b) b.click(); } },
+    { k: 'reel', text: () => `The consciousness made its first <b>memory reel</b> out of what they lived through. Open 🎞 and play it.`, ready: () => reelCount() > 0, go: () => { const b = $('#reelsBtn'); if (b) b.click(); } },
 ];
   const mn = n => n ? `<a class="mn" data-n="${esc(n)}">${esc(n)}</a>` : 'someone';
   function sleeperName() { const s = live().find(c => c.state === 'sleep'); return s ? s.name : meta().sleeper; }
@@ -91,7 +91,7 @@
   // keep the moods the starter world promises: someone asleep (a dream one click away), someone hungry
   function stage() { const m = meta(); if (!S.done.dream) { const sl = byName(m.sleeper); if (sl && sl.state !== 'sleep' && !live().some(c => c.state === 'sleep')) { sl.d.fatigue = 0.95; try { A().act(A().raw().indexOf(sl), 'sleep'); } catch (e) {} } }
     if (!S.done.feed) { const h = byName(m.hungry); if (h && h.d.hunger < 0.7) h.d.hunger = 0.82; } }
-  function askName() { N({ kind: 'trail', icon: '🧭', ttl: 0, key: 'first5:name-world', html: `This world doesn't have a name yet. <input data-f5="wname" maxlength="26" placeholder="call it…" style="font:inherit;width:9em;padding:1px 5px;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit">`,
+  function askName() { N({ kind: 'trail', icon: '🧭', ttl: 0, key: 'first5:name-world', html: `This consciousness doesn't have a name yet. <input data-f5="wname" maxlength="26" placeholder="call it…" style="font:inherit;width:9em;padding:1px 5px;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit">`,
     actions: [{ label: 'name it', run: () => { const i = document.querySelector('[data-f5=wname]'), v = i && i.value.trim(); if (!v) return; nameWorld(v); } }, { label: 'later', run: () => {} }] }); }
   function nameWorld(v) { S.named = v; aha('world_named'); save(); try { if (window.__places && window.__places.rename) window.__places.rename('home', v); } catch (e) {}
     N({ kind: 'world', icon: '🏠', html: `Welcome to <b>${esc(v)}</b>.`, ttl: 6000 }); }

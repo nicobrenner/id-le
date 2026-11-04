@@ -138,11 +138,12 @@ def call(path, tok, raw=False, body=None):
 
 
 # the storyline's funnel (helper/worker.js 'sf': "arm|step" → browsers), in the order a player meets them
-SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play", "ch_story", "ch_play", "pw_shown", "pw_story"]
+SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play", "ch_story", "ch_play", "pw_shown", "pw_story", "st_resume", "st_restart"]
 SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
             "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)",
             "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground",
-            "ch_story": "chooser: the storyline", "ch_play": "chooser: the playground", "pw_shown": "playground welcome shown", "pw_story": "playground welcome: started the story"}
+            "ch_story": "chooser: the storyline", "ch_play": "chooser: the playground", "pw_shown": "playground welcome shown", "pw_story": "playground welcome: started the story",
+            "st_resume": "⚙ storyline: resumed", "st_restart": "⚙ storyline: restarted"}
 
 
 # the Founder gift (idle-founder.js), from the same once-per-browser moments ('fd_…'), summed over the storyline's arms

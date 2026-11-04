@@ -133,7 +133,7 @@
   function greet() { const lines = ['Happy Halloween from the Tiny Oracle: everyone is in costume tonight, and some words have turned into pumpkins', 'The moon is up and the costumes are on. Resting creatures may drift by as ghosts, do not mind them'];
     const say = () => { if (window.__oracleSay) window.__oracleSay(lines[(Math.random() * lines.length) | 0]); else setTimeout(say, 1500); }; setTimeout(say, 6000); }
   function firstNotice() { let seen = false; try { seen = localStorage.getItem(SEEN) === '1'; localStorage.setItem(SEEN, '1'); } catch (e) {} if (seen) return;
-    const n = () => window.__notify ? window.__notify({ kind: 'system', html: '🎃 Happy Halloween: the world is in costume tonight <button data-act="settings-open">⚙ to turn it off</button>', ttl: 20000, key: 'halloween' }) : setTimeout(n, 1500); setTimeout(n, 5000); }
+    const n = () => window.__notify ? window.__notify({ kind: 'system', html: '🎃 Happy Halloween: the whole consciousness is in costume tonight <button data-act="settings-open">⚙ to turn it off</button>', ttl: 20000, key: 'halloween' }) : setTimeout(n, 1500); setTimeout(n, 5000); }
   cbs.push(v => { apply(v); if (v) { firstNotice(); greet(); } if (window.__settings && window.__settings.rerender) window.__settings.rerender(); });
   const start = () => { apply(last); if (last) { firstNotice(); greet(); } };
   window.__halloween.test = { flock: spawnFlock, ghost: spawnGhost, state: () => ({ on: last, pumpkins: document.querySelectorAll('#floor .word.hwpk').length, flocks: flocks.length, ghosts: ghosts.length }) };

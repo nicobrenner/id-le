@@ -31,6 +31,10 @@
   document.head.appendChild(css);
 
   // ---------- 🛠 and the tray
+  // one-off slash commands typed in the chat (Enter), added with __opwin.command (the real table is idle-slash.js: /story, /help…)
+  const COMMANDS = {};   // (/story lives in idle-slash.js, the slash commands' own table; this is for quick one-offs)
+  text.addEventListener('keydown', e => { if (e.key !== 'Enter' || e.shiftKey) return; const m = /^\/([a-z]+)\s*$/i.exec(text.value.trim()); const f = m && COMMANDS[m[1].toLowerCase()]; if (!f) return;
+    e.preventDefault(); e.stopImmediatePropagation(); text.value = ''; f(); }, true);
   const tools = document.createElement('button'); tools.id = 'op-tools'; tools.type = 'button'; tools.title = 'suggestions: things to say to the Operator'; tools.textContent = '🛠';
   const close = $('#lab-close'); if (close) head.insertBefore(tools, close); else head.appendChild(tools);
   const tray = document.createElement('div'); tray.id = 'opTray'; tray.hidden = true; tray.setAttribute('role', 'group'); tray.setAttribute('aria-label', 'suggestions');
@@ -42,7 +46,9 @@
   const ctx = () => { const g = genChip(); return { genesis: !!g, step: g && g.step, phone: phone() }; };
   let override = null;   // __opwin.setChips(): chips another feature puts in the tray for a while (reviews, the playground's welcome…)
   // Genesis has no chips (v14, Nico: "let's drop the predefined button"): its command is pre-typed in the input; the tray stays closed there
-  function templateChips(c) { if (genChip()) return []; return override ? override.slice() : TEMPLATES.slice(); }
+  // the playground's way back to the story (v16): '📖 back to the story' first whenever there is story progress (idle-genesis.js __storyBack)
+  const backChip = () => { try { return window.__storyBack ? window.__storyBack() : null; } catch (e) { return null; } };
+  function templateChips(c) { if (genChip()) return []; if (override) return override.slice(); const b = backChip(); return b ? [b, ...TEMPLATES] : TEMPLATES.slice(); }
   // the tray is open by default in Genesis (its chip is the step's glowing button), closed elsewhere unless the player opened it
   let userOpen = null; try { userOpen = localStorage.getItem('idle.opTray'); } catch (e) {}
   const trayOpen = () => genChip() ? false : override ? true : userOpen === '1';
@@ -80,7 +86,7 @@
   { const vv = window.visualViewport; if (vv) { const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h + 'px'); }; vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); kb(); } }
 
   // ---------- stepping aside for lightboxes (never stacked underneath one)
-  const OVER = ['#oracle.on', '#hitl.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront'];
+  const OVER = ['#oracle.on', '#hitl.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genResume', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront'];
   const shown = el => { if (!el || !el.isConnected) return false; const s = getComputedStyle(el); if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity === 0) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const over = () => OVER.find(s => shown($(s))) || null;
   let yieldTo = null;
@@ -135,6 +141,7 @@
   //                                           selector target keeps a soft glow until clicked or for 2 minutes (survives a reload)
   //   glowing() / clearGlow()                 the lingering glow's selector, and clearing it
   //   refresh(), tray(), toggleTray(), yielding(), pos()/setPos(), templates()   (tests and the tray's own state)
+  //   command(name, fn)                       a one-off slash command typed in the chat (/name + Enter); the slash table proper is idle-slash.js
   //   window.__opSuggest(ctx) → chips | Promise<chips>: the hook for generated suggestions (ctx: { genesis, step, phone })
-  window.__opwin = { open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, glowing: () => glowSel, clearGlow, cutting: () => cutting, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text) }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
+  window.__opwin = { command: (name, fn) => { COMMANDS[String(name).toLowerCase()] = fn; }, commands: () => Object.keys(COMMANDS), open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, glowing: () => glowSel, clearGlow, cutting: () => cutting, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text) }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
 })();
