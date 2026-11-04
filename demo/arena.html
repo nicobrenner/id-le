@@ -1,4 +1,14 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="canonical" href="https://id-le.com/"><title>Id|le</title><meta name="description" content="A small world whose ground is made of words, and creatures that walk on them, eat them and cut them into pieces."><meta property="og:type" content="website"><meta property="og:site_name" content="Id|le"><meta property="og:url" content="https://id-le.com/"><meta property="og:title" content="Id|le"><meta property="og:description" content="A small world whose ground is made of words. Creatures with legs walk on them, eat them, carry them, cut them into pieces, name them and pile them up. Every creature has a genome, a job, feelings, a diary and a mind you can watch stream."><meta property="og:image" content="https://id-le.com/og-image.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="The Id|le wordmark over a pale floor scattered with 0s and 1s, word-bricks reading coffee, heap, loop and token, and six many-legged creatures walking among them."><meta name="twitter:card" content="summary_large_image">
+<script>/* tests only (Nov 4): ?timescale=N runs the page's own clock N× faster (timers, performance.now, Date.now, animation frames) so the suite
+   doesn't sit through the intro in real time. Honoured on localhost/127.0.0.1, and on staging only with ?test; never on id-le.com.
+   The audio clock can't be sped up: anything scheduled on it still plays in real time. */
+(() => { try { const q = new URLSearchParams(location.search), k = +q.get('timescale'), h = location.hostname;
+  if (!(k > 1 && k <= 20) || !(h === 'localhost' || h === '127.0.0.1' || (/^staging\./.test(h) && q.has('test')))) return;
+  const pn = performance.now.bind(performance), dn = Date.now, p0 = pn(), d0 = dn(), st = setTimeout, si = setInterval, raf = requestAnimationFrame;
+  performance.now = () => p0 + (pn() - p0) * k; Date.now = () => Math.round(d0 + (dn() - d0) * k);
+  window.setTimeout = (f, t, ...r) => st(f, (+t || 0) / k, ...r); window.setInterval = (f, t, ...r) => si(f, (+t || 0) / k, ...r);
+  window.requestAnimationFrame = f => raf(ts => f(p0 + (ts - p0) * k)); window.__timescale = k; } catch (e) {} })();
+</script>
 <script>/* canvas roundRect for browsers without it (Safari before 16, older Chromes): "g.roundRect is not a function" (Nov 3); corners from a
    number or an array of up to 4 radii (DOMPointInit {x, y} taken by x), each clamped to half the box */
 (() => { const add = P => { if (!P || P.roundRect) return; P.roundRect = function (x, y, w, h, r) { let a = Array.isArray(r) ? r : [r]; a = a.map(v => +(v && typeof v === 'object' ? v.x : v) || 0);
