@@ -6,6 +6,15 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-04
 
+**Launch, Nov 4: the storyline and the A/B/C split live on id-le.com.** Nico's go (11-03, before bed): "deploy the A/B/C testing when it lands, all the options looked good to me, at least for first launch".
+- `AB = 'on'` (idle-genesis.js): every NEW browser gets one arm at random, a third each, kept in this browser (idle.gv): **story** (straight into the title card and the full intro), **choose** (the chooser: 📖 the storyline / 🛝 the playground), **play** (the playground's ready world; the Operator welcomes it once and offers the story). A browser that already has a world keeps it and gets the storyline offer once.
+- The storyline always plays the terminal boot now (it was staging-only); ⚙ 📖 Storyline and the chooser's 📖 are on id-le.com.
+- `?arm=` forces an arm only on staging and local copies; pages with `?test` get no random arm (so tests stay deterministic).
+- Unchanged: the Founder gift stays off; keyframes stay staging-only; reviews (HITL) and presence were already on.
+- Tests: 'prod gates' rewritten for the launched site (random arms with ?arm= ignored, a returning world keeps it and gets one offer, 📖 in ⚙ and the chooser, 🧪, presence, reviews, no Founder, keyframes inert); 'story arms' expects the A/B on.
+
+## 2026-11-04
+
 **⭐ Reviews on id-le.com (Nov 4).** Nico: "https://staging.id-le.com/?review=logos love it!! so good... you decide when to show it to users on each mode at the appropriate time, would love to have feedback by morning :)". `ON_PROD = true` in idle-reviews.js; the Founder gift stays off; totals stay private (showTotals off).
 - **When the invitation comes by itself**, once per browser, never during the intro, Genesis, a modal, a cut-scene or an open panel, never while typing: the storyline only after the end of what's built (its card closed, or the 🗺 roadmap it opened closed), or 20 s into the playground its 🛝 leads to; the playground and a returning player's plain world after 3 minutes on screen and one interaction (a click in the world or the top bar), at a quiet moment. Links (`?review=…`) at once. "not now": once more a day later, never a third time.
 - **Stats:** the rv_* moments print per arm under the storyline funnel (tools/stats.py: invited, I'm in, not now, opened, ✕ ✓ ★, done, which one?, 🌱).

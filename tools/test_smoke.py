@@ -2827,7 +2827,7 @@ def t_story_arms(P):
         finally:
             ctx.close()
     P.clean()
-    return "off by default, three arms; returning browser keeps its world; story → the title card; choose → the chooser (🛝 counted, no offer after); play → the ready world, the Operator's welcome (once), [ 📖 start the story ] → snapshot + story; 'current' → 'play'"
+    return "on (Nov 4), three arms; a ?test page gets no random arm; returning browser keeps its world; story → the title card; choose → the chooser (🛝 counted, no offer after); play → the ready world, the Operator's welcome (once), [ 📖 start the story ] → snapshot + story; 'current' → 'play'"
 
 
 def t_story_offer(P):
