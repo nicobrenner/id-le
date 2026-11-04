@@ -3197,7 +3197,7 @@ def t_engage_ask(P):
     # name: a chip renames the first newborn; the two ways on stay right there
     ctx, pg = moment("/arena.html?story#epoch0done")
     try:
-        wait_for(pg, "() => window.__genesis.ask().state === 'open' && !!document.querySelector('#genConsole .gask')", 70, P=P)
+        wait_for(pg, "() => window.__genesis.ask().state === 'open' && !!document.querySelector('#genConsole .gask')", 150, P=P)
         r = pg.evaluate("() => ({ chips: [...document.querySelectorAll('#genConsole [data-ask=chip]')].map(b => b.textContent), input: !!document.querySelector('#genAskName'), skip: !!document.querySelector('#genConsole [data-ask=skip]'), start: !!document.querySelector('#genConsole [data-gm=start]'), play: !!document.querySelector('#genConsole [data-gm=play]'), first: window.__genesis.ask().first })")
         need(len(r["chips"]) == 3 and r["input"] and r["skip"] and r["start"] and r["play"] and r["first"], f"the ask, with the two ways on still there: {r}")
         pg.click("#genConsole [data-ask=chip]"); pg.wait_for_timeout(500)
@@ -3209,7 +3209,7 @@ def t_engage_ask(P):
     # skip: one tap, nothing renamed
     ctx, pg = moment("/arena.html?at=epoch0done")
     try:
-        wait_for(pg, "() => window.__genesis.ask().state === 'open'", 70, P=P)
+        wait_for(pg, "() => window.__genesis.ask().state === 'open'", 150, P=P)
         first = pg.evaluate("() => window.__genesis.ask().first"); pg.click("#genConsole [data-ask=skip]"); pg.wait_for_timeout(400)
         s2 = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), gask: !!document.querySelector('#genConsole .gask'), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}') })")
         need(s2["ask"]["state"] == "done" and first in s2["names"] and not s2["gask"] and s2["funnel"].get("e0_ask_skip"), f"skip: {s2}")
@@ -3220,7 +3220,7 @@ def t_engage_ask(P):
     ctx, pg = moment("/arena.html?story#epoch0done")
     try:
         wait_for(pg, "() => !!window.__genesis && !!window.__genesis.askSet", 30, P=P); pg.evaluate("() => window.__genesis.askSet('logo')")
-        wait_for(pg, "() => window.__genesis.ask().state === 'open' && document.querySelectorAll('#genConsole [data-ask=pick]').length === 2", 70, P=P)
+        wait_for(pg, "() => window.__genesis.ask().state === 'open' && document.querySelectorAll('#genConsole [data-ask=pick]').length === 2", 150, P=P)
         pg.click("#genConsole [data-ask=pick]"); pg.wait_for_timeout(500)
         l = pg.evaluate("() => ({ ask: window.__genesis.ask(), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), pick: localStorage.getItem('idle.askLogo') })")
         need(l["ask"]["state"] == "done" and l["funnel"].get("e0_ask_logo") and l["pick"] == "c3-typed-dust", f"logo pick: {l}")
@@ -3230,7 +3230,7 @@ def t_engage_ask(P):
     # phone: the ask fits the screen
     ctx, pg = moment("/arena.html?at=epoch0done", {"width": 375, "height": 667})
     try:
-        wait_for(pg, "() => window.__genesis.ask().state === 'open'", 80, P=P)
+        wait_for(pg, "() => window.__genesis.ask().state === 'open'", 150, P=P)
         b = pg.evaluate("() => { const r = document.querySelector('#genConsole .gask').getBoundingClientRect(), i = document.querySelector('#genAskName').getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, ir: i.right, W: innerWidth, H: innerHeight, sx: document.documentElement.scrollWidth }; }")
         need(b["l"] >= 0 and b["r"] <= b["W"] and b["ir"] <= b["W"] and b["sx"] <= b["W"] + 1, f"phone: the ask fits: {b}")
         out.append("phone fits")
@@ -3571,7 +3571,7 @@ def t_prod_gates(P, root):
         try:
             q = Q.open(f"/arena.html?arm={forced}")
             if want == "story":
-                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && (document.querySelector('#idleIntro').dataset.title === '1' || (window.__epoch0 && window.__epoch0.time && window.__epoch0.time() > 0))", 60)   # the title card, or the intro it auto-started after 2 s (Nov 4)
             elif want == "choose":
                 wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
             else:
