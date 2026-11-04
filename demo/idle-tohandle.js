@@ -12,7 +12,8 @@
 #toHandle:hover .tip,#toHandle.hint .tip{opacity:1}#toHandle.glow{animation:toGlow 1.4s ease-in-out infinite}#toHandle.glow .tip{opacity:1}@keyframes toGlow{0%,100%{box-shadow:0 0 10px #6b7cff44}50%{box-shadow:0 0 0 6px #9fb0ff55,0 0 26px 6px #9fb0ffcc}}@media (prefers-reduced-motion:reduce){#toHandle.glow{animation:none;box-shadow:0 0 0 3px #9fb0ffaa,0 0 18px #9fb0ffaa}}html.gen-landing #toHandle{display:none!important}`;
   css.textContent += `#toHandle{width:38px;height:36px;line-height:34px;font-size:19px;border-radius:10px}#toHandle.on{background:#2a3180;border-color:#cfd6ff}
 #toHandle .tip{right:auto!important;left:0!important;bottom:auto!important;top:42px!important}
-#toSlot,#topbar #toSlot{display:inline-block!important;width:44px;height:1px;vertical-align:middle}
+#toHandle.inbar{position:relative!important;left:auto!important;top:auto!important;z-index:auto;vertical-align:middle;margin-left:4px;width:34px;height:28px;line-height:26px;font-size:16px;border-radius:8px;box-shadow:none}
+@media (max-width:500px){#topbar>#toHandle{display:inline-flex!important;align-items:center;justify-content:center;min-height:44px;min-width:44px;font-size:18px;border-radius:12px;margin-left:auto}#topbar>#toHandle+#mMore{margin-left:0!important}}
 #toHandle .bd{position:absolute;right:-6px;top:-6px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#e0367a;color:#fff;font:700 11px/18px var(--ui-font,system-ui);text-align:center;box-shadow:0 0 0 2px #0a0b16;pointer-events:none}`;
   document.head.appendChild(css);
   const b = document.createElement('button'); b.id = 'toHandle'; b.type = 'button'; b.setAttribute('aria-label', 'open the Operator (the Tiny Operator)'); b.hidden = true;
@@ -21,19 +22,28 @@
   if (document.body) add(); else document.addEventListener('DOMContentLoaded', add, { once: true });
   const visible = el => { if (!el) return false; const s = getComputedStyle(el), r = el.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.3 && s.pointerEvents !== 'none' && r.width > 0 && r.height > 0; };
   const labOpen = () => { const l = $('#lab'); return !!(l && l.classList.contains('open')); };
-  // v15 (Nico: "the operator is also on top of the minimap... should we move the operator to the top, maybe next to the bell?"): the 📟 lives at
-  // the top, right after 🔔 when the top bar shows it, otherwise in the top-left corner where the bar would be; it stays there while the window
-  // is open (it is the window's toggle), and the window opens anchored just below it (--op-top / --op-left, read by idle-opwin.js and idle-mobile.js).
+  // v15 put the 📟 at the top; v16 (Nico, Nov 4: "Why is the operator floating on the top left? I thought it was going to float to the right
+  // of the settings icon"): it is a button IN the top bar, right after ⚙ (on phones, where ⚙ lives in ☰'s sheet: right before ☰). When the
+  // bar is hidden (the guided start's calm, the landing), it stays reachable as a fixed button where it last sat in the bar. The window opens
+  // anchored just below it, right-aligned under it (--op-top / --op-left, read by idle-opwin.js and idle-mobile.js).
   // A small badge counts the epoch's pending tasks in the storyline (window.__genesis.pending()), like a messaging app.
   const genWin = () => /\bgen-(box|float)\b/.test(document.documentElement.className);
+  let last = null;   // where the 📟 last sat in the bar (viewport rect), for the fixed fallback
   function place() { add(); const intro = !!document.getElementById('idleIntro'); b.hidden = intro; if (intro) return;   // (v14: not over the intro and its skip ›)
-    const bell = $('#ntfBtn'); let L = 10, T = 8, H = 36;
-    // a slot right after 🔔 in the top bar keeps the bar's other buttons from sliding under the 📟
-    let slot = $('#toSlot'); if (bell && (!slot || slot.previousElementSibling !== bell)) { if (!slot) { slot = document.createElement('span'); slot.id = 'toSlot'; slot.setAttribute('aria-hidden', 'true'); } bell.after(slot); }
-    if (visible(bell)) { const rb = bell.getBoundingClientRect(), r = slot && slot.getBoundingClientRect(); L = Math.round(r && r.width ? r.left + 2 : rb.right + 6); T = Math.round(rb.top + rb.height / 2 - 18); }
-    L = Math.max(6, Math.min(innerWidth - 46, L)); T = Math.max(6, T);
-    b.style.left = L + 'px'; b.style.top = T + 'px'; b.style.right = 'auto'; b.style.bottom = 'auto';
-    const R = document.documentElement.style; R.setProperty('--op-top', (T + H + 8) + 'px'); R.setProperty('--op-left', Math.max(8, Math.min(L - 4, innerWidth - 300)) + 'px');
+    const bar = $('#topbar'), set = $('#settingsBtn'), more = $('#mMore'), slot = $('#toSlot'); if (slot) slot.remove();
+    const barOn = visible(bar), after = visible(set) ? set : null, before = !after && visible(more) ? more : null;
+    if (barOn && (after || before)) {
+      if (after && b.previousElementSibling !== after) after.after(b); else if (before && b.nextElementSibling !== before) before.before(b);
+      b.classList.add('inbar'); b.style.left = b.style.top = b.style.right = b.style.bottom = '';
+      const r = b.getBoundingClientRect(); if (r.width) last = { l: r.left, t: r.top, w: r.width, h: r.height };
+    } else {
+      if (b.parentElement !== document.body) document.body.appendChild(b);
+      b.classList.remove('inbar'); const L = last ? last.l : Math.max(6, innerWidth - 50), T = last ? last.t : 8;
+      b.style.left = Math.round(L) + 'px'; b.style.top = Math.round(T) + 'px'; b.style.right = 'auto'; b.style.bottom = 'auto';
+    }
+    const r = b.getBoundingClientRect(), lab = $('#lab'), w = (lab && lab.offsetWidth) || 380;
+    const R = document.documentElement.style; R.setProperty('--op-top', Math.round(r.bottom + 8) + 'px');
+    R.setProperty('--op-left', Math.round(Math.max(8, Math.min(r.right - w, innerWidth - w - 8))) + 'px');
     b.classList.toggle('on', labOpen());
     let n = 0; try { n = window.__genesis && window.__genesis.pending ? +window.__genesis.pending() || 0 : 0; } catch (e) {}
     let d = b.querySelector('.bd'); if (n > 0) { if (!d) { d = document.createElement('span'); d.className = 'bd'; b.appendChild(d); } if (d.textContent !== String(n)) d.textContent = n; b.setAttribute('aria-label', `the Operator: ${n} task${n > 1 ? 's' : ''} left in this epoch`); }
