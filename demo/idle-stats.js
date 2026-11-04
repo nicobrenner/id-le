@@ -172,6 +172,7 @@
     if (!firstAct) E2.did.add('ni_seen'); else if (performance.now() - firstAct < 30000) E2.did.add('qe_seen'); };
   const e2part = () => { const x = {}; for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'op']) if (Object.keys(E2[k]).length) x[k] = { ...E2[k] };
     const did = [...E2.did].filter(f => !E2sent.did.has(f)); if (did.length) x.did = did; return x; };
+  let batchNo = 0;   // reports this page load has sent
   let secSent = 0;   // visible seconds already added to the day's total
   let sent = { visit: false, feats: [], errs: [], fps: false, m: [], f5: '', dw: null, fl: null, eng: {} }; let ahaSent = {};
   try { ahaSent = JSON.parse(localStorage.getItem(SENT) || '{}') || {}; } catch (e) {}   // first-five moments already counted from this browser (so a reload doesn't count them twice)
@@ -225,10 +226,10 @@
     return any ? p : null;
   }
   function send(why) {
-    if (!live()) return; if (!sent.visit && seenMs() < 1 && why !== 'open') return;   /* never seen: nothing to report */ if (why === 'hide' || why === 'leave') leaveFlags(); const p = payload(why !== 'peek'); if (!p) return; p.why = why;
+    if (!live()) return; if (!sent.visit && seenMs() < 1 && why !== 'open') return;   /* never seen: nothing to report */ if (why === 'hide' || why === 'leave') leaveFlags(); const p = payload(why !== 'peek'); if (!p) return; p.why = why; p.bi = batchNo + 1;   // which report of this page load (1 = the first): shows if first reports go missing on the way
     const body = JSON.stringify(p); let ok = false; try { ok = navigator.sendBeacon('/lab/p', new Blob([body], { type: 'application/json' })); } catch (e) {}
     if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = body.length < 60000; } catch (e) {}
-    if (!ok) return;
+    if (!ok) return; batchNo++;
     if (p.visit) sent.visit = true; if (p.fps) sent.fps = true; if (p.feat) sent.feats.push(...p.feat); if (p.err) sent.errs.push(...p.err);
     if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dl) p.dl.forEach(k => { ahaSent['dl:' + k] = 1; }); if (p.gs) Object.keys(p.gs).forEach(k => { ahaSent['gs:' + k] = 1; }); if (p.sf) p.sf.forEach(k => { ahaSent['sf:' + k] = 1; }); if (p.sd) Object.keys(p.sd).forEach(k => { ahaSent['sd:' + k] = 1; }); if (p.rb) try { localStorage.setItem('idle.backSent', JSON.stringify([...new Set(backSent().concat(p.rb.b))])); } catch (e) {} if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; if (p.eg) Object.assign(sent.eng, p.eg); if (p.sec) secSent += p.sec;
     if (p.path) E2sent.path = p.path; if (p.x) { for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'op']) for (const [a, n] of Object.entries(p.x[k] || {})) { E2[k][a] -= n; if (E2[k][a] <= 0) delete E2[k][a]; } (p.x.did || []).forEach(f => E2sent.did.add(f)); }
