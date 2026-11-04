@@ -261,5 +261,39 @@
       if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = true; } catch (e) {}
       if (ok) localStorage.setItem(ARM_SENT, g); return ok; } catch (e) { return false; } };
   { let n = 0; const iv = setInterval(() => { if (armBeacon() || ++n > 60) clearInterval(iv); }, 500); addEventListener('visibilitychange', () => { if (!document.hidden) armBeacon(); }); }
-  window.__stats = { live, armBeacon, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _e2: () => ({ ...e2part(), path: E2.path.join('>') }), _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop(), eg: engage(), since, back: backBucket() }) };
+  // engaged (Nov 4, Nico: "real engagement… a user saw this, clicked/interacted, and they want to participate"): three tiny beacons on the
+  // arm beacon's path, each at most once per browser per UTC day, aggregate only (no identifier): { dd: arm } this browser was here today,
+  // { en: act, ar: arm } its first deliberate act today (the act from a fixed list), { cb: arm, b: bucket } it came back on a later day than
+  // its first visit (the come-back buckets). Passive viewing never counts; nor do the Genesis commands themselves (finishing Genesis does)
+  const EN_ACTS = ['op_msg', 'irc_msg', 'cr_talk', 'cr_card', 'cr_name', 'cr_feed', 'e0_done', 'vote', 'sci_sent', 'hitl_join', 'review', 'ask_name', 'ask_logo'];
+  const armNow = () => { let g = null; try { g = localStorage.getItem('idle.gv'); } catch (e) {} g = g === 'current' ? 'play' : g; return ARMS3.includes(g) ? g : 'none'; };
+  const dayIs = k => { try { return localStorage.getItem(k) === TODAY; } catch (e) { return true; } }, dayMark = k => { try { localStorage.setItem(k, TODAY); } catch (e) {} };
+  const tinyBeacon = p => { if (!live()) return false; const u0 = utm(); if (u0) p.u = u0; const body = JSON.stringify(p); let ok = false;
+    try { ok = navigator.sendBeacon('/lab/p', new Blob([body], { type: 'application/json' })); } catch (e) {}
+    if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = true; } catch (e) {}
+    return ok; };
+  const daily = () => { if (document.hidden || document.prerendering || !live()) return false;
+    if (!dayIs('idle.ddDay') && tinyBeacon({ v: 1, dd: armNow() })) dayMark('idle.ddDay');
+    if (!dayIs('idle.cbDay') && since.d < TODAY && since.k && tinyBeacon({ v: 1, cb: armNow(), b: backBucket() })) dayMark('idle.cbDay');
+    return dayIs('idle.ddDay'); };
+  const engaged = act => { if (!EN_ACTS.includes(act) || dayIs('idle.enDay')) return false; daily();
+    if (tinyBeacon({ v: 1, en: act, ar: armNow() })) { dayMark('idle.enDay'); return true; } return false; };
+  window.__engaged = engaged;
+  { let n = 0; const iv = setInterval(() => { if (daily() || ++n > 60) clearInterval(iv); }, 1000); addEventListener('visibilitychange', () => { if (!document.hidden) daily(); }); }
+  const genesisNow = () => { try { const G = window.__genesis, st = G && G.state && G.state(); return !!(st && st.on && !st.alive); } catch (e) { return false; } };
+  addEventListener('idle:optext', () => { if (!genesisNow()) engaged('op_msg'); });
+  addEventListener('idle:ev', e => { const d = e.detail || {}, x = d.extra || {};
+    switch (d.type) {
+      case 'chat': engaged('irc_msg'); break;
+      case 'whisper': engaged('cr_talk'); break;
+      case 'feel': if (x.what === 'click') engaged('cr_card'); break;
+      case 'rename': if (x.by === 'you') engaged('cr_name'); break;
+      case 'feed': engaged('cr_feed'); break;
+      case 'oracle_vote': engaged('vote'); break;
+      case 'oracle_sent': engaged('sci_sent'); break; } });
+  // funnel moments that are deliberate acts: finishing Genesis, joining the Humans in the Loop, judging a review item, the one-tap ask
+  { const FM = { e1done: 'e0_done', rv_in: 'hitl_join', rv_nah: 'review', rv_like: 'review', rv_love: 'review', e0_ask_name: 'ask_name', e0_ask_logo: 'ask_logo' };
+    const wrap = () => { const F = window.__funnel; if (!F || F._en) return !!F; const m0 = F.mark; F.mark = k => { const r = m0.call(F, k); if (FM[k]) engaged(FM[k]); return r; }; F._en = 1; return true; };
+    if (!wrap()) addEventListener('load', wrap, { once: true }); }
+  window.__stats = { live, armBeacon, engaged, daily, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _e2: () => ({ ...e2part(), path: E2.path.join('>') }), _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop(), eg: engage(), since, back: backBucket() }) };
 })();

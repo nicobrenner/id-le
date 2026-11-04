@@ -138,10 +138,10 @@ def call(path, tok, raw=False, body=None):
 
 
 # the storyline's funnel (helper/worker.js 'sf': "arm|step" → browsers), in the order a player meets them
-SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play", "e0_tap", "ch_story", "ch_play", "pw_shown", "pw_story", "st_resume", "st_restart"]
+SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play", "e0_tap", "e0_ask_name", "e0_ask_logo", "e0_ask_both", "e0_ask_skip", "ch_story", "ch_play", "pw_shown", "pw_story", "st_resume", "st_restart"]
 SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
             "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)",
-            "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground", "e0_tap": "tapped a creature in the look-around",
+            "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground", "e0_tap": "tapped a creature in the look-around", "e0_ask_name": "the ask: named the first creature", "e0_ask_logo": "the ask: picked an opening", "e0_ask_both": "the ask: liked both openings", "e0_ask_skip": "the ask: skipped",
             "ch_story": "chooser: the storyline", "ch_play": "chooser: the playground", "pw_shown": "playground welcome shown", "pw_story": "playground welcome: started the story",
             "st_resume": "⚙ storyline: resumed", "title_auto": "title card auto-started", "sound_on": "turned the sound on", "st_restart": "⚙ storyline: restarted"}
 
@@ -179,6 +179,37 @@ def internal_tags():
 
 def is_internal(tag, tags):
     return tag in tags or bool(re.search(r"^(internal|smoke)|-(check|test)$", tag))
+
+
+EN_LABELS = {"op_msg": "talked to the Operator", "irc_msg": "wrote in IRC", "cr_talk": "talked to a creature", "cr_card": "opened a creature's card",
+             "cr_name": "named a creature", "cr_feed": "fed a creature", "e0_done": "finished Genesis", "vote": "voted on the roadmap",
+             "sci_sent": "told the scientists", "hitl_join": "joined the Humans in the Loop", "review": "judged a review item",
+             "ask_name": "named their first creature (the ask)", "ask_logo": "picked an opening (the ask)"}
+
+
+def engaged_lines(days):
+    """real engagement (Nov 4): browsers here today (dd), those that did at least one deliberate act (en, by first act), and those that
+    came back on a later day than their first visit (cb), per arm; all once per browser per day, from idle-stats.js's tiny beacons.
+    Our own checks are kept apart (int)"""
+    dd, en, cb = {}, {}, {}
+    for d in days.values():
+        for k, n in (d.get("dd") or {}).items(): dd[k] = dd.get(k, 0) + n
+        for k, n in (d.get("en") or {}).items():
+            arm, act = k.split("|", 1); en.setdefault(arm, {}); en[arm][act] = en[arm].get(act, 0) + n
+        for k, n in (d.get("cb") or {}).items():
+            arm, b = k.split("|", 1); cb.setdefault(arm, {}); cb[arm][b] = cb[arm].get(b, 0) + n
+    if not dd and not en and not cb:
+        return
+    print("engaged (browser-days: here, did something on purpose, came back; once per browser per day; our own checks excluded):")
+    for arm in ["story", "choose", "play", "none"]:
+        here, acts, back = dd.get(arm, 0), en.get(arm, {}), cb.get(arm, {})
+        if not (here or acts or back):
+            continue
+        ne = sum(acts.values()); pct = f" ({100 * ne / here:.0f}%)" if here else ""
+        first = ", ".join(f"{EN_LABELS.get(a, a)} {n}" for a, n in sorted(acts.items(), key=lambda kv: -kv[1]))
+        nb = sum(back.values()); bk = ", ".join(f"{b} {n}" for b, n in sorted(back.items()))
+        print(f"  {arm:<7} engaged: {ne} of {here} browsers{pct}" + (f" · first act: {first}" if first else "")
+              + f" · came back: {nb}" + (f" ({bk})" if bk else ""))
 
 
 def arms_line(days):
@@ -476,7 +507,7 @@ def main():
         print(f"no stats since {since}")
         return
     print(f"id-le.com anonymous stats, {since} .. today (UTC)\n")
-    internal_line(days); arms_line(days)
+    internal_line(days); arms_line(days); engaged_lines(days)
     srv = server_days(days)
     if srv:
         print("Counted by our server (every page request; bots apart; visitors estimated without cookies, about ±2-3%)")

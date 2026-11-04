@@ -177,6 +177,7 @@ html.gen-look :is(#toHandle,#genTag,#genDay,#lab-toggle){opacity:0!important;poi
 #genConsole .gstamp{display:inline-block;font:700 13px/1 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.14em;color:#ffcf7a;border:1.5px solid #ffcf7a99;border-radius:4px;padding:5px 9px;margin:2px 0 10px}
 #genConsole .gm{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}#genConsole .gm button{font:600 14px var(--ui-font,system-ui);padding:9px 16px;border-radius:14px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;cursor:pointer}
 #genConsole .gm button.go{background:#3a46c8;border-color:#cfd6ff}#genConsole .gm button:hover{background:#2a3180}
+#genConsole .gask{margin:8px 0 2px;padding:10px 12px;border:1px solid #8ea0ff55;border-radius:12px;background:#121633cc}#genConsole .gask .gq{font:600 15px/1.35 var(--op-font,var(--ui-font,system-ui));color:#e8ebff;margin-bottom:8px}#genConsole .gaskr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}#genConsole .gaskr button{font:600 14px var(--ui-font,system-ui);padding:8px 14px;border-radius:14px;border:1px solid #8ea0ff88;background:#1d2350;color:#e8ebff;cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;gap:4px}#genConsole .gaskr button.go{background:#3a46c8;border-color:#cfd6ff}#genConsole .gaskr button.gskip{background:none;border-color:#8ea0ff44;color:#aab3e6;font-weight:500}#genConsole .gaskr button canvas{width:120px;height:50px;border-radius:6px;background:#000}#genConsole .gaskr input{flex:1 1 140px;min-width:0;font:15px var(--ui-font,system-ui);padding:8px 10px;border-radius:10px;border:1px solid #8ea0ff88;background:#0b0e24;color:#fff}#genConsole .gask-done{color:#ffcf7a}
 #genConfirm{position:fixed;inset:0;z-index:2147482700;display:flex;align-items:center;justify-content:center;padding:16px;background:#02030ab8;backdrop-filter:blur(2px)}
 #genConfirm .cb{width:min(400px,100%);padding:18px 20px 16px;border-radius:16px;background:#0a0b16f7;color:#e9ecff;box-shadow:0 24px 90px #000c,0 0 0 1px #6b7cff55;font:15px/1.45 var(--op-font,Georgia,serif)}
 #genConfirm .cr{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}#genConfirm .cr button{flex:1 1 140px;font:600 13.5px var(--ui-font,system-ui);padding:10px 12px;border-radius:12px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;cursor:pointer}#genConfirm .cr button[data-c=stay]{background:#3a46c8;border-color:#cfd6ff}
@@ -300,8 +301,8 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     else body = (storyMode() ? '' : `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>`) +
       (storyMode() ? '' : `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`);
     let said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
-    if (moment) { said = `<div class="gstamp">${esc(MOMENT.stamp)}</div>` + said; body = moment.ready ? `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : ''; }
-    c.innerHTML = said + body; tag(); cls('gen-noclose', storyMode() && (!(S && S.days && S.days[0]) || !!moment));
+    if (moment) { said = `<div class="gstamp">${esc(MOMENT.stamp)}</div>` + said; body = moment.ready ? askHtml() + `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : ''; }
+    c.innerHTML = said + body; if (moment && moment.ready) setTimeout(askStills, 0); tag(); cls('gen-noclose', storyMode() && (!(S && S.days && S.days[0]) || !!moment));
     prefill(); trimChat(); if (storyMode() && S && S.on && !$('#op-check') && !(S.days && S.days[0])) try { renderDay(); } catch (e) {}   // the ✅ from the first line on
     try { window.__opwin && window.__opwin.refresh(); } catch (e) {} }
   // the 🛠 tray's chip in the storyline's Genesis (idle-opwin.js): the step's command, or nothing while the Operator talks or a step runs
@@ -463,6 +464,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
       const back = hold.splice(0, 2); back.forEach((c, i) => { c.x = c.tx = w.x + (i ? 26 : -26); c.y = c.ty = w.y + 10; if (c.el) c.el.style.visibility = ''; if (!cs.includes(c)) cs.push(c); names.push(c.name); });
       if (!back.length || family) { const n = W() && W().spawn(family || 'crawly'); if (n) names.push(n); }
       if (!names.length) return null;
+      land.firstBorn = names[0];   // the one-tap ask at the moment names this one
       cosmos.calm(0.25); done('creatures', null, { x: w.x, y: w.y }, { who: names.join(' and ') }); return names; } }
   // v14, the storyline's life (Nico: "on let there be life, do: 1-3 lightning/thunder effects, creatures appear, (or maybe for each thunder 1
   // creature appears, total 3?), wait 1-3 seconds after the 3rd one, start background music.... and only after maybe 5-10 seconds of the user
@@ -493,6 +495,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
         { const cc = name && h.creatures().find(x => x.name === name); if (cc) setTimeout(() => firstWords(cc, i), RM ? 100 : 450); }
         if (i < 2) await sleep(RM ? 300 : LIFE.gap); }
       if (!names.length) return null;
+      land.firstBorn = names[0];   // the one-tap ask at the moment names this one
       cosmos.calm(0.25); done('creatures', null, { x: first.x, y: first.y }, { who: names.join(', ') });
       await sleep(RM ? 400 : LIFE.quiet); music();
       cls('gen-look', 1); land.look = { t0: now(), rings: 0, hint: null }; const until0 = now() + LIFE.look, born = names.map(n => h.creatures().find(x => x.name === n)).filter(Boolean);
@@ -939,6 +942,37 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
       'ready?'],
     start: 'start Epoch 1', play: () => PG().icon + ' ' + PG().short,
     confirm: { q: 'are you sure? the story will wait for you. you can always come back from ⚙', stay: 'stay in the story', go: () => 'go to ' + PG().short } };
+  // the one-tap ask (Nov 4, Nico: "real engagement… a user saw this, clicked/interacted, and they want to participate"): before the two ways
+  // on, the Operator asks one light question with one-tap answers. Never blocks: the [start Epoch 1] / [🛝] buttons stay right there, and
+  // 'skip' is one tap. MODE 'name' by default: every player has a first creature to name, while most saw only ONE of the two openings (the
+  // logo A/B), so "which opening did you like more?" ('logo') asks about something they mostly didn't see; switch ASK.mode when wanted.
+  // DRAFT: every word below is a draft for Nico.
+  const ASK = { draft: true, mode: 'name',
+    name: { q: 'your first creature needs a name. what should we call it?', ph: 'a name…', ok: 'name it', pool: ['Pixel', 'Echo', 'Byte', 'Loopy', 'Nova', 'Wisp', 'Glim', 'Momo', 'Zed', 'Tiko', 'Lumi', 'Bit'],
+      thanks: n => `${n} it is. hello, ${n} 👋` },
+    logo: { q: 'which opening did you like more?', a: ['c3-typed-dust', 'the dust'], b: ['c3-typed-crt', 'the old TV'], both: 'both', thanks: 'noted, thank you! it helps pick the opening' },
+    skip: 'skip' };
+  const askChips = () => { const p = ASK.name.pool.slice(), out = []; while (out.length < 3 && p.length) out.push(p.splice(Math.floor(Math.random() * p.length), 1)[0]); return out; };
+  const askHtml = () => { if (!moment || !moment.ready) return '';
+    if (moment.ask === 'done') return moment.askMsg ? `<div class="gl gask-done">${esc(moment.askMsg)}</div>` : '';
+    if (ASK.mode === 'logo') { const L = ASK.logo;
+      return `<div class="gask"><div class="gq">${esc(L.q)}</div><div class="gaskr">${[L.a, L.b].map(([id, lab], i) => `<button data-ask="pick" data-w="${esc(id)}" data-l="${esc(i ? L.a[0] : L.b[0])}"><canvas width="120" height="50" data-still="${esc(id)}"></canvas><span>${esc(lab)}</span></button>`).join('')}<button data-ask="both">${esc(L.both)}</button><button data-ask="skip" class="gskip">${esc(ASK.skip)}</button></div></div>`; }
+    const N = ASK.name, ch = moment.chips = moment.chips || askChips();
+    return `<div class="gask"><div class="gq">${esc(N.q)}</div><div class="gaskr">${ch.map(n => `<button data-ask="chip" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div>` +
+      `<div class="gaskr"><input id="genAskName" maxlength="24" placeholder="${esc(N.ph)}" autocomplete="off"><button data-ask="name" class="go">${esc(N.ok)}</button><button data-ask="skip" class="gskip">${esc(ASK.skip)}</button></div></div>`; };
+  const askStills = () => { try { const L = window.IdleLogos; if (!L || !L.byId) return; document.querySelectorAll('#genConsole canvas[data-still]').forEach(cv => { if (cv._s) return; cv._s = 1; const lg = L.byId(cv.dataset.still); if (lg && lg.still) Promise.resolve(lg.still(cv)).catch(() => {}); }); } catch (e) {} };
+  const askDone = (msg, k) => { if (!moment) return; moment.ask = 'done'; moment.askMsg = msg || ''; if (k) mark(k); renderConsole(); };
+  const askName = raw => { const n = String(raw || '').replace(/[<>\n\r]/g, '').trim().slice(0, 24); if (!n) return;
+    const old = land.firstBorn; let got = null; try { got = old && W() && W().rename(old, n); } catch (e) {} if (got) land.firstBorn = got;
+    askDone(ASK.name.thanks(got || n), 'e0_ask_name'); };
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#genConsole [data-ask]'); if (!b || !moment || !moment.ready || moment.ask === 'done') return;
+    const a = b.dataset.ask;
+    if (a === 'chip') return askName(b.dataset.n);
+    if (a === 'name') { const i = $('#genAskName'); return askName(i && i.value); }
+    if (a === 'pick') { try { window.__reviews && window.__reviews.askPick && window.__reviews.askPick(b.dataset.w, b.dataset.l); } catch (er) {} return askDone(ASK.logo.thanks, 'e0_ask_logo'); }
+    if (a === 'both') return askDone(ASK.logo.thanks, 'e0_ask_both');
+    if (a === 'skip') return askDone('', 'e0_ask_skip'); });
+  document.addEventListener('keydown', e => { if (e.key !== 'Enter' || !e.target || e.target.id !== 'genAskName') return; e.preventDefault(); e.stopPropagation(); askName(e.target.value); }, true);
   let moment = null;
   async function epochMoment(d) { const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; moment = { ready: false, at: now() };
     let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
@@ -1066,6 +1100,6 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   function pending() { try { if (!storyMode() || !S || !S.on) return 0; const d = dayOf(S.day || 0); if (!d || (S.days && S.days[d.n]) || (d.n > 0 && !builtNext(d.n))) return 0;
     return d.goals.filter(([k]) => !(d.n === 0 ? did(k) : false)).length; } catch (e) { return 0; } }
   // ready(): v15 — also only once the window is actually up (not during the landing, the dawn or a step's aside)
-  window.__genesis = { gate: () => lastGate && { ...lastGate }, gateOf, gateNgrams, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { ask: () => ({ mode: ASK.mode, state: moment ? (moment.ready ? (moment.ask || 'open') : 'typing') : null, msg: moment && moment.askMsg, first: land.firstBorn, q: { name: ASK.name.q, logo: ASK.logo.q } }), askSet: m => { if (m === 'name' || m === 'logo') ASK.mode = m; }, gate: () => lastGate && { ...lastGate }, gateOf, gateNgrams, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
