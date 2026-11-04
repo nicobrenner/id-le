@@ -167,7 +167,7 @@ const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 
   // v3: the 🌱 HITL tab opened
   'rv_tab',
   // slash commands (idle-slash.js): each command used at least once by this browser, and lines that named no command
-  'sc_help', 'sc_operator', 'sc_card', 'sc_rename', 'sc_pedia', 'sc_settings', 'sc_scientists', 'sc_roadmap', 'sc_hitl', 'sc_oracle', 'sc_music', 'sc_deck', 'sc_stats', 'sc_ocean', 'sc_find', 'sc_weather', 'sc_evolve', 'sc_rave', 'sc_spawn', 'sc_name', 'sc_unknown'];
+  'sc_help', 'sc_operator', 'sc_card', 'sc_rename', 'sc_pedia', 'sc_settings', 'sc_story', 'sc_scientists', 'sc_roadmap', 'sc_hitl', 'sc_oracle', 'sc_music', 'sc_deck', 'sc_stats', 'sc_ocean', 'sc_find', 'sc_weather', 'sc_evolve', 'sc_rave', 'sc_spawn', 'sc_name', 'sc_unknown'];
 const ARM = g => g === 'story' || g === 'choose' || g === 'play' ? g : g === 'current' ? 'play' : 'none';   // v15: the storyline's three arms
 const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });

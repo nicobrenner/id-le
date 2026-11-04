@@ -1714,7 +1714,7 @@ def t_story(P):
     pg.click("#genDay .x"); wait_for(pg, "() => !document.querySelector('#genDay.end')", 5, P=P)
     wait_for(pg, "() => !!document.querySelector('#genConsole [data-goracle]')", 10, P=P)
     need(pg.evaluate("() => document.querySelector('#ai-thread').textContent.includes(window.__genesis.oracleLine)"), "the Operator should say the Oracle line")
-    pg.click("#toHandle"); wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 5, P=P)
+    pg.evaluate("() => window.__opwin.open()"); wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 5, P=P)
     pg.click("#genConsole [data-goracle]"); pg.wait_for_timeout(300)
     need(pg.evaluate("() => window.__oracleBox.isOpen() && !!document.querySelector('#oracleBox #ai-brain') && window.__opwin.yielding() === '#oracleBox:not([hidden])'"), "the tour's 🔮 should open the Oracle lightbox, the Operator stepping aside")
     pg.keyboard.press("Escape"); pg.wait_for_timeout(500)
