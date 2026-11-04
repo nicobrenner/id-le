@@ -2946,6 +2946,104 @@ def t_operator_float_phone(P):
 
 
 
+def t_slash(P):
+    """Slash commands (idle-slash.js; Nico: ""/oracle" omg, I love this feature… open/close windows from the chat with /deck, or /music, or
+    /stats, or /ocean, or /find Craw*"): "/" opens the list in the Operator's input, in IRC and in a creature's mind chat; /music opens the
+    music and /music again closes it; /find Craw* opens a Crawly's card; /weather sets the weather; an unknown command gets suggestions; a
+    line without "/" goes to the Operator as before; every command is in the worker's allowlist (sc_*); in Genesis only the harmless ones."""
+    # static: every command (and sc_unknown) is an allowlisted funnel moment
+    src = open(os.path.join(ROOT, "demo", "idle-slash.js")).read(); wk = open(os.path.join(ROOT, "helper", "worker.js")).read()
+    names = re.findall(r"\{ name: '([a-z-]+)', aliases", src)
+    miss = [n for n in names + ["unknown"] if f"'sc_{n}'" not in wk]
+    need(len(names) >= 17 and not miss, f"every slash command should be allowlisted in the worker: {len(names)} commands, missing {miss}")
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    LIST = "() => { const b = document.querySelector('#slashList'); return b && b.classList.contains('on') ? [...b.querySelectorAll('.it .n')].map(e => e.textContent) : null; }"
+    # the Operator's input
+    pg.click("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(300)
+    pg.click("#lab-text"); pg.keyboard.type("/")
+    wait_for(pg, "() => !!document.querySelector('#slashList.on')", 3, P=P)
+    l1 = pg.evaluate(LIST); need(l1 and "/music" in l1 and "/find" in l1 and "/weather" in l1 and "/help" in l1, f"'/' in the Operator lists the commands: {l1}")
+    pg.keyboard.type("mu"); pg.wait_for_timeout(150); l2 = pg.evaluate(LIST); need(l2 == ["/music"], f"'/mu' filters to /music: {l2}")
+    pg.keyboard.press("Escape"); need(pg.evaluate(LIST) is None, "Esc closes the list")
+    # /music toggles the music panel: open, then closed
+    pg.fill("#lab-text", "/music"); pg.keyboard.press("Enter"); pg.wait_for_timeout(300)
+    m1 = pg.evaluate("() => document.querySelector('#dj').classList.contains('on')")
+    pg.fill("#lab-text", "/music"); pg.keyboard.press("Enter"); pg.wait_for_timeout(300)
+    m2 = pg.evaluate("() => document.querySelector('#dj').classList.contains('on')")
+    need(m1 and not m2 and pg.evaluate("() => document.querySelector('#lab-text').value") == "", f"/music opens the music, /music again closes it: {m1}, {m2}")
+    # /find Craw*: a Crawly's card
+    crawly = pg.evaluate("() => (window.__arena.raw().find(c => !c.lab && !c.guest && /^craw/i.test(c.name || '')) || {}).name || null")
+    need(crawly, "the starter world should have a creature whose name starts with Craw")
+    pg.fill("#lab-text", "/find Craw*"); pg.keyboard.press("Enter")
+    pg.wait_for_timeout(2500)
+    fs = pg.evaluate("() => { const w = document.querySelector('#whisper'); return { wd: getComputedStyle(w).display, wt: w.innerText.slice(0, 60), th: document.querySelector('#ai-thread').innerText.slice(-200), lab: document.querySelector('#lab').className, slash: !!window.IdleSlash, val: document.querySelector('#lab-text').value }; }")
+    need(fs["wd"] != "none" and "craw" in fs["wt"].lower() and "🔎 craw" in fs["th"].lower(), f"/find Craw* opens a Crawly's card: {fs}")
+    # /weather: sun, then rain
+    pg.fill("#lab-text", "/weather sun"); pg.keyboard.press("Enter"); wait_for(pg, "() => window.__idleWorld.summary().weather.kind === 'clear'", 6, P=P)
+    pg.fill("#lab-text", "/weather rain"); pg.keyboard.press("Enter"); wait_for(pg, "() => window.__idleWorld.summary().weather.kind === 'bitrain'", 6, P=P)
+    # the send button runs a command line too (on a phone that's how you send)
+    pg.fill("#lab-text", "/music"); pg.click("#lab-send"); pg.wait_for_timeout(300)
+    need(pg.evaluate("() => document.querySelector('#dj').classList.contains('on')"), "the send button runs /music too")
+    pg.fill("#lab-text", "/music"); pg.click("#lab-send"); pg.wait_for_timeout(300)
+    # unknown → suggestions, in the Operator's chat
+    pg.fill("#lab-text", "/musik"); pg.keyboard.press("Enter"); pg.wait_for_timeout(400)
+    th = pg.evaluate("() => document.querySelector('#ai-thread').innerText")
+    need("there's no /musik" in th and "/music" in th, f"an unknown command gets suggestions: {th[-300:]}")
+    # a line without "/" goes to the Operator as it always did
+    n0 = pg.evaluate("() => document.querySelectorAll('#ai-thread > *').length")
+    pg.fill("#lab-text", "hello there"); pg.click("#lab-send"); pg.wait_for_timeout(800)
+    th2 = pg.evaluate("() => document.querySelector('#ai-thread').innerText")
+    need("hello there" in th2 and pg.evaluate("() => document.querySelectorAll('#ai-thread > *').length") > n0, "a plain line still goes to the Operator")
+    fun = pg.evaluate("() => Object.keys(JSON.parse(localStorage.getItem('idle.funnel') || '{}'))")
+    need(all(k in fun for k in ("sc_music", "sc_find", "sc_weather", "sc_unknown")), f"funnel moments for the commands used: {fun}")
+    # IRC
+    pg.evaluate("() => { const o = document.querySelector('#rc-open'); if (o && getComputedStyle(o).display !== 'none') o.click(); }"); pg.wait_for_timeout(300)
+    pg.evaluate("() => { const i = document.querySelector('#chat'); i.focus(); i.value = ''; }"); pg.keyboard.type("/")
+    wait_for(pg, "() => !!document.querySelector('#slashList.on')", 3, P=P); l3 = pg.evaluate(LIST)
+    pg.keyboard.press("Escape"); pg.evaluate("() => { document.querySelector('#chat').value = ''; }")
+    # IRC is shared: a world command shows in the channel as yours; /op toggles the Operator from IRC
+    pg.keyboard.type("/weather sun"); pg.keyboard.press("Enter"); wait_for(pg, "() => window.__idleWorld.summary().weather.kind === 'clear'", 6, P=P)
+    need("ran /weather sun" in pg.evaluate("() => document.querySelector('#log').innerText"), "IRC: '/weather sun' shows in the channel as yours")
+    o0 = pg.evaluate("() => window.__opwin.isOpen()"); pg.evaluate("() => document.querySelector('#chat').focus()"); pg.keyboard.type("/op"); pg.keyboard.press("Enter"); pg.wait_for_timeout(500)
+    need(pg.evaluate("() => window.__opwin.isOpen()") != o0, f"/op from IRC toggles the Operator (was open: {o0})")
+    # a creature's mind chat
+    pg.evaluate("n => window.__idleWorld.openCard(n)", crawly); wait_for(pg, "() => getComputedStyle(document.querySelector('#whisper')).display !== 'none'", 6, P=P)
+    pg.evaluate("() => { const i = document.querySelector('#whisperIn'); i.focus(); i.value = ''; }"); pg.keyboard.type("/")
+    wait_for(pg, "() => !!document.querySelector('#slashList.on')", 3, P=P); l4 = pg.evaluate(LIST)
+    need(l3 and "/music" in l3 and "/weather" in l3 and "/rename" not in l3, f"IRC: the window toggles and the world commands, not the creature ones: {l3}")
+    need(l4 and all(x in l4 for x in ("/find", "/card", "/rename", "/evolve", "/operator", "/music")) and "/weather" not in l4 and "/spawn" not in l4, f"a mind chat: the window toggles and this creature's commands: {l4}")
+    # /help in the mind chat lists only what works there (the note above its input); /rename renames this creature
+    pg.keyboard.press("Escape"); pg.evaluate("() => { document.querySelector('#whisperIn').value = ''; }"); pg.keyboard.type("/help"); pg.keyboard.press("Enter"); pg.wait_for_timeout(300)
+    note = pg.evaluate("() => { const n = document.querySelector('#slashNote'); return n && n.classList.contains('on') ? n.textContent : ''; }")
+    need("/rename" in note and "/music" in note and "/weather" not in note, f"/help in a mind chat lists only its own commands: {note}")
+    pg.evaluate("() => { const i = document.querySelector('#whisperIn'); i.focus(); i.value = ''; }"); pg.keyboard.type("/rename Pipsqueak"); pg.keyboard.press("Enter")
+    wait_for(pg, "() => !!window.__arena.raw().find(c => c.name === 'Pipsqueak')", 6, P=P)
+    pg.close()
+    # Genesis: only the harmless ones
+    pg = P.open("/arena.html?at=lights"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+    wait_for(pg, "() => !!(window.__genesis && window.__genesis.unlocks().story && window.IdleSlash)", 30, P=P)
+    g = pg.evaluate("() => ({ list: window.IdleSlash.list('operator').map(c => c.name), weather: window.IdleSlash.why('weather'), oracle: window.IdleSlash.why('oracle') })")
+    need("help" in g["list"] and "settings" in g["list"] and "pedia" in g["list"] and not any(n in g["list"] for n in ("weather", "find", "spawn", "music", "evolve", "rave", "oracle")),
+         f"in Genesis only the harmless commands: {g}")
+    need(g["weather"] and "later" in g["weather"] and g["oracle"] == "not in the storyline", f"why /weather and /oracle aren't there: {g}")
+    P.clean()
+    return f"{len(names)} commands; '/' lists in 3 inputs; /music toggles; /find Craw* → {crawly}; /weather sun→rain; suggestions; Genesis: {', '.join(g['list'])}"
+
+
+def t_slash_phone(P):
+    """Slash commands on a phone (375×667): '/' opens the list inside the screen, a tap on a command that takes nothing runs it."""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.tap("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(400)
+    pg.tap("#lab-text"); pg.keyboard.type("/m")
+    wait_for(pg, "() => !!document.querySelector('#slashList.on')", 3, P=P)
+    r = pg.evaluate("() => { const r = document.querySelector('#slashList').getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, W: innerWidth, fs: parseFloat(getComputedStyle(document.querySelector('#slashList')).fontSize) }; }")
+    need(r["l"] >= 0 and r["r"] <= r["W"] and r["t"] >= 0 and r["fs"] >= 15, f"phone: the list fits the screen, 15 px+: {r}")
+    pg.tap("#slashList .it:has(.n:text-is('/music'))"); pg.wait_for_timeout(400)
+    need(pg.evaluate("() => document.querySelector('#dj').classList.contains('on')"), "phone: tapping /music runs it")
+    P.clean()
+    return f"the list fits ({round(r['r'] - r['l'])} px wide, {r['fs']} px text); a tap runs /music"
+
+
 def t_story_input_visible(P):
     """v14 (Nico: "this last operator's chat box input is under the fold"): through Genesis (the Operator's opening, lights, words, life, the
     Epoch 0 moment), whenever the Operator's window is shown its input is fully on screen and inside the window, on a computer and on two
@@ -3129,7 +3227,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "slash", "slash phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3191,6 +3289,8 @@ def main():
                 run("story input visible", t_story_input_visible)
                 run("operator float", t_operator_float)
                 run("operator float phone", t_operator_float_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
+                run("slash", t_slash)
+                run("slash phone", t_slash_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story end phone", t_story_end_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story v6", t_story_v6)
                 run("title card", t_title_card)

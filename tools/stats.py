@@ -146,6 +146,15 @@ def fd_total(sfs):
     return t
 
 
+def sc_total(sfs):
+    """slash commands (idle-slash.js): browsers that used each command at least once, summed over the arms"""
+    t = {}
+    for o in sfs.values():
+        for k, n in o.get("sc", {}).items():
+            t[k] = t.get(k, 0) + n
+    return t
+
+
 def sf_split(sf):
     """{'story|title': n, 'story|skip:chat': n, 'none|offer_shown': n, ...} → {arm: {'steps': {...}, 'skips': {...}, 'offer': {...}}}"""
     out = {}
@@ -158,6 +167,8 @@ def sf_split(sf):
             o["skips"][step[5:]] = o["skips"].get(step[5:], 0) + n
         elif step.startswith("fd_"):
             o.setdefault("fd", {})[step[3:]] = o.setdefault("fd", {}).get(step[3:], 0) + n
+        elif step.startswith("sc_"):
+            o.setdefault("sc", {})[step[3:]] = o.setdefault("sc", {}).get(step[3:], 0) + n
         elif step.startswith("end_"):
             o.setdefault("end", {})[step[4:]] = o.setdefault("end", {}).get(step[4:], 0) + n
         elif step.startswith("offer_"):
@@ -474,6 +485,9 @@ def main():
                 print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
             if o.get("end"):
                 en = o["end"]; print(f"           end of what's built: shown {en.get('shown', 0)}, roadmap {en.get('roadmap', 0)}, GitHub {en.get('github', 0)}, the playground {en.get('free', 0)}")
+        sc = sc_total(sfs)
+        if sc:
+            print("\nslash commands (browsers that used each, once): " + ", ".join(f"/{k} {n}" if k != "unknown" else f"(no such command) {n}" for k, n in sorted(sc.items(), key=lambda kv: -kv[1])))
         fd = fd_total(sfs)
         if fd:
             print("\nFounder gift (browsers, once each): " + ", ".join(f"{lab} {fd.get(k, 0)}" for k, lab in FD_STEPS)
@@ -609,6 +623,10 @@ def dashboard(days, since, traffic, note):
             f'<p class="muted">{e(arm)}: {starts} new browsers, first days {c0} .. {c1}</p>' + bars([(lab, num) for lab, num, den, pct in rows], total=starts or None)
             + f'<p class="muted">{e(" · ".join(f"{lab}: {num}/{den}" + (f" ({pct:.0f}%)" if pct is not None else " (too early)") for lab, num, den, pct in rows))}</p>'
             for arm, (starts, rows, c0, c1) in sorted(_rbr.items())) + "</section>")
+    _sc = sc_total(_sf)
+    if _sc:
+        sf_html += ("<section><h2>Slash commands</h2><p class=\"muted\">Browsers that used each command at least once (typed in the Operator, IRC or a mind chat).</p>"
+                    + bars([(("/" + k) if k != "unknown" else "(no such command)", n) for k, n in sorted(_sc.items(), key=lambda kv: -kv[1])], total=max(max(_sc.values()), 1)) + "</section>")
     _fd = fd_total(_sf)
     if _fd:
         sf_html += ("<section><h2>Founder gift</h2><p class=\"muted\">Browsers reaching each moment (once per browser).</p>" + bars([(lab, _fd.get(k, 0)) for k, lab in FD_STEPS], total=max(_fd.get("world", 0) + _fd.get("link", 0), 1))
