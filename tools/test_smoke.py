@@ -695,8 +695,15 @@ class Page:
         return pg
 
 
+def load_factor():
+    """how much longer to wait on an overloaded Mac: the 1-minute load over the cores, 1× to 3× (speed2: a loaded machine slows the page,
+    not the assertion; at load 28 on 16 cores three parallel boots of the site took over 90 s)"""
+    try: return max(1.0, min(3.0, os.getloadavg()[0] / (os.cpu_count() or 4)))
+    except OSError: return 1.0
+
+
 def wait_for(pg, js, timeout=60, every=0.5, P=None):
-    t0 = time.time()
+    t0 = time.time(); timeout = timeout * load_factor()
     while time.time() - t0 < timeout:
         if P is not None: P.clean()   # a feature that switched itself off fails now, with its own words, instead of a timeout
         try: v = pg.evaluate(js)
@@ -705,7 +712,7 @@ def wait_for(pg, js, timeout=60, every=0.5, P=None):
             v = None
         if v: return v
         time.sleep(every)
-    raise AssertionError(f"timed out after {timeout}s waiting for {js[:80]}")
+    raise AssertionError(f"timed out after {timeout:.0f}s waiting for {js[:80]}")
 
 
 def booted(pg):
@@ -1860,7 +1867,7 @@ def t_story_keys_logo(P):
     return " · ".join(out) + "; a stale idle-logos.js → the old logo, then the landing"
 
 
-def t_story_keys(P):
+def t_story_keys(P, keys=None):
     """Keyframes (idle-keys.js, staging/local; Nico: "markers or key frames to go to either with # or & parameters in the url"): every key
     loads to its moment in time (the intro ones at their second of the film, the later ones with the state they need built), after one
     key press (the sound's gate; the title card is its own); the player's real localStorage is never read or written; #keys shows the strip."""
@@ -1876,7 +1883,9 @@ def t_story_keys(P):
         return pg
     intro = {"computer": "messages", "labchat": "chat", "boot": "boot", "run": "run", "crash": "run", "logo": "crash"}
     got = {}
-    for i, k in enumerate(["title", "computer", "labchat", "boot", "run", "crash", "logo", "dark", "operator", "lights", "words", "life", "epoch0done", "epoch1", "end"]):
+    ALL = ["title", "computer", "labchat", "boot", "run", "crash", "logo", "dark", "operator", "lights", "words", "life", "epoch0done", "epoch1", "end"]
+    for i, k in enumerate(ALL):   # split into groups (speed2): each group its own check, in parallel workers; the URL form still follows the key's index
+        if keys is not None and k not in keys: continue
         t0 = time.time(); pg = go(k, ("hash", "at", "bare")[i % 3])
         if k == "title":
             wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.waiting())", 40, P=P)
@@ -1909,6 +1918,11 @@ def t_story_keys(P):
         got[k] = round(time.time() - t0, 1)
         need(not pg.evaluate("() => localStorage.getItem('arena.genomes') === 'REAL' || localStorage.getItem('idle.genesis') === 'REAL'"), f"{k}: the keyframe must not see the real localStorage")
         if k != "end": pg.close()
+    if keys is not None and "end" not in keys:   # a group without the end card: just the real localStorage, untouched
+        pg = P.open("/privacy.html"); real = pg.evaluate("() => Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]))"); pg.close()
+        need(real == {"arena.genomes": "REAL", "idle.genesis": "REAL"}, f"keyframes wrote to the real localStorage: {sorted(real)[:8]}")
+        P.clean()
+        return f"{len(got)} keyframes, seconds to reach each: " + ", ".join(f"{k} {v}" for k, v in got.items()) + "; real localStorage untouched"
     # the end card (still open in pg): its three ways on
     e = pg.evaluate("() => { const d = document.querySelector('#genDay.end'), r = d.getBoundingClientRect(), a = d.querySelector('[data-end=github]'); return { text: d.innerText, href: a && a.href, repo: window.IDLE_REPO, in: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, font: getComputedStyle(d.querySelector('.dt')).fontFamily, op: getComputedStyle(d.querySelector('.el')).fontFamily }; }")
     need("WORK IN PROGRESS" in e["text"].upper() and "roadmap" in e["text"] and "GitHub" in e["text"] and "the playground" in e["text"] and "free-play" not in e["text"] and e["in"], f"the end card: {e}")
@@ -1929,7 +1943,7 @@ def t_story_keys(P):
     ch = pg.evaluate("() => window.__opwin.tray().chips"); pg.evaluate("() => window.__opwin.toggleTray()"); pg.wait_for_timeout(400)
     ch = pg.evaluate("() => window.__opwin.tray()")
     need(ch["chips"][:1] == ["📖 back to the story"], f"the playground's 🛠: '📖 back to the story' first: {ch}")
-    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); st_txt = pg.evaluate("() => document.querySelector('#settings').innerText")
+    pg.evaluate("() => window.__settings.open()"); wait_for(pg, "() => !!document.querySelector('#settings.on')", 5); st_txt = pg.evaluate("() => document.querySelector('#settings').innerText")
     need("📖 Storyline" in st_txt and "Epoch 1 · unnamed" in st_txt and "Back to the storyline" not in st_txt and "Storyline mode" not in st_txt, f"⚙: one 📖 Storyline row with the story's progress: {st_txt[:400]!r}")
     snaps = lambda: pg.evaluate("() => JSON.parse(localStorage.getItem('arena.snaps') || '[]').length")
     s0 = snaps(); pg.click('#settings [data-k="storyline"]'); wait_for(pg, "() => !!document.querySelector('#genResume')", 5, P=P)
@@ -2527,7 +2541,7 @@ def t_reviews(P):
     for x in sent: scores.update(x["scores"]); pairs += x.get("pairs", []); notes.update(x.get("notes", {}))
     need(scores == st["rated"] and pairs == [[pair[1], pair[0]]] and notes == {seen[5]: "the typing is great"} and all(x["bkey"] == sent[0]["bkey"] for x in sent), f"sent: {sent}")
     need("in the loop (vesting)" in end["txt"] and end["sent"], f"the end: {end}")
-    pg.evaluate("() => window.__reviews.close()"); pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300)
+    pg.evaluate("() => window.__reviews.close()"); pg.evaluate("() => window.__settings.open()"); wait_for(pg, "() => !!document.querySelector('#settings.on')", 5)
     row = pg.evaluate("() => (document.getElementById('reviewerRow') || {}).innerText || ''"); pg.evaluate("() => window.__settings.close()")
     need("in the loop (vesting)" in row, f"⚙ row: {row!r}")
     pg.evaluate("() => { window.__feedback.open('rev'); }"); wait_for(pg, "() => document.querySelectorAll('#oracle [data-review]').length === 2", 15, P=P)
@@ -2764,53 +2778,60 @@ def t_title_card(P):
     return f"waits at the title ({w['t']:.2f} s), a key starts the messages, Esc marks skip:messages"
 
 
-def t_title_auto(P):
+def t_title_auto(P, parts=(1, 2, 3, 4)):
     """The title card starts itself (Nov 4, HN: 19 of 26 story starts never pressed a key): with no key or tap for 2 s the intro starts muted
     (the audio stays suspended: no gesture yet), shows "🔊 tap for sound", keeps moving to the dark on its own clock with the logo drawn; a tap
     then turns the sound on and hides the chip; a key during the title card still starts it with sound; the story arm does the same"""
     SUSP = "() => { try { const c = window.__audio && window.__audio.ctx(); if (c && c.state === 'running') c.suspend(); return true; } catch (e) { return false; } }"
-    # 1. no input at all: auto-start, muted, chip, and on to the dark without sound (headless allows autoplay, so the test suspends the audio first)
-    pg = P.open("/arena.html?story&test")
-    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
-    pg.evaluate(SUSP); t0 = time.time()
-    wait_for(pg, "() => !window.__epoch0.waiting()", 6, P=P); t_auto = time.time() - t0
-    need(t_auto <= 2.6, f"the title card should start itself within ~2 s, took {t_auto:.1f} s")
-    a = pg.evaluate("""() => { const b = document.querySelector('#idleIntro .snd'), r = b && b.getBoundingClientRect();
-      return { auto: window.__epoch0.autoMuted(), chip: !!b && getComputedStyle(b).display !== 'none' && b.classList.contains('tap') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
-        state: window.__audio.ctx().state, f: window.__funnel.reached(), sounding: window.__epoch0.sounding() }; }""")
-    need(a["auto"] and a["chip"] and a["state"] != "running" and not a["sounding"] and "title_auto" in a["f"], f"auto-start should be muted with the chip shown: {a}")
-    t1 = pg.evaluate("() => window.__epoch0.time()"); s1 = pg.screenshot(); pg.wait_for_timeout(1500)
-    t2 = pg.evaluate("() => window.__epoch0.time()"); s2 = pg.screenshot()
-    need(t2 - t1 > 1.0 and s1 != s2, f"the film should keep moving while muted: {t1:.2f} → {t2:.2f}, frames differ {s1 != s2}")
-    wait_for(pg, "() => window.__funnel.reached().includes('landing') || (window.__genesis && window.__genesis.landing && window.__genesis.landing().phase === 'dark')", 120, P=P)
-    b = pg.evaluate("() => ({ state: window.__audio.ctx().state, f: window.__funnel.reached(), logo: window.__epoch0.last && window.__epoch0.last.logo ? { arm: window.__epoch0.last.logo.arm, shown: !!window.__epoch0.last.logo.shown, broken: !!window.__epoch0.last.logo.broken } : null })")
-    # (headless Chromium lets later code resume the audio without a gesture, which a real browser refuses; so this checks only that nothing counted as a tap)
-    need("sound_on" not in b["f"], f"no tap happened, so no sound_on: {b}")
-    need(not b["logo"] or (b["logo"]["shown"] and not b["logo"]["broken"] and ("lg_shown:" + b["logo"]["arm"]) in b["f"]), f"the logo should draw while muted: {b}")
-    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
-    # 2. auto-start, then a tap anywhere turns the sound on and hides the chip
-    pg = P.open("/arena.html?story&test")
-    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
-    pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 6, P=P)
-    pg.mouse.click(200, 200)
-    wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding() && !window.__epoch0.autoMuted()", 10, P=P)
-    c = pg.evaluate("() => { const b = document.querySelector('#idleIntro .snd'); return { chipTap: !!b && b.classList.contains('tap'), shown: !!b && getComputedStyle(b).display !== 'none', f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
-    need(not c["chipTap"] and not c["shown"] and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and hide the chip (not pause): {c}")
-    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
-    # 3. a key during the title card: starts at once, with sound, no chip
-    pg = P.open("/arena.html?story&test")
-    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
-    pg.keyboard.press("Enter")
-    wait_for(pg, "() => !window.__epoch0.waiting() && window.__epoch0.sounding()", 10, P=P)
-    d = pg.evaluate("() => ({ auto: window.__epoch0.autoMuted(), f: window.__funnel.reached() })")
-    need(not d["auto"] and "title_auto" not in d["f"], f"a key should start it with sound, not as an auto-start: {d}")
-    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
-    # 4. the story arm (a new browser) does the same
-    pg = P.open("/arena.html?arm=story")
-    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
-    pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted() && !window.__epoch0.waiting()", 6, P=P)
-    P.clean()
-    return f"auto-start in {t_auto:.1f} s, muted with the chip; moved {t2 - t1:.1f} s in 1.5 s; reached the dark silent (logo {b['logo']['arm'] if b['logo'] else '-'}); tap → sound; key → sound; story arm auto-starts"
+    said = []
+    if 1 in parts:   # (speed2: part 1 is its own check, 'title auto'; parts 2-4 are 'title auto tap')
+        # 1. no input at all: auto-start, muted, chip, and on to the dark without sound (headless allows autoplay, so the test suspends the audio first)
+        pg = P.open("/arena.html?story&test")
+        wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+        pg.evaluate(SUSP); t0 = time.time()
+        wait_for(pg, "() => !window.__epoch0.waiting()", 6, P=P); t_auto = time.time() - t0
+        need(t_auto <= 2.6, f"the title card should start itself within ~2 s, took {t_auto:.1f} s")
+        a = pg.evaluate("""() => { const b = document.querySelector('#idleIntro .snd'), r = b && b.getBoundingClientRect();
+          return { auto: window.__epoch0.autoMuted(), chip: !!b && getComputedStyle(b).display !== 'none' && b.classList.contains('tap') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
+            state: window.__audio.ctx().state, f: window.__funnel.reached(), sounding: window.__epoch0.sounding() }; }""")
+        need(a["auto"] and a["chip"] and a["state"] != "running" and not a["sounding"] and "title_auto" in a["f"], f"auto-start should be muted with the chip shown: {a}")
+        t1 = pg.evaluate("() => window.__epoch0.time()"); s1 = pg.screenshot(); pg.wait_for_timeout(1500)
+        t2 = pg.evaluate("() => window.__epoch0.time()"); s2 = pg.screenshot()
+        need(t2 - t1 > 1.0 and s1 != s2, f"the film should keep moving while muted: {t1:.2f} → {t2:.2f}, frames differ {s1 != s2}")
+        wait_for(pg, "() => window.__funnel.reached().includes('landing') || (window.__genesis && window.__genesis.landing && window.__genesis.landing().phase === 'dark')", 120, P=P)
+        b = pg.evaluate("() => ({ state: window.__audio.ctx().state, f: window.__funnel.reached(), logo: window.__epoch0.last && window.__epoch0.last.logo ? { arm: window.__epoch0.last.logo.arm, shown: !!window.__epoch0.last.logo.shown, broken: !!window.__epoch0.last.logo.broken } : null })")
+        # (headless Chromium lets later code resume the audio without a gesture, which a real browser refuses; so this checks only that nothing counted as a tap)
+        need("sound_on" not in b["f"], f"no tap happened, so no sound_on: {b}")
+        need(not b["logo"] or (b["logo"]["shown"] and not b["logo"]["broken"] and ("lg_shown:" + b["logo"]["arm"]) in b["f"]), f"the logo should draw while muted: {b}")
+        pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+        said.append(f"auto-start in {t_auto:.1f} s, muted with the chip; moved {t2 - t1:.1f} s in 1.5 s; reached the dark silent (logo {b['logo']['arm'] if b['logo'] else '-'})")
+    if 2 in parts:
+        # 2. auto-start, then a tap anywhere turns the sound on and hides the chip
+        pg = P.open("/arena.html?story&test")
+        wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+        pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 6, P=P)
+        pg.mouse.click(200, 200)
+        wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding() && !window.__epoch0.autoMuted()", 10, P=P)
+        c = pg.evaluate("() => { const b = document.querySelector('#idleIntro .snd'); return { chipTap: !!b && b.classList.contains('tap'), shown: !!b && getComputedStyle(b).display !== 'none', f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
+        need(not c["chipTap"] and not c["shown"] and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and hide the chip (not pause): {c}")
+        pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    if 3 in parts:
+        # 3. a key during the title card: starts at once, with sound, no chip
+        pg = P.open("/arena.html?story&test")
+        wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+        pg.keyboard.press("Enter")
+        wait_for(pg, "() => !window.__epoch0.waiting() && window.__epoch0.sounding()", 10, P=P)
+        d = pg.evaluate("() => ({ auto: window.__epoch0.autoMuted(), f: window.__funnel.reached() })")
+        need(not d["auto"] and "title_auto" not in d["f"], f"a key should start it with sound, not as an auto-start: {d}")
+        pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    if 4 in parts:
+        # 4. the story arm (a new browser) does the same
+        pg = P.open("/arena.html?arm=story")
+        wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+        pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted() && !window.__epoch0.waiting()", 6, P=P)
+        P.clean()
+    if {2, 3, 4} & set(parts): said.append("tap → sound; key → sound; story arm auto-starts")
+    return "; ".join(said)
 
 
 def t_ios_sound(P, ios=True):
@@ -3178,95 +3199,102 @@ def t_story_first_paint(P, root, phone=False):
             ctx.close()
     return f"{'phone' if phone else 'desktop'}: {sum(a for a, b in out_)} frames filmed, {sum(b for a, b in out_)} before the story's black, all black; choose and play unchanged"
 
-def t_prod_gates(P, root):
+def t_prod_gates(P, root, parts=("site", "links", "arms")):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
     storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
     world stays put and gets the storyline offer once; fonts, 🧪, presence and reviews are on; the Founder gift is off; keyframes are inert"""
     P.base, P.root = "https://id-le.com", root
-    seed = P.open("/arena.html?fresh=1&test"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=P); seed.close()
-    pg = P.open("/arena.html"); booted(pg)   # a returning browser (it has a world): no arm, the world stays, the offer comes once
-    wait_for(pg, "() => !!document.querySelector('#storyOffer')", 40, P=P)
-    r = pg.evaluate("""async () => { await document.fonts.ready; return { host: location.hostname, live: window.__genesis.storyLive(), void: !!window.__genesisVoid,
-      intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(), v: window.__genesis.variant(),
-      c: window.__arena.raw().filter(c => !c.lab).length,
-      f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
-      ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
-    need(r["host"] == "id-le.com" and r["live"], f"not emulating production (or the story isn't live): {r}")
-    need(r["offer"] and not r["void"] and not r["intro"] and r["v"] is None and r["c"] > 0, f"a returning world keeps its world and gets the offer: {r}")
-    pg.evaluate("() => document.querySelector('#storyOffer .x').click()"); pg.wait_for_timeout(500)
-    need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
-    # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
-    P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
-    pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
-    wait_for(pz, "() => window.__presence && window.__presence.state().running", 20, P=P)
-    pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on })"); pz.evaluate("() => window.__presence.bye()"); pz.close()
-    beats = [json.loads(b) for b in P.here if b]
-    need(pr["stats"] and pr["on"] and beats, f"presence must beat on production: {pr}, {len(beats)} beats")
-    need(all(set(b) <= {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye", "page", "ref", "tag"} for b in beats), f"a production beat outside the allowlist: {beats[:1]}")
-    full = next((b for b in beats if not b.get("bye") and b.get("tag") == "prod-check"), None) or [b for b in beats if not b.get("bye")][0]   # the returning tab above keeps beating too
-    need(full.get("page") == "game" and full.get("ref") == "reddit.com" and full.get("tag") == "prod-check" and "WebGames" not in json.dumps(beats), f"production beat: {full}")
-    P.here.clear()
-    need(not r["founder"], f"the Founder gift on production: {r}")
-    need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
-    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
-    pg.evaluate("() => window.__settings.close()")
-    need("Tell the scientists" in txt and "📖 Storyline" in txt and "Founder gift" not in txt, "⚙ rows on production (🧪 and 📖 Storyline in, no Founder): " + ", ".join(k for k in ("Tell the scientists", "📖 Storyline", "Founder gift") if k in txt))
-    # 🧪: sends (to the stub), the roadmap lists and votes once
-    pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(300)
-    pg.evaluate("() => document.querySelector('#oracle [data-kind=idea]').click()"); pg.fill("#oracle textarea", "prod gate check")
-    pg.evaluate("() => document.querySelector('#oracle [data-a=send]').click()")
-    wait_for(pg, "() => /🧪/.test((document.querySelector('#oracle .msg') || {}).textContent || '')", 10, P=P)
-    pg.evaluate("() => document.querySelector('#oracle [data-tab=road]').click()")
-    wait_for(pg, "() => document.querySelectorAll('#oracle .it').length === 2", 10, P=P)
-    pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').click()"); pg.wait_for_timeout(500)
-    need(len([k for k, _ in P.fb if k == "oracle"]) == 1 and len([k for k, _ in P.fb if k == "vote"]) == 1, f"🧪 sends/votes: {P.fb}")
-    pg.evaluate("() => window.__feedback.close()")
-    # the chooser (⚙ New consciousness): the storyline is in it since the launch
-    pg.evaluate("() => { window.__genesis.newUniverse(); }")
-    wait_for(pg, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 30, P=P)
-    ms = pg.evaluate("() => [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m)")
-    need(sorted(ms) == ["free", "ready", "story"], f"chooser on production: {ms}")
-    lbl = pg.evaluate("() => document.querySelector('#genChoose button[data-m=ready] b').textContent")
-    need("the playground" in lbl, f"v13: the playground in the chooser: {lbl!r}")
-    pg.close()
-    # gift links: nothing opens
-    P.gifts["abcdefghijklmnopqrstuvwx"] = {"letter": "hi", "claimed": False}
-    for q in ("gift=founder", "gift=abcdefghijklmnopqrstuvwx"):
-        pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
-        g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
-        need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
-    # the A/B/C on id-le.com (Nov 4): a NEW browser gets an arm at random (Math.random pinned per context here), ?arm= forces nothing
-    seen = {}
-    for rnd, want, forced in ((0.01, "story", "play"), (0.5, "choose", "story"), (0.99, "play", "story")):
-        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script(f"Math.random = () => {rnd};"); Q = Page(ctx, P.base); Q.root = root
-        try:
-            q = Q.open(f"/arena.html?arm={forced}")
-            if want == "story":
-                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
-            elif want == "choose":
-                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
-            else:
-                booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
-            x = q.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), ms: [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m), intro: !!document.querySelector('#idleIntro'), boot: !!window.__termBoot })")
-            need(x["v"] == want and x["gv"] == want, f"a new browser on id-le.com (?arm={forced} ignored) must get its random arm {want}: {x}")
-            if want == "choose": need(x["ms"][:2] == ["story", "ready"], f"the chooser on id-le.com: {x['ms']}")
-            if want == "play": need(not x["intro"], f"the play arm lands in the playground: {x}")
-            seen[want] = True
-        finally:
-            ctx.close()
-    # ⭐ reviews and the Humans in the Loop are ON on id-le.com since Nov 4 (Nico's go): ?review=logos relays Nico's message at once, the 🌱
-    # and 🧪's ⭐ tab are there; the Founder gift stays off (FOUNDER_ON = false)
-    pg = P.open("/arena.html?review=logos"); booted(pg)
-    with contextlib.suppress(AssertionError): wait_for(pg, "() => !!document.querySelector('.rvletter')", 30, P=P)
-    rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: !!window.__reviews, letter: !!document.querySelector('.rvletter'), hitl: !!document.getElementById('hitlBtn'), tab: t, founder: window.__founder.off === true && !window.__founder.available() }; }")
-    need(rv["api"] and rv["letter"] and rv["hitl"] and rv["tab"] and rv["founder"], f"reviews on production: {rv}"); pg.close()
-    # keyframes (idle-keys.js) do nothing on id-le.com: no gate, no sandbox, no strip
-    pg = P.open("/arena.html?at=end#keys"); booted(pg)
-    k = pg.evaluate("() => ({ key: window.__storyKey || null, keys: !!window.__keys, gate: !!document.querySelector('#keyGate'), strip: !!document.querySelector('#keyStrip'), real: Object.getOwnPropertyDescriptor(window, 'localStorage') ? 'own' : 'proto' })")
-    need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
+    said = []   # speed2: three checks run in parallel workers: "prod gates" (the site), "prod gates links", "prod gates arms"
+    if "site" in parts:
+        seed = P.open("/arena.html?fresh=1&test"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=P); seed.close()
+        pg = P.open("/arena.html"); booted(pg)   # a returning browser (it has a world): no arm, the world stays, the offer comes once
+        wait_for(pg, "() => !!document.querySelector('#storyOffer')", 40, P=P)
+        r = pg.evaluate("""async () => { await document.fonts.ready; return { host: location.hostname, live: window.__genesis.storyLive(), void: !!window.__genesisVoid,
+          intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(), v: window.__genesis.variant(),
+          c: window.__arena.raw().filter(c => !c.lab).length,
+          f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
+          ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
+        need(r["host"] == "id-le.com" and r["live"], f"not emulating production (or the story isn't live): {r}")
+        need(r["offer"] and not r["void"] and not r["intro"] and r["v"] is None and r["c"] > 0, f"a returning world keeps its world and gets the offer: {r}")
+        pg.evaluate("() => document.querySelector('#storyOffer .x').click()"); pg.wait_for_timeout(500)
+        need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
+        # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
+        P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
+        pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
+        wait_for(pz, "() => window.__presence && window.__presence.state().running", 20, P=P)
+        pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on })"); pz.evaluate("() => window.__presence.bye()"); pz.close()
+        beats = [json.loads(b) for b in P.here if b]
+        need(pr["stats"] and pr["on"] and beats, f"presence must beat on production: {pr}, {len(beats)} beats")
+        need(all(set(b) <= {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye", "page", "ref", "tag"} for b in beats), f"a production beat outside the allowlist: {beats[:1]}")
+        full = next((b for b in beats if not b.get("bye") and b.get("tag") == "prod-check"), None) or [b for b in beats if not b.get("bye")][0]   # the returning tab above keeps beating too
+        need(full.get("page") == "game" and full.get("ref") == "reddit.com" and full.get("tag") == "prod-check" and "WebGames" not in json.dumps(beats), f"production beat: {full}")
+        P.here.clear()
+        need(not r["founder"], f"the Founder gift on production: {r}")
+        need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
+        pg.evaluate("() => window.__settings.open()"); wait_for(pg, "() => !!document.querySelector('#settings.on')", 5); txt = pg.evaluate("() => document.body.innerText")
+        pg.evaluate("() => window.__settings.close()")
+        need("Tell the scientists" in txt and "📖 Storyline" in txt and "Founder gift" not in txt, "⚙ rows on production (🧪 and 📖 Storyline in, no Founder): " + ", ".join(k for k in ("Tell the scientists", "📖 Storyline", "Founder gift") if k in txt))
+        # 🧪: sends (to the stub), the roadmap lists and votes once
+        pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(300)
+        pg.evaluate("() => document.querySelector('#oracle [data-kind=idea]').click()"); pg.fill("#oracle textarea", "prod gate check")
+        pg.evaluate("() => document.querySelector('#oracle [data-a=send]').click()")
+        wait_for(pg, "() => /🧪/.test((document.querySelector('#oracle .msg') || {}).textContent || '')", 10, P=P)
+        pg.evaluate("() => document.querySelector('#oracle [data-tab=road]').click()")
+        wait_for(pg, "() => document.querySelectorAll('#oracle .it').length === 2", 10, P=P)
+        pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').click()"); pg.wait_for_timeout(500)
+        need(len([k for k, _ in P.fb if k == "oracle"]) == 1 and len([k for k, _ in P.fb if k == "vote"]) == 1, f"🧪 sends/votes: {P.fb}")
+        pg.evaluate("() => window.__feedback.close()")
+        # the chooser (⚙ New consciousness): the storyline is in it since the launch
+        pg.evaluate("() => { window.__genesis.newUniverse(); }")
+        wait_for(pg, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 30, P=P)
+        ms = pg.evaluate("() => [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m)")
+        need(sorted(ms) == ["free", "ready", "story"], f"chooser on production: {ms}")
+        lbl = pg.evaluate("() => document.querySelector('#genChoose button[data-m=ready] b').textContent")
+        need("the playground" in lbl, f"v13: the playground in the chooser: {lbl!r}")
+        pg.close()
+        said.append(f"UI in {r['ui']}, a returning world keeps it + one offer, 📖 in ⚙ and the chooser, 🧪 sent + voted, no Founder")
+    if "links" in parts:
+        # gift links: nothing opens
+        P.gifts["abcdefghijklmnopqrstuvwx"] = {"letter": "hi", "claimed": False}
+        for q in ("gift=founder", "gift=abcdefghijklmnopqrstuvwx"):
+            pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
+            g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
+            need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
+        # ⭐ reviews and the Humans in the Loop are ON on id-le.com since Nov 4 (Nico's go): ?review=logos relays Nico's message at once, the 🌱
+        # and 🧪's ⭐ tab are there; the Founder gift stays off (FOUNDER_ON = false)
+        pg = P.open("/arena.html?review=logos"); booted(pg)
+        with contextlib.suppress(AssertionError): wait_for(pg, "() => !!document.querySelector('.rvletter')", 30, P=P)
+        rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: !!window.__reviews, letter: !!document.querySelector('.rvletter'), hitl: !!document.getElementById('hitlBtn'), tab: t, founder: window.__founder.off === true && !window.__founder.available() }; }")
+        need(rv["api"] and rv["letter"] and rv["hitl"] and rv["tab"] and rv["founder"], f"reviews on production: {rv}"); pg.close()
+        # keyframes (idle-keys.js) do nothing on id-le.com: no gate, no sandbox, no strip
+        pg = P.open("/arena.html?at=end#keys"); booted(pg)
+        k = pg.evaluate("() => ({ key: window.__storyKey || null, keys: !!window.__keys, gate: !!document.querySelector('#keyGate'), strip: !!document.querySelector('#keyStrip'), real: Object.getOwnPropertyDescriptor(window, 'localStorage') ? 'own' : 'proto' })")
+        need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
+        said.append("gift links inert, reviews on, keyframes inert")
+    if "arms" in parts:
+        # the A/B/C on id-le.com (Nov 4): a NEW browser gets an arm at random (Math.random pinned per context here), ?arm= forces nothing
+        seen = {}
+        for rnd, want, forced in ((0.01, "story", "play"), (0.5, "choose", "story"), (0.99, "play", "story")):
+            ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script(f"Math.random = () => {rnd};"); Q = Page(ctx, P.base); Q.root = root
+            try:
+                q = Q.open(f"/arena.html?arm={forced}")
+                if want == "story":
+                    wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+                elif want == "choose":
+                    wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
+                else:
+                    booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+                x = q.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), ms: [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m), intro: !!document.querySelector('#idleIntro'), boot: !!window.__termBoot })")
+                need(x["v"] == want and x["gv"] == want, f"a new browser on id-le.com (?arm={forced} ignored) must get its random arm {want}: {x}")
+                if want == "choose": need(x["ms"][:2] == ["story", "ready"], f"the chooser on id-le.com: {x['ms']}")
+                if want == "play": need(not x["intro"], f"the play arm lands in the playground: {x}")
+                seen[want] = True
+            finally:
+                ctx.close()
+        said.append(f"arms {sorted(seen)} at random (?arm= ignored)")
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
-    return f"id-le.com (launched): UI in {r['ui']}, arms {sorted(seen)} at random (?arm= ignored), a returning world keeps it + one offer, 📖 in ⚙ and the chooser, 🧪 sent + voted, no Founder; reviews on; keyframes inert"
+    return "id-le.com (launched): " + "; ".join(said)
 
 
 def t_presence(P):
@@ -3721,7 +3749,7 @@ def t_slash_phone(P):
     return f"the list fits ({round(r['r'] - r['l'])} px wide, {r['fs']} px text); a tap runs /music"
 
 
-def t_story_input_visible(P):
+def t_story_input_visible(P, only=None):
     """v14 (Nico: "this last operator's chat box input is under the fold"): through Genesis (the Operator's opening, lights, words, life, the
     Epoch 0 moment), whenever the Operator's window is shown its input is fully on screen and inside the window, on a computer and on two
     phones (375×667, 390×844), and on a 375×420 screen (a phone with its keyboard up)."""
@@ -3729,7 +3757,8 @@ def t_story_input_visible(P):
       return { shown: lab.classList.contains('open') && o > 0.9, ok: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth && r.top >= L.top - 1 && r.bottom <= L.bottom + 1 && r.height > 16,
         r: [Math.round(r.top), Math.round(r.bottom)], L: [Math.round(L.top), Math.round(L.bottom)], H: innerHeight, step: window.__genesis.next(), m: !!(window.__genesis.moment() || {}).ready }; }"""
     out = []
-    for vw in ({"width": 1400, "height": 900}, {"width": 375, "height": 667}, {"width": 390, "height": 844}, {"width": 375, "height": 420}):
+    VWS = ({"width": 1400, "height": 900}, {"width": 375, "height": 667}, {"width": 390, "height": 844}, {"width": 375, "height": 420})
+    for vw in (VWS if only is None else [VWS[i] for i in only]):   # split per screen size so they run in parallel workers (speed2)
         ctx = P.ctx.browser.new_context(viewport=vw, is_mobile=vw["width"] < 500, has_touch=vw["width"] < 500); Q = Page(ctx, P.base)
         try:
             pg = Q.open("/arena.html?at=lights"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30); pg.keyboard.press("k")
@@ -3760,7 +3789,7 @@ def t_story_row(P):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     ch = pg.evaluate("() => { window.__opwin.toggleTray(); return new Promise(r => setTimeout(() => r(window.__opwin.tray().chips), 400)); }")
     need("📖 back to the story" not in ch, f"no story yet: no way back to offer: {ch}")
-    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300)
+    pg.evaluate("() => window.__settings.open()"); wait_for(pg, "() => !!document.querySelector('#settings.on')", 5)
     need("📖 Storyline" in pg.evaluate("() => document.querySelector('#settings').innerText"), "⚙ should have 📖 Storyline")
     # (Nico, v16: "move these sections to the bottom of the settings (in that order, with Anonymous stats at the bottom of all): Tell the scientists, Oracle, Public helper, Anonymous stats")
     rows = pg.evaluate("() => [...document.querySelectorAll('#settings .row .t > b')].map(b => b.textContent.trim())")
@@ -3975,7 +4004,7 @@ def browser_tests(a, out):
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
-        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}),
+        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}),
         ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
@@ -3988,7 +4017,7 @@ def browser_tests(a, out):
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
         ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
-        ("prod gates", t_prod_gates, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
+        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
@@ -4003,7 +4032,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+LAUNCH = {"title auto", "title auto tap", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "prod gates links", "prod gates arms", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
@@ -4014,34 +4043,46 @@ STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", 
 SCALED = set() | {n.strip() for n in os.environ.get("IDLE_SCALED_EXTRA", "").split(",") if n.strip()}   # IDLE_SCALED_EXTRA: try more
 # checks that fail when other checks run at the same time (they time the storyline's start against the boot; under contention the start
 # can race the boot and land in the chooser): run alone, one after another, once the parallel ones are done (Nov 4)
-SERIAL = {"story arms", "story row", "story keys", "founder personal", "camera phone", "zoom shapes phone"}   # + WebKit phone geometry settling
+SERIAL = {"founder personal", "camera phone", "zoom shapes phone"}   # + WebKit phone geometry settling. speed2: story arms / story row / story keys left it: their failures under load were the double boot, fixed by armfix
 TIMES = os.path.join(tempfile.gettempdir(), "idle-test-times.json")   # last run's seconds per check: the slowest start first
 
 
-def run_in_process(names, a, out, base):
-    """run these browser checks here, one after another: one browser per engine, a fresh context per check"""
+def run_in_process(names, a, out, base, feed=None):
+    """run these browser checks here, one after another: one browser per engine (kept open across checks), a fresh context per check.
+    feed: a callable giving the next name (None to stop), for a long-lived worker (speed2: no process, server or browser start per check)"""
     from playwright.sync_api import sync_playwright
     reg = {t[0]: t for t in browser_tests(a, out)}
-    todo = [reg[n] for n in names if n in reg]
     with sync_playwright() as p:
         browsers = {}
         def engine(e):
-            if e not in browsers:
+            if e not in browsers or not browsers[e].is_connected():
                 browsers[e] = (p.webkit if e in ("webkit", IPHONE) else p.chromium).launch(headless=not a.headed, **({} if e != "chromium" else {"args": ["--autoplay-policy=no-user-gesture-required"]}))
             return browsers[e]
+        def one(name):
+            if name not in reg: RESULTS.append((name, False, "no such check", 0)); print(f"  FAIL  {name}  no such check", flush=True); return
+            _, fn, args, kw, e = reg[name]
+            if e == IPHONE:
+                dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
+                kw = {**dev, **kw}
+            else:
+                kw = {"viewport": {"width": 1400, "height": 900}, **kw}
+            ts = kw.pop("timescale", 0) or (a.timescale if name in SCALED else 1)
+            ctx = engine(e).new_context(**kw); P = Page(ctx, base); P.timescale = ts
+            try: check(name, fn, P, *args)
+            finally:
+                with contextlib.suppress(Exception): ctx.close()
         try:
-            for name, fn, args, kw, e in todo:
-                if e == IPHONE:
-                    dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
-                    kw = {**dev, **kw}
-                else:
-                    kw = {"viewport": {"width": 1400, "height": 900}, **kw}
-                ts = kw.pop("timescale", 0) or (a.timescale if name in SCALED else 1)
-                ctx = engine(e).new_context(**kw); P = Page(ctx, base); P.timescale = ts
-                try: check(name, fn, P, *args)
-                finally: ctx.close()
+            if feed is None:
+                for n in names: one(n)
+            else:
+                while True:
+                    n = feed()
+                    if not n: break
+                    one(n); r = RESULTS[-1]
+                    print("@@DONE\t" + n + "\t" + ("1" if r[1] else "0") + f"\t{r[3]:.1f}", flush=True)
         finally:
-            for b in browsers.values(): b.close()
+            for b in browsers.values():
+                with contextlib.suppress(Exception): b.close()
 
 
 def jobs_wanted(a, n):
@@ -4055,31 +4096,62 @@ def jobs_wanted(a, n):
 
 
 def run_parallel(names, a, out, jobs):
-    """each check in its own process (its own server port, browser and storage), at most `jobs` at once, slowest first; a new worker
-    starts only while the machine isn't overloaded (the load under 1.5× the cores), so a busy Mac gets fewer; SERIAL checks run last, alone"""
+    """`jobs` long-lived worker processes (each its own server port, browser and storage, kept across checks), fed the checks slowest
+    first; a check fails alone without taking its worker down. A new worker starts only while the machine isn't overloaded (the load under
+    1.5× the cores). SERIAL checks run last, one at a time, in one worker (speed2: one process per worker, not one per check)"""
     try: times = json.load(open(TIMES))
     except Exception: times = {}
     queue = sorted((n for n in names if n not in SERIAL), key=lambda n: -times.get(n, 30))
     alone = [n for n in names if n in SERIAL]
-    running, cores = {}, os.cpu_count() or 4
-    while queue or running or alone:
-        if not queue and not running: queue, jobs = [alone.pop(0)], 1   # the SERIAL ones: after the rest, one at a time
-        while queue and len(running) < jobs and (not running or os.getloadavg()[0] < 1.5 * cores):
-            n = queue.pop(0)
-            cmd = [sys.executable, os.path.abspath(__file__), "--dist", out, "--only", n, "--child", "--timescale", str(a.timescale)] + (["--full"] if a.full else []) + (["--headed"] if a.headed else [])
-            running[n] = (subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True), time.time())
+    cores = os.cpu_count() or 4
+    cmd = [sys.executable, os.path.abspath(__file__), "--dist", out, "--worker", "--timescale", str(a.timescale)] + (["--full"] if a.full else []) + (["--headed"] if a.headed else [])
+    workers, lock = [], threading.Lock()
+    def spawn():
+        pr = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        w = {"p": pr, "cur": None, "t": 0, "buf": [], "q": queue}
+        def reader():
+            for line in pr.stdout:
+                if line.startswith("@@DONE\t"):
+                    _, n, ok, dt = line.rstrip("\n").split("\t")
+                    out_l = next((l for l in w["buf"] if l.startswith(("  ok    " + n, "  FAIL  " + n))), None)
+                    with lock:
+                        if ok == "1": RESULTS.append((n, True, out_l or "", time.time() - w["t"])); print(out_l.rstrip("\n") if out_l else f"  ok    {n}", flush=True)
+                        else:
+                            msg = out_l[len("  FAIL  " + n):].strip() if out_l else "no result: " + "".join(w["buf"])[-600:]
+                            RESULTS.append((n, False, msg, time.time() - w["t"])); print(f"  FAIL  {n}  {msg}", flush=True)
+                            if os.environ.get("IDLE_TEST_TRACE"): print("".join(w["buf"])[-3000:])
+                        w["buf"], w["cur"] = [], None
+                else: w["buf"].append(line)
+            with lock:   # the worker died: its current check fails with what it printed
+                if w["cur"]:
+                    RESULTS.append((w["cur"], False, "worker died: " + "".join(w["buf"])[-600:], time.time() - w["t"])); print(f"  FAIL  {w['cur']}  worker died", flush=True); w["cur"] = None
+        threading.Thread(target=reader, daemon=True).start()
+        workers.append(w); return w
+    def give(w, q):
+        n = q.pop(0) if q else None
+        w["cur"], w["t"], w["buf"] = n, time.time(), []
+        try: w["p"].stdin.write((n or "") + "\n"); w["p"].stdin.flush()
+        except (BrokenPipeError, OSError): pass
+    while queue or any(w["cur"] for w in workers):
+        with lock:
+            for w in workers:
+                if w["p"].poll() is None and not w["cur"] and queue: give(w, queue)
+            alive = [w for w in workers if w["p"].poll() is None]
+            if queue and len(alive) < jobs and (not alive or os.getloadavg()[0] < 1.5 * cores): give(spawn(), queue)
+            if queue and not alive and workers and all(w["p"].poll() is not None for w in workers): give(spawn(), queue)
         time.sleep(0.2)
-        for n, (pr, ts) in list(running.items()):
-            if pr.poll() is None: continue
-            outp = pr.stdout.read(); del running[n]
-            line = next((l for l in outp.splitlines() if l.startswith(("  ok    " + n, "  FAIL  " + n))), None)
-            dt = time.time() - ts
-            if line and line.startswith("  ok"):
-                RESULTS.append((n, True, line, dt)); print(line, flush=True)
-            else:
-                msg = line[len("  FAIL  " + n):].strip() if line else ("no result: " + outp.strip()[-600:])
-                RESULTS.append((n, False, msg, dt)); print(f"  FAIL  {n}  {msg}", flush=True)
-                if os.environ.get("IDLE_TEST_TRACE"): print(outp[-3000:])
+    for w in workers:
+        with contextlib.suppress(Exception): w["p"].stdin.write("\n"); w["p"].stdin.flush()
+    if alone:   # the SERIAL ones: after the rest, one at a time, in one fresh worker
+        w = spawn()
+        while alone or w["cur"]:
+            with lock:
+                if not w["cur"] and alone and w["p"].poll() is None: give(w, alone)
+                if w["p"].poll() is not None and alone: w = spawn()
+            time.sleep(0.2)
+        with contextlib.suppress(Exception): w["p"].stdin.write("\n"); w["p"].stdin.flush()
+    for w in workers:
+        with contextlib.suppress(Exception): w["p"].wait(timeout=30)
 
 
 def main():
@@ -4089,7 +4161,7 @@ def main():
     ap.add_argument("-t", "--tier", default="", choices=["", "launch", "full"], help="launch: the checks a deploy needs (~3 min); full (default): everything")
     ap.add_argument("-j", "--jobs", type=int, default=0, help="browser workers (default: from the load, 1-6; also IDLE_TEST_JOBS)")
     ap.add_argument("--timescale", type=int, default=int(os.environ.get("IDLE_TIMESCALE") or 5), help="how much faster the checks in SCALED run the page's clock (1: real time)")
-    ap.add_argument("--only", default="", help=argparse.SUPPRESS); ap.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--only", default="", help=argparse.SUPPRESS); ap.add_argument("--child", action="store_true", help=argparse.SUPPRESS); ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args(); t0 = time.time()
     tier = (lambda name: name in LAUNCH) if a.tier == "launch" else (lambda name: True)
     want = lambda name: a.k.lower() in name.lower() and tier(name)
@@ -4098,6 +4170,11 @@ def main():
         with browser_lock(): run_in_process([a.only], a, a.dist, base)
         srv.shutdown()
         return 0 if RESULTS and all(r[1] for r in RESULTS) else 1
+    if a.worker:   # a long-lived worker started by run_parallel: checks arrive on stdin, one name per line, an empty line to stop
+        srv, base = serve(a.dist)
+        with browser_lock(): run_in_process([], a, a.dist, base, feed=lambda: (sys.stdin.readline() or "").strip())
+        srv.shutdown()
+        return 0
     statics = lambda: [check(label, fn) for key, label, fn in STATIC if want(key)]
     out = a.dist or tempfile.mkdtemp(prefix="idle-dist-")
     names = [t[0] for t in browser_tests(a, out) if want(t[0])]
