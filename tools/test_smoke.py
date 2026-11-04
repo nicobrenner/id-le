@@ -537,13 +537,25 @@ def browser_lock():
     if os.path.isdir(os.path.dirname(LOCK)) and not os.environ.get("CI"):
         t0 = time.time()
         while True:
-            try: os.mkdir(LOCK); held = True; break
+            try: os.mkdir(LOCK); held = True
             except FileExistsError:
+                # a holder killed outright (SIGKILL: a stopped background task) never runs its finally: the lock names its pid, and a lock
+                # whose pid is gone is stale (Nov 4: one sat for an hour and blocked every browser check and deploy behind it)
+                pid = None
+                with contextlib.suppress(OSError, ValueError): pid = int(open(os.path.join(LOCK, "pid")).read().strip())
+                if pid:
+                    try: os.kill(pid, 0)
+                    except ProcessLookupError:
+                        print(f"  removing a stale browser lock (pid {pid} is gone)", flush=True); shutil.rmtree(LOCK, ignore_errors=True); continue
+                    except PermissionError: pass
                 if time.time() - t0 > 1800: raise RuntimeError("the shared browser lock was held for 30 minutes: " + LOCK)
-                print("  waiting for the shared browser lock…", flush=True); time.sleep(15)
+                print("  waiting for the shared browser lock…", flush=True); time.sleep(15); continue
+            with contextlib.suppress(OSError): open(os.path.join(LOCK, "pid"), "w").write(str(os.getpid()))
+            break
     try: yield
     finally:
         if held:
+            with contextlib.suppress(OSError): os.remove(os.path.join(LOCK, "pid"))
             with contextlib.suppress(OSError): os.rmdir(LOCK)
 
 
