@@ -232,6 +232,7 @@ out.rate_61st = last;
   { const w = await (await live('k'.repeat(40))).json(), f = a => w.players.find(x => x.a === a.slice(0, 6));
     P.ref3 = f(id3); P.ref4 = f(id4); P.ref5 = f(id5); P.ref_tot = w.tot.ref; P.page_tot = w.tot.page; P.ref_leak = /path|secret|Bad Tag/.test(JSON.stringify(w));
     for (const i of [id3, id4, id5]) await beat({ v: 1, id: i, bye: 1 }); }
+  { const k0 = env.LIVE_KEY; env.LIVE_KEY = k0 + '\n'; P.newline_key = (await live('k'.repeat(40))).status; env.LIVE_KEY = k0; }   // a secret pasted with its trailing newline
   P.nokey = (await live()).status; P.wrong = (await live('wrong')).status; P.short = (env.LIVE_KEY = 'short', (await live('short')).status); env.LIVE_KEY = 'k'.repeat(40);
   const v = await (await live('k'.repeat(40))).json(); P.online = v.online;
   P.p1 = v.players.find(x => x.a === id1.slice(0, 6)); P.p2 = v.players.find(x => x.a === id2.slice(0, 6)); P.tot = v.tot; P.hist = v.hist.length ? v.hist[v.hist.length - 1] : null;
@@ -389,6 +390,7 @@ def worker_unit():
     pr = o["presence"]
     need(pr["prod"] == 204 and pr["view_before_prod_beat"] == 0, f"with the kill switch (PRESENCE_ON=0) beats must be accepted and dropped: {pr['prod']}, then online {pr['view_before_prod_beat']}")
     need(pr["b1"].get("ok") and pr["b2"].get("ok") and pr["bad"].get("ok") is False and pr["big"] == 413, f"beats: {pr['b1']} {pr['b2']} bad id {pr['bad']} too big {pr['big']}")
+    need(pr["newline_key"] == 200, f"a LIVE_KEY saved with a trailing newline must still match: {pr['newline_key']}")
     need(pr["nokey"] == 404 and pr["wrong"] == 404 and pr["short"] == 404, f"the live view without the right key must be 404: none {pr['nokey']}, wrong {pr['wrong']}, a short server key {pr['short']}")
     p1, p2 = pr["p1"] or {}, pr["p2"] or {}
     need(pr["online"] == 2 and p1.get("mode") == "story" and p1.get("step") == "words" and p1.get("ep") == 0 and p1.get("p") == ["operator", "card"] and p1.get("cr") == "0-12" and p1.get("t") == 42 and p1.get("back") == 1 and p1.get("dev") == "phone", f"story beat: {p1}")
