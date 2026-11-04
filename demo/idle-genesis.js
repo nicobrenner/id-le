@@ -348,9 +348,27 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   const SAYS = { light: ['lights on', 'let there be light'], words: ['let there be words'], creatures: ['let there be life', 'bring life'], sky: ['give it weather', 'let there be music'] };
   const isCommand = (g, said) => { const n = norm(said); return n === norm(sayOf(g)) || (SAYS[g] || []).some(c => n === norm(c)) || (g === 'words' && !storyMode() && /^let there be words about [a-z0-9 ]{1,40}$/.test(n)); };
   let GATE = null; const loadGate = async () => GATE || (GATE = await fetch('genesis_gate.json').then(r => r.ok ? r.json() : null).catch(() => null));
-  const gateOf = (G, x) => { if (!G || !x || x.length !== G.d) return null; const z = G.w.map((w, c) => { let s = G.b[c]; for (let d = 0; d < G.d; d++) s += w[d] * x[d]; return s; });
-    const mx = Math.max(...z), e = z.map(v => Math.exp(v - mx)), sum = e.reduce((a, b) => a + b, 0), probs = {}; G.classes.forEach((c, i) => { probs[c] = e[i] / sum; });
-    const top = G.classes[z.indexOf(mx)]; return { top, p: probs[top], probs }; };
+  // round 2 (Nov 4, after the launch: paraphrases of "let there be life" almost always got the nudge): per step, the head is either the
+  // Tiny Oracle's features alone ('oracle') or those plus hashed character n-grams of the message ('comb'), both learned in
+  // tools/genesis_gate.py. gateNgrams must match its ngrams() exactly: lowercased, spaces normalized, UTF-16 code units, FNV-1a, modulo B.
+  const fnv = (s, a, b) => { let h = 0x811c9dc5; for (let i = a; i < b; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
+  const gateNgrams = (text, B, ns) => { const t = ' ' + String(text).toLowerCase().trim().split(/\s+/).filter(Boolean).join(' ') + ' ', v = new Float64Array(B);
+    for (const n of ns) for (let i = 0; i + n <= t.length; i++) v[fnv(t, i, i + n) % B] += 1;
+    for (const w of t.split(' ').filter(Boolean)) { const k = 'w:' + w; v[fnv(k, 0, k.length) % B] += 1; }
+    let nn = 0; for (let i = 0; i < B; i++) nn += v[i] * v[i]; nn = Math.sqrt(nn); if (nn > 0) for (let i = 0; i < B; i++) v[i] /= nn; return v; };
+  const headProbs = (m, x, ng, classes) => { const z = m.w.map((w, c) => { let s = m.b[c]; for (let d = 0; d < 1024; d++) s += w[d] * x[d];
+      if (m.ngrams && ng) for (let d = 1024; d < m.d; d++) { const v = ng[d - 1024]; if (v) s += w[d] * v; } return s; });
+    const mx = Math.max(...z), e = z.map(v => Math.exp(v - mx)), sum = e.reduce((a, b) => a + b, 0), probs = {}; classes.forEach((c, i) => { probs[c] = e[i] / sum; });
+    const top = classes[z.indexOf(mx)]; return { top, p: probs[top], probs }; };
+  // gateOf(G, x, said, step): with a step, that step's head and whether it advances; without one (tests/probes), every step's verdict
+  const gateOf = (G, x, said, step) => { if (!G || !x || x.length !== (G.d || 1024)) return null;
+    if (!G.models) { const v = headProbs({ w: G.w, b: G.b, d: G.d }, x, null, G.classes); v.adv = G.classes.filter(c => c !== 'other' && v.top === c && v.p >= G.thr[c]); return v; }
+    const ng = said != null && G.ngram ? gateNgrams(said, G.ngram.B, G.ngram.ns) : null;
+    const one = st => { const m = G.models[G.step[st]]; if (!m) return null; const v = headProbs(m, x, ng, G.classes); v.adv = v.top === st && v.p >= G.thr[st]; return v; };
+    if (step) { const v = one(step); return v && { top: v.top, p: v.p, probs: v.probs, adv: v.adv ? [step] : [] }; }
+    const all = Object.keys(G.step).map(st => [st, one(st)]).filter(([, v]) => v), adv = all.filter(([, v]) => v.adv).map(([st]) => st);
+    const best = adv.length ? all.find(([st]) => st === adv[0])[1] : (all.find(([st]) => G.step[st] === 'comb') || all[0])[1];
+    return { top: adv.length ? adv[0] : best.top, p: best.p, probs: best.probs, adv }; };
   const NUDGE = {   // draft lines (Operator voice: lowercase, no trailing period); {cmd} is the step's command as typed for the player
     light: 'hmm, not quite. to turn the lights on, say "{cmd}"', words: 'hmm, not quite. to give it words, say "{cmd}"',
     creatures: 'hmm, not quite. to bring life, say "{cmd}"', sky: 'hmm, not quite. to give it a sky, say "{cmd}"',
@@ -366,10 +384,10 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     if (!(O && O.ready && window.__idleAI)) { add('you', said, 'you'); lastGate = { said, how: 'asleep' }; nudge('asleep'); return; }
     // one read of the message: the Tiny Operator's heads (for its reply) and the gate's features
     let r = null, G = null; try { const H = await window.__idleAI.heads(); r = await O.classify(said, H, true); G = await loadGate(); } catch (e) { console.warn('genesis: gate', e); }
-    const gv = r && gateOf(G, r.x), thr = G && G.thr && G.thr[g];
+    const gv = r && gateOf(G, r.x, said, g), thr = G && G.thr && G.thr[g];
     lastGate = { said, how: 'gate', top: gv && gv.top, p: gv && +gv.p.toFixed(3), thr, v4: r && { option: r.option, p: r.probs[r.option] } };
     ev('genesis_gate', { step: g, top: gv ? gv.top : null, p: gv ? +gv.p.toFixed(2) : null });
-    if (gv && gv.top === g && thr != null && gv.p >= thr) { add('you', said, 'you'); await STEPS[g].run(); return; }
+    if (gv && gv.adv && gv.adv.includes(g)) { add('you', said, 'you'); await STEPS[g].run(); return; }
     // not this step: a short real reply (no world tools during Genesis), then the nudge
     add('you', said, 'you'); quiet = true; try { if (r) { const r2 = { ...r }; delete r2.x; await window.__idleAI.tiny(said, { noAct: true, r: r2 }); } } catch (e) { console.warn('genesis: operator', e); } finally { quiet = false; }
     nudge(g); }
@@ -1048,6 +1066,6 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   function pending() { try { if (!storyMode() || !S || !S.on) return 0; const d = dayOf(S.day || 0); if (!d || (S.days && S.days[d.n]) || (d.n > 0 && !builtNext(d.n))) return 0;
     return d.goals.filter(([k]) => !(d.n === 0 ? did(k) : false)).length; } catch (e) { return 0; } }
   // ready(): v15 — also only once the window is actually up (not during the landing, the dawn or a step's aside)
-  window.__genesis = { gate: () => lastGate && { ...lastGate }, gateOf, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { gate: () => lastGate && { ...lastGate }, gateOf, gateNgrams, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
