@@ -1552,7 +1552,7 @@ def t_genesis(P):
     st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), calm: document.documentElement.classList.contains('gen-calm'), lit: document.documentElement.classList.contains('gen-lit'), next: window.__genesis.next(), pre: (document.getElementById('lab-text') || {}).value, g: window.__genesis.state(), ab: window.__genesis.ab })"
     v0 = pg.evaluate(st)
     need(v0["c"] == 0 and v0["w"] == 0 and v0["v"] and v0["calm"], f"genesis should start empty, dark and calm: {v0}")
-    need(v0["ab"] == "off", f"the A/B switch must ship off: {v0['ab']}")
+    need(v0["ab"] == "on", f"the A/B switch is on since the Nov 4 launch: {v0['ab']}")
     need(v0["next"] == "light" and v0["pre"] == "let there be light", f"the first guided step should be light, pre-filled: {v0['next']} / {v0['pre']!r}")
     wait_for(pg, "() => getComputedStyle(document.getElementById('topbar')).opacity === '0'", 8, P=P)   # it fades out (1.6 s)
     e0 = pg.evaluate("""() => { const vis = el => !!el && getComputedStyle(el).opacity !== '0' && el.offsetParent !== null;
@@ -3478,7 +3478,7 @@ def t_story_row(P):
         ctx.close()
     ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)   # a browser with no story: the review link
     try:
-        q = Q.open("/?review=logos"); wait_for(q, "() => !!document.querySelector('#review.on') || /message from Nico/.test((document.querySelector('#ai-thread') || {}).textContent || '')", 60); q.close()
+        q = Q.open("/?review=logos&test"); wait_for(q, "() => !!document.querySelector('#review.on') || /message from Nico/.test((document.querySelector('#ai-thread') || {}).textContent || '')", 60); q.close()
     finally:
         ctx.close()
     pg = P.open("/pedia.html"); wait_for(pg, "() => document.querySelectorAll('a[href]').length > 20", 30, P=P)
