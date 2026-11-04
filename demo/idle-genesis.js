@@ -158,6 +158,8 @@ html.gen-void #ai-thread>.ai-row.page{display:none}
 @keyframes genDawn{0%{opacity:0}35%{opacity:1}100%{opacity:0}}
 html.gen-story #lab{transition:opacity .45s ease}html.gen-dawning #lab{opacity:0!important;pointer-events:none!important}#genBackdrop.dawn{transition:opacity .45s ease;opacity:0!important}
 html.gen-story.gen-noclose #lab-close{display:none!important}html.gen-story.gen-box,html.gen-story.gen-box body{background:#05060c!important}html.gen-story #lab-form small,html.gen-story #ai-oracle-link{display:none!important}
+.gen-tap{position:absolute;transform:translate(-50%,0);z-index:7;pointer-events:none;white-space:nowrap;font:600 15px/1 var(--ui-font,system-ui);color:#fff;background:#0a0b16d9;border:1px solid #ffcf7a;border-radius:12px;padding:6px 10px;box-shadow:0 0 14px #ffcf7a66;animation:genTap .9s ease-in-out infinite alternate}
+@keyframes genTap{from{translate:0 0}to{translate:0 -6px}}@media (prefers-reduced-motion:reduce){.gen-tap{animation:none}}
 .gen-ring{position:absolute;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;border:2px solid #9fb0ff;pointer-events:none;z-index:6;animation:genRing 1.6s ease-out forwards}
 @keyframes genRing{from{transform:scale(.3);opacity:1}to{transform:scale(9);opacity:0}}
 #genConsole .gw p{font:17px/1.45 var(--op-font);color:#fff;margin:2px 0 8px}#genConsole .gw p b{color:#9fb0ff;font:600 11px ui-monospace,Menlo,monospace;margin-right:6px}
@@ -168,7 +170,7 @@ html.gen-box #lab{position:fixed!important;left:50%!important;top:50%!important;
 html:is(.gen-box,.gen-float) #lab :is(#ai-thread,#lab-thread,#ai-bar,#ai-set,#ai-smart-btn,#ai-smart){display:none!important}
 html.gen-float #lab{position:fixed!important;left:50%!important;right:auto!important;top:auto!important;bottom:28px!important;transform:translateX(-50%)!important;width:min(560px,94vw)!important;height:auto!important;max-height:52vh!important;z-index:2147482000!important;border-radius:16px!important;box-shadow:0 18px 70px #000c,0 0 0 1px #6b7cff55!important;overflow:hidden!important}
 html:is(.gen-box,.gen-float) #lab{transition:opacity .45s ease!important}html:is(.gen-box,.gen-float) #lab>#genConsole{flex:0 1 auto;min-height:0;overflow:auto}html:is(.gen-box,.gen-float) #lab>:is(#lab-head,#lab-form,#opTray){flex:none}
-@media (max-width:500px){html.gen-float #lab{left:0!important;right:0!important;bottom:var(--kb,0px)!important;transform:none!important;width:100%!important;max-height:45dvh!important;border-radius:16px 16px 0 0!important}}
+@media (max-width:500px){html.gen-float #lab{left:0!important;right:0!important;top:var(--op-top,52px)!important;bottom:auto!important;transform:none!important;width:100%!important;max-height:min(45dvh,calc(100dvh - var(--op-top,52px) - var(--kb,0px) - 8px))!important;border-radius:0 0 16px 16px!important}}
 html:is(.gen-aside,.gen-look) #lab{opacity:0!important;pointer-events:none!important}
 html.gen-look :is(#toHandle,#genTag,#genDay,#lab-toggle){opacity:0!important;pointer-events:none!important;transition:opacity .6s}
 #genFlash{position:fixed;inset:0;z-index:2147481980;pointer-events:none;background:#e8f1ff;opacity:0}
@@ -291,17 +293,33 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
         (st.alt ? `<button class="quiet" data-galt="1"${busy ? ' disabled' : ''}>${esc(st.alt[0])}</button>` : '') + `</div>`) +
         `<div class="gh">${storyMode() ? (coarse() ? 'it is typed for you below: tap send, or say it your own way' : 'it is typed for you below: press enter, or say it your own way') : coarse() ? 'tap ▶, or type it your own way below' : 'press enter, or say it your own way'}</div>` +
         `<div class="gs">${storyMode() ? 'epoch 0 · genesis · ' : ''}step ${GD.indexOf(g) + 1} of ${GD.length} · <a data-gskip="1">skip the guide</a></div>`; }
-    else body = (S && S.orc === 'offer' ? `<div class="gc gor"><button class="glow" data-goracle="1" title="the Oracle: bring your own AI">🔮 Oracle</button></div>` : '') + `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>` +
+    // v15 (Nico: "I thought we were removing the buttons with the texts instead of re-adding them for all of the sections"): in the storyline the
+    // console never shows command buttons, after Genesis either (the 🛠 tray holds suggestions for whoever wants them); the playground's console keeps its chips
+    else body = (storyMode() ? '' : `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>`) +
       (storyMode() ? '' : `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`);
     let said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
     if (moment) { said = `<div class="gstamp">${esc(MOMENT.stamp)}</div>` + said; body = moment.ready ? `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : ''; }
     c.innerHTML = said + body; tag(); cls('gen-noclose', storyMode() && (!(S && S.days && S.days[0]) || !!moment));
-    prefill(); try { window.__opwin && window.__opwin.refresh(); } catch (e) {} }
+    prefill(); trimChat(); if (storyMode() && S && S.on && !$('#op-check') && !(S.days && S.days[0])) try { renderDay(); } catch (e) {}   // the ✅ from the first line on
+    try { window.__opwin && window.__opwin.refresh(); } catch (e) {} }
   // the 🛠 tray's chip in the storyline's Genesis (idle-opwin.js): the step's command, or nothing while the Operator talks or a step runs
   const chip = () => { if (!storyMode() || !guiding() || moment || !$('#genConsole')) return null; const g = nextGuide(); if (!g) return null; return { step: g, say: wakeBusy ? '' : sayOf(g), busy: !!busy }; };
   // the console line, and the same line in the Operator's thread (unless the Tiny Operator is mid-reply: it answers in its own voice)
   let quiet = false;
-  function say(line) { renderConsole(line); if (quiet) return; try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', line, 'ai'); } catch (e) {} }
+  function say(line) { renderConsole(line); if (quiet) return; try { const r = window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', line, 'ai'); if (r && r.classList && storyMode() && guiding()) r.classList.add('gmir'); } catch (e) {} }
+  // v15 (Nico: "while still on guided tour (all of Epoch 0, until the end), don't show the history of the chat messages yet, only at the end...
+  // just keep it to at the most 2-3 messages for the current brief interaction/task.. do allow the user to send random messages if they want...
+  // but we only display a limited number of recent ones"): while the storyline's Genesis window is up (gen-box / gen-float), the console shows the
+  // Operator's current line and the chat shows at most the last CHAT_KEEP rows of the current step (what the player typed and the replies);
+  // the console's own lines (gmir) and earlier steps' rows (gold) are hidden, never removed: the whole history shows once Genesis is over
+  const CHAT_KEEP = 2; let chatStep = null;
+  function trimChat() { try { _trimChat(); } catch (e) {} }   // (called from renderConsole, which can run before these lines are initialised)
+  function _trimChat() { const th = $('#ai-thread'); if (!th) return; const on = storyMode() && guiding() && document.documentElement.classList.contains('gen-story');
+    const g = on ? (nextGuide() || (moment ? 'moment' : null)) : null;
+    if (on && g !== chatStep) { chatStep = g; th.querySelectorAll(':scope > *').forEach(r => r.classList.add('gold')); }
+    const rows = [...th.children], keep = on ? rows.filter(r => !r.classList.contains('gmir') && !r.classList.contains('gold')).slice(-CHAT_KEEP) : [];
+    rows.forEach(r => r.classList.toggle('glast', keep.includes(r))); cls('gen-chat', on && keep.length > 0); if (keep.length) th.scrollTop = 1e9; }
+  { const watch = () => { const th = $('#ai-thread'); if (!th) return false; new MutationObserver(() => trimChat()).observe(th, { childList: true }); return true; }; if (!watch()) addEventListener('DOMContentLoaded', watch, { once: true }); }
 
   // the chips (free mode), the glowing suggestion and its quiet alternative (guided mode), "skip the guide"
   document.addEventListener('click', e => { const t = e.target.closest && e.target.closest('#genConsole [data-gen],#genConsole [data-gsay],#opTray [data-gsay],#genConsole [data-galt],#genConsole [data-gskip]'); if (!t) return;
@@ -340,7 +358,9 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   // the tour's last step (v10, Nico: "If you want to use your own AI model, just click here to connect to the Oracle"): one line and a small
   // glowing 🔮 in the console; the Oracle's lightbox (idle-ai.js window.__oracleBox) also opens from the Operator's chat and from ⚙ settings
   const ORACLE_LINE = 'if you ever want to bring your own AI model, click here to connect it to the Oracle';
-  function offerOracle() { if (!S || S.orc) return; S.orc = 'offer'; save(); say(ORACLE_LINE); }
+  // v15 (Nico: "inside the operator, I don't want the Oracle so prominent, in fact the oracle should be inside the settings"): no Oracle tour step
+  // or line in the Operator's chat any more; the Oracle lives in ⚙ settings (and /oracle, and the ⚡ tray in the playground)
+  function offerOracle() {}
   document.addEventListener('click', e => { if (!(e.target.closest && e.target.closest('#genConsole [data-goracle]'))) return; if (S) { S.orc = 'seen'; save(); }
     try { window.__oracleBox && window.__oracleBox.open('tour'); } catch (err) {} renderConsole(); });
   function endGuide(skipped) { if (!S || S.free) return; S.free = now(); S.skipped = !!skipped; save(); cls('gen-calm', 0); prefill(); if (!skipped) setTimeout(offerOracle, 2600);
@@ -407,7 +427,13 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   // looking around, then pop the Epoch 1 thing"): the window steps aside; three strikes, each with a far thunder, each bringing one creature
   // (the two originals, then a newborn crawly); quiet with the wind; the music; a look around with no UI at all (LOOK_MS, sooner after a
   // creature's card opens); then the Operator's Epoch 0 moment
-  const LIFE = { gap: 1500, quiet: 2000, look: 7000, lookAfterCard: 2500 };
+  const LIFE = { gap: 1500, quiet: 2000, look: 7000, lookAfterCard: 2500, hintAfter: 3000 };
+  // v15 (Nico: "Shuold we add some dialog on the creatures after they first show up? something kind of signalling the user to click them...."):
+  // each of the three says its first words as it appears (its own bubble, its family's voice); during the look-around a soft ring pulses on
+  // them and, after ~3 s, a small "👆 tap me" bobs by the first one (until the player has tapped a creature once, ever). DRAFT lines (Nico to tune)
+  const FIRST_LINES = ['…hello?', 'is this… light?', 'who are you?'], TAP_HINT = '👆 tap me';
+  const firstWords = (c, i) => { try { const R = window.__raveHooks; if (!c || !R || !R.say) return; R.say(c, FIRST_LINES[i] || FIRST_LINES[0]); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub && c.bub.classList.remove('on'), 3800); (snd.first = snd.first || []).push({ i, who: c.name, at: now() }); } catch (e) {} };
+  let tapped = false; try { tapped = localStorage.getItem('idle.e0tap') === '1'; } catch (e) {}
   let finaleNow = false;
   async function finale(family) { const h = H(); finaleNow = true; aside(1); const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; snd.strikes = [];
     try { await sleep(RM ? 150 : 600);
@@ -422,12 +448,19 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
         if (c0) { c0.x = c0.tx = w.x; c0.y = c0.ty = w.y + 8; if (c0.el) c0.el.style.visibility = ''; if (!cs.includes(c0)) cs.push(c0); name = c0.name; }
         else { name = W() && W().spawn(family || 'crawly'); const c = name && h.creatures().find(x => x.name === name); if (c) { c.x = c.tx = w.x; c.y = c.ty = w.y + 8; } }
         if (name) names.push(name); snd.strikes.push({ at: now(), who: name });
+        { const cc = name && h.creatures().find(x => x.name === name); if (cc) setTimeout(() => firstWords(cc, i), RM ? 100 : 450); }
         if (i < 2) await sleep(RM ? 300 : LIFE.gap); }
       if (!names.length) return null;
       cosmos.calm(0.25); done('creatures', null, { x: first.x, y: first.y }, { who: names.join(', ') });
       await sleep(RM ? 400 : LIFE.quiet); music();
-      cls('gen-look', 1); land.look = { t0: now() }; const until0 = now() + LIFE.look;
-      for (let cardAt = 0; now() < until0 && !(cardAt && now() > cardAt + LIFE.lookAfterCard);) { await sleep(150); const wh = $('#whisper'); if (!cardAt && wh && wh.style.display === 'block' && wh.offsetParent !== null) cardAt = now(); }
+      cls('gen-look', 1); land.look = { t0: now(), rings: 0, hint: null }; const until0 = now() + LIFE.look, born = names.map(n => h.creatures().find(x => x.name === n)).filter(Boolean);
+      let hintEl = null, lastRing = 0;
+      for (let cardAt = 0; now() < until0 && !(cardAt && now() > cardAt + LIFE.lookAfterCard);) { await sleep(150);
+        if (!cardAt && !RM && now() - lastRing > 1200) { lastRing = now(); born.forEach(c => ring(c.x, c.y)); land.look.rings++; }
+        if (!cardAt && !tapped && !hintEl && now() - land.look.t0 > LIFE.hintAfter && born[0]) { const f = $('#floor'); if (f) { hintEl = document.createElement('div'); hintEl.className = 'gen-tap'; hintEl.textContent = TAP_HINT; f.appendChild(hintEl); land.look.hint = now(); } }
+        if (hintEl && born[0]) { hintEl.style.left = born[0].x + 'px'; hintEl.style.top = (born[0].y + 26) + 'px'; }
+        const wh = $('#whisper'); if (!cardAt && wh && wh.style.display === 'block' && wh.offsetParent !== null) { cardAt = now(); land.look.tap = cardAt; mark('e0_tap'); if (!tapped) { tapped = true; try { localStorage.setItem('idle.e0tap', '1'); } catch (e) {} } if (hintEl) { hintEl.remove(); hintEl = null; } } }
+      if (hintEl) hintEl.remove();
       land.look.end = now(); cls('gen-look', 0); cls('gen-float', 0);
       dayDone(0); return names;
     } finally { finaleNow = false; } }
@@ -726,12 +759,38 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
 #genDay.end .ea>*{display:block;text-align:center;font:600 14px/1.2 var(--ui-font,system-ui);padding:10px 14px;border-radius:12px;border:1px solid #8ea0ff88;background:#1a1f55;color:#fff;text-decoration:none;cursor:pointer}
 #genDay.end .ea>*:hover,#genDay.end .ea>*:focus-visible{background:#2a3180;outline:none}#genDay.end .ea [data-end=free]{background:#3a46c8;border-color:#cfd6ff}
 #genDay.end .en{margin-top:12px;font:11.5px/1.45 var(--ui-font,system-ui);opacity:.65}#genDay .wip a{cursor:pointer;text-decoration:underline dotted;color:#9fd8ff}
-@media (max-width:600px){#genDay.end{padding:16px 16px 12px}#genDay.end .dt{font-size:19px}#genDay.end .el{font-size:15px}}`; document.head.appendChild(c4); }
+@media (max-width:600px){#genDay.end{padding:16px 16px 12px}#genDay.end .dt{font-size:19px}#genDay.end .el{font-size:15px}}
+#lab>#genDay.inop{position:static!important;inset:auto!important;transform:none!important;display:none;flex:none;min-width:0;max-width:none;margin:6px 10px 0;padding:8px 12px;border-radius:10px;font-size:12.5px;z-index:auto;opacity:1!important;pointer-events:auto!important}
+#lab.chk-open>#genDay.inop{display:block}#lab>#genDay.inop .x{display:none}#lab>#genDay.inop .dt{font-size:11px;margin-bottom:4px}
+#op-check{margin-left:auto;margin-right:6px;font:600 12px/1 var(--ui-font,system-ui);padding:4px 9px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer;min-height:28px}
+#lab.chk-open #op-check{background:#2f9e6a33;border-color:#8fe3b4}#op-check+#op-tools{margin-left:0}
+html.gen-story.gen-chat:is(.gen-box,.gen-float) #lab #ai-thread{display:block!important;flex:0 1 auto;min-height:0;max-height:30vh;overflow:auto;padding:4px 10px 6px;font-size:14px}
+html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none!important}
+#op-check.flash{animation:opChk 1.6s ease-out}@keyframes opChk{0%{box-shadow:0 0 0 0 #8fe3b4cc;background:#2f9e6a88}100%{box-shadow:0 0 0 14px #8fe3b400}}
+@media (prefers-reduced-motion:reduce){#op-check.flash{animation:none;background:#2f9e6a66}}`; document.head.appendChild(c4); }
   const builtNext = n => { const d = dayOf(n); return !!(d && d.goals && d.goals.length); };
-  function renderDay() { if (!storyMode()) { const g = $('#genDay'); if (g) g.remove(); return; } tag(); const d = dayOf(S.day || 0); if (!d) return; let el = $('#genDay');
-    if (document.documentElement.classList.contains('gen-box')) { if (el) el.remove(); return; }
-    if (!el) { el = document.createElement('div'); el.id = 'genDay'; document.body.appendChild(el); }
+  // v15 (Nico: "the little panel with the checklist (Epoch 0 Genesis), kinda of blocks the little bit of view that the user has behind/around
+  // the operator - we should keep that checklist within a ✅ section that shows the tasks, and it's toggable, at the top/inside the operator chat
+  // window"): during Genesis the epoch's checklist lives inside the Operator's window, under a ✅ in its header (collapsed by default; the ✅
+  // flashes when an item is ticked). Later epochs' small "coming soon" card and the end card stay where they were.
+  function checkBtn(show, n) { const head = $('#lab-head'); let b = $('#op-check');
+    if (!show) { if (b) b.remove(); const l = $('#lab'); if (l) l.classList.remove('chk-open'); return; }
+    if (!b && head) { b = document.createElement('button'); b.id = 'op-check'; b.type = 'button'; b.title = 'the epoch\'s tasks'; b.setAttribute('aria-expanded', 'false');
+      b.addEventListener('click', e => { e.stopPropagation(); const l = $('#lab'); if (!l) return; const on = !l.classList.contains('chk-open'); l.classList.toggle('chk-open', on); b.setAttribute('aria-expanded', on ? 'true' : 'false'); });
+      const t = $('#op-tools') || $('#lab-close'); if (t) head.insertBefore(b, t); else head.appendChild(b); }
+    if (!b) return; b.textContent = '✅ ' + n; if (b.dataset.n && +b.dataset.n < parseInt(n)) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 1700); } b.dataset.n = parseInt(n); }
+  // a closed end card shrinks toward the ✅ in the Operator's title bar when it's on screen, otherwise toward the 📟 (shrinkEnd)
+  window.__epochTarget = () => { for (const sel of ['#op-check', '#toHandle']) { const e = $(sel); if (e && !e.hidden && getComputedStyle(e).visibility !== 'hidden' && e.getBoundingClientRect().width) return e; } return null; };
+  function renderDay() { if (!storyMode()) { const g = $('#genDay'); if (g) g.remove(); checkBtn(false); return; } tag(); const d = dayOf(S.day || 0); if (!d) return; let el = $('#genDay');
     const ok = k => S.days && S.days[d.n] ? true : (d.n === 0 ? did(k) : false), soon = d.n > 0 && !builtNext(d.n), end = soon && !!S.endOpen;
+    // the Genesis checklist always lives in ✅; a later epoch's card goes there once the player closes it (never lost: manager v15 item 6)
+    const inop = !end && ((d.n === 0 && !soon && !(S.days && S.days[0])) || !!(S.dayIn && S.dayIn[d.n])), lab = $('#lab');
+    if (!inop) checkBtn(false);
+    if (!inop && document.documentElement.classList.contains('gen-box')) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'genDay'; }
+    if (inop && lab) { const c = $('#genConsole'), h = $('#lab-head'); if (el.parentNode !== lab) { if (h && h.nextSibling) lab.insertBefore(el, h.nextSibling); else lab.prepend(el); } }
+    else if (el.parentNode !== document.body) document.body.appendChild(el);
+    el.classList.toggle('inop', inop); if (inop) checkBtn(true, `${d.goals.filter(([k]) => ok(k)).length}/${d.goals.length}`);
     el.classList.toggle('soon', soon); el.classList.toggle('end', end); el.setAttribute('role', end ? 'dialog' : 'status');
     const repo = esc(window.IDLE_REPO || 'https://github.com/nicobrenner/id-le'), title = `EPOCH ${d.n} · ${esc(d.title.toUpperCase())}`;
     if (end) el.innerHTML = `<button class="x" title="close">×</button><div class="eb">${esc(END.head)}</div><div class="dt">${title}</div>
@@ -740,7 +799,7 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
 <div class="en">${esc(PG().short)} opens every part of Id|le now and keeps this consciousness as it is. when Epoch ${d.n} ships, ⚙ settings takes you back into the story.</div>`;
     else el.innerHTML = `<button class="x" title="hide">×</button><div class="dt">${title}</div><ul>${d.goals.map(([k, t]) => `<li class="${ok(k) ? 'ok' : ''}">${esc(t)}</li>`).join('')}</ul>` +
       (soon ? `<div class="wip">coming soon · Id|le is a work in progress · <a data-end="open">what's next ›</a></div>` : `<div class="dn">${esc('teaches: ' + d.teaches)}</div>`);
-    el.querySelector('.x').onclick = () => { if (end) { shrinkEnd(); S.endOpen = false; save(); renderDay(); } else el.remove(); };
+    el.querySelector('.x').onclick = () => { if (end) { shrinkEnd(); S.endOpen = false; save(); renderDay(); } else if (inop) { const l = $('#lab'); if (l) l.classList.remove('chk-open'); } else { S.dayIn = S.dayIn || {}; S.dayIn[d.n] = 1; save(); renderDay(); } };
     el.querySelectorAll('[data-end]').forEach(b => b.addEventListener('click', e => endChoice(b.dataset.end, e))); }
   function showEnd() { if (!storyMode() || !S || S.endOpen || builtNext(S.day || 0)) return; S.endOpen = true; S.endAt = S.endAt || now(); save(); mark('end_shown'); renderDay();
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_end', extra: { epoch: S.day || 0 } } })); } catch (e) {} }
@@ -956,6 +1015,10 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
   if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && (S.steps.music || S.steps.words)) && !genesisDone() && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   applyUnlocks();
-  window.__genesis = { modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole')), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  // the epoch's tasks still to do (the 📟's badge, idle-tohandle.js): only in the storyline, only while that epoch is being played
+  function pending() { try { if (!storyMode() || !S || !S.on) return 0; const d = dayOf(S.day || 0); if (!d || (S.days && S.days[d.n]) || (d.n > 0 && !builtNext(d.n))) return 0;
+    return d.goals.filter(([k]) => !(d.n === 0 ? did(k) : false)).length; } catch (e) { return 0; } }
+  // ready(): v15 — also only once the window is actually up (not during the landing, the dawn or a step's aside)
+  window.__genesis = { modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();

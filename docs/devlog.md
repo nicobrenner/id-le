@@ -13,6 +13,27 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-03
 
+**Story v15: from Nico's iPhone playthrough (staging).** He had been on an older build still open in a tab ("yes, that was the issue"); the newer
+one fixed most of it, and the rest is here.
+- **A newer build is never kept:** the build names its revision (window.IDLE_REV, build_static.py; version.json, never cached; `/`, `/arena`,
+  `/arena.html` no-cache in _headers). A page restored from the back/forward cache while a newer build is live reloads (unless someone is
+  typing); a tab that comes back after a while shows "a new version of Id|le is here · update ›". (The scripts were already fingerprinted.)
+- **The run:** the red line's plunge through the chart's floor now completes (an exponential dive, 23.2 → 28.2 s) before the vortex, and the twirl
+  starts gently (turn = k^2.6·14 rad; was k^2.2·16 from 26.6 s, when the dive was half done). The flash and the logo are unchanged (29.75 s, 31.0 s).
+- **The Operator at the top:** the 📟 sits right after 🔔 (top-left corner when the bar is hidden) and stays there as the window's toggle; the
+  window opens below it, never over the minimap (shorter or moved left when it would be); on phones a sheet from the top (≤ 45%). It steps
+  aside for ☰ and 🔔's panel too. Send is right of the box. ⚡ (quick actions) replaces 🛠.
+- **The Oracle out of the Operator:** no Oracle tour line, button, chip or caption in the storyline's Operator; the Oracle lives in ⚙ and
+  /oracle (and ⚡'s *bring your own AI* in the playground only). The Operator's greeting no longer mentions it.
+- **The epoch's tasks in the Operator:** the Genesis checklist sits under ✅ in the window's title bar (never a card over the world; it hid the
+  words falling on a phone); a later epoch's card, once closed, goes there too. The 📟 badge counts the tasks left (3 → 2 → 1 → none).
+- **No command buttons in the storyline**, after Genesis either (the playground's console keeps its chips).
+- **A short chat during Genesis:** the console's line plus at most the last 2 rows of the current step (what the player typed and the replies);
+  earlier rows are hidden, never removed, and the whole history shows once Genesis is over.
+- **The first creatures speak** (Nico: "Shuold we add some dialog on the creatures after they first show up?"): "…hello?", "is this… light?",
+  "who are you?" (drafts) as each appears; during the look-around a ring pulses on them and after 3 s "👆 tap me" bobs by the first (until
+  the player has tapped one, ever); a tap opens its card, ends the look-around early and logs e0_tap.
+- `__genesis.ready()` now also waits for the window to be up (not during the landing, the dawn or a step's aside).
 **Story v16: the way back to the story, Epochs 1–3 re-ordered, "consciousness", one address, ⚙'s order, modal cards (staging).**
 - **⚙ → 📖 Storyline** (Nico: "when I clicked the Story button in the settings, it took me all the way to the start of the story.. even though I had already completed it... like Netflix shows maybe, it should ask: [Restart story mode] [Resume play (Epoch1 - Unamed)]"): one row (was Storyline mode + Back to the storyline). No story yet: it starts one. A story going (finished or not): a modal, "📖 the storyline", "consciousness 24 · Epoch 1 · <name or unnamed>", [ ▶ resume (Epoch 1 · unnamed) ] / [ ↺ restart the story ]. Resume: a snapshot, story mode and its unlocks back, the saved point (today Epoch 1's end card). Restart: a snapshot, then a new story from the title card. Funnel st_resume, st_restart.
 - **The way back from the playground:** 🛠's first chip "📖 back to the story" whenever there is a story going; /story in the Operator's chat (a small slash-command registry, __opwin.command); the Operator says it after "welcome to the playground…" ("whenever you want the story back: 📖 back to the story in 🛠, or ⚙ → 📖 Storyline"); the play arm's welcome ends "you can always switch from ⚙ → 📖 Storyline (or type /story)".

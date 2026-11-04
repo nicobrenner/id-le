@@ -7,9 +7,13 @@
   const $ = s => document.querySelector(s);
   const css = document.createElement('style');
   // (v10, Nico: "I don't like the creature-like ghost, the operator is already a computer emoji"): the handle is the 📟 itself
-  css.textContent = `#toHandle{position:fixed;right:12px;bottom:12px;z-index:2147482002;width:44px;height:44px;border:1px solid #6b7cff66;border-radius:12px;padding:0;background:#0a0b16e6;cursor:pointer;font-size:22px;line-height:42px;text-align:center;box-shadow:0 0 10px #6b7cff44;transition:opacity .4s,transform .2s}
+  css.textContent = `#toHandle{position:fixed;left:10px;top:8px;z-index:2147482002;width:44px;height:44px;border:1px solid #6b7cff66;border-radius:12px;padding:0;background:#0a0b16e6;cursor:pointer;font-size:22px;line-height:42px;text-align:center;box-shadow:0 0 10px #6b7cff44;transition:opacity .4s,transform .2s}
 #toHandle:hover{transform:scale(1.08)}#toHandle[hidden]{display:block!important;opacity:0;pointer-events:none}#toHandle .tip{position:absolute;right:52px;bottom:10px;white-space:nowrap;font:600 11px var(--ui-font,system-ui);color:#cfe9f0;background:#0b0f18e6;border:1px solid #2b6f86;border-radius:10px;padding:3px 8px;opacity:0;pointer-events:none;transition:opacity .3s;line-height:1.4}
 #toHandle:hover .tip,#toHandle.hint .tip{opacity:1}#toHandle.glow{animation:toGlow 1.4s ease-in-out infinite}#toHandle.glow .tip{opacity:1}@keyframes toGlow{0%,100%{box-shadow:0 0 10px #6b7cff44}50%{box-shadow:0 0 0 6px #9fb0ff55,0 0 26px 6px #9fb0ffcc}}@media (prefers-reduced-motion:reduce){#toHandle.glow{animation:none;box-shadow:0 0 0 3px #9fb0ffaa,0 0 18px #9fb0ffaa}}html.gen-landing #toHandle{display:none!important}`;
+  css.textContent += `#toHandle{width:38px;height:36px;line-height:34px;font-size:19px;border-radius:10px}#toHandle.on{background:#2a3180;border-color:#cfd6ff}
+#toHandle .tip{right:auto!important;left:0!important;bottom:auto!important;top:42px!important}
+#toSlot,#topbar #toSlot{display:inline-block!important;width:44px;height:1px;vertical-align:middle}
+#toHandle .bd{position:absolute;right:-6px;top:-6px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#e0367a;color:#fff;font:700 11px/18px var(--ui-font,system-ui);text-align:center;box-shadow:0 0 0 2px #0a0b16;pointer-events:none}`;
   document.head.appendChild(css);
   const b = document.createElement('button'); b.id = 'toHandle'; b.type = 'button'; b.setAttribute('aria-label', 'open the Operator (the Tiny Operator)'); b.hidden = true;
   b.innerHTML = `<span aria-hidden="true">📟</span><span class="tip">Operator</span>`;
@@ -17,11 +21,26 @@
   if (document.body) add(); else document.addEventListener('DOMContentLoaded', add, { once: true });
   const visible = el => { if (!el) return false; const s = getComputedStyle(el), r = el.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.3 && s.pointerEvents !== 'none' && r.width > 0 && r.height > 0; };
   const labOpen = () => { const l = $('#lab'); return !!(l && l.classList.contains('open')); };
-  function place() { add(); const open = labOpen() || !!document.getElementById('idleIntro'); b.hidden = open; if (open) return;   // (v14: not over the intro and its skip ›)
-    // sit just above the Operator's own button when it is there, otherwise in the corner
-    const t = $('#lab-toggle'); if (visible(t)) { const r = t.getBoundingClientRect(); b.style.bottom = Math.max(12, innerHeight - r.top + 6) + 'px'; } else b.style.bottom = '12px'; }
-  // tapping it: the Operator's window, and every menu the guided start had hidden
-  function out() { document.documentElement.classList.remove('gen-calm'); if (!labOpen()) { const t = $('#lab-toggle'); if (t) t.click(); }
+  // v15 (Nico: "the operator is also on top of the minimap... should we move the operator to the top, maybe next to the bell?"): the 📟 lives at
+  // the top, right after 🔔 when the top bar shows it, otherwise in the top-left corner where the bar would be; it stays there while the window
+  // is open (it is the window's toggle), and the window opens anchored just below it (--op-top / --op-left, read by idle-opwin.js and idle-mobile.js).
+  // A small badge counts the epoch's pending tasks in the storyline (window.__genesis.pending()), like a messaging app.
+  const genWin = () => /\bgen-(box|float)\b/.test(document.documentElement.className);
+  function place() { add(); const intro = !!document.getElementById('idleIntro'); b.hidden = intro; if (intro) return;   // (v14: not over the intro and its skip ›)
+    const bell = $('#ntfBtn'); let L = 10, T = 8, H = 36;
+    // a slot right after 🔔 in the top bar keeps the bar's other buttons from sliding under the 📟
+    let slot = $('#toSlot'); if (bell && (!slot || slot.previousElementSibling !== bell)) { if (!slot) { slot = document.createElement('span'); slot.id = 'toSlot'; slot.setAttribute('aria-hidden', 'true'); } bell.after(slot); }
+    if (visible(bell)) { const rb = bell.getBoundingClientRect(), r = slot && slot.getBoundingClientRect(); L = Math.round(r && r.width ? r.left + 2 : rb.right + 6); T = Math.round(rb.top + rb.height / 2 - 18); }
+    L = Math.max(6, Math.min(innerWidth - 46, L)); T = Math.max(6, T);
+    b.style.left = L + 'px'; b.style.top = T + 'px'; b.style.right = 'auto'; b.style.bottom = 'auto';
+    const R = document.documentElement.style; R.setProperty('--op-top', (T + H + 8) + 'px'); R.setProperty('--op-left', Math.max(8, Math.min(L - 4, innerWidth - 300)) + 'px');
+    b.classList.toggle('on', labOpen());
+    let n = 0; try { n = window.__genesis && window.__genesis.pending ? +window.__genesis.pending() || 0 : 0; } catch (e) {}
+    let d = b.querySelector('.bd'); if (n > 0) { if (!d) { d = document.createElement('span'); d.className = 'bd'; b.appendChild(d); } if (d.textContent !== String(n)) d.textContent = n; b.setAttribute('aria-label', `the Operator: ${n} task${n > 1 ? 's' : ''} left in this epoch`); }
+    else if (d) { d.remove(); b.setAttribute('aria-label', 'open the Operator (the Tiny Operator)'); } }
+  // tapping it: the Operator's window (or closing it again: it is the window's toggle), and every menu the guided start had hidden.
+  // During the storyline's Genesis window it only opens (the guided part can't be closed)
+  function out() { document.documentElement.classList.remove('gen-calm'); const t = $('#lab-toggle'); if (!labOpen()) { if (t) t.click(); } else if (!genWin()) { const c = $('#lab-close'); if (c) c.click(); else if (t) t.click(); }
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'to_handle' } })); } catch (e) {} place(); }
   b.addEventListener('click', e => { e.stopPropagation(); out(); });
   // after the player closes the Operator, the first few times (Nico: "after closing it, at least the first couple of times, make it glow
@@ -32,5 +51,5 @@
     if (n >= GLOW.times) return; try { localStorage.setItem('idle.opCloses', String(n + 1)); } catch (er) {} setTimeout(() => { place(); b.classList.add('glow'); clearTimeout(glowT); glowT = setTimeout(stopGlow, GLOW.ms); }, 300); }, true);
   b.addEventListener('pointerenter', stopGlow); b.addEventListener('click', stopGlow);
   setInterval(place, 600); addEventListener('load', place);
-  window.__toHandle = { place, out, el: b, glowing: () => b.classList.contains('glow'), glow: GLOW };
+  window.__toHandle = { place, out, el: b, badge: () => { const d = b.querySelector('.bd'); return d ? +d.textContent : 0; }, glowing: () => b.classList.contains('glow'), glow: GLOW };
 })();

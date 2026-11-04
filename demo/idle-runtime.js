@@ -173,5 +173,24 @@ window.__funnel = (() => { const K = 'idle.funnel', KD = 'idle.funnelDt', KA = '
       if (t.value.trim()) localStorage.setItem(K(t.id), t.value); else localStorage.removeItem(K(t.id)); } catch (e) {} } };
     document.addEventListener('input', e => { if (e.target.matches && e.target.matches(SEL) && seen.has(e.target)) sync(); });
     addEventListener('pagehide', sync); setInterval(sync, 1000); if (document.readyState !== 'loading') sync(); else addEventListener('DOMContentLoaded', sync); })();
+  // ---------- a newer build (v15: Nico's iPhone kept a tab open from an older build, so a fixed bug looked unfixed). The page knows its own build
+  // (IDLE_REV, from build_static.py) and version.json (never cached) names the live one. When the page comes back (from the back/forward cache,
+  // or the tab becomes visible again after a while) and they differ: a page restored from the cache reloads at once if nobody is typing; otherwise
+  // a small "a new version of Id|le is here · update ›" appears (a reload keeps the world: it is saved all the time). Local copies have no IDLE_REV.
+  (() => { const mine = window.IDLE_REV; if (!mine || location.protocol === 'file:') return; let shown = false, lastCheck = 0, hiddenAt = 0;
+    const typing = () => { const a = document.activeElement; return !!(a && /^(TEXTAREA|INPUT)$/.test(a.tagName) && a.value && a.value.trim()); };
+    async function live() { try { const r = await fetch('version.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && j.rev || null; } catch (e) { return null; } }
+    function banner() { if (shown || !document.body) return; shown = true; const b = document.createElement('div'); b.id = 'newBuild'; b.setAttribute('role', 'status');
+      b.innerHTML = '<span>a new version of Id|le is here</span><button type="button">update ›</button><button type="button" class="x" aria-label="later">×</button>';
+      const st = document.createElement('style'); st.textContent = '#newBuild{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147483000;display:flex;gap:8px;align-items:center;max-width:calc(100vw - 32px);padding:8px 10px 8px 14px;border-radius:14px;background:#0a0b16f2;border:1px solid #8ea0ff88;color:#eef;font:15px/1.3 var(--ui-font,system-ui);box-shadow:0 10px 40px #0008}#newBuild button{font:600 14px var(--ui-font,system-ui);padding:6px 12px;border-radius:10px;border:1px solid #cfd6ff;background:#3a46c8;color:#fff;cursor:pointer}#newBuild .x{background:transparent;border-color:#8886;padding:6px 10px}';
+      document.head.appendChild(st); document.body.appendChild(b);
+      b.querySelector('button').onclick = () => location.reload(); b.querySelector('.x').onclick = () => b.remove(); }
+    async function check(restored) { const t = Date.now(); if (!restored && t - lastCheck < 60000) return; lastCheck = t; const rev = await live(); if (!rev || rev === mine) return;
+      try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'new_build', extra: { restored: !!restored } } })); } catch (e) {}
+      if (restored && !typing()) { location.reload(); return; } banner(); }
+    addEventListener('pageshow', e => { if (e.persisted) check(true); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { hiddenAt = Date.now(); return; } if (hiddenAt && Date.now() - hiddenAt > 30000) check(false); });
+    setInterval(() => { if (!document.hidden) check(false); }, 15 * 60000);
+    window.__newBuild = { check, mine: () => mine }; })();
   window.__idle = { mode: () => modeP, cfg: CFG, helperOn, sandbox: SANDBOX, swHelper: () => { try { const c = navigator.serviceWorker && navigator.serviceWorker.controller; if (c) c.postMessage({ helper: helperOn() ? CFG.helper : '' }); } catch (e) {} }, download, backups: () => tx('backups', 'readonly', s => s.getAll()), kv: { get, put } };   // kv: the almanac keeps its history here (served or static)
 })();
