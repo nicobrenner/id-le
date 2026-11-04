@@ -38,13 +38,14 @@
     { text: "what's happening?" }, { text: '🔮 bring your own AI', act: 'oracle' }];
   const genChip = () => { try { return window.__genesis && window.__genesis.chip ? window.__genesis.chip() : null; } catch (e) { return null; } };
   const ctx = () => { const g = genChip(); return { genesis: !!g, step: g && g.step, phone: phone() }; };
-  function templateChips(c) { const g = genChip(); if (g) return g.say ? [{ text: g.say, gsay: true, glow: true, disabled: !!g.busy }] : []; return TEMPLATES.slice(); }
+  let override = null;   // __opwin.setChips(): chips another feature puts in the tray for a while (reviews, the playground's welcome…)
+  function templateChips(c) { const g = genChip(); if (g) return g.say ? [{ text: g.say, gsay: true, glow: true, disabled: !!g.busy }] : []; return override ? override.slice() : TEMPLATES.slice(); }
   // the tray is open by default in Genesis (its chip is the step's glowing button), closed elsewhere unless the player opened it
   let userOpen = null; try { userOpen = localStorage.getItem('idle.opTray'); } catch (e) {}
-  const trayOpen = () => genChip() ? true : userOpen === '1';
+  const trayOpen = () => genChip() || override ? true : userOpen === '1';
   let sig = '';
   async function render(force) { const c = ctx(); let chips = null;
-    if (!c.genesis && typeof window.__opSuggest === 'function') { try { chips = await window.__opSuggest(c); } catch (e) { chips = null; } }
+    if (!c.genesis && !override && typeof window.__opSuggest === 'function') { try { chips = await window.__opSuggest(c); } catch (e) { chips = null; } }
     if (!Array.isArray(chips)) chips = templateChips(c);
     const open = trayOpen() && chips.length > 0, s = JSON.stringify([open, chips, c.phone]); tools.classList.toggle('on', open); tools.hidden = !!c.genesis;
     if (!force && s === sig) return; sig = s; tray.hidden = !open;
@@ -55,6 +56,7 @@
   // handled by idle-genesis.js (data-gsay: the same as saying the step's words)
   tray.addEventListener('click', e => { const b = e.target.closest('[data-opc]'); if (!b || b.disabled || b.dataset.gsay) return; const x = (tray._chips || [])[+b.dataset.opc]; if (!x) return;
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_chip', extra: { chip: x.act || x.text.slice(0, 24) } } })); } catch (er) {}
+    if (typeof x.act === 'function') { try { x.act(x); } catch (er) { console.warn('opwin: chip', er); } return; }
     if (x.act === 'oracle') { try { window.__oracleBox && window.__oracleBox.open('tray'); } catch (er) {} return; }
     text.value = x.text; if (coarse()) { const s = $('#lab-send'); if (s) s.click(); } else { text.focus(); try { text.setSelectionRange(text.value.length, text.value.length); } catch (er) {} } });
 
@@ -79,5 +81,24 @@
   let yieldTo = null;
   function tick() { const o = over(); if (o !== yieldTo) { yieldTo = o; document.documentElement.classList.toggle('op-yield', !!o); } render(); }
   setInterval(tick, 300); addEventListener('load', () => { tick(); render(true); });
-  window.__opwin = { refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text) }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
+  // ---------- pointing at something: a pulsing ring around any element (a toolbar icon…) and an arrow to it, for a few seconds
+  { const c2 = document.createElement('style'); c2.textContent = `.opHi{position:fixed;z-index:2147482900;pointer-events:none;border:2px solid #ffcf7a;border-radius:12px;box-shadow:0 0 0 0 #ffcf7a99;animation:opHi 1.1s ease-out infinite}
+@keyframes opHi{0%{box-shadow:0 0 0 0 #ffcf7acc}100%{box-shadow:0 0 0 14px #ffcf7a00}}.opHiA{position:fixed;z-index:2147482900;pointer-events:none;font:700 22px/1 var(--ui-font,system-ui);color:#ffcf7a;text-shadow:0 1px 6px #000a;animation:opHiA .9s ease-in-out infinite alternate}
+.opHiA small{display:block;font:600 11.5px/1.3 var(--ui-font,system-ui);margin-top:2px;max-width:180px;white-space:normal}@keyframes opHiA{from{translate:0 0}to{translate:0 -6px}}
+@media (prefers-reduced-motion:reduce){.opHi,.opHiA{animation:none}}`; document.head.appendChild(c2); }
+  function highlight(sel, { ms = 4000, note = '' } = {}) { const el = typeof sel === 'string' ? $(sel) : sel; if (!el || !el.getBoundingClientRect) return false; const r = el.getBoundingClientRect(); if (!r.width) return false;
+    const ring = document.createElement('div'); ring.className = 'opHi'; Object.assign(ring.style, { left: r.left - 5 + 'px', top: r.top - 5 + 'px', width: r.width + 10 + 'px', height: r.height + 10 + 'px' });
+    const below = r.top < innerHeight / 2, a = document.createElement('div'); a.className = 'opHiA'; a.innerHTML = (below ? '↑' : '↓') + (note ? `<small>${esc(note)}</small>` : '');
+    a.style.left = Math.max(6, Math.min(innerWidth - 190, r.left + r.width / 2 - 8)) + 'px'; if (below) a.style.top = r.bottom + 10 + 'px'; else a.style.bottom = innerHeight - r.top + 10 + 'px';
+    document.body.append(ring, a); setTimeout(() => { ring.remove(); a.remove(); }, ms); return true; }
+  const isOpen = () => lab.classList.contains('open');
+  const openWin = () => { if (!isOpen()) { const t = $('#lab-toggle'); if (t) t.click(); } }, closeWin = () => { if (isOpen()) { const t = $('#lab-toggle'); if (t) t.click(); } };
+  // the window's API, for other features (reviews, the playground's welcome, the storyline):
+  //   open() / close() / isOpen()            the window (the 📟 does the same)
+  //   say(text)                               a line in the Operator's voice in its chat (lowercase, no trailing period: the chat style)
+  //   setChips([{ text, act?, glow? }] | null) chips in the 🛠 tray until cleared (act: a function, or 'oracle'; no act: fills or sends the text)
+  //   highlight(selectorOrElement, { ms, note }) a pulsing ring and an arrow on any element for ms (4 s)
+  //   refresh(), tray(), toggleTray(), yielding(), pos()/setPos(), templates()   (tests and the tray's own state)
+  //   window.__opSuggest(ctx) → chips | Promise<chips>: the hook for generated suggestions (ctx: { genesis, step, phone })
+  window.__opwin = { open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text) }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
 })();

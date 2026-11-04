@@ -1666,7 +1666,7 @@ def t_story(P):
     need(not mo["hushed"] and mo["bg"] and mo["bed"] and mo["dj"] == "none", f"the music and the world's ambience on, the music panel still locked: {mo}")
     need(not pg.evaluate("() => !!document.querySelector('#genFront')"), "v14: no Gazette at the end of Genesis")
     # the playground asks first; stay goes back
-    pg.click("#genConsole [data-gm=play]"); wait_for(pg, "() => !!document.querySelector('#genConfirm')", 5, P=P)
+    pg.click("#genConsole [data-gm=play]"); wait_for(pg, "() => !!document.querySelector('#genConfirm') && !!window.__opwin.yielding()", 5, P=P)
     cf = pg.evaluate("() => ({ q: document.querySelector('#genConfirm').innerText, y: window.__opwin.yielding() })")
     need("are you sure" in cf["q"] and "stay in the story" in cf["q"] and cf["y"] == "#genConfirm", f"v14: the playground asks first, the Operator steps aside: {cf}")
     pg.click("#genConfirm [data-c=stay]"); wait_for(pg, "() => !document.querySelector('#genConfirm') && !window.__opwin.yielding() && window.__genesis.mode() === 'story'", 5, P=P)
@@ -2785,6 +2785,12 @@ def t_operator_float(P):
     pg.evaluate("() => { document.querySelector('#lab-text').value = ''; window.__opSuggest = () => [{ text: 'generated one' }]; }"); pg.wait_for_timeout(700)
     need(pg.evaluate("() => window.__opwin.tray().chips") == ["generated one"], "window.__opSuggest replaces the template chips (the hook for generated suggestions)")
     pg.evaluate("() => { delete window.__opSuggest; }")
+    # the window's API for other features: setChips (with a function), say, highlight
+    api = pg.evaluate("""async () => { window.__hit = 0; window.__opwin.setChips([{ text: 'do the thing', act: () => { window.__hit++; } }]); await new Promise(r => setTimeout(r, 400));
+      const tr = window.__opwin.tray(); document.querySelector("#opTray [data-opc='0']").click(); window.__opwin.say('hello from a feature'); const hi = window.__opwin.highlight('#settingsBtn', { ms: 600, note: 'here' });
+      const rings = document.querySelectorAll('.opHi').length; window.__opwin.setChips(null); await new Promise(r => setTimeout(r, 800));
+      return { tr, hit: window.__hit, said: document.querySelector('#ai-thread').textContent.includes('hello from a feature'), hi, rings, gone: !document.querySelector('.opHi'), back: window.__opwin.tray().chips.includes('make it rain') }; }""")
+    need(api["tr"]["chips"] == ["do the thing"] and api["tr"]["open"] and api["hit"] == 1 and api["said"] and api["hi"] and api["rings"] == 1 and api["gone"] and api["back"], f"the Operator window's API (setChips, say, highlight): {api}")
     pg.click("#op-tools"); wait_for(pg, "() => !window.__opwin.tray().open", 3, P=P)
     # 🧪 / the roadmap / the Oracle: the Operator steps aside, then comes back
     out = []
