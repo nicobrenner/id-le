@@ -6,6 +6,11 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+
+## 2026-11-04
+
+**The grey boxes were stones and pillars, not creatures.** Nico's staging screenshots showed grey rounded rectangles scattered over a dark world. They are building materials: `idle-build.js` `drawObj` had normal-mode drawings for crates, bricks, rocks and racks only; stones and pillars (and any unknown kind) fell through to `rr(...); fillStyle = dark ? '#555' : '#bbb'`, a flat box, striking in dark mode. Same code on id-le.com; it has nothing to do with the crash guard's light mode or the world hold. Now a stone is a rounded pebble with a crack and "01", a pillar a fluted column with a capital and base, and an unknown kind a labelled crate. Test 'build looks' (launch tier): every kind × light/dark × normal/Gloamhold draws ≥ 3 colours (≥ 2 in 1-bit Gloamhold); on the old code it fails exactly on stone and pillar (1 colour). Sheets: Desktop idle-trailers/greybox-before.png, greybox-after.png.
+
 ## 2026-11-04
 
 **KV writes: the stats accumulator (Nov 4, 8:22 PT Cloudflare alert: 90% of the free tier's 1,000 KV writes/day).** Cloudflare's own KV analytics for Nov 4 (UTC, to ~16:50): id-le-stats 830 writes, 2,520 reads, 156 lists; id-le-stats-staging 132 writes; worlds 0 writes. Almost all writes were the in-page stats flushes: every isolate wrote its own shard about 20 s after its first report, so roughly one write per visit.

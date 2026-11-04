@@ -30,13 +30,25 @@
     else if (o.k === 'brick') { rr(X, Y, w, h, 2); g.fillStyle = dark ? 'hsl(10,42%,36%)' : 'hsl(12,58%,58%)'; g.fill(); g.strokeStyle = dark ? 'hsl(10,45%,58%)' : 'hsl(10,50%,40%)'; g.stroke(); g.font = '600 9px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsl(20,70%,88%)' : '#fff8'; g.fillText((o.word || 'brick').slice(0, 7), x, y + 0.5); }
     else if (o.k === 'rock') { g.beginPath(); g.ellipse(x, y, hw, hh, 0, 0, 7); g.fillStyle = dark ? 'hsl(215,10%,30%)' : 'hsl(215,10%,74%)'; g.fill(); g.strokeStyle = dark ? 'hsl(215,14%,52%)' : 'hsl(215,10%,52%)'; g.stroke(); g.font = '9px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsla(210,30%,85%,.45)' : 'hsla(215,25%,30%,.45)'; g.fillText('{ 0 1 }', x, y - 6); g.fillText('1 0 1', x + 4, y + 8); }
     else if (o.k === 'rack') { rr(X, Y, w, h, 3); g.fillStyle = dark ? '#1b1f26' : '#2c323c'; g.fill(); g.strokeStyle = dark ? '#556' : '#111'; g.stroke(); for (let i = 0; i < 6; i++) { const yy = Y + 7 + i * (h - 12) / 6; g.fillStyle = dark ? '#2a303a' : '#3a414d'; g.fillRect(X + 4, yy, w - 8, (h - 12) / 6 - 3); for (let j = 0; j < 3; j++) { const on = Math.sin(ts / (300 + j * 170 + i * 90) + i * 2 + j + o.x) > 0.2; g.fillStyle = on ? (j === 2 ? '#f6b73c' : '#3ddc84') : '#0006'; g.fillRect(X + 7 + j * 5, yy + 3, 3, 3); } } }
-    else { rr(X, Y, w, h, 6); g.fillStyle = dark ? '#555' : '#bbb'; g.fill(); }
+    // stones and pillars had no drawing outside Gloamhold and fell through to a plain grey box (Nov 4, Nico's staging screenshot: "grey
+    // rounded rectangles where creatures should be"); every kind now has its own look, and an unknown kind is drawn as a labelled crate
+    else if (o.k === 'stone') { rr(X, Y, w, h, Math.min(w, h) / 2.4); g.fillStyle = dark ? 'hsl(200,12%,34%)' : 'hsl(200,10%,78%)'; g.fill(); g.strokeStyle = dark ? 'hsl(200,16%,58%)' : 'hsl(200,12%,50%)'; g.stroke();
+      g.beginPath(); g.moveTo(X + w * .28, Y + h * .3); g.lineTo(X + w * .5, Y + h * .52); g.lineTo(X + w * .72, Y + h * .4); g.strokeStyle = dark ? 'hsla(200,30%,80%,.35)' : 'hsla(200,25%,30%,.3)'; g.stroke();
+      g.font = '7px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsla(200,40%,88%,.6)' : 'hsla(200,30%,25%,.55)'; g.fillText('01', x, y + h * .2); }
+    else if (o.k === 'pillar') { const cap = Math.max(4, h * .14); g.fillStyle = dark ? 'hsl(40,14%,40%)' : 'hsl(40,22%,82%)'; g.fillRect(X + w * .18, Y + cap, w * .64, h - cap * 2); g.fillRect(X, Y, w, cap); g.fillRect(X, Y + h - cap, w, cap);
+      g.strokeStyle = dark ? 'hsl(40,20%,62%)' : 'hsl(40,20%,45%)'; g.strokeRect(X + w * .18, Y + cap, w * .64, h - cap * 2); g.strokeRect(X, Y, w, cap); g.strokeRect(X, Y + h - cap, w, cap);
+      g.beginPath(); for (let i = 1; i < 4; i++) { const fx = X + w * .18 + w * .64 * i / 4; g.moveTo(fx, Y + cap + 2); g.lineTo(fx, Y + h - cap - 2); } g.stroke(); }
+    else { rr(X, Y, w, h, 3); g.fillStyle = dark ? 'hsl(32,32%,30%)' : 'hsl(34,48%,72%)'; g.fill(); g.strokeStyle = dark ? 'hsl(32,40%,55%)' : 'hsl(30,40%,42%)'; g.stroke();
+      g.font = '7px ui-monospace,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = dark ? 'hsla(32,60%,80%,.7)' : 'hsla(30,50%,30%,.6)'; g.fillText(String((d && d.name) || o.k || '?').slice(0, 8), x, y); }
     if (o.pin) { g.font = '11px system-ui'; g.textAlign = 'center'; g.fillText('📌', x + hw - 2, y - hh + 2); } }
   function drawTo(g2, ob, dark, keep, ts) { if (!ob) return; const g0 = g; g = g2; try { const ink = keep ? (dark ? '#fff' : '#000') : dark ? 'rgba(230,200,150,.75)' : 'rgba(110,70,30,.7)';
       for (const s of ob.s || []) { const I = s.i; if (!I) continue; g.fillStyle = keep ? dither(2, ink) : dark ? 'rgba(240,200,140,.07)' : 'rgba(170,120,60,.08)'; if (s.k === 'pen') { g.beginPath(); g.ellipse(I[0], I[1], I[2], I[3], 0, 0, 7); g.fill(); } else g.fillRect(I[0], I[1], I[2] - I[0], I[3] - I[1]); }
       for (const [k, x, y, rot, word] of ob.o || []) drawObj({ k, rot, word }, x, y, keep, dark, ts);
       for (const s of ob.s || []) { if (!s.n) continue; g.font = keep ? '12px monospace' : 'italic 11px Georgia,serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = ink; g.fillText(s.n, s.x, s.k === 'hut' ? s.y + 62 : s.k === 'pen' ? s.y + 96 : s.k === 'bench' ? s.y + 26 : s.y + (s.v ? 108 : 30)); }
     } finally { g = g0; } }
+  // tests: draw one object of a kind onto a given context (the grey-box check: every kind must have its own look)
+  const drawObjTo = (g2, o, x, y, keep, dark) => { const g0 = g; g = g2; try { drawObj(o, x, y, keep, dark, 0); } finally { g = g0; } };
+  window.__buildObjKinds = () => Object.keys(DEF); window.__buildDrawObj = drawObjTo;
   const H = () => window.__buildHooks; if (!H()) { window.__build = window.__build || { drawTo }; return; }
   const now = () => Date.now(), pick = a => a[Math.floor(Math.random() * a.length)], clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const P = () => window.__places, placeId = () => (P() && P().cur && P().cur()) || 'home', kind = () => placeId() === 'home' ? 'home' : (P() && P().kind && P().kind()) || 'page';
