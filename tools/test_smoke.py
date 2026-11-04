@@ -352,6 +352,68 @@ def pages_unit():
     return f"views {s['views']}, bots {o['bots']}, 1k/10k/100k uniques → {o['est']['1000']:.0f}/{o['est']['10000']:.0f}/{o['est']['100000']:.0f}, 401 through the worker → {e2e['uniques']}"
 
 
+KV_WRITES_TEST = r"""
+const realST = globalThis.setTimeout; const tick = () => new Promise(r => realST(r, 0));
+globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; }; globalThis.__statFlushNow = true;
+let NOW = Date.UTC(2026, 10, 5, 0, 0, 30); const realNow = Date.now; Date.now = () => NOW;
+const RealDate = Date; globalThis.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } };
+const M = await import(process.argv[2]), W = M.default;
+let failPut = 0;   // >0: the next KV puts throw like the free-tier cap does
+const kv = () => { const m = new Map(), puts = []; return { m, puts, get: async k => m.get(k) ?? null, put: async (k, v) => { if (failPut > 0) { failPut--; throw new Error('KV PUT failed: 429 Too Many Requests'); } puts.push(k); m.set(k, v); }, delete: async k => { m.delete(k); } }; };
+const store = () => { const m = new Map(); return { m, get: async k => m.has(k) ? structuredClone(m.get(k)) : undefined, put: async (k, v) => { m.set(k, structuredClone(v)); }, delete: async k => { m.delete(k); } }; };
+const inst = {}, NS = { idFromName: n => n, get: id => ({ fetch: (url, init) => (inst[id] = inst[id] || new M.Presence({ storage: store() }, {})).fetch(new Request(url, init)) }) };
+const run = async (env, n, every) => { const go = (path, body) => W.fetch(new Request('https://id-le.com' + path, { method: 'POST', body: JSON.stringify(body), headers: { 'CF-Connecting-IP': '9.9.9.' + (n % 200), 'Content-Type': 'application/json' } }), env, { waitUntil(p) { return p; } });
+  for (let i = 0; i < n; i++) { NOW += every; await go('/lab/stats', { v: 1, visit: 1, dev: 'desktop', feat: ['music'] }); await tick(); await tick(); } };
+const out = {};
+// the old path (no accumulator): one KV write per batch; with every report in its own 20-s window that is one write per report
+{ const env = { STATS: kv(), ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' }; await run(env, 300, 108e3); await new Promise(r => setTimeout(r)); out.oldPuts = env.STATS.puts.filter(k => k.startsWith('stats:')).length; }
+// the accumulator: 800 reports over a day (one every 108 s, like Nov 4's 781 batches) → KV written at most once an hour
+NOW = Date.UTC(2026, 10, 6, 0, 0, 30);
+const env = { STATS: kv(), PRESENCE: NS, ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' };
+await run(env, 790, 108e3);
+await tick(); await tick();
+const day = '2026-11-06', puts = env.STATS.puts.filter(k => k.startsWith('stats:'));
+out.newPuts = puts.length; out.shards = [...new Set(puts)];
+const kvVisits = [...env.STATS.m.entries()].filter(([k]) => k.startsWith('stats:' + day)).reduce((a, [, v]) => a + JSON.parse(v).visits, 0);
+const peek = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json();
+const pendVisits = Object.values(peek.acc || {}).reduce((a, r) => a + r.visits, 0) + Object.values(peek.lent || {}).reduce((a, r) => a + r.visits, 0);
+out.visitsTotal = kvVisits + pendVisits;
+// a KV write that fails after a take: nothing is lost (the lent copy goes back into the pile after 5 minutes and is written later)
+{ NOW += 61 * 60e3; failPut = 1; await run(env, 1, 1000); await tick(); await tick();
+  NOW += 6 * 60e3; await run(env, 1, 1000); NOW += 61 * 60e3; await run(env, 1, 1000); await tick(); await tick();
+  const kv2 = [...env.STATS.m.entries()].filter(([k]) => k.startsWith('stats:')).reduce((a, [, v]) => a + JSON.parse(v).visits, 0);
+  const pk = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json();
+  out.afterFailTotal = kv2 + Object.values(pk.acc || {}).reduce((a, r) => a + r.visits, 0) + Object.values(pk.lent || {}).reduce((a, r) => a + r.visits, 0); }
+// a player's 🧪 message while KV refuses writes: "saved, will sync", then written with the accumulator's next take
+{ failPut = 99; const r = await W.fetch(new Request('https://id-le.com/lab/oracle', { method: 'POST', body: JSON.stringify({ kind: 'idea', text: 'more crawlies please' }), headers: { 'CF-Connecting-IP': '7.7.7.7', 'Content-Type': 'application/json' } }), env, { waitUntil(p) { return p; } });
+  out.fbStatus = r.status; out.fbBody = await r.json(); failPut = 0;
+  NOW += 61 * 60e3; await run(env, 1, 1000); await tick(); await tick();
+  out.fbWritten = [...env.STATS.m.keys()].some(k => k.startsWith('fb:')); }
+console.log(JSON.stringify(out));
+"""
+
+
+def kv_writes_unit():
+    """Nov 4 (KV free tier: 1,000 writes a day for the account): stats go through the accumulator (a Durable Object), KV is written at most
+    once an hour per day key, every visit is kept (KV + pending), a failed KV write loses nothing, a player's write refused by KV is queued
+    ("saved, will sync") and written later"""
+    tmp = tempfile.mkdtemp(prefix="idle-kvw-")
+    try:
+        shutil.copy(os.path.join(ROOT, "helper", "worker.js"), os.path.join(tmp, "worker.mjs"))
+        t = os.path.join(tmp, "t.mjs"); open(t, "w").write(KV_WRITES_TEST)
+        r = subprocess.run(["node", t, "file://" + os.path.join(tmp, "worker.mjs")], capture_output=True, text=True, timeout=120)
+        need(r.returncode == 0, (r.stderr or r.stdout)[-600:])
+        o = json.loads(r.stdout.strip().splitlines()[-1])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    need(o["oldPuts"] >= 250, f"the old path should write per batch: {o['oldPuts']} writes for 300 reports")
+    need(o["newPuts"] <= 25, f"the accumulator wrote KV {o['newPuts']} times in a day (≤ 25 expected)")
+    need(o["visitsTotal"] == 790, f"visits kept {o['visitsTotal']} != 790 (KV + pending)")
+    need(o["afterFailTotal"] == 793, f"after a failed KV write {o['afterFailTotal']} != 793")
+    need(o["fbStatus"] == 200 and o["fbBody"].get("queued") and o["fbWritten"], f"a refused 🧪 write: {o['fbStatus']} {o['fbBody']}, written later {o['fbWritten']}")
+    return f"a day of 790 reports: {o['newPuts']} KV writes (old path: {o['oldPuts']} for 300); every visit kept; a failed write recovered; a refused 🧪 queued and written"
+
+
 def worker_unit():
     tmp = tempfile.mkdtemp(prefix="idle-worker-")
     try:
@@ -2797,8 +2859,8 @@ def t_title_auto(P):
     pg.evaluate(SUSP); t0 = time.time()
     wait_for(pg, "() => !window.__epoch0.waiting()", 6, P=P); t_auto = time.time() - t0
     need(t_auto <= 2.6, f"the title card should start itself within ~2 s, took {t_auto:.1f} s")
-    a = pg.evaluate("""() => { const b = document.querySelector('#idleIntro .snd'), r = b && b.getBoundingClientRect();
-      return { auto: window.__epoch0.autoMuted(), chip: !!b && getComputedStyle(b).display !== 'none' && b.classList.contains('tap') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
+    a = pg.evaluate("""() => { const b = document.querySelector('#storySnd'), r = b && b.getBoundingClientRect();
+      return { auto: window.__epoch0.autoMuted(), chip: !!b && !b.classList.contains('gone') && b.classList.contains('chip') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
         state: window.__audio.ctx().state, f: window.__funnel.reached(), sounding: window.__epoch0.sounding() }; }""")
     need(a["auto"] and a["chip"] and a["state"] != "running" and not a["sounding"] and "title_auto" in a["f"], f"auto-start should be muted with the chip shown: {a}")
     t1 = pg.evaluate("() => window.__epoch0.time()"); s1 = pg.screenshot(); pg.wait_for_timeout(1500)
@@ -2816,8 +2878,9 @@ def t_title_auto(P):
     pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 6, P=P)
     pg.mouse.click(200, 200)
     wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding() && !window.__epoch0.autoMuted()", 10, P=P)
-    c = pg.evaluate("() => { const b = document.querySelector('#idleIntro .snd'); return { chipTap: !!b && b.classList.contains('tap'), shown: !!b && getComputedStyle(b).display !== 'none', f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
-    need(not c["chipTap"] and not c["shown"] and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and hide the chip (not pause): {c}")
+    pg.wait_for_timeout(1000)
+    c = pg.evaluate("() => { const b = document.querySelector('#storySnd'); return { chipTap: !!b && b.classList.contains('chip'), shown: !!b && !b.classList.contains('gone'), icon: b ? b.textContent : null, f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
+    need(not c["chipTap"] and c["shown"] and c["icon"] == "🔊" and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and shrink the chip into the 🔊 toggle (not pause): {c}")
     pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
     # 3. a key during the title card: starts at once, with sound, no chip
     pg = P.open("/arena.html?story&test")
@@ -2833,6 +2896,67 @@ def t_title_auto(P):
     pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted() && !window.__epoch0.waiting()", 6, P=P)
     P.clean()
     return f"auto-start in {t_auto:.1f} s, muted with the chip; moved {t2 - t1:.1f} s in 1.5 s; reached the dark silent (logo {b['logo']['arm'] if b['logo'] else '-'}); tap → sound; key → sound; story arm auto-starts"
+
+
+def t_speaker(P, phone=False):
+    """The sound toggle (Nov 4, Nico: "the 'tap for sound' message/prompt could animate/minimize to a speaker icon that stays at the bottom
+    left of the screen, like opposite/mirror of skip... and maybe it can stay there as a toggle too, so people can also turn it off"): the chip
+    shrinks after ~4 s into a bottom-left button that mirrors "skip ›"; a tap turns the sound on (🔊), another mutes it for real (the game's own
+    mute, kept in its setting), a third turns it back on in sync; it stays through the skip into the dark landing; phones: a 44 px target
+    clear of "skip ›" and the Operator"""
+    SUSP = "() => { try { const c = window.__audio && window.__audio.ctx(); if (c && c.state === 'running') c.suspend(); return true; } catch (e) { return false; } }"
+    RECT = """() => { const b = document.querySelector('#storySnd'), k = document.querySelector('#idleIntro .skip'), op = document.querySelector('#lab');
+      const R = e => { if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
+      const vis = e => !!e && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden' && +getComputedStyle(e).opacity > 0.05;
+      return { b: R(b), skip: vis(k) ? R(k) : null, op: vis(op) ? R(op) : null, cls: b ? b.className : null, icon: b ? b.textContent : null, on: b ? b.dataset.on : null, H: innerHeight, W: innerWidth,
+        muted: window.__audio.muted(), state: window.__audio.ctx().state, sounding: window.__epoch0.sounding(), f: window.__funnel.reached() }; }"""
+    over = lambda a, b: bool(a and b and a["l"] < b["r"] and b["l"] < a["r"] and a["t"] < b["b"] and b["t"] < a["b"])
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 150, P=P)
+    pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 15, P=P)
+    a = pg.evaluate(RECT)
+    need("chip" in a["cls"] and "gone" not in a["cls"] and "tap for sound" in a["icon"], f"the chip should show first: {a}")
+    pg.wait_for_timeout(4800)
+    b = pg.evaluate(RECT)
+    need("chip" not in b["cls"] and "gone" not in b["cls"] and b["icon"] in ("🔇", "🔊"), f"after ~4 s the chip should become the speaker button: {b}")
+    need(abs(b["b"]["l"] - 14) <= 2 and abs((b["H"] - b["b"]["b"]) - 14) <= 3, f"the speaker should sit at the bottom left (14 px): {b['b']} in {b['W']}x{b['H']}")
+    if b["skip"]:
+        need(abs(b["b"]["b"] - b["skip"]["b"]) <= 3 and abs((b["W"] - b["skip"]["r"]) - b["b"]["l"]) <= 3, f"it should mirror skip ›: speaker {b['b']}, skip {b['skip']}")
+        need(not over(b["b"], b["skip"]), f"it must not overlap skip ›: {b['b']} vs {b['skip']}")
+    if phone:
+        need(b["b"]["w"] >= 44 and b["b"]["h"] >= 44, f"a 44 px tap target on phones: {b['b']}")
+    else:
+        need(b["skip"] and abs(b["b"]["h"] - b["skip"]["h"]) <= 4, f"the same size as skip › on desktop: {b['b']} vs {b['skip']}")
+    # on
+    pg.click("#storySnd")
+    wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding()", 10, P=P); pg.wait_for_timeout(700)
+    c = pg.evaluate(RECT)
+    need(c["icon"] == "🔊" and not c["muted"] and "sound_on" in c["f"] and not pg.evaluate("() => window.__epoch0.paused()"), f"a tap should turn the sound on (🔊), without pausing: {c}")
+    # off: the game's own mute, kept in its setting; the film's sound stops
+    pg.click("#storySnd"); pg.wait_for_timeout(900)
+    d = pg.evaluate(RECT); saved = pg.evaluate("() => { try { return JSON.parse(localStorage.getItem('idle.audio') || 'null'); } catch (e) { return null; } }")
+    need(d["icon"] == "🔇" and d["muted"] and not d["sounding"] and d["state"] != "running" and "sound_off" in d["f"], f"a second tap should mute for real (gain 0, audio suspended): {d}")
+    need(saved and saved.get("muted") is True, f"the mute should be kept in the game's sound setting: {saved}")
+    # on again: back in sync
+    pg.click("#storySnd")
+    wait_for(pg, "() => !window.__audio.muted() && window.__audio.ctx().state === 'running' && window.__epoch0.sounding()", 10, P=P)
+    # skip into the dark landing: the toggle stays, and still mutes the game
+    pg.keyboard.press("Escape")
+    wait_for(pg, "() => !document.querySelector('#idleIntro') && window.__genesis && window.__genesis.landing && ['dark', 'arriving', 'sonar'].includes(window.__genesis.landing().phase)", 20, P=P)
+    pg.wait_for_timeout(3600)
+    e = pg.evaluate(RECT)
+    need(e["b"] and "gone" not in e["cls"], f"the toggle should stay into the dark landing: {e}")
+    pg.click("#storySnd"); pg.wait_for_timeout(500)
+    f = pg.evaluate(RECT)
+    need(f["muted"] and f["icon"] == "🔇", f"muting in the dark should mute the game: {f}")
+    if phone:
+        wait_for(pg, "() => { const op = document.querySelector('#lab'); return !!op && getComputedStyle(op).display !== 'none'; }", 60, P=P)
+        g = pg.evaluate(RECT)
+        need(not over(g["b"], g["op"]), f"the speaker must never sit under the Operator: {g['b']} vs {g['op']}")
+    if os.environ.get("IDLE_SHOTS"):
+        pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], f"speaker-{'phone' if phone else 'desktop'}-dark.png"))
+    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    return f"{'phone' if phone else 'desktop'}: chip → speaker at {b['b']['l']:.0f},{b['H'] - b['b']['b']:.0f} ({b['b']['w']:.0f}x{b['b']['h']:.0f}); on → off (muted, kept) → on; stays into the dark landing"
 
 
 def t_ios_sound(P, ios=True):
@@ -3174,7 +3298,7 @@ def t_story_arms(P):
 def t_story_offer(P):
     """The storyline offer (returning players, the other arm): shown once per browser (remembered); accepting keeps the world as a snapshot
     and starts the story."""
-    pg = P.open("/arena.html?fresh=1&test&offer"); booted(pg)
+    pg = P.open("/arena.html?fresh=1&test&offer=old"); booted(pg)
     wait_for(pg, "() => !!document.querySelector('#storyOffer')", 30, P=P)
     t = pg.inner_text("#storyOffer"); need("storyline mode" in t and "snapshot" in t, f"the offer: {t!r}")
     again = pg.evaluate("() => { document.querySelector('#storyOffer').remove(); return window.__genesis.offer(); }")
@@ -3188,6 +3312,63 @@ def t_story_offer(P):
     need(n1 == n0 + 1 and "offer_shown" in f["f"] and "offer_accepted" in f["f"] and f["o"] == "accepted", f"accepting: a snapshot first, then the story: {n0}→{n1}, {f}")
     pg.keyboard.press("Escape"); P.clean()
     return f"shown once (remembered), accepted → snapshot ({n0}→{n1}) → the story"
+
+
+def t_story_offer_v2(P):
+    """The storyline offer v2 (Nov 4: v1 shown 22 times at load, accepted 0): variants a (timed card), b (card with a silent logo preview),
+    c (the Operator's line + a chip). Each waits for time on screen AND an interaction, never shows over an open panel, takes a snapshot first
+    when accepted, and 'later' asks once more days later, then never."""
+    out = []
+    for v in "abc":
+        pg = P.open(f"/arena.html?fresh=1&test&offer={v}&offerms=1500"); booted(pg)
+        pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.removeItem('idle.storyOffer'); localStorage.removeItem('idle.genesis'); }"); pg.reload(); booted(pg)
+        pg.wait_for_timeout(2500)
+        need(not pg.evaluate("() => !!document.querySelector('#storyOffer') || /Doc's story/.test(document.body.innerText)"), f"{v}: shown before any interaction")
+        pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(400)
+        pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        pg.wait_for_timeout(2000)
+        st = pg.evaluate("() => window.__genesis.offerState()")
+        need(st["last"] is None, f"{v}: shown over the open 🧪 panel: {st}")
+        pg.evaluate("() => { window.__feedback.close(); document.querySelectorAll('#ntf .np').forEach(n => n.remove()); }")   # a ?fresh toast shares the corner; the offer waits for toasts
+        if v == "c":
+            wait_for(pg, "() => [...document.querySelectorAll('#opTray .opc')].some(b => /start the story/.test(b.textContent))", 15, P=P)
+            txt = pg.evaluate("() => document.body.innerText")
+            need("Doc's story" in txt, f"c: the Operator's line: {txt[-300:]!r}")
+            go = "() => [...document.querySelectorAll('#opTray .opc')].find(b => /start the story/.test(b.textContent)).click()"
+        else:
+            try: wait_for(pg, "() => !!document.querySelector('#storyOffer')", 15, P=P)
+            except AssertionError: need(False, f"{v}: no card: {pg.evaluate('() => { const s = window.__genesis.offerState(); delete s.text; return s; }')}")
+            t = pg.inner_text("#storyOffer"); need("Doc's story" in t and ("snapshot" in t or "safe" in t), f"{v}: the card: {t!r}")
+            if v == "b":
+                wait_for(pg, "() => { const c = document.querySelector('#storyOffer canvas.pv'); return c && (+c.dataset.frames > 5 || c.dataset.still); }", 20, P=P)
+                lit = pg.evaluate("() => { const c = document.querySelector('#storyOffer canvas.pv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i+1] + d[i+2] > 120) n++; return { n, frames: +c.dataset.frames || 0, still: !!c.dataset.still }; }")
+                need(lit["n"] > 20, f"b: the preview draws nothing: {lit}")
+            go = "() => document.querySelector('#storyOffer .go').click()"
+        f0 = pg.evaluate("() => window.__funnel.reached()")
+        need("offer_shown" in f0 and f"offer_shown_{v}" in f0, f"{v}: funnel: {f0}")
+        n0 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+        pg.evaluate(go); wait_for(pg, "() => !!document.querySelector('#idleIntro')", 20, P=P)
+        n1 = pg.evaluate("() => (JSON.parse(localStorage.getItem('arena.snaps') || '[]') || []).length")
+        f1 = pg.evaluate("() => ({ f: window.__funnel.reached(), s: JSON.parse(localStorage.getItem('idle.storyOffer2')) })")
+        need(n1 == n0 + 1 and f"offer_go_{v}" in f1["f"] and f1["s"]["ans"] == "accepted", f"{v}: accepted → snapshot then story: {n0}→{n1}, {f1}")
+        pg.keyboard.press("Escape"); P.clean(); out.append(f"{v} ✓")
+    # later: asks once more, days later, then never
+    pg = P.open("/arena.html?fresh=1&test&offer=a&offerms=0"); booted(pg)
+    pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.removeItem('idle.storyOffer'); localStorage.removeItem('idle.genesis'); }"); pg.reload(); booted(pg)
+    pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+    wait_for(pg, "() => !!document.querySelector('#storyOffer')", 15, P=P)
+    pg.click("#storyOffer .lt"); pg.wait_for_timeout(500)
+    r = pg.evaluate("""() => { const G = window.__genesis, o1 = JSON.parse(localStorage.getItem('idle.storyOffer2')), again = G.offer();
+      const o = JSON.parse(localStorage.getItem('idle.storyOffer2')); o.at = Date.now() - 4 * 864e5; localStorage.setItem('idle.storyOffer2', JSON.stringify(o));
+      document.querySelector('#storyOffer') && document.querySelector('#storyOffer').remove(); const second = G.offer(); document.querySelector('#storyOffer .lt').click();
+      const o2 = JSON.parse(localStorage.getItem('idle.storyOffer2')); o2.at = Date.now() - 40 * 864e5; localStorage.setItem('idle.storyOffer2', JSON.stringify(o2));
+      return { o1, again, second, third: (document.querySelector('#storyOffer') && document.querySelector('#storyOffer').remove(), G.offer()), n: o2.n }; }""")
+    need(r["o1"]["ans"] == "later" and r["o1"]["n"] == 1 and r["again"] is False and r["second"] is True and r["third"] is False and r["n"] == 2, f"later → once more days later → never: {r}")
+    # v1 browsers (shown at load before v2) get one more, better-timed ask
+    m = pg.evaluate("() => { localStorage.removeItem('idle.storyOffer2'); localStorage.setItem('idle.storyOffer', 'dismissed'); return window.__genesis.offerState().seen; }")
+    need(m["n"] == 1 and m["ans"] == "later", f"a v1 'dismissed' browser: {m}")
+    P.clean()
+    return " · ".join(out) + "; nothing before an interaction or over 🧪; later → once more after 3 days → never; v1 dismissals get one more ask"
 
 
 def t_story_v6(P):
@@ -3290,6 +3471,41 @@ def t_story_first_paint(P, root, phone=False):
         finally:
             ctx.close()
     return f"{'phone' if phone else 'desktop'}: {sum(a for a, b in out_)} frames filmed, {sum(b for a, b in out_)} before the story's black, all black; choose and play unchanged"
+
+def t_intent_links(P, root):
+    """id-le.com (production hostname): every link with an explicit destination (arena.html's INTENT_PARAMS / INTENT_HASH, Nov 4: "?lab",
+    "?wiki=Octopus" loaded the story) skips the A/B/C draw: no arm, no title card, no story black; it goes where it says and is counted as
+    entry_<kind>. A plain address (only utm tags) still gets its arm. Math.random is pinned so a draw would land on the story arm."""
+    P.base, P.root = "https://id-le.com", root
+    links = [("/?lab&utm_source=x", "lab", "lab"), ("/#lab", "lab", "lab"), ("/?datalab", "lab", "lab"), ("/?start=ready", "start", "world"),
+             ("/?wiki=Octopus", "wiki", None), ("/?review=logos", "review", None), ("/?gift=founder", "gift", None), ("/?halloween", "halloween", "world"),
+             ("/?world=abc123", "world", "world"), ("/?intro=eerie", "intro", None), ("/#c=Crawly", "creature", "world"), ("/?utm_source=x", None, "story")]
+    out = []
+    for path, kind, dest in links:
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script("Math.random = () => 0.01;"); Q = Page(ctx, P.base); Q.root = root
+        try:
+            q = Q.open(path)
+            if dest == "story":
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            else:
+                wait_for(q, "() => !!window.__restoredOrFresh && !!window.__genesis", 40); q.wait_for_timeout(2500)
+            if dest == "lab": wait_for(q, "() => document.querySelector('#team') && document.querySelector('#team').classList.contains('on') && !!(window.__dlwalk && window.__dlwalk.active())", 40)
+            if dest == "world": wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+            x = q.evaluate("""() => { let f = {}; try { f = JSON.parse(localStorage.getItem('idle.funnel') || '{}') || {}; } catch (e) {}
+              const it = document.querySelector('#idleIntro'), st = window.__genesis.state && window.__genesis.state();
+              return { gv: localStorage.getItem('idle.gv'), entry: window.__intentEntry || null, title: !!(it && it.dataset.title === '1'), story: !!(st && st.on && st.mode === 'story'),
+                black: document.documentElement.classList.contains('story-boot'), offer: !!document.querySelector('#storyOffer'), marks: Object.keys(f).filter(k => k.startsWith('entry_')) }; }""")
+            if kind is None:
+                need(x["gv"] == "story" and x["title"] and not x["entry"], f"a plain address keeps getting its arm: {x}")
+            else:
+                need(x["gv"] is None and not x["title"] and not x["story"] and not x["black"] and not x["offer"] and x["entry"] == kind, f"{path}: no arm, no story, goes where it says: {x}")
+                q.wait_for_timeout(1200); m = q.evaluate("() => { try { return Object.keys(JSON.parse(localStorage.getItem('idle.funnel') || '{}')).filter(k => k.startsWith('entry_')); } catch (e) { return []; } }")
+                need(("entry_" + kind) in m, f"{path}: funnel entry_{kind} expected, got {m}")
+            out.append(f"{path} → {kind or 'arm story'}")
+        finally:
+            ctx.close()
+    return "; ".join(out)
+
 
 def t_prod_gates(P, root):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
@@ -4100,8 +4316,8 @@ def browser_tests(a, out):
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
-        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -4113,7 +4329,7 @@ def browser_tests(a, out):
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
         ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
-        ("prod gates", t_prod_gates, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
+        ("prod gates", t_prod_gates, (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
@@ -4128,10 +4344,10 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"engaged", "engage ask", "title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+LAUNCH = {"engaged", "engage ask", "arm reload", "arm stats", "chooser", "conflict markers", "fresh load", "intent links", "js syntax", "presence", "prod gates", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "worker"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
-          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
+          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
           ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
 # checks that pass the same assertions with the page's clock sped up (?timescale). Measured Nov 4 on 15 of the slowest at 5×: none got
 # meaningfully faster (they wait on the test's own fixed pauses and on the audio clock, which can't run faster) and 4 broke (story keys

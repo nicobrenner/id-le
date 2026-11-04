@@ -141,9 +141,9 @@ def call(path, tok, raw=False, body=None):
 SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play", "e0_tap", "e0_ask_name", "e0_ask_logo", "e0_ask_both", "e0_ask_skip", "ch_story", "ch_play", "pw_shown", "pw_story", "st_resume", "st_restart"]
 SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
             "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)",
-            "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground", "e0_tap": "tapped a creature in the look-around", "e0_ask_name": "the ask: named the first creature", "e0_ask_logo": "the ask: picked an opening", "e0_ask_both": "the ask: liked both openings", "e0_ask_skip": "the ask: skipped",
+            "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground", "e0_tap": "tapped a creature in the look-around", "e0_ask_name": "the ask: named the first creature", "e0_ask_logo": "the ask: picked an opening", "e0_ask_both": "the ask: liked both openings", "e0_ask_skip": "the ask: skipped", "entry_lab": "link: ?lab (data lab)", "entry_start": "link: ?start=…", "entry_wiki": "link: ?wiki= (a Wikipedia world)", "entry_review": "link: ?review=", "entry_gift": "link: ?gift=", "entry_halloween": "link: ?halloween", "entry_world": "link: a shared world", "entry_intro": "link: ?intro=", "entry_creature": "link: #c= (a creature)", "entry_recover": "link: #recover",
             "ch_story": "chooser: the storyline", "ch_play": "chooser: the playground", "pw_shown": "playground welcome shown", "pw_story": "playground welcome: started the story",
-            "st_resume": "⚙ storyline: resumed", "title_auto": "title card auto-started", "sound_on": "turned the sound on", "st_restart": "⚙ storyline: restarted"}
+            "st_resume": "⚙ storyline: resumed", "title_auto": "title card auto-started", "sound_on": "turned the sound on", "sound_off": "muted with the speaker toggle", "st_restart": "⚙ storyline: restarted"}
 
 
 # the Founder gift (idle-founder.js), from the same once-per-browser moments ('fd_…'), summed over the storyline's arms
@@ -456,11 +456,29 @@ def feedback_html(fb):
             f"<code>python3 tools/feedback.py</code>; promote to the roadmap with <code>feedback.py promote ID --title …</code>.</p><ul>{rows}</ul><h3>Latest 20</h3><ul>{latest}</ul></section>")
 
 
+def pending_stats(a):
+    """[(day, record)] the stats accumulator hasn't written to KV yet (Nov 4: KV is written at most every 10 minutes), read with the live key
+    from ~/.idle-ts/live.key (never printed). Empty if the key or the endpoint isn't there."""
+    if getattr(a, "no_pending", False):
+        return []
+    try:
+        key = open(os.path.expanduser("~/.idle-ts/live.key")).read().strip()
+        rq = urllib.request.Request(SITE_PENDING, headers={"Authorization": "Bearer " + key, "User-Agent": "curl/8"})
+        d = json.loads(urllib.request.urlopen(rq, timeout=15).read())
+    except Exception:
+        return []
+    return [(day, rec) for part in (d.get("acc") or {}, d.get("lent") or {}) for day, rec in part.items() if isinstance(rec, dict)]
+
+
+SITE_PENDING = "https://id-le.com/lab/stats-pending"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=14)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--html", metavar="FILE", help="write a dashboard page")
+    ap.add_argument("--no-pending", action="store_true", help="leave out what the stats accumulator hasn't written to KV yet")
     a = ap.parse_args()
     tok = token()
     acct = call("/accounts", tok)["result"][0]["id"]
@@ -484,6 +502,13 @@ def main():
             continue
         v = json.loads(call(f"/accounts/{acct}/storage/kv/namespaces/{nsid}/values/{urllib.parse.quote(k, safe='')}", tok, raw=True))
         for kk, sv in ((v.get("pv") or {}).get("hll") or {}).items():   # sketches merge by max, never add
+            sketches.setdefault(day, {}).setdefault(kk, []).append(sv)
+        add(days.setdefault(day, {}), v)
+    pend = pending_stats(a)
+    for day, v in pend:   # what the stats accumulator (a Durable Object) holds and hasn't written to KV yet (at most ~10 minutes' worth)
+        if day < since:
+            continue
+        for kk, sv in ((v.get("pv") or {}).get("hll") or {}).items():
             sketches.setdefault(day, {}).setdefault(kk, []).append(sv)
         add(days.setdefault(day, {}), v)
     for day, by in sketches.items():
@@ -590,12 +615,14 @@ def main():
             st = o["steps"]; first = next((st[k] for k in SF_STEPS if st.get(k)), 0)
             line = " → ".join(f"{SF_NAMES[k]} {st[k]}" + (f" ({100 * st[k] / first:.0f}%)" if first else "") for k in SF_STEPS if st.get(k))
             print(f"  {arm:<8} {line or '-'}")
-            if st.get("title_auto") or st.get("sound_on"):
-                print(f"           title card: auto-started (no key in 2 s) {st.get('title_auto', 0)}, then turned the sound on {st.get('sound_on', 0)}")
+            if st.get("title_auto") or st.get("sound_on") or st.get("sound_off"):
+                print(f"           title card: auto-started (no key in 2 s) {st.get('title_auto', 0)}, then turned the sound on {st.get('sound_on', 0)} · the speaker toggle turned it off {st.get('sound_off', 0)}")
             if o["skips"]:
                 print(f"           skipped at: " + ", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in sorted(o["skips"].items(), key=lambda kv: -kv[1])))
             if o["offer"]:
                 print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
+                for vv in "abc":
+                    if o['offer'].get('shown_' + vv): print(f"             offer {vv}: shown {o['offer'].get('shown_' + vv, 0)}, played {o['offer'].get('go_' + vv, 0)}, later {o['offer'].get('later_' + vv, 0)}")
             if o.get("rv"):
                 print("           ⭐ reviews: " + rv_line(o["rv"]))
             if o.get("end"):

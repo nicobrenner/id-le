@@ -5,6 +5,36 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+
+## 2026-11-04
+
+**KV writes: the stats accumulator (Nov 4, 8:22 PT Cloudflare alert: 90% of the free tier's 1,000 KV writes/day).** Cloudflare's own KV analytics for Nov 4 (UTC, to ~16:50): id-le-stats 830 writes, 2,520 reads, 156 lists; id-le-stats-staging 132 writes; worlds 0 writes. Almost all writes were the in-page stats flushes: every isolate wrote its own shard about 20 s after its first report, so roughly one write per visit.
+- Isolates now hand their batch to a stats accumulator: the existing Presence Durable Object class, instance `stats-live` / `stats-staging`, same PRESENCE binding, so no new binding. It merges each batch into its own SQLite-backed storage (durable: an evicted isolate loses nothing) with the same `mergeStat` the KV write uses.
+- One request takes the pile and writes it to KV (shard `stats:<day>:do`) at most once an hour: ≤ 24 writes a day per day key, whatever the traffic. The KV record keeps the tokens it applied, so a batch offered twice (taken, but the KV write or the confirmation failed: re-offered after 5 min) counts once.
+- `/lab/stats-pending` (live key) returns what is pending; `tools/stats.py` adds it, so the numbers stay current (`--no-pending` to leave it out).
+- Without the binding (local, tests) or if the accumulator can't be reached, an isolate writes its own shard as before.
+- Player writes (🧪, votes, reviews, the team, gift claims): if KV refuses (429), the request is queued in the accumulator and replayed with its next KV write; the player sees "saved, will sync" (🧪 says so).
+- Test "kv writes" (launch tier): a day of 790 reports → 23 KV writes (old path: one per batch); every visit kept (KV + pending); a failed KV write after a take loses and doubles nothing; a refused 🧪 is queued and written later.
+- Free-plan Durable Object limits (Cloudflare pricing page, read Nov 4): 100,000 requests/day (HTTP, RPC, WebSocket messages, alarms), 13,000 GB-s duration/day, SQLite rows read 5M/day, rows written 100,000/day, 5 GB stored.
+
+**The sound toggle (staging).** Since auto-start, 4 intros auto-started and 1 turned the sound on. Nico: "the 'tap for sound' message/prompt could animate/minimize to a speaker icon that stays at the bottom left of the screen, like opposite/mirror of skip... and maybe it can stay there as a toggle too, so people can also turn it off".
+- `#storySnd` (idle-epoch0.js `speaker()`): a body-level button. On an auto-start the "🔊 tap for sound" chip shows ~4 s, then shrinks and slides into a bottom-left button that mirrors "skip ›" (same style; 44 px on touch screens). 🔇 when silent (a gentle pulse for 10 s, none with reduced motion), 🔊 when sounding.
+- A tap turns the sound on (joins the film in sync); another mutes for real: `__audio.setMuted(true)` (gain 0, the audio suspended), the film's sound stopped, and the mute kept in the game's own sound setting (idle.audio), so the game stays muted; a third turns it back on in sync. The toggle decides from the state the player saw (a tap's own pointerdown wakes the audio before the click runs).
+- It outlives the intro: in the storyline it stays through the dark landing (the landing's dark / arriving / sonar phases) and goes when the lights come on; other intros remove it at the end.
+- Funnel: `sound_off` added next to `sound_on` (worker allowlist, stats.py line).
+- Tests: new 'speaker' and 'speaker phone' (chip → button at 14/14 px, mirrors skip ›, 44 px on phones, on → off (muted, kept in idle.audio, audio suspended) → on, stays into the dark landing and mutes the game there, clear of the Operator on phones); 'title auto' now expects the chip to shrink into the 🔊 toggle instead of disappearing.
+
+## 2026-11-04 (offer v2, staging)
+
+**The storyline offer v2: three variants for Nico to pick from (staging only; id-le.com keeps v1).** On id-le.com the v1 card (shown 20 s after load to returning players) was shown 22 times and accepted 0: they come back for their world. v2 (`idle-genesis.js`):
+- All variants wait for the player to be active in their world: on screen ≥ 75 s (`OFFERV.activeS`) **and** one interaction (a click in the world, the top bar, a card or the minimap), at a quiet moment (no panel, popup, modal, toast, typing or Operator cut-scene). Accepting takes a snapshot first (`newUniverse('story')`). "later" asks once more after 3 days, then never (`idle.storyOffer2`: asks, last ask, variant, answer); a v1 dismissal counts as the first ask.
+- **a**: the card with clearer words ("✦ new: Doc's story … About 5 minutes. Your world stays safe") and [ ▶ play the story ] [ later ].
+- **b**: a compact card with a silent 6 s loop of the story's own logo (this browser's logo arm, drawn by `idle-logos.js` on a small canvas; a still if it can't load or with reduced motion), one line "new: Doc's story — 5 minutes, your world stays safe", same buttons.
+- **c**: the floating Operator says two lines, with chips [ 📖 start the story ] [ maybe later ]; unanswered after 2 min counts as later.
+- `?offer=a|b|c|old` forces one on staging/local (after 10 s on screen + an interaction; `&offerms=N` sets the wait). `OFFER_PROD = 'old'` keeps v1 on id-le.com until Nico picks; `OFFER_TEST = 'a'` is the staging default.
+- Funnel: `offer_shown`/`offer_accepted` as before, plus `offer_shown_x`, `offer_go_x`, `offer_later_x` per variant (worker allowlist; stats.py prints a line per variant).
+- Test 'story offer v2' (each variant: nothing before an interaction or over an open 🧪 panel, the card or the Operator's line, b's preview draws, accepting → snapshot → the story; later → once more after 3 days → never; v1 dismissals get one more ask). 'story offer' now forces v1 with `?offer=old`.
+
 ## 2026-11-04
 
 **Real engagement, measured, and a one-tap ask (staging).** Nico: "something that actually means a user saw this, clicked/interacted, and they want to participate".
@@ -794,3 +824,5 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - Finding: disasters had silently stopped since Oct 28 because the line that runs them each frame had slipped into a comment.
 - Hunger: only Crawly kin could eat → per-family diets. Hangry mode; hangry beats fear (fight or flight).
 - Gloamhold (1-bit world), memory reels v1/v2, family names, Counters and Mathematicians, Designers, the Id|le-pedia, BYO-AI chat v1, static build groundwork.
+
+**Links with a destination skip the split (Nov 4).** Nico: "How do I skip the story/abc split and go directly to the lab?" (?lab loaded the story), then ?wiki=Octopus did the same. One list in arena.html's <head> (INTENT_PARAMS: lab/datalab, start≠story, wiki/from_wiki, review, gift, halloween, world/w, intro; INTENT_HASH: #lab, #c=Name, #recover) sets window.__intentEntry before the first paint: such a visit draws no arm (idle.gv stays unset, no arm beacon), never paints the story black, gets no title card and no storyline offer, and goes where it says (?lab opens the data lab with its walkthrough and skips the guided-start tips). idle-genesis.js only reads the list. Each counts as entry_<kind> in the funnel (worker allowlist, stats.py labels). Only a plain address (no params, or only utm/ref tags) gets an arm. Test 'intent links' (launch tier) loops every intent link on the production hostname with Math.random pinned to the story arm.

@@ -157,7 +157,7 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
+const SFSTEP = ['entry_lab', 'entry_start', 'entry_wiki', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
@@ -250,11 +250,10 @@ function addStats(p) {
     if (x.fav && typeof x.fav === 'object') for (const [a, n] of Object.entries(x.fav).slice(0, 60)) if (FAV.test(a) && Number.isInteger(n) && n > 0 && n <= 500) capped(D.fav, a, n, X_CAP.fav); }
   if (okPath(p.path) && (p.path0 === undefined || okPath(p.path0) && p.path0 !== p.path)) { capped(D.path, p.path, 1, X_CAP.path); if (p.path0 !== undefined) bump(D.path, p.path0, -1); }
 }
-async function flushStats(env) {
-  statTimer = null; const buf = statBuf; statBuf = {}; if (!env.STATS) return;
-  for (const [day, add] of Object.entries(buf)) {
-    const key = `stats:${day}:${SHARD}`, cur = JSON.parse(await env.STATS.get(key) || 'null') || { ...EMPTY(), writes: 0 };
-    cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches; cur.writes = (cur.writes || 0) + 1;
+// merges one batch (or a whole day's record: the same shape) into a day's record; used by the isolates, the Durable Object's
+// accumulator and the KV write alike, so every number is added up the same way wherever it is added
+function mergeStat(cur, add) {
+    cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches;
     for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss', 'sf', 'bi', 'aa', 'dd', 'en', 'cb']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
     cur.secs = (cur.secs || 0) + add.secs; cur.v2visits = (cur.v2visits || 0) + (add.v2visits || 0);
     cur.pv = mergePv(cur.pv, add.pv);
@@ -269,8 +268,69 @@ async function flushStats(env) {
     cur.rb = cur.rb || {}; for (const [a, n] of Object.entries(add.rb || {})) if (n && (cur.rb[a] != null || Object.keys(cur.rb).length < 600)) bump(cur.rb, a, n);   // arm|cohort day|bucket (bounded: 5 arms x 400 days x 6)
     for (const [e, n] of Object.entries(add.err)) if (cur.err[e] || Object.keys(cur.err).length < 60) bump(cur.err, e, n);
     if (add.int) { const q = cur.int = cur.int || { r: 0, v: 0, t: {} }; q.r += add.int.r; q.v += add.int.v; if (add.int.aa) { q.aa = q.aa || {}; for (const [a, n] of Object.entries(add.int.aa)) bump(q.aa, a, n); } for (const k of ['dd', 'en', 'cb']) if (add.int[k]) { q[k] = q[k] || {}; for (const [a, n] of Object.entries(add.int[k])) bump(q[k], a, n); } for (const [a, n] of Object.entries(add.int.t || {})) if (q.t[a] != null || Object.keys(q.t).length < 20) bump(q.t, a, n); }
+  return cur;
+}
+// Nov 4: the KV free tier allows 1,000 writes a day for the whole account, and one write per isolate batch (every 20 s while anyone
+// plays) reached 90% of it by 8 am PT. Now an isolate hands its batch to the stats accumulator, a Durable Object (the same namespace as
+// presence, instance 'stats-live' or 'stats-staging'), which keeps it in its own storage (durable: nothing is lost if an isolate is
+// evicted) and lets one request write it to KV at most every STATS_KV_EVERY (an hour): at most 24 writes a day per day key, whatever the traffic; tools/stats.py adds what is still pending (/lab/stats-pending).
+// Without the binding (local copies, tests), or if the accumulator can't be reached, the isolate writes its own shard as before.
+const STATS_KV_EVERY = 60 * 60e3, STATS_LENT_TTL = 5 * 60e3, STATS_Q_MAX = 500;
+let statSite = 'live';   // which site this isolate serves (one deployment = one site); set on every stats report and page view
+async function flushStats(env) {
+  statTimer = null; const buf = statBuf; statBuf = {}; if (!env.STATS || !Object.keys(buf).length) return;
+  for (const d of Object.values(buf)) for (const [k, r] of Object.entries((d.pv || {}).hll || {})) if (r instanceof Uint8Array) d.pv.hll[k] = b64e(r);   // sketches travel as base64
+  if (env.PRESENCE) {
+    let r = null; try { r = await doStats(env, '/stats/add', { days: buf }); } catch (e) {}
+    if (r && r.ok) { if (r.due) { try { await takeStats(env); } catch (e) {} } return; }   // the batch is safe in the accumulator now, even if the KV write failed
+  }
+  await writeStats(env, buf, SHARD);
+}
+async function writeStats(env, days, shard, token) {
+  for (const [day, add] of Object.entries(days)) {
+    const key = `stats:${day}:${shard}`, cur = JSON.parse(await env.STATS.get(key) || 'null') || { ...EMPTY(), writes: 0 };
+    if (token) { cur.tok = cur.tok || []; if (cur.tok.includes(token)) continue; cur.tok = [...cur.tok, token].slice(-30); }   // a batch offered twice counts once
+    mergeStat(cur, add); cur.writes = (cur.writes || 0) + 1;
     await env.STATS.put(key, JSON.stringify(cur), { expirationTtl: 60 * 60 * 24 * 400 });
   }
+}
+async function doStats(env, path, body) {
+  const stub = env.PRESENCE.get(env.PRESENCE.idFromName('stats-' + statSite));
+  const r = await stub.fetch('https://presence' + path, { method: 'POST', body: JSON.stringify(body || {}) }); return r.json();
+}
+// takes what the accumulator holds (it keeps a copy, 'lent', until this request says it was written; unconfirmed after 5 minutes,
+// it is offered again with the same token), writes it to KV (one shard key per day, 'do'), replays any player actions queued while KV refused
+// writes, then confirms
+async function takeStats(env) {
+  const t = await doStats(env, '/stats/take', {}); if (!t || !t.token) return;
+  if (t.days && Object.keys(t.days).length) await writeStats(env, t.days, 'do', t.token);
+  const back = []; for (const q of t.q || []) { try { const r = await replayWrite(env, q); if (r && r.status === 503) back.push(q); } catch (e) { back.push(q); } }
+  await doStats(env, '/stats/ack', { token: t.token });
+  for (const q of back) await doStats(env, '/stats/queue', q).catch(() => {});
+}
+// the accumulator's side (runs inside the Durable Object; storage: 'acc' {day: record}, 'lent' {token, t, days, q}, 'q' [queued
+// player actions], 'last' (when it was last taken))
+export async function statsAcc(storage, path, body, now = Date.now()) {
+  let acc = await storage.get('acc') || {}, lent = await storage.get('lent') || null, q = await storage.get('q') || [], last = await storage.get('last');
+  if (last == null) { last = now; await storage.put('last', last); }
+  const pending = () => Object.keys(acc).length > 0 || q.length > 0, due = () => (lent ? now - lent.t > STATS_LENT_TTL : pending() && now - last >= STATS_KV_EVERY);
+  if (path === '/stats/add') {
+    for (const [day, add] of Object.entries((body && body.days) || {})) if (/^20\d\d-[01]\d-[0-3]\d$/.test(day) && add && typeof add === 'object') acc[day] = mergeStat(acc[day] || EMPTY(), add);
+    await storage.put('acc', acc); return { ok: true, due: due() };
+  }
+  if (path === '/stats/queue') { if (body && typeof body.path === 'string' && typeof body.body === 'string' && body.body.length <= 8000) { q.push({ path: body.path, body: body.body, ip: String(body.ip || 'local').slice(0, 64), t: body.t || now }); q = q.slice(-STATS_Q_MAX); await storage.put('q', q); } return { ok: true, due: due() }; }
+  if (path === '/stats/take') {
+    if (lent) {   // taken but never confirmed: offered again with the same token (KV keeps the tokens it applied, so a repeat is skipped)
+      if (now - lent.t <= STATS_LENT_TTL) return { token: null };
+      lent.t = now; await storage.put('lent', lent); return { token: lent.token, days: lent.days, q: lent.q || [] }; }
+    if (!pending()) return { token: null };
+    const token = crypto.randomUUID(); lent = { token, t: now, days: acc, q };
+    await storage.put('lent', lent); await storage.put('acc', {}); await storage.put('q', []); await storage.put('last', now);
+    return { token, days: acc, q };
+  }
+  if (path === '/stats/ack') { if (lent && body && body.token === lent.token) await storage.delete('lent'); return { ok: true }; }
+  if (path === '/stats/peek') return { acc, lent: lent ? lent.days : null, q: q.length, last };
+  return { error: 'unknown' };
 }
 // ---------- page views, counted by the server (11-01) ----------
 // Every HTML page request that reaches the Pages worker ('/', the pedia, the privacy page) is counted here, so a visit counts whether
@@ -349,6 +409,7 @@ async function pageview(req, env, page, res) {
     if (req.method !== 'GET' || !res || (res.status !== 200 && res.status !== 304) || !(req.headers.get('Accept') || '').includes('text/html')) return;   // 304: a returning visit revalidated by the service worker
     if (new URL(req.url).searchParams.has('_coi')) return;   // the page's one-time cross-origin-isolation reload (idle-runtime.js): the same visit, not a new view
     const purpose = (req.headers.get('Sec-Purpose') || req.headers.get('Purpose') || '').toLowerCase(); if (/prefetch|prerender/.test(purpose)) return;
+    statSite = prTable(env, req);
     const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY(), P = d.pv = d.pv || EMPTY_PV();
     const why = pvBot(req);
     if (why) { bump(P.bots, page); bump(P.botWhy, why); return; }   // bots never start a write of their own: they ride along with the next batch
@@ -377,7 +438,7 @@ async function stats(req, env, ctx) {
   const txt = await req.text(); if (txt.length > 8000) return json({ error: 'too big' }, 413);
   let p; try { p = JSON.parse(txt); } catch (e) { return json({ error: 'not JSON' }, 400); }
   if (!p || p.v !== 1) return json({ error: 'unknown format' }, 400);
-  addStats(p);
+  statSite = prTable(env, req); addStats(p);
   // the first report of a batch starts the timer and holds its request open (waitUntil) until the batch is written; reports that
   // arrive meanwhile join the same buffer, so a busy isolate writes at most once per STAT_EVERY
   const t = batch(env); if (t) { if (ctx && ctx.waitUntil) ctx.waitUntil(t); else await t; }
@@ -549,9 +610,10 @@ export class PresenceTable {
 }
 // the Durable Object: one instance (idFromName('live')) holds the table in memory; it is never written to storage
 export class Presence {
-  constructor(state, env) { this.table = new PresenceTable(); }
+  constructor(state, env) { this.table = new PresenceTable(); this.state = state; }
   async fetch(req) {
     const u = new URL(req.url);
+    if (u.pathname.startsWith('/stats/') && this.state && this.state.storage) { const b = req.method === 'POST' ? await req.json().catch(() => ({})) : {}; return json(await statsAcc(this.state.storage, u.pathname, b)); }
     if (u.pathname === '/beat') { const q = await req.json().catch(() => null); return json(this.table.beat(q, req.headers.get('X-Country') || '')); }
     if (u.pathname === '/view') return json(this.table.view());
     return json({ error: 'unknown' }, 404);
@@ -694,6 +756,24 @@ async function review(req, env, path, ip) {
   const o = { ok: true, added: newS.length, pairs: newP.length, skipped: Object.keys(scores).length - newS.length }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o);
 }
 
+// the player's own writes (🧪, votes, reviews, the team, gift claims). If KV refuses a write (the daily free-tier cap: 429), the action
+// is queued in the stats accumulator and replayed with its next write to KV; the player is told "saved, will sync" instead of an error
+const userRoute = (req, env, path, ip) => path.startsWith('/lab/gift/') ? gift(req, env, path, ip) : path === '/lab/reviews' || path.startsWith('/lab/review/') ? review(req, env, path, ip)
+  : path.startsWith('/lab/team/') ? team(req, env, path) : feedback(req, env, path, ip);
+const kvRefused = e => /\b429\b|limit|too many requests/i.test(String((e && e.message) || e));
+async function userWrite(req, env, path, ip) {
+  const body = req.method === 'POST' ? await req.clone().text() : null;
+  try { return await userRoute(req, env, path, ip); }
+  catch (e) {
+    if (body && kvRefused(e) && env.PRESENCE) { try { await doStats(env, '/stats/queue', { path, body, ip, t: Date.now() }); return json({ ok: true, queued: true, note: 'saved, will sync' }); } catch (e2) {} }
+    return json({ error: 'could not save that right now: please try again later' }, 503);
+  }
+}
+async function replayWrite(env, q) {
+  const req = new Request('https://replay' + q.path, { method: 'POST', body: q.body, headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': q.ip } });
+  try { return await userRoute(req, env, q.path, q.ip); } catch (e) { return kvRefused(e) ? new Response(null, { status: 503 }) : null; }
+}
+
 export default {
   pages: PV_PAGES,
   // the Pages wrapper (tools/build_static.py) calls this for every HTML page it serves, once the response is ready
@@ -710,11 +790,13 @@ export default {
     if (path === '/lab/here') { const pk = ip + '|' + min + '|here', pn = (mem.hits.get(pk) || 0) + 1; mem.hits.set(pk, pn); if (mem.hits.size > 5000) mem.hits.clear(); if (pn > 30) return cors(env, req, json({ error: 'slow down' }, 429)); return cors(env, req, await presence(req, env, path)); }
     const k = ip + '|' + min + (bg ? '|bg' : ''), n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (bg ? 240 : (+env.RATE_PER_MIN || 60))) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
-    if (path === '/lab/live') return cors(env, req, await presence(req, env, path));   // the creator's live view: 404 without the key
-    if (path === '/lab/oracle' || path === '/lab/roadmap' || path === '/lab/vote') return cors(env, req, await feedback(req, env, path, ip));
-    if (path.startsWith('/lab/gift/')) return cors(env, req, await gift(req, env, path, ip));
-    if (path === '/lab/reviews' || path.startsWith('/lab/review/')) return cors(env, req, await review(req, env, path, ip));
-    if (path.startsWith('/lab/team/')) return cors(env, req, await team(req, env, path));
+    if (path === '/lab/live') return cors(env, req, await presence(req, env, path));
+    // what the stats accumulator holds but hasn't written to KV yet (tools/stats.py adds it, so the numbers are current): the live key, else 404
+    if (path === '/lab/stats-pending') { if (req.method !== 'GET' || !(await liveKeyOk(req, env)) || !env.PRESENCE) return cors(env, req, json({ error: 'unknown path' }, 404));
+      statSite = prTable(env, req); const st = env.PRESENCE.get(env.PRESENCE.idFromName('stats-' + statSite)); const r = await st.fetch('https://presence/stats/peek', { method: 'POST', body: '{}' });
+      return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }   // the creator's live view: 404 without the key
+    if (path === '/lab/oracle' || path === '/lab/roadmap' || path === '/lab/vote' || path.startsWith('/lab/gift/') || path === '/lab/reviews' || path.startsWith('/lab/review/') || path.startsWith('/lab/team/'))
+      return cors(env, req, await userWrite(req, env, path, ip));
     if (path === '/lab/stats' || path === '/lab/p') return stats(req, env, ctx);   // /lab/p: the same reports under a plain name   // rate-limited like the rest (that count lives in memory for a minute, never stored)
     const u = url.searchParams.get('url') || '', self = url.origin;
     try {
