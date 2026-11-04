@@ -3474,7 +3474,7 @@ def t_story_row(P):
     try:
         q = Q.open("/?arm=story&test")
         try: wait_for(q, "() => !!document.querySelector('#idleIntro') && window.__genesis.variant() === 'story'", 60)
-        except AssertionError: need(False, "/?arm=story: " + str(q.evaluate("() => ({ href: location.href, v: window.__genesis && window.__genesis.variant(), intro: !!document.querySelector('#idleIntro'), mode: window.__genesis && window.__genesis.mode(), gv: localStorage.getItem('idle.gv'), boot: document.documentElement.className })")))
+        except AssertionError: need(False, "/?arm=story: " + str(q.evaluate("() => ({ href: location.href, v: window.__genesis && window.__genesis.variant(), intro: !!document.querySelector('#idleIntro'), mode: window.__genesis && window.__genesis.mode(), gv: localStorage.getItem('idle.gv'), boot: document.documentElement.className, chooser: !!document.querySelector('#genChoose') })")))
         need(q.evaluate("() => (document.querySelector('link[rel=canonical]') || {}).href") == "https://id-le.com/", "the game page's canonical address is https://id-le.com/")
         q.close(); q = Q.open("/?at=dark"); wait_for(q, "() => !!document.querySelector('#keyGate')", 30); q.close()
     finally:
@@ -3708,9 +3708,13 @@ STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", 
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
           ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
-# checks that pass the same assertions with the page's clock sped up (?timescale): measured one by one (Nov 4); the rest assert real
-# durations or sounds scheduled on the audio clock, which can't run faster
-SCALED = set()
+# checks that pass the same assertions with the page's clock sped up (?timescale). Measured Nov 4 on 15 of the slowest at 5×: none got
+# meaningfully faster (they wait on the test's own fixed pauses and on the audio clock, which can't run faster) and 4 broke (story keys
+# logo, story landing, founder, reviews cutscene), so none is listed yet; the mechanism stays for checks written to use it
+SCALED = set() | {n.strip() for n in os.environ.get("IDLE_SCALED_EXTRA", "").split(",") if n.strip()}   # IDLE_SCALED_EXTRA: try more
+# checks that fail when other checks run at the same time (they time the storyline's start against the boot; under contention the start
+# can race the boot and land in the chooser): run alone, one after another, once the parallel ones are done (Nov 4)
+SERIAL = {"story arms", "story row", "story keys", "founder personal", "camera phone", "zoom shapes phone"}   # + WebKit phone geometry settling
 TIMES = os.path.join(tempfile.gettempdir(), "idle-test-times.json")   # last run's seconds per check: the slowest start first
 
 
@@ -3741,23 +3745,26 @@ def run_in_process(names, a, out, base):
 
 
 def jobs_wanted(a, n):
-    """how many browser workers: -j / IDLE_TEST_JOBS, otherwise from the load (cores minus the 1-minute load, 1 to 6)"""
+    """how many browser workers: -j / IDLE_TEST_JOBS, otherwise from the 1-minute load against the cores (6, 4, 2 or 1)"""
     j = a.jobs or int(os.environ.get("IDLE_TEST_JOBS") or 0)
-    if not j:
-        cores = os.cpu_count() or 4
-        j = max(1, min(6, int(cores - os.getloadavg()[0])))
+    if not j:   # the checks mostly wait on the page's own timers, not the CPU: parallel pays off even on a busy Mac, until it is overloaded
+        cores, load = os.cpu_count() or 4, os.getloadavg()[0]
+        j = 4 if load < cores / 2 else 3 if load < cores else 2 if load < 1.5 * cores else 1   # Nov 4: 6 workers at load 11 on 16 cores drove it
+        # to 52 and 8 checks failed on timing; 3 at load ~17 left 2 (both now in SERIAL)
     return max(1, min(j, n))
 
 
 def run_parallel(names, a, out, jobs):
     """each check in its own process (its own server port, browser and storage), at most `jobs` at once, slowest first; a new worker
-    starts only while the machine has room (the load stays under the core count), so a busy Mac gets fewer"""
+    starts only while the machine isn't overloaded (the load under 1.5× the cores), so a busy Mac gets fewer; SERIAL checks run last, alone"""
     try: times = json.load(open(TIMES))
     except Exception: times = {}
-    queue = sorted(names, key=lambda n: -times.get(n, 30))
+    queue = sorted((n for n in names if n not in SERIAL), key=lambda n: -times.get(n, 30))
+    alone = [n for n in names if n in SERIAL]
     running, cores = {}, os.cpu_count() or 4
-    while queue or running:
-        while queue and len(running) < jobs and (not running or os.getloadavg()[0] < cores + 2):
+    while queue or running or alone:
+        if not queue and not running: queue, jobs = [alone.pop(0)], 1   # the SERIAL ones: after the rest, one at a time
+        while queue and len(running) < jobs and (not running or os.getloadavg()[0] < 1.5 * cores):
             n = queue.pop(0)
             cmd = [sys.executable, os.path.abspath(__file__), "--dist", out, "--only", n, "--child", "--timescale", str(a.timescale)] + (["--full"] if a.full else []) + (["--headed"] if a.headed else [])
             running[n] = (subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True), time.time())
