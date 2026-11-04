@@ -153,6 +153,15 @@ out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visit
 { await post('/lab/p', { v: 1, visit: 1, gv: 'story', sf: ['title', 'messages', 'skip:chat', 'evil<script>', 'title'], dw: '1-5' }); await post('/lab/p', { v: 1, sf: ['offer_shown', 'offer_accepted', 'fd_link', 'fd_badge_pipe', 'fd_badge_evil'] }); await post('/lab/p', { v: 1, lg: 'crt', sf: ['lg_shown:crt', 'landing', 'title'] }); await post('/lab/p', { v: 1, lg: 'evil', sf: ['lights'] });
   const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.sf = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.sf || {})) a[k] = (a[k] || 0) + n; return a; }, {});
   out.gv_story = ds.reduce((a, d) => { for (const [k, n] of Object.entries(d.gv || {})) a[k] = (a[k] || 0) + n; return a; }, {}); }
+// time per step and coming back (Nov 3): known moments only, seconds bucketed with a sum per arm; return buckets by arm|cohort|bucket, junk dropped
+{ const today = new Date().toISOString().slice(0, 10), future = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  await post('/lab/p', { v: 1, gv: 'story', sd: { lights: 25, words: 5, 'evil<x>': 3, e1life: -4, e1words: 4, title: 99999 } }); await post('/lab/p', { v: 1, gv: 'story', sd: { lights: 700 } });
+  await post('/lab/p', { v: 1, gv: 'story', lg: 'c3', rb: { c: today, b: 'd0' } }); await post('/lab/p', { v: 1, rb: { c: '2026-11-01', b: 'd1' } });
+  await post('/lab/p', { v: 1, rb: { c: future, b: 'd1' } }); await post('/lab/p', { v: 1, rb: { c: today, b: 'd9' } }); await post('/lab/p', { v: 1, rb: { c: 'x<y>', b: 'd0' } });
+  const ds = [...env.STATS.m.values()].map(v => JSON.parse(v)); out.sd = {}; out.rb = {};
+  for (const d of ds) { for (const [k, x] of Object.entries(d.sd || {})) { const c = out.sd[k] = out.sd[k] || { n: 0, sum: 0, b: {} }; c.n += x.n; c.sum += x.sum; for (const [b, n] of Object.entries(x.b)) c.b[b] = (c.b[b] || 0) + n; }
+    for (const [k, n] of Object.entries(d.rb || {})) out.rb[k] = (out.rb[k] || 0) + n; }
+  out.rbToday = today; }
 // jeffy proxy: an allowlist of two paths; nothing else is relayed (no network needed for these answers)
 out.jeffy_train = (await post('/jeffy/train', { text: 'x', task: 'sms_spam' })).status;
 out.jeffy_get_predict = (await go('/jeffy/predict')).status;
@@ -320,6 +329,8 @@ def worker_unit():
     need(o["jeffy_no_text"] == 400, f"predict without text {o['jeffy_no_text']}")
     need(o.get("lone_report_written") is True, "a single stats report with no later request was never written (stats would be lost when the isolate is evicted)")
     need(o.get("labp") == 204 and o.get("v2visits") == 1, f"/lab/p answered {o.get('labp')}, v2 visits {o.get('v2visits')}")
+    need(o.get("sd") == {"story|lights": {"n": 2, "sum": 725, "b": {"10-30s": 1, "10m+": 1}}, "story|e1words": {"n": 1, "sum": 4, "b": {"<10s": 1}}}, f"time per step: {o.get('sd')}")
+    need(o.get("rb") == {f"story|{o['rbToday']}|d0": 1, f"lg:c3|{o['rbToday']}|d0": 1, "none|2026-11-01|d1": 1}, f"coming back: {o.get('rb')}")
     need(o.get("sf") == {"story|title": 1, "story|messages": 1, "story|skip:chat": 1, "none|offer_shown": 1, "none|offer_accepted": 1, "none|fd_link": 1, "none|fd_badge_pipe": 1, "none|lg_shown:crt": 1, "none|landing": 1, "none|title": 1, "lg:crt|lg_shown:crt": 1, "lg:crt|landing": 1, "none|lights": 1}, f"storyline funnel (with the logo arm): {o.get('sf')}")
     need(o.get("gv_story", {}).get("story|visit") == 1 and o.get("gv_story", {}).get("story|dw:1-5") == 1, f"the story arm's visits and dwell: {o.get('gv_story')}")
     ev = re.search(r"STAT_EVERY = (\d+)", open(os.path.join(ROOT, "helper", "worker.js")).read())
@@ -910,7 +921,7 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0"}
+ALLOWED_STATS = {"gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -1006,6 +1017,49 @@ def t_stats_seen(P):
     need(not ({"ni_seen", "qe_seen"} & did()), f"on screen < 5 s: did {did()}")
     pg.close(); P.clean()
     return "unseen tab: nothing sent; seen 6 s no click → ni_seen; click then hidden → qe_seen; < 5 s → neither; roundRect polyfilled"
+
+
+def t_stats_return(P):
+    """time per step and coming back (Nov 3): a storyline moment carries the on-screen seconds since the moment before (hidden time doesn't
+    count) and lands in the right bucket; a browser first seen yesterday reports 'day 1' once (not again on reload), a new browser 'day 0',
+    and a browser that was here before the measure (no first day known) reports nothing. No identifier in any report."""
+    HID = """window.__vis = window.__vis || 'visible'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
+      get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
+    flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
+    def sent(): return [json.loads(b) for b in P.stats]
+    import datetime as _dt
+    today = _dt.datetime.now(_dt.timezone.utc).date(); yday = (today - _dt.timedelta(days=1)).isoformat()
+    # 1. time per step: the clock says 100 s of on-screen time so far and the last moment was at 75 s → the next moment took ~25 s
+    #    (set before the page's scripts run, once: a page's own pagehide writes its clock back, so setting it from a live page won't stick)
+    SEED = f"""if (!sessionStorage.getItem('rt_seeded')) {{ sessionStorage.setItem('rt_seeded', '1'); localStorage.setItem('idle.activeMs', '100000'); localStorage.setItem('idle.funnelAt', '75000');
+      localStorage.removeItem('idle.funnel'); localStorage.removeItem('idle.funnelDt'); localStorage.setItem('idle.since', JSON.stringify({{ d: '{yday}', k: 1 }}));
+      localStorage.removeItem('idle.backSent'); localStorage.removeItem('idle.stats.sent'); }}"""
+    pg = P.ctx.new_page(); pg.on("pageerror", lambda e: P.errors.append(str(e)[:200])); pg.add_init_script(HID); pg.add_init_script(SEED)
+    P.stats.clear(); pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg)   # every report from this load counts (the first batch can go before booted)
+    pg.evaluate("() => window.__funnel.mark('lights')")
+    flip(pg, "hidden"); pg.wait_for_timeout(2500); flip(pg, "visible"); pg.wait_for_timeout(300)   # 2.5 s hidden: must not count
+    pg.evaluate("() => window.__funnel.mark('e1words')")
+    d = pg.evaluate("() => window.__funnel.durations()")
+    need(20 <= d.get("lights", -1) <= 40, f"lights after ~25 s on screen: {d}")
+    need(0 <= d.get("e1words", -1) <= 2, f"hidden time must not count: {d}")
+    pg.evaluate("() => window.__stats._send('leave')"); pg.wait_for_timeout(400)
+    s1 = sent(); sd = {k: v for q in s1 for k, v in (q.get("sd") or {}).items()}; rb = [q["rb"] for q in s1 if q.get("rb")]
+    need(set(sd) >= {"lights", "e1words"}, f"durations sent: {s1}")
+    need(rb == [{"c": yday, "b": "d1"}], f"first seen yesterday → one 'd1': {rb}")
+    bad = [k for q in s1 for k in q if k in ("id", "uid", "bkey", "since")]
+    need(not bad, f"no identifier in the report: {bad}")
+    # 2. reload the same day: neither the durations nor the return go again
+    P.stats.clear(); pg.reload(wait_until="load"); booted(pg); pg.evaluate("() => window.__stats._send('leave')"); pg.wait_for_timeout(400)
+    s2 = sent(); need(not any(q.get("rb") for q in s2) and not any(q.get("sd") for q in s2), f"reload must not resend: {s2}")
+    # 3. a new browser: day 0 with today's cohort; a browser that was here before the measure (returning, no first day): nothing
+    pg.evaluate("() => { for (const k of ['idle.since', 'idle.backSent', 'idle.stats.seen', 'idle.firstSeen']) localStorage.removeItem(k); }")
+    P.stats.clear(); pg.reload(wait_until="load"); booted(pg); pg.evaluate("() => window.__stats._send('leave')"); pg.wait_for_timeout(400)
+    rb3 = [q["rb"] for q in sent() if q.get("rb")]; need(rb3 == [{"c": today.isoformat(), "b": "d0"}], f"a new browser → d0 today: {rb3}")
+    pg.evaluate("() => { localStorage.removeItem('idle.since'); localStorage.removeItem('idle.backSent'); localStorage.setItem('idle.stats.seen', '1'); }")
+    P.stats.clear(); pg.reload(wait_until="load"); booted(pg); pg.evaluate("() => window.__stats._send('leave')"); pg.wait_for_timeout(400)
+    rb4 = [q["rb"] for q in sent() if q.get("rb")]; need(not rb4, f"here before the measure, no first day → nothing: {rb4}")
+    pg.close(); P.clean()
+    return f"lights {d['lights']} s (10-30s), hidden 2.5 s not counted ({d['e1words']} s); day 1 once, not on reload; new → d0; unknown first day → nothing"
 
 
 def t_op_actions(P):
@@ -2913,7 +2967,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -2943,6 +2997,7 @@ def main():
                 run("stats", t_stats)
                 run("stats v2", t_stats_v2)
                 run("stats seen", t_stats_seen)
+                run("stats return", t_stats_return)
                 run("op stats", t_op_stats)
                 run("op actions", t_op_actions)
                 run("pedia stats", t_pedia_stats)

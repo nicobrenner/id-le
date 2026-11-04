@@ -189,6 +189,53 @@ def lg_split(sfs):
     return main, lg
 
 
+# time per step (Nov 3): 'sd' = {"arm|step": {n, sum, b: {bucket: n}}}, seconds of on-screen time since the moment before
+SD_B = ["<10s", "10-30s", "30-60s", "1-3m", "3-10m", "10m+"]
+SD_ORDER = SF_STEPS + ["lg_shown:c3", "lg_shown:crt", "end_shown", "end_roadmap", "end_github", "end_free", "offer_shown", "offer_accepted"]
+SD_NAMES = dict(SF_NAMES, **{"lg_shown:c3": "logo (C3)", "lg_shown:crt": "logo (C3-crt)", "end_shown": "end card", "end_roadmap": "end → roadmap", "end_github": "end → GitHub",
+                             "end_free": "end → the playground", "offer_shown": "offer shown", "offer_accepted": "offer accepted"})
+
+
+def sd_rows(sd):
+    """{arm: [(step name, n, mean s, {bucket: n})]} in play order"""
+    out = {}
+    for k, x in (sd or {}).items():
+        if "|" not in k or not isinstance(x, dict) or not x.get("n"):
+            continue
+        arm, step = k.split("|", 1)
+        out.setdefault(arm, {})[step] = x
+    return {arm: [(SD_NAMES.get(st, st), x["n"], x.get("sum", 0) / x["n"], x.get("b", {})) for st, x in sorted(st_.items(), key=lambda kv: SD_ORDER.index(kv[0]) if kv[0] in SD_ORDER else 99)]
+            for arm, st_ in out.items()}
+
+
+# coming back (Nov 3): 'rb' = {"arm|cohort day|bucket": browsers}; each browser sends each bucket at most once, d0 = its first day
+RB_B = [("d1", 1, "day 1"), ("d2-3", 2, "days 2–3"), ("d4-7", 4, "days 4–7"), ("d8-14", 8, "days 8–14"), ("d15+", 15, "day 15+")]
+
+
+def rb_rows(rb, last_day):
+    """{arm: (starts, [(label, came back, eligible starts, %)], first cohort, last cohort)}: a bucket only counts cohorts old enough to have reached it by last_day"""
+    import datetime as _dt
+    by = {}
+    for k, n in (rb or {}).items():
+        parts = k.split("|")
+        if len(parts) != 3 or not n:
+            continue
+        arm, c, b = parts
+        by.setdefault(arm, {}).setdefault(c, {})[b] = by.setdefault(arm, {}).setdefault(c, {}).get(b, 0) + n
+    end = _dt.date.fromisoformat(last_day)
+    out = {}
+    for arm, cs in by.items():
+        starts = sum(v.get("d0", 0) for v in cs.values())
+        rows = []
+        for b, lo, lab in RB_B:
+            ok = [c for c in cs if (end - _dt.date.fromisoformat(c)).days >= lo]
+            den = sum(cs[c].get("d0", 0) for c in ok)
+            num = sum(cs[c].get(b, 0) for c in ok)
+            rows.append((lab, num, den, 100 * num / den if den else None))
+        out[arm] = (starts, rows, min(cs), max(cs))
+    return out
+
+
 def lg_lines(lg):
     out = []
     for arm in ("c3", "crt"):
@@ -402,6 +449,19 @@ def main():
         print("\nthe story's logo A/B (browsers that saw each logo, and how far they got from there):")
         for ln in lg_lines(lgs):
             print(ln)
+    window = f"{min(days)} .. {max(days)} (UTC)" if days else "-"
+    sdr = sd_rows(tot.get("sd"))
+    if sdr:
+        print(f"\nstoryline: time per step (on-screen seconds since the moment before; once per browser and moment; {window}):")
+        for arm, rows in sorted(sdr.items()):
+            print(f"  {arm}")
+            for name, n, mean, b in rows:
+                print(f"    {name:<24}{n:>5}  mean {mean:>6.0f} s   " + "  ".join(f"{x} {b.get(x, 0)}" for x in SD_B))
+    rbr = rb_rows(tot.get("rb"), max(days)) if days else {}
+    if rbr:
+        print(f"\ncome back (browsers that came back at least once in each window after their first day, % of that cohort's first-day browsers; reports {window}):")
+        for arm, (starts, rows, c0, c1) in sorted(rbr.items()):
+            print(f"  {arm:<8} first days {c0} .. {c1}: {starts} new browsers · " + " · ".join(f"{lab} {num}/{den}" + (f" ({pct:.0f}%)" if pct is not None else " (too early)") for lab, num, den, pct in rows))
     if sfs:
         print("\nstoryline funnel (browsers reaching each moment, by arm; % of the arm's first moment):")
         for arm, o in sorted(sfs.items()):
@@ -537,6 +597,18 @@ def dashboard(days, since, traffic, note):
         + (f'<p class="muted">storyline offer: shown {o["offer"].get("shown", 0)}, accepted {o["offer"].get("accepted", 0)}</p>' if o["offer"] else "")
         + (f'<p class="muted">end of what\'s built: shown {o["end"].get("shown", 0)}, roadmap {o["end"].get("roadmap", 0)}, GitHub {o["end"].get("github", 0)}, the playground {o["end"].get("free", 0)}</p>' if o.get("end") else "")
         for arm, o in sorted(_sf.items())) + "</section>") if _sf else ""
+    _sdr = sd_rows(tot.get("sd"))
+    if _sdr:
+        sf_html += ("<section><h2>Storyline: time per step</h2><p class=\"muted\">On-screen seconds since the moment before (once per browser and moment), by arm; mean and spread.</p>" + "".join(
+            f'<p class="muted">{e(arm)}</p><table><thead><tr><th>moment</th><th>browsers</th><th>mean</th>' + "".join(f"<th>{e(x)}</th>" for x in SD_B) + "</tr></thead><tbody>"
+            + "".join(f"<tr><td>{e(name)}</td><td>{n}</td><td>{mean:.0f} s</td>" + "".join(f"<td>{b.get(x, 0)}</td>" for x in SD_B) + "</tr>" for name, n, mean, b in rows) + "</tbody></table>"
+            for arm, rows in sorted(_sdr.items())) + "</section>")
+    _rbr = rb_rows(tot.get("rb"), max(days)) if days else {}
+    if _rbr:
+        sf_html += ("<section><h2>Coming back</h2><p class=\"muted\">Browsers that came back at least once in each window after their first day, as a share of their cohort's first-day browsers. A window only counts cohorts old enough to have reached it.</p>" + "".join(
+            f'<p class="muted">{e(arm)}: {starts} new browsers, first days {c0} .. {c1}</p>' + bars([(lab, num) for lab, num, den, pct in rows], total=starts or None)
+            + f'<p class="muted">{e(" · ".join(f"{lab}: {num}/{den}" + (f" ({pct:.0f}%)" if pct is not None else " (too early)") for lab, num, den, pct in rows))}</p>'
+            for arm, (starts, rows, c0, c1) in sorted(_rbr.items())) + "</section>")
     _fd = fd_total(_sf)
     if _fd:
         sf_html += ("<section><h2>Founder gift</h2><p class=\"muted\">Browsers reaching each moment (once per browser).</p>" + bars([(lab, _fd.get(k, 0)) for k, lab in FD_STEPS], total=max(_fd.get("world", 0) + _fd.get("link", 0), 1))

@@ -165,7 +165,11 @@ const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 
   // v2: the Operator's invitation (shown, I'm in, not now), the pledge, swipes (✕ ✓ ★), keep going / done, which one?, the cliff passed
   'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested'];
 const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
-const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
+const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
+// time per step (Nov 3): seconds of on-screen time since the moment before, per arm and moment: count, sum (for a mean) and buckets
+const SDB = ['<10s', '10-30s', '30-60s', '1-3m', '3-10m', '10m+'], sdBucket = v => v < 10 ? '<10s' : v < 30 ? '10-30s' : v < 60 ? '30-60s' : v < 180 ? '1-3m' : v < 600 ? '3-10m' : '10m+';
+// coming back (Nov 3): a browser adds 1 to arm|first-visit day|days-since bucket, at most once per bucket (no identifier; the cohort is a UTC day)
+const RBB = ['d0', 'd1', 'd2-3', 'd4-7', 'd8-14', 'd15+'], RBDAY = /^20\d\d-[01]\d-[0-3]\d$/;
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
@@ -191,6 +195,11 @@ function addStats(p) {
   // the story's logo A/B (idle-epoch0.js, Nov 3): the moments from the logo on are also counted per logo arm ('lg:c3|lights'), so the two logos compare
   if (Array.isArray(p.sf)) { const arm = p.gv === 'story' || p.gv === 'current' ? p.gv : 'none', lg = p.lg === 'c3' || p.lg === 'crt' ? p.lg : null;
     for (const k of new Set(p.sf.slice(0, 30))) if (SFSTEP.includes(k)) { d.sf = d.sf || {}; bump(d.sf, arm + '|' + k); if (lg && LGSTEP.includes(k)) bump(d.sf, 'lg:' + lg + '|' + k); } }
+  { const arm = p.gv === 'story' || p.gv === 'current' ? p.gv : 'none', lg = p.lg === 'c3' || p.lg === 'crt' ? p.lg : null;
+    if (p.sd && typeof p.sd === 'object' && !Array.isArray(p.sd)) for (const [k, v] of Object.entries(p.sd).slice(0, 30)) { if (!SFSTEP.includes(k) || !Number.isFinite(v) || v < 0 || v > 86400) continue;
+      d.sd = d.sd || {}; const x = d.sd[arm + '|' + k] = d.sd[arm + '|' + k] || { n: 0, sum: 0, b: {} }; x.n++; x.sum += Math.round(v); bump(x.b, sdBucket(v)); }
+    if (p.rb && typeof p.rb === 'object' && RBDAY.test(p.rb.c) && RBB.includes(p.rb.b) && p.rb.c <= day && Date.parse(day) - Date.parse(p.rb.c) < 400 * 86400000) {
+      d.rb = d.rb || {}; bump(d.rb, arm + '|' + p.rb.c + '|' + p.rb.b); if (lg) bump(d.rb, 'lg:' + lg + '|' + p.rb.c + '|' + p.rb.b); } }
   if (p.gv === 'genesis' || p.gv === 'starter' || p.gv === 'story' || p.gv === 'current') { d.gv = d.gv || {}; if (p.visit === 1) bump(d.gv, p.gv + '|visit');
     if (DWELL.includes(p.dw) && (p.dw0 === undefined || DWELL.indexOf(p.dw0) >= 0 && DWELL.indexOf(p.dw0) < DWELL.indexOf(p.dw))) { bump(d.gv, p.gv + '|dw:' + p.dw); if (p.dw0 !== undefined) bump(d.gv, p.gv + '|dw:' + p.dw0, -1); }
     if (Array.isArray(p.feat)) for (const f of p.feat.slice(0, 30)) if (FEATS.test(f)) bump(d.gv, p.gv + '|feat:' + f); }
@@ -228,6 +237,8 @@ async function flushStats(env) {
       for (const [a, n] of Object.entries(A.sec)) capped(q.sec, a, n, CAP.psec); }
     for (const k of ['ref', 'utm']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k])) capped(cur[k], a, n, CAP[k]); }
     for (const [k, x] of Object.entries(add.m)) { const c = cur.m[k] = cur.m[k] || { n: 0, sum: 0, b: {} }; c.n += x.n; c.sum += x.sum; for (const [b, n] of Object.entries(x.b)) bump(c.b, b, n); }
+    cur.sd = cur.sd || {}; for (const [k, x] of Object.entries(add.sd || {})) { const c = cur.sd[k] = cur.sd[k] || { n: 0, sum: 0, b: {} }; c.n += x.n; c.sum += x.sum; for (const [b, n] of Object.entries(x.b)) bump(c.b, b, n); }
+    cur.rb = cur.rb || {}; for (const [a, n] of Object.entries(add.rb || {})) if (n && (cur.rb[a] != null || Object.keys(cur.rb).length < 600)) bump(cur.rb, a, n);   // arm|cohort day|bucket (bounded: 5 arms x 400 days x 6)
     for (const [e, n] of Object.entries(add.err)) if (cur.err[e] || Object.keys(cur.err).length < 60) bump(cur.err, e, n);
     await env.STATS.put(key, JSON.stringify(cur), { expirationTtl: 60 * 60 * 24 * 400 });
   }
