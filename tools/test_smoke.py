@@ -148,11 +148,15 @@ await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
 await post('/lab/stats', { v: 1, x: { op: { 'out:acted': 3, 'out:unsure': 1, 'opt:light': 2, 'cf:hi': 3, 'fr:rephrase': 1, 'mood:negative': 1, 'mm:negative': 1, 'gd:light': 1, 'gt:light': 2, 'gn:light': 1, 'text:make it rain': 1, 'opt:rm -rf': 1, 'out:acted ': 1, 'fr:caps': -2, 'cf:lo': 1.5 }, did: ['op_miss', 'op_rephrase', 'op_secret'] } });
 // many distinct favorites from many page loads: capped, the rest counted as 'other'
 for (let i = 0; i < 70; i++) await post('/lab/stats', { v: 1, x: { fav: { ['name:Zz' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26))]: 1 } } });
+// our own checks (an internal campaign tag): the page's reports go to 'int', never into the totals (its visit, time and features stay out)
+await post('/lab/stats', { v: 1, visit: 1, dev: 'desktop', ref: 'direct', utm: 'prod-check', dw: '<1', feat: ['music'] });
+await post('/lab/stats', { v: 1, u: 'prod-check', dw: '1-5', dw0: '<1', feat: ['music'] });
 out.bad_format = (await post('/lab/stats', { v: 2 })).status;
 out.too_big = (await go('/lab/stats', { method: 'POST', body: 'x'.repeat(9000) })).status;
 const days = [...env.STATS.m.values()].map(v => JSON.parse(v));
 out.stats = days.reduce((a, d) => { for (const k of ['visits', 'dev', 'ref', 'utm', 'dw', 'fl', 'feat']) a[k] = typeof d[k] === 'number' ? (a[k] || 0) + d[k] : { ...(a[k] || {}), ...d[k] }; return a; }, {});
 out.stat_keys = [...new Set(days.flatMap(d => Object.keys(d)))].sort();
+out.int = days.reduce((a, d) => { const q = d.int || {}; a.r += q.r || 0; a.v += q.v || 0; for (const [k, n] of Object.entries(q.t || {})) a.t[k] = (a.t[k] || 0) + n; return a; }, { r: 0, v: 0, t: {} });
 out.bi = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.bi || {})) a[k] = (a[k] || 0) + n; return a; }, {});
 out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})) a[k] = (a[k] || 0) + n; return a; }, {}); out.secs = days.reduce((a, d) => a + (d.secs || 0), 0);
 out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
@@ -347,6 +351,7 @@ def worker_unit():
         shutil.rmtree(tmp, ignore_errors=True)
     s = o["stats"]
     need(s["visits"] == 2, f"visits {s['visits']} != 2")
+    need(o["int"] == {"r": 2, "v": 1, "t": {"prod-check": 2}} and "music" not in s["feat"] and "prod-check" not in s["utm"], f"our own checks must stay apart: int {o['int']}, feat {s['feat']}, utm {s['utm']}")
     need(s["dev"] == {"phone": 1}, f"dev {s['dev']} (a made-up device must not be counted)")
     need(s["ref"] == {"reddit.com": 1, "other": 1}, f"ref {s['ref']} (a full URL must count as 'other')")
     need(s["utm"] == {"r-webgames": 1}, f"utm {s['utm']}")
@@ -957,6 +962,41 @@ def t_operator(P):
 
 
 
+def t_genesis_gate(P):
+    """The Genesis gate (Nov 4, Nico typed "wachito" at the lights: the world evolved, then the guide ran the lights anyway): while a guided
+    step waits, free text runs no world tool and never advances the step unless the learned gate (demo/genesis_gate.json) says this step
+    over its threshold; the step's own command (any case/punctuation, either wording) still advances; a nudge types the command back"""
+    pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
+    wait_for(pg, "() => !!(window.__genesis && window.__genesis.next && window.__genesis.next() === 'light')", 40, P=P)
+    pg.wait_for_function("() => window.__oracle && window.__oracle.ready && window.__idleAI", timeout=120000)
+    pg.evaluate("() => { window.__evs = []; window.addEventListener('idle:ev', e => window.__evs.push(e.detail)); }")
+    G = pg.evaluate("async () => { const G = await window.__genesis.loadGate(); return G && { thr: G.thr, classes: G.classes, d: G.d }; }")
+    need(G and G["d"] == 1024 and set(G["thr"]) >= {"light", "words", "creatures"}, f"the gate did not load: {G}")
+    lit = "() => document.documentElement.classList.contains('gen-lit')"
+    for i in range(2):   # twice, like Nico
+        pg.fill("#lab-text", "wachito"); pg.press("#lab-text", "Enter")
+        wait_for(pg, f"() => {{ const g = window.__genesis.gate(); return !!(g && g.said === 'wachito' && (window.__genesis.state().nudge || {{}}).light === {i + 1}); }}", 60, P=P)
+        pg.wait_for_timeout(1500)
+        r = pg.evaluate("() => ({ next: window.__genesis.next(), gate: window.__genesis.gate(), pre: document.getElementById('lab-text').value, acted: window.__evs.filter(e => e.type === 'tiny_operator').map(e => e.extra.acted), world: window.__idleWorld.summary({ limit: 0 }).weather.kind })")
+        need(r["next"] == "light" and not pg.evaluate(lit), f"'wachito' advanced the lights (#{i + 1}): {r}")
+        need(all(a is None for a in r["acted"]), f"a world tool ran during Genesis from free text: {r['acted']}")
+        need(r["pre"] == "let there be light", f"the nudge must type the command back: {r['pre']!r}")
+    thread = pg.evaluate("() => document.getElementById('ai-thread').innerText")
+    need("not quite" in thread, "no nudge line in the Operator's chat")
+    wach = pg.evaluate("() => window.__genesis.gate()")
+    # the step's own command, typed differently, still advances (command syntax: case, punctuation, the story's wording)
+    pg.fill("#lab-text", "LIGHTS ON."); pg.press("#lab-text", "Enter"); wait_for(pg, lit, 20, P=P)
+    need(pg.evaluate("() => window.__genesis.gate().how") == "command", "the command did not advance as a command")
+    # paraphrases and nonsense through the gate (no step run: the gate's own verdict against its threshold)
+    probe = pg.evaluate("""async ts => { const H = await window.__idleAI.heads(), G = await window.__genesis.loadGate(), out = {};
+        for (const t of ts) { const r = await window.__oracle.classify(t, H, true), v = window.__genesis.gateOf(G, r.x); out[t] = { top: v.top, p: +v.p.toFixed(3), adv: v.top !== 'other' && v.p >= G.thr[v.top] }; } return out; }""",
+        ["asdf", "hello", "who are you?", "evolve the world", "life is hard", "light years"])
+    false_adv = {t: v for t, v in probe.items() if v["adv"]}
+    need(not false_adv, f"the gate would advance on chit-chat or nonsense: {false_adv}")
+    P.clean()
+    return f"'wachito' ×2: no advance, no world tool, nudged, command typed back (gate {wach.get('top')} {wach.get('p')}, v4 {wach.get('v4')}); 'LIGHTS ON.' advanced; no false advance on {len(probe)} off-script probes"
+
+
 def t_tiny_genesis(P):
     """The Tiny Operator's genesis options (arena_instr_v4.json, arena_instructions_v4.py): genesis phrasings route through the learned heads
     to words / first_creatures / light / music; with window.__genesis.actions present TO calls them (with the extracted topic/family);
@@ -983,7 +1023,7 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"u", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -1574,7 +1614,7 @@ def t_genesis(P):
     st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), calm: document.documentElement.classList.contains('gen-calm'), lit: document.documentElement.classList.contains('gen-lit'), next: window.__genesis.next(), pre: (document.getElementById('lab-text') || {}).value, g: window.__genesis.state(), ab: window.__genesis.ab })"
     v0 = pg.evaluate(st)
     need(v0["c"] == 0 and v0["w"] == 0 and v0["v"] and v0["calm"], f"genesis should start empty, dark and calm: {v0}")
-    need(v0["ab"] == "off", f"the A/B switch must ship off: {v0['ab']}")
+    need(v0["ab"] == "on", f"the A/B switch is on since the Nov 4 launch: {v0['ab']}")
     need(v0["next"] == "light" and v0["pre"] == "let there be light", f"the first guided step should be light, pre-filled: {v0['next']} / {v0['pre']!r}")
     wait_for(pg, "() => getComputedStyle(document.getElementById('topbar')).opacity === '0'", 8, P=P)   # it fades out (1.6 s)
     e0 = pg.evaluate("""() => { const vis = el => !!el && getComputedStyle(el).opacity !== '0' && el.offsetParent !== null;
@@ -2583,6 +2623,26 @@ def t_reviews_timing(P):
     return "storyline: not in Genesis, not before or during the end card, not with the roadmap open, after the card ✓; 🛝 after 20 s ✓; playground: 3 min + an interaction ✓, not while typing or with 🧪 open; the message then comes"
 
 
+def t_reviews_fresh(P):
+    """A returning browser (Nov 4: 13 invites on day one): with an old funnel and old activity in localStorage, a fresh visit doesn't get
+    the invitation before its own 3 minutes on screen and a click (nothing about time on screen carries over between visits); and the
+    invitation's source is logged (rv_inv_auto here, rv_inv_link for a ?review= link)."""
+    pg = _rv_page(P)
+    pg.evaluate("() => { localStorage.setItem('idle.activeMs', '9000000'); localStorage.removeItem('idle.invite'); localStorage.removeItem('idle.team'); }")
+    pg.reload(); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); window.__reviews.test.auto(true); }")
+    pg.mouse.click(400, 400); pg.wait_for_timeout(11000)
+    r = pg.evaluate("() => ({ letters: document.querySelectorAll('.rvletter').length, on: window.__reviews.test.onScreen(), ready: window.__reviews.test.ready() })")
+    need(r["letters"] == 0 and r["on"] < 60 and not r["ready"], f"a fresh visit with old stored state: {r}")
+    pg.evaluate("() => window.__reviews.test.onScreen(185)"); wait_for(pg, "() => !!document.querySelector('.rvletter')", 15, P=P)
+    f = pg.evaluate("() => window.__funnel.reached()")
+    need("rv_inv_auto" in f and "rv_inv_link" not in f, f"the source: {f}")
+    pg.close()
+    pg = P.open("/arena.html?review=logos&test"); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); }")
+    wait_for(pg, "() => window.__funnel.reached().includes('rv_inv_link')", 30, P=P)
+    pg.close(); P.clean()
+    return f"old stored activity → nothing after 11 s ({r['on']} s counted this visit); 3 min + a click → the invitation, logged rv_inv_auto; a ?review= link → rv_inv_link"
+
+
 def t_reviews_phone(P):
     """⭐ reviews at 375 px: the card is ≥ 70% of the lightbox and fills the width, no sideways scroll, ✕ ✓ ★ on screen."""
     pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()"); pg.wait_for_timeout(200)
@@ -2804,7 +2864,7 @@ def t_story_arms(P):
     (snapshot first, then the story) and points at ⚙; the two-arm 'current' migrates to 'play'; a browser that already has a world keeps it."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     off = pg.evaluate("() => ({ ab: window.__genesis.ab, v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), arms: window.__genesis.arms })")
-    need(off["ab"] == "off" and off["v"] is None and off["gv"] is None and off["arms"] == ["story", "choose", "play"], f"the A/B/C ships off, three arms: {off}")
+    need(off["ab"] == "on" and off["v"] is None and off["gv"] is None and off["arms"] == ["story", "choose", "play"], f"the A/B/C is on (Nov 4 launch), three arms; a ?test page gets no random arm: {off}")
     wait_for(pg, "() => !!localStorage.getItem('arena.autosave')", 30, P=P)
     ret = P.open("/arena.html?arm=story&test"); booted(ret); ret.wait_for_timeout(3000)   # this browser has a world: it keeps it
     r = ret.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid, c: window.__arena.raw().filter(c => !c.lab).length })")
@@ -2849,7 +2909,7 @@ def t_story_arms(P):
         finally:
             ctx.close()
     P.clean()
-    return "off by default, three arms; returning browser keeps its world; story → the title card; choose → the chooser (🛝 counted, no offer after); play → the ready world, the Operator's welcome (once), [ 📖 start the story ] → snapshot + story; 'current' → 'play'"
+    return "on (Nov 4), three arms; a ?test page gets no random arm; returning browser keeps its world; story → the title card; choose → the chooser (🛝 counted, no offer after); play → the ready world, the Operator's welcome (once), [ 📖 start the story ] → snapshot + story; 'current' → 'play'"
 
 
 def t_story_offer(P):
@@ -2905,33 +2965,38 @@ def t_story_v6(P):
 
 
 def t_prod_gates(P, root):
-    """id-le.com (the production hostname, served from the build, nothing leaves the browser): the fonts and 🧪 tell the scientists are
-    on; no boot or storyline intro, no storyline offer, no Storyline mode / Replay rows, no storyline in the chooser, no Founder gift
-    (?gift=founder and personal links do nothing)"""
+    """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
+    storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
+    world stays put and gets the storyline offer once; fonts, 🧪, presence and reviews are on; the Founder gift is off; keyframes are inert"""
     P.base, P.root = "https://id-le.com", root
-    pg = P.open("/arena.html?fresh=1"); booted(pg)
-    pg.wait_for_timeout(22000)   # past the storyline offer's 20 s
+    seed = P.open("/arena.html?fresh=1&test"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=P); seed.close()
+    pg = P.open("/arena.html"); booted(pg)   # a returning browser (it has a world): no arm, the world stays, the offer comes once
+    wait_for(pg, "() => !!document.querySelector('#storyOffer')", 40, P=P)
     r = pg.evaluate("""async () => { await document.fonts.ready; return { host: location.hostname, live: window.__genesis.storyLive(), void: !!window.__genesisVoid,
-      intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(),
+      intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(), v: window.__genesis.variant(),
+      c: window.__arena.raw().filter(c => !c.lab).length,
       f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
       ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
-    need(r["host"] == "id-le.com" and not r["live"], f"not emulating production: {r}")
+    need(r["host"] == "id-le.com" and r["live"], f"not emulating production (or the story isn't live): {r}")
+    need(r["offer"] and not r["void"] and not r["intro"] and r["v"] is None and r["c"] > 0, f"a returning world keeps its world and gets the offer: {r}")
+    pg.evaluate("() => document.querySelector('#storyOffer .x').click()"); pg.wait_for_timeout(500)
+    need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
     # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
-    need(not P.here, f"a ?fresh page beat on production: {P.here[:1]}")
+    P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
     pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
     wait_for(pz, "() => window.__presence && window.__presence.state().running", 20, P=P)
     pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on })"); pz.evaluate("() => window.__presence.bye()"); pz.close()
     beats = [json.loads(b) for b in P.here if b]
     need(pr["stats"] and pr["on"] and beats, f"presence must beat on production: {pr}, {len(beats)} beats")
     need(all(set(b) <= {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye", "page", "ref", "tag"} for b in beats), f"a production beat outside the allowlist: {beats[:1]}")
-    full = [b for b in beats if not b.get("bye")][0]
+    full = next((b for b in beats if not b.get("bye") and b.get("tag") == "prod-check"), None) or [b for b in beats if not b.get("bye")][0]   # the returning tab above keeps beating too
     need(full.get("page") == "game" and full.get("ref") == "reddit.com" and full.get("tag") == "prod-check" and "WebGames" not in json.dumps(beats), f"production beat: {full}")
     P.here.clear()
-    need(not r["void"] and not r["intro"] and not r["offer"] and not r["founder"], f"story/offer/founder visible on production: {r}")
+    need(not r["founder"], f"the Founder gift on production: {r}")
     need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
     pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
     pg.evaluate("() => window.__settings.close()")
-    need("Tell the scientists" in txt and "📖 Storyline" not in txt and "Replay the intro" not in txt and "Founder gift" not in txt, "⚙ rows on production: " + ", ".join(k for k in ("Tell the scientists", "📖 Storyline", "Replay the intro", "Founder gift") if k in txt))
+    need("Tell the scientists" in txt and "📖 Storyline" in txt and "Founder gift" not in txt, "⚙ rows on production (🧪 and 📖 Storyline in, no Founder): " + ", ".join(k for k in ("Tell the scientists", "📖 Storyline", "Founder gift") if k in txt))
     # 🧪: sends (to the stub), the roadmap lists and votes once
     pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(300)
     pg.evaluate("() => document.querySelector('#oracle [data-kind=idea]').click()"); pg.fill("#oracle textarea", "prod gate check")
@@ -2942,11 +3007,11 @@ def t_prod_gates(P, root):
     pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').click()"); pg.wait_for_timeout(500)
     need(len([k for k, _ in P.fb if k == "oracle"]) == 1 and len([k for k, _ in P.fb if k == "vote"]) == 1, f"🧪 sends/votes: {P.fb}")
     pg.evaluate("() => window.__feedback.close()")
-    # the chooser (⚙ New consciousness): no storyline on production
+    # the chooser (⚙ New consciousness): the storyline is in it since the launch
     pg.evaluate("() => { window.__genesis.newUniverse(); }")
     wait_for(pg, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 30, P=P)
     ms = pg.evaluate("() => [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m)")
-    need(sorted(ms) == ["free", "ready"], f"chooser on production: {ms}")
+    need(sorted(ms) == ["free", "ready", "story"], f"chooser on production: {ms}")
     lbl = pg.evaluate("() => document.querySelector('#genChoose button[data-m=ready] b').textContent")
     need("the playground" in lbl, f"v13: the playground in the chooser: {lbl!r}")
     pg.close()
@@ -2956,11 +3021,25 @@ def t_prod_gates(P, root):
         pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
         g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
         need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
-    # v15: the A/B/C is off on id-le.com: ?arm= forces nothing (no intro, no chooser, no welcome, no arm stored)
-    for a in ("story", "choose", "play"):
-        pg = P.open(f"/arena.html?arm={a}"); booted(pg); pg.wait_for_timeout(2500)
-        ab = pg.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), intro: !!document.querySelector('#idleIntro'), ch: !!document.querySelector('#genChoose'), w: window.__genesis.playWelcome() })")
-        need(ab == {"v": None, "gv": None, "intro": False, "ch": False, "w": False}, f"?arm={a} on production: {ab}"); pg.close()
+    # the A/B/C on id-le.com (Nov 4): a NEW browser gets an arm at random (Math.random pinned per context here), ?arm= forces nothing
+    seen = {}
+    for rnd, want, forced in ((0.01, "story", "play"), (0.5, "choose", "story"), (0.99, "play", "story")):
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script(f"Math.random = () => {rnd};"); Q = Page(ctx, P.base); Q.root = root
+        try:
+            q = Q.open(f"/arena.html?arm={forced}")
+            if want == "story":
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            elif want == "choose":
+                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
+            else:
+                booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+            x = q.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), ms: [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m), intro: !!document.querySelector('#idleIntro'), boot: !!window.__termBoot })")
+            need(x["v"] == want and x["gv"] == want, f"a new browser on id-le.com (?arm={forced} ignored) must get its random arm {want}: {x}")
+            if want == "choose": need(x["ms"][:2] == ["story", "ready"], f"the chooser on id-le.com: {x['ms']}")
+            if want == "play": need(not x["intro"], f"the play arm lands in the playground: {x}")
+            seen[want] = True
+        finally:
+            ctx.close()
     # ⭐ reviews and the Humans in the Loop are ON on id-le.com since Nov 4 (Nico's go): ?review=logos relays Nico's message at once, the 🌱
     # and 🧪's ⭐ tab are there; the Founder gift stays off (FOUNDER_ON = false)
     pg = P.open("/arena.html?review=logos"); booted(pg)
@@ -2973,7 +3052,7 @@ def t_prod_gates(P, root):
     need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
-    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal); reviews on (the link relays Nico's message, 🌱, ⭐ tab)"
+    return f"id-le.com (launched): UI in {r['ui']}, arms {sorted(seen)} at random (?arm= ignored), a returning world keeps it + one offer, 📖 in ⚙ and the chooser, 🧪 sent + voted, no Founder; reviews on; keyframes inert"
 
 
 def t_presence(P):
@@ -3195,14 +3274,20 @@ def t_v15_creatures(P):
 
 def t_operator_top(P, phone=False):
     """v15 (Nico: "the operator is also on top of the minimap... should we move the operator to the top, maybe next to the bell?", "the "Send"
-    button … should be on the righ side", "instead of a tools icon, use the ⚡️ icon"): the 📟 sits right after 🔔, the window opens below it and
+    button … should be on the righ side", "instead of a tools icon, use the ⚡️ icon"); v16: the 📟 sits in the top bar right after ⚙ (phones: before ☰), the window opens below it and
     never covers the minimap, ☰ / 🔔's panel hide it, Send is the right-most control of the input row, ⚡ toggles the quick actions."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg); pg.wait_for_timeout(1500)
     pg.evaluate("() => { document.documentElement.classList.remove('gen-calm'); }"); pg.wait_for_timeout(800)
-    pos = pg.evaluate("""() => { const b = document.querySelector('#ntfBtn'), h = document.querySelector('#toHandle'), rb = b && b.getBoundingClientRect(), rh = h.getBoundingClientRect();
-      const bv = !!(b && rb.width && getComputedStyle(b).visibility !== 'hidden'); return { bell: bv ? [rb.left, rb.right, rb.top] : null, h: [rh.left, rh.top, rh.width], iw: innerWidth }; }""")
-    if pos["bell"]: need(abs(pos["h"][0] - pos["bell"][1]) < 16 and abs(pos["h"][1] - pos["bell"][2]) < 16, f"the 📟 sits right after 🔔: {pos}")
-    else: need(pos["h"][1] < 20 and pos["h"][0] < 60, f"no 🔔 on screen: the 📟 sits in the top-left corner: {pos}")
+    # v16 (Nico: "I thought it was going to float to the right of the settings icon"): the 📟 is a button IN the top bar, right after ⚙
+    # (phones: right before ☰), vertically centred on the bar's buttons
+    pos = pg.evaluate("""() => { const h = document.querySelector('#toHandle'), bar = document.querySelector('#topbar'), set = document.querySelector('#settingsBtn'), more = document.querySelector('#mMore');
+      const vis = e => !!(e && e.getBoundingClientRect().width && getComputedStyle(e).display !== 'none'); const rh = h.getBoundingClientRect();
+      const ref = vis(set) ? set : more, rr = ref.getBoundingClientRect();
+      return { inBar: h.parentElement === bar, prev: h.previousElementSibling && h.previousElementSibling.id, next: h.nextElementSibling && h.nextElementSibling.id,
+        setVis: vis(set), dx: rh.left - rr.right, dxMore: rr.left - rh.right, dy: Math.abs((rh.top + rh.height / 2) - (rr.top + rr.height / 2)), h: [rh.left, rh.top, rh.width] }; }""")
+    need(pos["inBar"], f"the 📟 is inside the top bar: {pos}")
+    if pos["setVis"]: need(pos["prev"] == "settingsBtn" and -2 <= pos["dx"] < 16 and pos["dy"] < 4, f"the 📟 sits right after ⚙, aligned: {pos}")
+    else: need(pos["next"] == "mMore" and -2 <= pos["dxMore"] < 16 and pos["dy"] < 4, f"phone: the 📟 sits right before ☰, aligned: {pos}")
     pg.click("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(700)
     g = pg.evaluate("""() => { const r = e => { const x = e && e.getBoundingClientRect(); return x && x.width ? [x.left, x.top, x.right, x.bottom] : null; };
       const lab = r(document.querySelector('#lab')), mm = document.querySelector('#minimap'), m = mm && mm.offsetParent ? r(mm) : null, h = r(document.querySelector('#toHandle'));
@@ -3481,7 +3566,7 @@ def t_story_row(P):
         ctx.close()
     ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)   # a browser with no story: the review link
     try:
-        q = Q.open("/?review=logos"); wait_for(q, "() => !!document.querySelector('#review.on') || /message from Nico/.test((document.querySelector('#ai-thread') || {}).textContent || '')", 60); q.close()
+        q = Q.open("/?review=logos&test"); wait_for(q, "() => !!document.querySelector('#review.on') || /message from Nico/.test((document.querySelector('#ai-thread') || {}).textContent || '')", 60); q.close()
     finally:
         ctx.close()
     pg = P.open("/pedia.html"); wait_for(pg, "() => document.querySelectorAll('a[href]').length > 20", 30, P=P)
@@ -3670,7 +3755,7 @@ def browser_tests(a, out):
         ("operator", t_operator, (), {}), ("tiny genesis", t_tiny_genesis, (), {}), ("halloween", t_halloween, (), {}),
         ("halloween light", t_halloween_light, (), {"color_scheme": "light"}), ("intro", t_intro, (), {}),
         ("intro reduced", t_intro_reduced, (), {"reduced_motion": "reduce"}), ("intro epoch0", t_intro_epoch0, (), {}), ("trick or treat", t_treat, (), {}),
-        ("wikipedia world", t_wiki, (), {}), ("genesis", t_genesis, (), {}), ("story", t_story, (), {}), ("story migrate", t_story_migrate, (), {}),
+        ("wikipedia world", t_wiki, (), {}), ("genesis", t_genesis, (), {}), ("genesis gate", t_genesis_gate, (), {}), ("story", t_story, (), {}), ("story migrate", t_story_migrate, (), {}),
         ("story keys", t_story_keys, (), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
         ("story row", t_story_row, (), {}), ("story modal", t_story_modal, (), {}), ("operator float", t_operator_float, (), {}),
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
@@ -3681,7 +3766,7 @@ def browser_tests(a, out):
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
-        ("reviews link", t_reviews_link, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
+        ("reviews link", t_reviews_link, (), {}), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
         ("founder personal", t_founder_personal, (), {}), ("founder phone", t_founder_phone, (), {"is_mobile": True, "has_touch": True}),
         ("story landing", t_story_landing, (), {}), ("story intro", t_story_intro, (), {}), ("logo thunder", t_logo_thunder, (), {}),
         ("story fans", t_story_fans, (), {}), ("story clock", t_story_clock, (), {}), ("logo solo", t_logo_solo, (), {}), ("logo ab", t_logo_ab, (), {}),

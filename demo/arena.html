@@ -1103,9 +1103,9 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
       return shown.replace(/\n.*$/s, '');
     } catch (e) { console.error(e); return null; } finally { oracleBusy.v = false; }
   }
-  window.__oracle = { babble: o => oracleBabble(o), comment: (s, why) => oracleComment(s, why), classify: (t, heads) => classify(t, heads), reply: (t, seed) => oracleReply(t, seed), chat: t => handleChat(t), get kv() { return oracleKV; }, get busy() { return oracleBusy.v; }, get ready() { return !!genSession; } };   // test hook
+  window.__oracle = { babble: o => oracleBabble(o), comment: (s, why) => oracleComment(s, why), classify: (t, heads, wantX) => classify(t, heads, wantX), reply: (t, seed) => oracleReply(t, seed), chat: t => handleChat(t), get kv() { return oracleKV; }, get busy() { return oracleBusy.v; }, get ready() { return !!genSession; } };   // test hook
   // ---------- the instruction model (option + argument) on the Oracle's hidden states ----------
-  async function classify(text, heads) { const instr_ = heads || instr;   // v2 (creatures, IRC) unless a head set is passed (v3: the Tiny Operator)
+  async function classify(text, heads, wantX) { const instr_ = heads || instr;   // v2 (creatures, IRC) unless a head set is passed (v3: the Tiny Operator); wantX: also return the features (the Genesis gate)
     const pre = tokenizer.encode(SYSTEM_TAG + '<|user|>').length, ids = tokenizer.encode(SYSTEM_TAG + '<|user|> ' + text).slice(-256);
     const out = await hidSession.run(oraFeeds(ids)); const h = out.hidden.data, S = out.hidden.dims[1], D = out.hidden.dims[2], n = S - pre; if (n <= 0) return { option: 'none', arg: null, probs: {} };
     const mean = new Float32Array(D); for (let t = pre; t < S; t++) for (let d = 0; d < D; d++) mean[d] += h[t * D + d] / n; const x = new Float32Array(2 * D); for (let d = 0; d < D; d++) { x[d] = h[(S - 1) * D + d]; x[D + d] = mean[d]; }
@@ -1114,7 +1114,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
     const option = instr_.options[z.indexOf(mx)]; const keep = tagSpan(instr_.span_w, instr_.span_b, instr_.span_classes);
     const textIds = ids.slice(pre); const arg = keep.length ? tokenizer.decode(textIds.slice(keep[0], keep[keep.length - 1] + 1)).trim().replace(/^(the|a|an)\s+/i, '').replace(/\s+word$/i, '') : null;
     let target = null; if (instr_.tspan_w) { const tk = tagSpan(instr_.tspan_w, instr_.tspan_b, instr_.tspan_classes); if (tk.length) target = tokenizer.decode(textIds.slice(tk[0], tk[tk.length - 1] + 1)).trim(); }
-    return { option, arg, probs, target };
+    return wantX ? { option, arg, probs, target, x } : { option, arg, probs, target };
   }
   const SYSTEM_TAG = '<|system|> ' + SYSTEM + '\n';
   async function handleChat(text, to) {
