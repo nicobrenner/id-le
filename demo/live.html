@@ -42,12 +42,14 @@
 <div id="app">
   <div id="stage"><canvas id="cv" aria-label="players online now, one circle each"></canvas>
     <div id="hud"><h1><b>Id<i>|</i>le</b> · live</h1><div id="big">–<small>online now</small></div></div>
-    <div id="ctl" role="group" aria-label="colour by"><button data-by="mode" aria-pressed="true">by mode</button><button data-by="cc" aria-pressed="false">by country</button></div>
+    <div id="ctl" role="group" aria-label="colour by"><button data-by="mode" aria-pressed="true">by mode</button><button data-by="cc" aria-pressed="false">by country</button><button data-by="ref" aria-pressed="false">by came from</button></div>
     <div id="legend"></div><div id="tip" role="tooltip"></div>
   </div>
   <aside id="side">
     <h2>online, last hour</h2><canvas class="spark" id="spOn" aria-label="players online per minute, last hour"></canvas>
     <h2>arrivals ↑ and leaves ↓ per minute</h2><canvas class="spark" id="spAL" aria-label="arrivals and leaves per minute, last hour"></canvas>
+    <h2>came from</h2><div class="bars" id="bRef"></div>
+    <h2>pages</h2><div class="bars" id="bPage"></div>
     <h2>storyline now</h2><div class="bars" id="bStep"></div>
     <h2>panels open</h2><div class="bars" id="bPanel"></div>
     <h2>countries</h2><div class="bars" id="bCc"></div>
