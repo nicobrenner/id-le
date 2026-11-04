@@ -31,8 +31,8 @@
   document.head.appendChild(css);
 
   // ---------- 🛠 and the tray
-  // slash commands typed in the chat (Enter): /story opens ⚙'s 📖 Storyline (start, or resume / restart); more can be added with __opwin.command
-  const COMMANDS = { story: () => { try { return window.__genesis && window.__genesis.storyRow ? window.__genesis.storyRow() : false; } catch (e) { return false; } } };
+  // one-off slash commands typed in the chat (Enter), added with __opwin.command (the real table is idle-slash.js: /story, /help…)
+  const COMMANDS = {};   // (/story lives in idle-slash.js, the slash commands' own table; this is for quick one-offs)
   text.addEventListener('keydown', e => { if (e.key !== 'Enter' || e.shiftKey) return; const m = /^\/([a-z]+)\s*$/i.exec(text.value.trim()); const f = m && COMMANDS[m[1].toLowerCase()]; if (!f) return;
     e.preventDefault(); e.stopImmediatePropagation(); text.value = ''; f(); }, true);
   const tools = document.createElement('button'); tools.id = 'op-tools'; tools.type = 'button'; tools.title = 'suggestions: things to say to the Operator'; tools.textContent = '🛠';
@@ -141,7 +141,7 @@
   //                                           selector target keeps a soft glow until clicked or for 2 minutes (survives a reload)
   //   glowing() / clearGlow()                 the lingering glow's selector, and clearing it
   //   refresh(), tray(), toggleTray(), yielding(), pos()/setPos(), templates()   (tests and the tray's own state)
-  //   command(name, fn)                       a slash command typed in the chat (/name + Enter); /story is built in
+  //   command(name, fn)                       a one-off slash command typed in the chat (/name + Enter); the slash table proper is idle-slash.js
   //   window.__opSuggest(ctx) → chips | Promise<chips>: the hook for generated suggestions (ctx: { genesis, step, phone })
   window.__opwin = { command: (name, fn) => { COMMANDS[String(name).toLowerCase()] = fn; }, commands: () => Object.keys(COMMANDS), open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, glowing: () => glowSel, clearGlow, cutting: () => cutting, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text) }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
 })();
