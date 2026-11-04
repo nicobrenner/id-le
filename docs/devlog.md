@@ -6,6 +6,14 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+## 2026-11-04
+
+**Quick actions always work (branch chips).** Nico, from id-le.com during the life step: "some of the basic auto-actions/predefined on the operator chat, don't even work! those should all work always" (he tapped ⚡ "make it rain": the Operator said "Yes, it is", then the step nudge).
+- Cause: a reload in the middle of Genesis. The world came back from its autosave, but the Genesis console did not, so `__genesis.chip()` was null and the ⚡ tray offered the playground's chips while the step gate still refused anything but the step. Reproduced: before the reload the tray is hidden; after it, all ten chips.
+- Genesis resumes after a reload (`resumeGenesis`): the void's classes, the cosmos (lit after lights on), the hush until life, the console on the pending step, its words typed in. The ⚡ tray treats any pending Genesis as Genesis (`genPending`), console or not.
+- A chip is a command: the six quick actions (rain, a sunny day, a new creature, a rave, evolve, what's happening?) run their tool directly with a short Operator line (idle-ai.js `QUICK`); their exact words typed (case, spaces, end punctuation) do the same, whatever the brain; /command chips run instead of only filling the input.
+- Tests 'chips playground', 'chips genesis' (launch tier).
+
 ## 2026-11-04 (offer v2, staging)
 
 **The storyline offer v2: three variants for Nico to pick from (staging only; id-le.com keeps v1).** On id-le.com the v1 card (shown 20 s after load to returning players) was shown 22 times and accepted 0: they come back for their world. v2 (`idle-genesis.js`):
