@@ -935,6 +935,41 @@ def t_operator(P):
 
 
 
+def t_genesis_gate(P):
+    """The Genesis gate (Nov 4, Nico typed "wachito" at the lights: the world evolved, then the guide ran the lights anyway): while a guided
+    step waits, free text runs no world tool and never advances the step unless the learned gate (demo/genesis_gate.json) says this step
+    over its threshold; the step's own command (any case/punctuation, either wording) still advances; a nudge types the command back"""
+    pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
+    wait_for(pg, "() => !!(window.__genesis && window.__genesis.next && window.__genesis.next() === 'light')", 40, P=P)
+    pg.wait_for_function("() => window.__oracle && window.__oracle.ready && window.__idleAI", timeout=120000)
+    pg.evaluate("() => { window.__evs = []; window.addEventListener('idle:ev', e => window.__evs.push(e.detail)); }")
+    G = pg.evaluate("async () => { const G = await window.__genesis.loadGate(); return G && { thr: G.thr, classes: G.classes, d: G.d }; }")
+    need(G and G["d"] == 1024 and set(G["thr"]) >= {"light", "words", "creatures"}, f"the gate did not load: {G}")
+    lit = "() => document.documentElement.classList.contains('gen-lit')"
+    for i in range(2):   # twice, like Nico
+        pg.fill("#lab-text", "wachito"); pg.press("#lab-text", "Enter")
+        wait_for(pg, f"() => {{ const g = window.__genesis.gate(); return !!(g && g.said === 'wachito' && (window.__genesis.state().nudge || {{}}).light === {i + 1}); }}", 60, P=P)
+        pg.wait_for_timeout(1500)
+        r = pg.evaluate("() => ({ next: window.__genesis.next(), gate: window.__genesis.gate(), pre: document.getElementById('lab-text').value, acted: window.__evs.filter(e => e.type === 'tiny_operator').map(e => e.extra.acted), world: window.__idleWorld.summary({ limit: 0 }).weather.kind })")
+        need(r["next"] == "light" and not pg.evaluate(lit), f"'wachito' advanced the lights (#{i + 1}): {r}")
+        need(all(a is None for a in r["acted"]), f"a world tool ran during Genesis from free text: {r['acted']}")
+        need(r["pre"] == "let there be light", f"the nudge must type the command back: {r['pre']!r}")
+    thread = pg.evaluate("() => document.getElementById('ai-thread').innerText")
+    need("not quite" in thread, "no nudge line in the Operator's chat")
+    wach = pg.evaluate("() => window.__genesis.gate()")
+    # the step's own command, typed differently, still advances (command syntax: case, punctuation, the story's wording)
+    pg.fill("#lab-text", "LIGHTS ON."); pg.press("#lab-text", "Enter"); wait_for(pg, lit, 20, P=P)
+    need(pg.evaluate("() => window.__genesis.gate().how") == "command", "the command did not advance as a command")
+    # paraphrases and nonsense through the gate (no step run: the gate's own verdict against its threshold)
+    probe = pg.evaluate("""async ts => { const H = await window.__idleAI.heads(), G = await window.__genesis.loadGate(), out = {};
+        for (const t of ts) { const r = await window.__oracle.classify(t, H, true), v = window.__genesis.gateOf(G, r.x); out[t] = { top: v.top, p: +v.p.toFixed(3), adv: v.top !== 'other' && v.p >= G.thr[v.top] }; } return out; }""",
+        ["asdf", "hello", "who are you?", "evolve the world", "life is hard", "light years"])
+    false_adv = {t: v for t, v in probe.items() if v["adv"]}
+    need(not false_adv, f"the gate would advance on chit-chat or nonsense: {false_adv}")
+    P.clean()
+    return f"'wachito' ×2: no advance, no world tool, nudged, command typed back (gate {wach.get('top')} {wach.get('p')}, v4 {wach.get('v4')}); 'LIGHTS ON.' advanced; no false advance on {len(probe)} off-script probes"
+
+
 def t_tiny_genesis(P):
     """The Tiny Operator's genesis options (arena_instr_v4.json, arena_instructions_v4.py): genesis phrasings route through the learned heads
     to words / first_creatures / light / music; with window.__genesis.actions present TO calls them (with the extracted topic/family);
@@ -3644,7 +3679,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "genesis gate", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3692,6 +3727,7 @@ def main():
                 run("replay", t_replay)
                 run("operator", t_operator)
                 run("tiny genesis", t_tiny_genesis)
+                run("genesis gate", t_genesis_gate)
                 run("halloween", t_halloween)
                 run("halloween light", t_halloween_light, color_scheme="light")
                 run("intro", t_intro)

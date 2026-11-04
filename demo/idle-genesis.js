@@ -327,25 +327,47 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     ({ words: () => A.letThereBeWords(arg || ''), creatures: () => A.firstCreatures(), light: () => A.light(), weather: () => A.weather(), hut: () => A.hut(), music: () => A.music() })[k]?.(); });
 
   // ---------- what the player says while the guide runs
-  // Enter in the Operator's input (or the big ▶) comes here first (document capture runs before idle-ai's own listeners). The exact
-  // suggested phrase is the same as pressing its chip; anything else goes to the Tiny Operator (or the player's own AI), and if the
-  // step didn't happen: one nudge, then the suggestion runs anyway. Words typed out of order (light before words…) are fine: the guide
-  // moves on to whatever is still missing.
+  // Enter in the Operator's input (or the send button) comes here first (document capture runs before idle-ai's own listeners).
+  // Nov 4 (Nico typed "wachito" twice at the lights: the first time the v4 heads evolved the world, the second time the guide ran the lights
+  // anyway after its one nudge): a guided step now advances only on
+  //   - its own command, as typed for the player (command syntax, like /slash: case, punctuation and spaces don't matter; in the story and
+  //     the free guide both wordings of the step count, e.g. "lights on" and "let there be light"), or
+  //   - the Genesis gate (demo/genesis_gate.json, tools/genesis_gate.py): a small learned head over the Tiny Oracle's features, which must say
+  //     this step with at least its threshold (picked for zero false advances on the training split; the held-out numbers are in the file).
+  // Anything else gets a chat reply from the Tiny Operator with no world tools (no evolve, spawn, weather…), then a kind nudge, and the
+  // command is typed back into the input. The step never runs "anyway".
   const brain = () => { try { return (window.__idleAI && window.__idleAI.cfg && window.__idleAI.cfg().brain) || 'tiny'; } catch (e) { return 'tiny'; } };
   async function runGuided(g, fn, label) { if (busy) return; if (label) try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('you', label, 'you'); } catch (e) {}
     const t = input(); if (t) { t.value = ''; delete t.dataset.genPre; } await fn(); }
+  // the step's own commands, both wordings (the story says "lights on", the free guide "let there be light"; the free guide's words step names its topic)
+  const SAYS = { light: ['lights on', 'let there be light'], words: ['let there be words'], creatures: ['let there be life', 'bring life'], sky: ['give it weather', 'let there be music'] };
+  const isCommand = (g, said) => { const n = norm(said); return n === norm(sayOf(g)) || (SAYS[g] || []).some(c => n === norm(c)) || (g === 'words' && !storyMode() && /^let there be words about [a-z0-9 ]{1,40}$/.test(n)); };
+  let GATE = null; const loadGate = async () => GATE || (GATE = await fetch('genesis_gate.json').then(r => r.ok ? r.json() : null).catch(() => null));
+  const gateOf = (G, x) => { if (!G || !x || x.length !== G.d) return null; const z = G.w.map((w, c) => { let s = G.b[c]; for (let d = 0; d < G.d; d++) s += w[d] * x[d]; return s; });
+    const mx = Math.max(...z), e = z.map(v => Math.exp(v - mx)), sum = e.reduce((a, b) => a + b, 0), probs = {}; G.classes.forEach((c, i) => { probs[c] = e[i] / sum; });
+    const top = G.classes[z.indexOf(mx)]; return { top, p: probs[top], probs }; };
+  const NUDGE = {   // draft lines (Operator voice: lowercase, no trailing period); {cmd} is the step's command as typed for the player
+    light: 'hmm, not quite. to turn the lights on, say "{cmd}"', words: 'hmm, not quite. to give it words, say "{cmd}"',
+    creatures: 'hmm, not quite. to bring life, say "{cmd}"', sky: 'hmm, not quite. to give it a sky, say "{cmd}"',
+    asleep: 'the Tiny Oracle is still waking up. say "{cmd}" and I can do it' };
+  let lastGate = null;
   async function submit(text) { const g = nextGuide(); if (!g || busy) return; const t = input(); const said = String(text || '').trim() || sayOf(g);
     if (t) { t.value = ''; delete t.dataset.genPre; }
-    if (norm(said) === norm(sayOf(g))) { try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text: said, brain: 'guide' } })); } catch (e) {} try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('you', said, 'you'); } catch (e) {} await STEPS[g].run(); return; }
-    const before = ORDER.filter(did).length, b = brain(), O = window.__oracle;
-    if (b === 'relay' || (b === 'tiny' && !(O && O.ready))) {
-      // the local coding-agent line can't build a step, and a sleeping Tiny Oracle can't understand yet: treat it as the suggestion
-      try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text: said, brain: 'guide' } })); } catch (e) {} try { window.__idleAI.add('you', said, 'you'); } catch (e) {} await STEPS[g].run(); return; }
-    if (b === 'tiny') try { window.__idleAI.add('you', said, 'you'); } catch (e) {}
-    quiet = true; try { if (b === 'tiny') await window.__idleAI.tiny(said); else await window.__idleAI.send(said); } catch (e) { console.warn('genesis: operator', e); } finally { quiet = false; }
-    if (ORDER.filter(did).length > before) return;   // the Operator built something (maybe another step than the suggestion: the guide follows)
-    S.nudge = S.nudge || {}; if (!S.nudge[g]) { S.nudge[g] = 1; save(); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_nudge', extra: { step: g } } })); } catch (e) {} say('try: ' + sayOf(g)); return; }
-    await STEPS[g].run(); }
+    const add = (who, msg, cls) => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add(who, msg, cls); } catch (e) {} };
+    const ev = (type, extra) => { try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type, extra } })); } catch (e) {} };
+    if (isCommand(g, said)) { try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text: said, brain: 'guide' } })); } catch (e) {} add('you', said, 'you'); lastGate = { said, how: 'command' }; await STEPS[g].run(); return; }
+    const O = window.__oracle, cmd = sayOf(g), refill = () => { const t2 = input(); if (t2) { t2.value = cmd; t2.dataset.genPre = '1'; } };
+    const nudge = k => { S.nudge = S.nudge || {}; S.nudge[g] = (S.nudge[g] || 0) + 1; save(); ev('genesis_nudge', { step: g }); say((NUDGE[k] || NUDGE[g] || 'say "{cmd}"').replace('{cmd}', cmd)); refill(); };
+    if (!(O && O.ready && window.__idleAI)) { add('you', said, 'you'); lastGate = { said, how: 'asleep' }; nudge('asleep'); return; }
+    // one read of the message: the Tiny Operator's heads (for its reply) and the gate's features
+    let r = null, G = null; try { const H = await window.__idleAI.heads(); r = await O.classify(said, H, true); G = await loadGate(); } catch (e) { console.warn('genesis: gate', e); }
+    const gv = r && gateOf(G, r.x), thr = G && G.thr && G.thr[g];
+    lastGate = { said, how: 'gate', top: gv && gv.top, p: gv && +gv.p.toFixed(3), thr, v4: r && { option: r.option, p: r.probs[r.option] } };
+    ev('genesis_gate', { step: g, top: gv ? gv.top : null, p: gv ? +gv.p.toFixed(2) : null });
+    if (gv && gv.top === g && thr != null && gv.p >= thr) { add('you', said, 'you'); await STEPS[g].run(); return; }
+    // not this step: a short real reply (no world tools during Genesis), then the nudge
+    add('you', said, 'you'); quiet = true; try { if (r) { const r2 = { ...r }; delete r2.x; await window.__idleAI.tiny(said, { noAct: true, r: r2 }); } } catch (e) { console.warn('genesis: operator', e); } finally { quiet = false; }
+    nudge(g); }
   function onKey(e) { if (e.key !== 'Enter' || e.shiftKey || e.isComposing || !e.target || e.target.id !== 'lab-text' || !guiding() || !nextGuide()) return; if (/^\//.test(e.target.value.trim())) return;   // chat commands (/oracle) aren't steps
     e.preventDefault(); e.stopImmediatePropagation(); submit(e.target.value); }
   function onSend(e) { const b = e.target.closest && e.target.closest('#lab-send'); if (!b || !guiding() || !nextGuide()) return; e.preventDefault(); e.stopImmediatePropagation(); const t = input(); submit(t ? t.value : ''); }
@@ -1016,6 +1038,6 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   function pending() { try { if (!storyMode() || !S || !S.on) return 0; const d = dayOf(S.day || 0); if (!d || (S.days && S.days[d.n]) || (d.n > 0 && !builtNext(d.n))) return 0;
     return d.goals.filter(([k]) => !(d.n === 0 ? did(k) : false)).length; } catch (e) { return 0; } }
   // ready(): v15 — also only once the window is actually up (not during the landing, the dawn or a step's aside)
-  window.__genesis = { modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { gate: () => lastGate && { ...lastGate }, gateOf, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();

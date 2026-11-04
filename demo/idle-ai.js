@@ -271,12 +271,15 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   const kindOf = span => { for (const t of String(span || '').toLowerCase().split(/[\s,]+/)) { const k = KIND[t.replace(/[^a-z]/g, '')]; if (k) return k; } return null; };
   const creatureNamed = (span, text) => { const cs = ((window.__arena && window.__arena.raw()) || []).filter(c => c.name); const s0 = String(span || '').toLowerCase().trim();
     return (s0 && cs.find(c => c.name.toLowerCase() === s0)) || (s0 && cs.find(c => c.name.toLowerCase().startsWith(s0) || s0.startsWith(c.name.toLowerCase()))) || cs.find(c => String(text).toLowerCase().includes(c.name.toLowerCase())) || null; };
-  async function tinyTurn(t) {
+  // opts.noAct (the Genesis guide, Nov 4): read the message and reply, but run no world tool and pass nothing to IRC (Nico typed "wachito"
+  // during the lights step and the v4 heads evolved the world); opts.r: the classify() result already computed by the caller
+  async function tinyTurn(t, opts = {}) {
     optext(t, 'tiny');
     const O = window.__oracle; if (!O || !O.ready) { add('page', 'the Tiny Oracle is still waking up; try again in a moment', 'err'); return; }
-    const heads = await loadH3(); const r = await O.classify(t, heads); const p = r.probs[r.option] || 0, tip = `${r.option} · ${Math.round(p * 100)}%`;
+    const heads = await loadH3(); const r = opts.r || await O.classify(t, heads); const p = r.probs[r.option] || 0, tip = `${r.option} · ${Math.round(p * 100)}%`;
     let seed = '', acted = null, lastRes = null;
-    if (WORLD_OPTS.has(r.option) && p >= (SURE[r.option] ?? SURE0)) {
+    if (opts.noAct) {}
+    else if (WORLD_OPTS.has(r.option) && p >= (SURE[r.option] ?? SURE0)) {
       const who = creatureNamed(r.target, t), call = (() => { switch (r.option) {
         case 'weather': { const k = kindOf(r.arg); return k && ['weather', { kind: k }]; }
         case 'spawn': { const k = kindOf(r.arg); return k && ['spawn', { kind: k }]; }
@@ -331,5 +334,5 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   // take over the lab's send button and Cmd+Enter while an AI brain is chosen; the relay keeps the arena's own path
   sendBtn.addEventListener('click', e => { if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
   text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
-  window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: t => tinyTurn(t), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
+  window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: (t, opts) => tinyTurn(t, opts), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
 })();
