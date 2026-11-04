@@ -1,9 +1,18 @@
 """Id|le regression checks: a static build in real browsers, plus the helper Worker and every script's syntax.
 
-    python3 tools/test_smoke.py            # the fast set (a few minutes): what CI runs on every push
-    python3 tools/test_smoke.py --full     # also a frame-rate floor with 300 creatures and a longer data lab run
+    python3 tools/test_smoke.py            # everything (the full tier), in parallel browser workers
+    python3 tools/test_smoke.py -t launch  # the launch tier (~3 min): what a deploy to id-le.com needs
     python3 tools/test_smoke.py -k camera  # only the checks whose name contains "camera"
+    python3 tools/test_smoke.py -j 1       # one browser worker (the old way); -j 4 four; default: from the load (1-6), or IDLE_TEST_JOBS
+    python3 tools/test_smoke.py --timescale 1   # run the sped-up checks (SCALED) in real time too (default 5×, or IDLE_TIMESCALE)
+    python3 tools/test_smoke.py --full     # also a frame-rate floor with 300 creatures and a longer data lab run
     python3 tools/test_smoke.py --dist dist --keep   # reuse an existing build; keep the temporary build
+
+Speed (Nov 4): each browser check runs in its own worker process (its own server port, browser and storage), slowest first (last run's
+times in $TMPDIR/idle-test-times.json), as many at once as the load allows. Browser slots are shared by every checkout on this Mac:
+/private/tmp/claude-501/idle-browser.lock and .1 … .5, each naming its owner's pid (a dead owner's slot is freed). Checks listed in
+SCALED open the page with ?timescale=N: the page's own clock (timers, performance.now, Date.now, animation frames) runs N× faster.
+Checks that assert real durations or sounds scheduled on the audio clock stay at 1×.
 
 Needs: python3, node, and Playwright for Python (pip install playwright; playwright install chromium webkit).
 Nothing leaves this computer: the build is served on localhost, every other request is answered with an empty
@@ -531,32 +540,42 @@ def serve(d):
     return s, f"http://127.0.0.1:{s.server_address[1]}"
 
 
+SLOTS = 6   # browser slots on this Mac (Nov 4, Nico: "use as many as you can without hurting yourself"): slot 0 is LOCK itself, so an older
+            # test_smoke that only knows the one lock still waits for it; slots 1..5 are LOCK.1 .. LOCK.5
+
+
 @contextlib.contextmanager
 def browser_lock():
-    held = False
+    """take one free browser slot (a directory holding the owner's pid); a slot whose pid is gone is stale and freed"""
+    held = None
     if os.path.isdir(os.path.dirname(LOCK)) and not os.environ.get("CI"):
-        t0 = time.time()
-        while True:
-            try: os.mkdir(LOCK); held = True
-            except FileExistsError:
-                # a holder killed outright (SIGKILL: a stopped background task) never runs its finally: the lock names its pid, and a lock
-                # whose pid is gone is stale (Nov 4: one sat for an hour and blocked every browser check and deploy behind it)
-                pid = None
-                with contextlib.suppress(OSError, ValueError): pid = int(open(os.path.join(LOCK, "pid")).read().strip())
-                if pid:
-                    try: os.kill(pid, 0)
-                    except ProcessLookupError:
-                        print(f"  removing a stale browser lock (pid {pid} is gone)", flush=True); shutil.rmtree(LOCK, ignore_errors=True); continue
-                    except PermissionError: pass
-                if time.time() - t0 > 1800: raise RuntimeError("the shared browser lock was held for 30 minutes: " + LOCK)
-                print("  waiting for the shared browser lock…", flush=True); time.sleep(15); continue
-            with contextlib.suppress(OSError): open(os.path.join(LOCK, "pid"), "w").write(str(os.getpid()))
-            break
+        t0, said = time.time(), False
+        while held is None:
+            for i in range(SLOTS):
+                d = LOCK if i == 0 else f"{LOCK}.{i}"
+                try: os.mkdir(d)
+                except FileExistsError:
+                    # a holder killed outright (SIGKILL: a stopped background task) never runs its finally: the slot names its pid, and a slot
+                    # whose pid is gone is stale (Nov 4: one sat for an hour and blocked every browser check and deploy behind it)
+                    pid = None
+                    with contextlib.suppress(OSError, ValueError): pid = int(open(os.path.join(d, "pid")).read().strip())
+                    if pid:
+                        try: os.kill(pid, 0)
+                        except ProcessLookupError:
+                            print(f"  removing a stale browser slot (pid {pid} is gone)", flush=True); shutil.rmtree(d, ignore_errors=True)
+                        except PermissionError: pass
+                    continue
+                with contextlib.suppress(OSError): open(os.path.join(d, "pid"), "w").write(str(os.getpid()))
+                held = d; break
+            if held is None:
+                if time.time() - t0 > 1800: raise RuntimeError("every shared browser slot was held for 30 minutes: " + LOCK)
+                if not said: print("  waiting for a browser slot…", flush=True); said = True
+                time.sleep(2)
     try: yield
     finally:
         if held:
-            with contextlib.suppress(OSError): os.remove(os.path.join(LOCK, "pid"))
-            with contextlib.suppress(OSError): os.rmdir(LOCK)
+            with contextlib.suppress(OSError): os.remove(os.path.join(held, "pid"))
+            with contextlib.suppress(OSError): os.rmdir(held)
 
 
 CAPS = {"capabilities": [{"task_id": t, "name": t, "n_classes": n, "labels": {str(i): l for i, l in enumerate(L)}} for t, n, L in [
@@ -580,6 +599,7 @@ class Page:
         self.root = None   # set: the build is served from this folder at self.base (a production hostname, t_prod_gates)
         self.here = []      # presence beats (/lab/here) this page sent
         self.helper = None  # set: /lab/here and /lab/live go to this local helper (node helper/dev_server.mjs), t_presence
+        self.timescale = 1  # >1: pages open with ?timescale=N (the page's own clock runs N× faster; tests only, see arena.html)
         ctx.route("**/*", self._route)
 
     def _route(self, route):
@@ -657,6 +677,8 @@ class Page:
         def nav(fr):   # the service worker reloads the page once (cross-origin isolation): errors from the first document were from a page being replaced
             if fr == pg.main_frame and (self.errors or self.console or self.warns): self.before_reload += self.errors + self.console + self.warns; self.errors.clear(); self.console.clear(); self.warns.clear()
         pg.on("framenavigated", nav)
+        if self.timescale > 1 and "timescale=" not in path:
+            p, _, h = path.partition("#"); p += ("&" if "?" in p else "?") + f"timescale={self.timescale}"; path = p + ("#" + h if h else "")
         pg.goto(self.base + path, wait_until="load", referer=referer)
         return pg
 
@@ -3629,165 +3651,171 @@ def t_fps(P, n=300, floor=20):
     return f"{avg:.1f} fps with {n} extra creatures"
 
 
+# ---------------------------------------------------------------- what runs where (Nov 4: tiers, parallel workers)
+PHONE = {"viewport": {"width": 375, "height": 667}, "is_mobile": True, "has_touch": True}
+IPHONE = "iphone"   # a WebKit context from Playwright's iPhone 12 Mini profile
+
+
+def browser_tests(a, out):
+    """every browser check, in the order a single worker runs them: (name, fn, args, context options, engine)"""
+    C, W = "chromium", "webkit"
+    T = [
+        ("fresh load", t_fresh_load, (), {}), ("fresh slow", t_fresh_slow, (), {}), ("crash guard", t_crash_guard, (), {}),
+        ("camera desktop", t_camera, (), {}), ("panels", t_panels, (), {}), ("sound", t_sound, (), {}), ("haunted music", t_haunted, (), {}),
+        ("stats", t_stats, (), {}), ("stats v2", t_stats_v2, (), {}), ("stats once", t_stats_once, (), {}), ("stats seen", t_stats_seen, (), {}),
+        ("stats return", t_stats_return, (), {}), ("op stats", t_op_stats, (), {}), ("op actions", t_op_actions, (), {}), ("pedia stats", t_pedia_stats, (), {}),
+        ("data lab", t_datalab, (90 if a.full else 45,), {}), ("data lab stuck", t_datalab_stuck, (), {}), ("data lab home", t_datalab_home, (), {}),
+        ("mood migrate", t_mood_migrate, (), {}), ("lab card", t_lab_card, (), {}), ("irc inbox", t_irc_inbox, (), {}), ("oracle", t_oracle, (), {}),
+        ("quick commands", t_quick, (), {}), ("right-click", t_rclick, (), {}), ("clicks", t_clicks, (), {}), ("replay", t_replay, (), {}),
+        ("operator", t_operator, (), {}), ("tiny genesis", t_tiny_genesis, (), {}), ("halloween", t_halloween, (), {}),
+        ("halloween light", t_halloween_light, (), {"color_scheme": "light"}), ("intro", t_intro, (), {}),
+        ("intro reduced", t_intro_reduced, (), {"reduced_motion": "reduce"}), ("intro epoch0", t_intro_epoch0, (), {}), ("trick or treat", t_treat, (), {}),
+        ("wikipedia world", t_wiki, (), {}), ("genesis", t_genesis, (), {}), ("story", t_story, (), {}), ("story migrate", t_story_migrate, (), {}),
+        ("story keys", t_story_keys, (), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
+        ("story row", t_story_row, (), {}), ("story modal", t_story_modal, (), {}), ("operator float", t_operator_float, (), {}),
+        ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
+        ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
+        ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
+        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
+        ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
+        ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
+        ("reviews link", t_reviews_link, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
+        ("founder personal", t_founder_personal, (), {}), ("founder phone", t_founder_phone, (), {"is_mobile": True, "has_touch": True}),
+        ("story landing", t_story_landing, (), {}), ("story intro", t_story_intro, (), {}), ("logo thunder", t_logo_thunder, (), {}),
+        ("story fans", t_story_fans, (), {}), ("story clock", t_story_clock, (), {}), ("logo solo", t_logo_solo, (), {}), ("logo ab", t_logo_ab, (), {}),
+        ("story keys logo", t_story_keys_logo, (), {}), ("story ring", t_story_ring, (), {}), ("boot intro", t_boot_intro, (), {}), ("chooser", t_chooser, (), {}),
+        ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
+        ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
+        ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
+        ("prod gates", t_prod_gates, (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
+    ]
+    T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
+    if a.full: T.append(("fps", t_fps, (), {}, C))
+    # Safari's engine: desktop size for the review link (its service worker would answer /lab/* past the test's stubs), the iPhone profile for the rest
+    T.append(("reviews webkit", lambda P: t_reviews_link(P, "webkit"), (), {"viewport": {"width": 1280, "height": 800}, "service_workers": "block"}, W))
+    T.append(("ios sound", t_ios_sound, (), {"service_workers": "block"}, IPHONE))
+    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("zoom shapes phone", t_zoom_shapes, {}), ("lab card phone", t_lab_card, {"phone": True}),
+                         ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
+        T.append((name, (lambda P, fn=fn, kw=kw: fn(P, **kw)), (), {}, IPHONE))
+    return T
+
+
+# the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
+LAUNCH = {"js syntax", "conflict markers", "worker", "static build", "prod gates", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
+          ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
+          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
+          ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
+# checks that pass the same assertions with the page's clock sped up (?timescale): measured one by one (Nov 4); the rest assert real
+# durations or sounds scheduled on the audio clock, which can't run faster
+SCALED = set()
+TIMES = os.path.join(tempfile.gettempdir(), "idle-test-times.json")   # last run's seconds per check: the slowest start first
+
+
+def run_in_process(names, a, out, base):
+    """run these browser checks here, one after another: one browser per engine, a fresh context per check"""
+    from playwright.sync_api import sync_playwright
+    reg = {t[0]: t for t in browser_tests(a, out)}
+    todo = [reg[n] for n in names if n in reg]
+    with sync_playwright() as p:
+        browsers = {}
+        def engine(e):
+            if e not in browsers:
+                browsers[e] = (p.webkit if e in ("webkit", IPHONE) else p.chromium).launch(headless=not a.headed, **({} if e != "chromium" else {"args": ["--autoplay-policy=no-user-gesture-required"]}))
+            return browsers[e]
+        try:
+            for name, fn, args, kw, e in todo:
+                if e == IPHONE:
+                    dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
+                    kw = {**dev, **kw}
+                else:
+                    kw = {"viewport": {"width": 1400, "height": 900}, **kw}
+                ts = kw.pop("timescale", 0) or (a.timescale if name in SCALED else 1)
+                ctx = engine(e).new_context(**kw); P = Page(ctx, base); P.timescale = ts
+                try: check(name, fn, P, *args)
+                finally: ctx.close()
+        finally:
+            for b in browsers.values(): b.close()
+
+
+def jobs_wanted(a, n):
+    """how many browser workers: -j / IDLE_TEST_JOBS, otherwise from the load (cores minus the 1-minute load, 1 to 6)"""
+    j = a.jobs or int(os.environ.get("IDLE_TEST_JOBS") or 0)
+    if not j:
+        cores = os.cpu_count() or 4
+        j = max(1, min(6, int(cores - os.getloadavg()[0])))
+    return max(1, min(j, n))
+
+
+def run_parallel(names, a, out, jobs):
+    """each check in its own process (its own server port, browser and storage), at most `jobs` at once, slowest first; a new worker
+    starts only while the machine has room (the load stays under the core count), so a busy Mac gets fewer"""
+    try: times = json.load(open(TIMES))
+    except Exception: times = {}
+    queue = sorted(names, key=lambda n: -times.get(n, 30))
+    running, cores = {}, os.cpu_count() or 4
+    while queue or running:
+        while queue and len(running) < jobs and (not running or os.getloadavg()[0] < cores + 2):
+            n = queue.pop(0)
+            cmd = [sys.executable, os.path.abspath(__file__), "--dist", out, "--only", n, "--child", "--timescale", str(a.timescale)] + (["--full"] if a.full else []) + (["--headed"] if a.headed else [])
+            running[n] = (subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True), time.time())
+        time.sleep(0.2)
+        for n, (pr, ts) in list(running.items()):
+            if pr.poll() is None: continue
+            outp = pr.stdout.read(); del running[n]
+            line = next((l for l in outp.splitlines() if l.startswith(("  ok    " + n, "  FAIL  " + n))), None)
+            dt = time.time() - ts
+            if line and line.startswith("  ok"):
+                RESULTS.append((n, True, line, dt)); print(line, flush=True)
+            else:
+                msg = line[len("  FAIL  " + n):].strip() if line else ("no result: " + outp.strip()[-600:])
+                RESULTS.append((n, False, msg, dt)); print(f"  FAIL  {n}  {msg}", flush=True)
+                if os.environ.get("IDLE_TEST_TRACE"): print(outp[-3000:])
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--full", action="store_true"); ap.add_argument("-k", default=""); ap.add_argument("--dist", default=""); ap.add_argument("--keep", action="store_true")
     ap.add_argument("--headed", action="store_true")
+    ap.add_argument("-t", "--tier", default="", choices=["", "launch", "full"], help="launch: the checks a deploy needs (~3 min); full (default): everything")
+    ap.add_argument("-j", "--jobs", type=int, default=0, help="browser workers (default: from the load, 1-6; also IDLE_TEST_JOBS)")
+    ap.add_argument("--timescale", type=int, default=int(os.environ.get("IDLE_TIMESCALE") or 5), help="how much faster the checks in SCALED run the page's clock (1: real time)")
+    ap.add_argument("--only", default="", help=argparse.SUPPRESS); ap.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args(); t0 = time.time()
-    want = lambda name: a.k.lower() in name.lower()
-    print("static checks")
-    if want("js syntax"): check("js syntax", js_syntax)
-    if want("presence privacy"): check("presence privacy: what a beat carries", presence_privacy)
-    if want("conflict markers"): check("conflict markers", no_conflict_markers)
-    if want("fontgen"): check("fontgen", fontgen_round)
-    if want("gift tool"): check("gift tool: personal gift links", gift_tool_unit)
-    if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
-    if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
-    if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
-    if not any(want(n) for n in browser_names): return report(t0)
+    tier = (lambda name: name in LAUNCH) if a.tier == "launch" else (lambda name: True)
+    want = lambda name: a.k.lower() in name.lower() and tier(name)
+    if a.child:   # one check, in a worker process started by run_parallel: a browser slot, the shared build, its own server
+        srv, base = serve(a.dist)
+        with browser_lock(): run_in_process([a.only], a, a.dist, base)
+        srv.shutdown()
+        return 0 if RESULTS and all(r[1] for r in RESULTS) else 1
+    statics = lambda: [check(label, fn) for key, label, fn in STATIC if want(key)]
+    out = a.dist or tempfile.mkdtemp(prefix="idle-dist-")
+    names = [t[0] for t in browser_tests(a, out) if want(t[0])]
+    if not names:
+        print("static checks"); statics(); return report(t0)
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import sync_playwright   # noqa: F401
     except ImportError:
         print("  FAIL  playwright is not installed (pip install playwright; playwright install chromium webkit)"); RESULTS.append(("playwright", False, "missing", 0)); return report(t0)
-    out = a.dist or tempfile.mkdtemp(prefix="idle-dist-")
     try:
         if not a.dist:
             print("building", out); check("static build", build, out)
-        srv, base = serve(out)
-        print("browser checks at", base)
-        with browser_lock(), sync_playwright() as p:
-            ch = p.chromium.launch(headless=not a.headed, args=["--autoplay-policy=no-user-gesture-required"])
-            try:
-                def run(name, fn, *args, **ctxkw):
-                    if not want(name): return
-                    ctx = ch.new_context(**{"viewport": {"width": 1400, "height": 900}, **ctxkw}); P = Page(ctx, base)
-                    try: check(name, fn, P, *args)
-                    finally: ctx.close()
-                run("fresh load", t_fresh_load)
-                run("fresh slow", t_fresh_slow)
-                run("crash guard", t_crash_guard)
-                run("camera desktop", t_camera)
-                run("panels", t_panels)
-                run("sound", t_sound)
-                run("haunted music", t_haunted)
-                run("stats", t_stats)
-                run("stats v2", t_stats_v2)
-                run("stats once", t_stats_once)
-                run("stats seen", t_stats_seen)
-                run("stats return", t_stats_return)
-                run("op stats", t_op_stats)
-                run("op actions", t_op_actions)
-                run("pedia stats", t_pedia_stats)
-                run("data lab", t_datalab, 90 if a.full else 45)
-                run("data lab stuck", t_datalab_stuck)
-                run("data lab home", t_datalab_home)
-                run("mood migrate", t_mood_migrate)
-                run("lab card", t_lab_card)
-                run("irc inbox", t_irc_inbox)
-                run("oracle", t_oracle)
-                run("quick commands", t_quick)
-                run("right-click", t_rclick)
-                run("clicks", t_clicks)
-                run("replay", t_replay)
-                run("operator", t_operator)
-                run("tiny genesis", t_tiny_genesis)
-                run("halloween", t_halloween)
-                run("halloween light", t_halloween_light, color_scheme="light")
-                run("intro", t_intro)
-                run("intro reduced", t_intro_reduced, reduced_motion="reduce")
-                run("intro epoch0", t_intro_epoch0)
-                run("trick or treat", t_treat)
-                run("wikipedia world", t_wiki)
-                run("genesis", t_genesis)
-                run("story", t_story)
-                run("story migrate", t_story_migrate)
-                run("story keys", t_story_keys)
-                run("story phone steps", t_story_phone_steps, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
-                run("story input visible", t_story_input_visible)
-                run("story row", t_story_row)
-                run("story modal", t_story_modal)
-                run("operator float", t_operator_float)
-                run("v15 story", t_story_v15)
-                run("v15 creatures", t_v15_creatures)
-                run("v15 operator top", t_operator_top)
-                run("v15 operator top phone", lambda P: t_operator_top(P, phone=True), viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
-                run("v15 new build", t_new_build)
-                run("operator float phone", t_operator_float_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
-                run("slash", t_slash)
-                run("slash phone", t_slash_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
-                run("story end phone", t_story_end_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
-                run("story v6", t_story_v6)
-                run("title card", t_title_card)
-                run("hint phone", t_hint_phone)
-                run("story arms", t_story_arms)
-                run("story offer", t_story_offer)
-                run("never stuck", t_never_stuck)
-                run("founder", t_founder)
-                run("founder link", t_founder_link)
-                run("reviews invite", t_reviews_invite)
-                run("reviews", t_reviews, viewport={"width": 1280, "height": 800})
-                run("reviews cliff", t_reviews_cliff)
-                run("reviews tab", t_reviews_tab)
-                run("reviews timing", t_reviews_timing)
-                run("reviews cutscene", t_reviews_cutscene)
-                run("reviews cutscene phone", t_reviews_cutscene, True, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
-                run("reviews link", t_reviews_link)
-                run("founder off", t_founder_off)
-                run("reviews phone", t_reviews_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
-                run("founder personal", t_founder_personal)
-                run("founder phone", t_founder_phone, is_mobile=True, has_touch=True)
-                run("story landing", t_story_landing)
-                run("story intro", t_story_intro)
-                run("logo thunder", t_logo_thunder)
-                run("story fans", t_story_fans)
-                run("story clock", t_story_clock)
-                run("logo solo", t_logo_solo)
-                run("logo ab", t_logo_ab)
-                run("story keys logo", t_story_keys_logo)
-                run("story ring", t_story_ring)
-                run("boot intro", t_boot_intro)
-                run("chooser", t_chooser)
-                run("genesis phone", t_genesis_phone, is_mobile=True, has_touch=True)
-                run("pedia desktop", t_pedia)
-                run("pedia halloween", t_pedia_halloween)
-                run("fonts", t_fonts)
-                run("fonts phone", t_fonts_phone, is_mobile=True, has_touch=True)
-                run("presence", t_presence, service_workers="block")   # requests a service worker makes itself pass by the test routes
-                run("prod gates", t_prod_gates, out, service_workers="block")
-                run("ios sound desktop", t_ios_sound, False)
-                if a.full: run("fps", t_fps)
-            finally:
-                ch.close()
-            if want("reviews webkit"):   # Safari's engine, desktop size: the same deliberate link behaviour as Chromium (v3)
-                wk = p.webkit.launch(headless=not a.headed)
-                try:
-                    ctx = wk.new_context(viewport={"width": 1280, "height": 800}, service_workers="block"); P = Page(ctx, base)   # WebKit's service worker would answer /lab/* past the test's stubs
-                    try: check("reviews webkit", lambda P=P: t_reviews_link(P, "webkit"))
-                    finally: ctx.close()
-                finally:
-                    wk.close()
-            if want("ios sound"):
-                wk = p.webkit.launch(headless=not a.headed)
-                try:
-                    dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
-                    ctx = wk.new_context(**dev, service_workers="block"); P = Page(ctx, base)
-                    try: check("ios sound", t_ios_sound, P)
-                    finally: ctx.close()
-                finally:
-                    wk.close()
-            if any(want(n) for n in ("camera phone", "zoom shapes phone", "pedia phone", "pedia halloween phone", "lab card phone")):
-                wk = p.webkit.launch(headless=not a.headed)
-                try:
-                    dev = p.devices["iPhone 12 Mini"] if "iPhone 12 Mini" in p.devices else p.devices["iPhone 12"]
-                    for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("zoom shapes phone", t_zoom_shapes, {}), ("lab card phone", t_lab_card, {"phone": True}), ("pedia phone", t_pedia, {"phone": True}), ("pedia halloween phone", t_pedia_halloween, {"phone": True})):
-                        if not want(name): continue
-                        ctx = wk.new_context(**dev); P = Page(ctx, base)
-                        try: check(name, lambda P=P, fn=fn, kw=kw: fn(P, **kw))
-                        finally: ctx.close()
-                finally:
-                    wk.close()
-        srv.shutdown()
+        jobs = jobs_wanted(a, len(names))
+        if jobs > 1:   # the static checks (syntax, worker, server units) run alongside the browser workers
+            st = threading.Thread(target=statics, daemon=True); st.start()
+        else:
+            print("static checks"); statics()
+        if jobs == 1:
+            srv, base = serve(out)
+            print("browser checks at", base)
+            with browser_lock(): run_in_process(names, a, out, base)
+            srv.shutdown()
+        else:
+            print(f"browser checks: {len(names)} in {jobs} workers (load {os.getloadavg()[0]:.1f} on {os.cpu_count()} cores)", flush=True)
+            run_parallel(names, a, out, jobs); st.join()
     finally:
         if not a.dist and not a.keep: shutil.rmtree(out, ignore_errors=True)
     return report(t0)
@@ -3795,6 +3823,12 @@ def main():
 
 def report(t0):
     bad = [r for r in RESULTS if not r[1]]
+    timed = sorted((r for r in RESULTS if r[3] > 0), key=lambda r: -r[3])
+    if len(timed) > 3:
+        print("\nslowest: " + ", ".join(f"{r[0]} {r[3]:.0f}s" for r in timed[:10]))
+        try: old = json.load(open(TIMES))
+        except Exception: old = {}
+        with contextlib.suppress(OSError): json.dump({**old, **{r[0]: round(r[3], 1) for r in RESULTS}}, open(TIMES, "w"))
     print(f"\n{len(RESULTS) - len(bad)}/{len(RESULTS)} passed in {time.time() - t0:.0f}s")
     for n, _, msg, _ in bad: print(f"  FAIL  {n}: {msg}")
     return 1 if bad else 0
