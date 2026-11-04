@@ -185,7 +185,7 @@ html.gen-look :is(#toHandle,#genTag,#genDay,#lab-toggle){opacity:0!important;poi
 #genDay{position:fixed;left:14px;top:14px;z-index:40;min-width:200px;max-width:min(300px,70vw);padding:10px 12px;border-radius:12px;background:#0a0b16e6;border:1px solid #6b7cff66;color:#cfd6ff;font:12px ui-monospace,Menlo,monospace;transition:opacity .8s}
 #genDay .dt{font-weight:700;letter-spacing:.08em;font-size:11px;opacity:.8;margin-bottom:6px}#genDay li{list-style:none;margin:3px 0}#genDay ul{margin:0;padding:0}#genDay li.ok{color:#8fe3b4}#genDay li.ok:before{content:'✓ '}#genDay li:not(.ok):before{content:'○ '}
 #genDay .dn{margin-top:6px;opacity:.6;font-size:10.5px}#genDay .wip{margin-top:4px;font-size:11px;line-height:1.45;color:#cfd6ff}#genDay .wip a{color:#9fd8ff}#genDay.soon li:before{content:'· '}#genDay .x{position:absolute;right:8px;top:6px;cursor:pointer;opacity:.6;background:none;border:0;color:inherit}
-@media (max-width:600px){#genDay{top:auto;bottom:calc(45dvh + 8px);left:8px}}
+@media (max-width:600px){#genDay{bottom:auto!important;left:8px}}
 #genFront{position:fixed;inset:0;z-index:2147482500;display:flex;align-items:center;justify-content:center;background:#02030aa8;padding:16px}
 #genFront .np{max-width:520px;background:#f4ecd8;color:#1c1712;border-radius:6px;padding:20px 24px;box-shadow:0 30px 90px #000c;font:15px/1.5 Georgia,serif;transform:rotate(-1.2deg)}
 #genFront .mh{font:900 26px/1 Georgia,serif;letter-spacing:.02em;text-align:center;border-bottom:3px double #1c1712;padding-bottom:8px}#genFront .md{font:11px ui-monospace,Menlo,monospace;text-align:center;margin:6px 0 12px;opacity:.7}
