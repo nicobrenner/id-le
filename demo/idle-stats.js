@@ -190,7 +190,7 @@
   const fpsBucket = () => { if (!fpsS.length) return null; const v = fpsS.slice().sort((a, b) => a - b)[fpsS.length >> 1]; return v < 20 ? '<20' : v < 40 ? '20-40' : v < 55 ? '40-55' : '55+'; };
 
   function payload(final) {
-    const p = { v: 1 }; let any = false; try { const gv = localStorage.getItem('idle.gv'); if (gv === 'story' || gv === 'current') p.gv = gv; } catch (e) {}   // the storyline A/B arm (idle-genesis.js), only while it runs
+    const p = { v: 1 }; let any = false; try { const gv0 = localStorage.getItem('idle.gv'), gv = gv0 === 'current' ? 'play' : gv0; if (gv === 'story' || gv === 'choose' || gv === 'play') p.gv = gv; } catch (e) {}   // the storyline A/B arm (idle-genesis.js), only while it runs
     // the storyline's funnel (idle-runtime.js __funnel): each moment once per browser (title … lights, Epoch 1, skips, the offer)
     try { const f = window.__funnel ? window.__funnel.reached().filter(k => !ahaSent['sf:' + k]).slice(0, 30) : []; if (f.length) { p.sf = f; any = true; } } catch (e) {}
     // the story's logo A/B (idle-epoch0.js): the arm rides along once this browser has seen its logo, so the moments after it count per arm too

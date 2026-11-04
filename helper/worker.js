@@ -157,13 +157,14 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
+const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
   'rv_open_link', 'rv_open_lab', 'rv_open_end', 'rv_play', 'rv_sent', 'rv_already',
   // v2: the Operator's invitation (shown, I'm in, not now), the pledge, swipes (✕ ✓ ★), keep going / done, which one?, the cliff passed
   'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested'];
+const ARM = g => g === 'story' || g === 'choose' || g === 'play' ? g : g === 'current' ? 'play' : 'none';   // v15: the storyline's three arms
 const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 // time per step (Nov 3): seconds of on-screen time since the moment before, per arm and moment: count, sum (for a mean) and buckets
@@ -191,16 +192,16 @@ function addStats(p) {
   if (DWELL.includes(p.dw) && (p.dw0 === undefined || DWELL.indexOf(p.dw0) >= 0 && DWELL.indexOf(p.dw0) < DWELL.indexOf(p.dw))) { bump(d.dw, p.dw); if (p.dw0 !== undefined) bump(d.dw, p.dw0, -1); }
   if (F5STOP.includes(p.fl) && (p.fl0 === undefined || F5STOP.includes(p.fl0) && p.fl0 !== p.fl)) { bump(d.fl, p.fl); if (p.fl0 !== undefined) bump(d.fl, p.fl0, -1); }
   // the genesis A/B (idle-genesis.js; off until Nico switches it on): visits, time on screen and features per variant
-  // the storyline's funnel: each moment once per browser, by arm (story | current | none)
+  // the storyline's funnel: each moment once per browser, by arm (v15: story | choose | play | none; the two-arm 'current' counts as play)
   // the story's logo A/B (idle-epoch0.js, Nov 3): the moments from the logo on are also counted per logo arm ('lg:c3|lights'), so the two logos compare
-  if (Array.isArray(p.sf)) { const arm = p.gv === 'story' || p.gv === 'current' ? p.gv : 'none', lg = p.lg === 'c3' || p.lg === 'crt' ? p.lg : null;
+  if (Array.isArray(p.sf)) { const arm = ARM(p.gv), lg = p.lg === 'c3' || p.lg === 'crt' ? p.lg : null;
     for (const k of new Set(p.sf.slice(0, 30))) if (SFSTEP.includes(k)) { d.sf = d.sf || {}; bump(d.sf, arm + '|' + k); if (lg && LGSTEP.includes(k)) bump(d.sf, 'lg:' + lg + '|' + k); } }
-  { const arm = p.gv === 'story' || p.gv === 'current' ? p.gv : 'none', lg = p.lg === 'c3' || p.lg === 'crt' ? p.lg : null;
+  { const arm = ARM(p.gv), lg = p.lg === 'c3' || p.lg === 'crt' ? p.lg : null;
     if (p.sd && typeof p.sd === 'object' && !Array.isArray(p.sd)) for (const [k, v] of Object.entries(p.sd).slice(0, 30)) { if (!SFSTEP.includes(k) || !Number.isFinite(v) || v < 0 || v > 86400) continue;
       d.sd = d.sd || {}; const x = d.sd[arm + '|' + k] = d.sd[arm + '|' + k] || { n: 0, sum: 0, b: {} }; x.n++; x.sum += Math.round(v); bump(x.b, sdBucket(v)); }
     if (p.rb && typeof p.rb === 'object' && RBDAY.test(p.rb.c) && RBB.includes(p.rb.b) && p.rb.c <= day && Date.parse(day) - Date.parse(p.rb.c) < 400 * 86400000) {
       d.rb = d.rb || {}; bump(d.rb, arm + '|' + p.rb.c + '|' + p.rb.b); if (lg) bump(d.rb, 'lg:' + lg + '|' + p.rb.c + '|' + p.rb.b); } }
-  if (p.gv === 'genesis' || p.gv === 'starter' || p.gv === 'story' || p.gv === 'current') { d.gv = d.gv || {}; if (p.visit === 1) bump(d.gv, p.gv + '|visit');
+  if (p.gv === 'genesis' || p.gv === 'starter' || p.gv === 'story' || p.gv === 'current' || p.gv === 'choose' || p.gv === 'play') { d.gv = d.gv || {}; if (p.visit === 1) bump(d.gv, p.gv + '|visit');
     if (DWELL.includes(p.dw) && (p.dw0 === undefined || DWELL.indexOf(p.dw0) >= 0 && DWELL.indexOf(p.dw0) < DWELL.indexOf(p.dw))) { bump(d.gv, p.gv + '|dw:' + p.dw); if (p.dw0 !== undefined) bump(d.gv, p.gv + '|dw:' + p.dw0, -1); }
     if (Array.isArray(p.feat)) for (const f of p.feat.slice(0, 30)) if (FEATS.test(f)) bump(d.gv, p.gv + '|feat:' + f); }
   if (BUCKETS.includes(p.fps)) bump(d.fps, p.fps);
