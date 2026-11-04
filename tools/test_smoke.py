@@ -2527,32 +2527,58 @@ def t_hint_phone(P):
 
 
 def t_story_arms(P):
-    """The storyline A/B (off by default): a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=current gets the
-    starter world as now; a browser that already has a world keeps it, whatever its arm (returning players are never thrown into the story)."""
+    """The storyline's A/B/C (v15, Nico: "A: user goes into storyline mode, B: user sees choice screen, C: user goes directly to playground"),
+    off by default: a NEW browser with ?arm=story goes straight into the story (the title card); ?arm=choose gets the chooser (📖 / 🛝);
+    ?arm=play gets the playground's ready world, and on its first visit the floating Operator welcomes it and offers [ 📖 start the story ]
+    (snapshot first, then the story) and points at ⚙; the two-arm 'current' migrates to 'play'; a browser that already has a world keeps it."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
-    off = pg.evaluate("() => ({ ab: window.__genesis.ab, v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv') })")
-    need(off["ab"] == "off" and off["v"] is None and off["gv"] is None, f"the A/B ships off: {off}")
+    off = pg.evaluate("() => ({ ab: window.__genesis.ab, v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), arms: window.__genesis.arms })")
+    need(off["ab"] == "off" and off["v"] is None and off["gv"] is None and off["arms"] == ["story", "choose", "play"], f"the A/B/C ships off, three arms: {off}")
     wait_for(pg, "() => !!localStorage.getItem('arena.autosave')", 30, P=P)
     ret = P.open("/arena.html?arm=story&test"); booted(ret); ret.wait_for_timeout(3000)   # this browser has a world: it keeps it
     r = ret.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid, c: window.__arena.raw().filter(c => !c.lab).length })")
     need(not r["intro"] and not r["void"] and r["c"] > 0, f"a returning browser in the story arm keeps its world: {r}")
     out = []
-    for arm in ("story", "current"):   # new browsers: a fresh context each
+    for arm in ("story", "choose", "play", "current"):   # new browsers: a fresh context each ('current': a two-arm key from before v15)
         ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)
         try:
+            if arm == "current":
+                q = Q.open("/privacy.html"); q.evaluate("() => localStorage.setItem('idle.gv', 'current')"); q.close()
+                q = Q.open("/arena.html?test"); booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+                m = q.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), arm: window.__funnel.arm(), intro: !!document.querySelector('#idleIntro') })")
+                need(m == {"v": "play", "gv": "play", "arm": "play", "intro": False}, f"the two-arm 'current' becomes 'play': {m}"); out.append("current→play"); continue
             q = Q.open(f"/arena.html?arm={arm}&test")
             if arm == "story":
                 wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
                 st = q.evaluate("() => ({ v: window.__genesis.variant(), arm: window.__funnel.arm() })"); need(st == {"v": "story", "arm": "story"}, f"the story arm starts the story: {st}")
+            elif arm == "choose":
+                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
+                ch = q.evaluate("() => ({ v: window.__genesis.variant(), arm: window.__funnel.arm(), ms: [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m), intro: !!document.querySelector('#idleIntro') })")
+                need(ch["v"] == "choose" and ch["arm"] == "choose" and ch["ms"][:2] == ["story", "ready"] and not ch["intro"], f"the choose arm gets the chooser (📖 first, then 🛝): {ch}")
+                q.click("#genChoose button[data-m=ready]"); booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+                need("ch_play" in q.evaluate("() => window.__funnel.reached()") and q.evaluate("() => localStorage.getItem('idle.storyOffer')") == "chose", "the chooser's playground: counted, and no storyline offer after it")
             else:
                 booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
-                cur = q.evaluate("() => ({ v: window.__genesis.variant(), intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid })")
-                need(cur["v"] == "current" and not cur["intro"] and not cur["void"], f"the current arm keeps the starter world: {cur}")
+                pl = q.evaluate("() => ({ v: window.__genesis.variant(), arm: window.__funnel.arm(), intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid, chooser: !!document.querySelector('#genChoose') })")
+                need(pl == {"v": "play", "arm": "play", "intro": False, "void": False, "chooser": False}, f"the play arm: the playground's ready world: {pl}")
+                q.mouse.click(700, 450)   # the first tap: the welcome follows ~1.5 s later
+                wait_for(q, "() => window.__opwin.tray().chips.includes('📖 start the story') && !!document.querySelector('.opHi')", 15)
+                w = q.evaluate("() => ({ open: window.__opwin.isOpen(), thread: document.querySelector('#ai-thread').textContent, lines: window.__genesis.welcome.lines, after: window.__genesis.welcome.after, hi: document.querySelectorAll('.opHi').length, offer: !!document.querySelector('#storyOffer'), fun: window.__funnel.reached(), pw: localStorage.getItem('idle.playWelcome') })")
+                need(w["open"] and all(l in w["thread"] for l in w["lines"]) and w["after"] in w["thread"] and w["hi"] >= 1 and not w["offer"] and "pw_shown" in w["fun"] and w["pw"] == "shown",
+                     f"the play arm's welcome: the Operator says it, offers the story, points at ⚙ (no separate storyline offer): {w}")
+                need("cutting-edge things Id|le's consciousness is dreaming up" in w["thread"], "Nico's line in the welcome")
+                snaps0 = q.evaluate("() => JSON.parse(localStorage.getItem('arena.snaps') || '[]').length")
+                q.click("#opTray .opc.glow")
+                wait_for(q, "() => !!document.querySelector('#idleIntro') || !!window.__genesisVoid", 40)
+                after = q.evaluate("() => ({ mode: window.__genesis.mode(), fun: window.__funnel.reached(), snaps: JSON.parse(localStorage.getItem('arena.snaps') || '[]').length })")
+                need(after["mode"] == "story" and "pw_story" in after["fun"] and after["snaps"] > snaps0, f"[ 📖 start the story ]: the world kept as a snapshot, then the story: {snaps0} → {after}")
+                q.close(); q = Q.open("/arena.html?test"); booted(q); q.mouse.click(700, 450); q.wait_for_timeout(3000)
+                need(q.evaluate("() => !window.__opwin.tray().chips.includes('📖 start the story')"), "the welcome is once per browser")
             out.append(arm)
         finally:
             ctx.close()
     P.clean()
-    return "off by default; returning browser keeps its world; new story arm → the title card; new current arm → the starter world"
+    return "off by default, three arms; returning browser keeps its world; story → the title card; choose → the chooser (🛝 counted, no offer after); play → the ready world, the Operator's welcome (once), [ 📖 start the story ] → snapshot + story; 'current' → 'play'"
 
 
 def t_story_offer(P):
@@ -2659,6 +2685,11 @@ def t_prod_gates(P, root):
         pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
         g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
         need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
+    # v15: the A/B/C is off on id-le.com: ?arm= forces nothing (no intro, no chooser, no welcome, no arm stored)
+    for a in ("story", "choose", "play"):
+        pg = P.open(f"/arena.html?arm={a}"); booted(pg); pg.wait_for_timeout(2500)
+        ab = pg.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), intro: !!document.querySelector('#idleIntro'), ch: !!document.querySelector('#genChoose'), w: window.__genesis.playWelcome() })")
+        need(ab == {"v": None, "gv": None, "intro": False, "ch": False, "w": False}, f"?arm={a} on production: {ab}"); pg.close()
     # ⭐ reviews (idle-reviews.js) are off on id-le.com: ?review= opens nothing, 🧪 has no ⭐ tab
     pg = P.open("/arena.html?review=logos"); booted(pg); pg.wait_for_timeout(3000)
     rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: window.__reviews, box: !!document.querySelector('#review'), tab: t }; }")

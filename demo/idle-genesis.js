@@ -199,13 +199,20 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function night(on) { window.__genDark = !!on; const a = $('#arena'); if (a) a.classList.toggle('gen-night', !!on); }
 
   // ---------- who gets a genesis
-  // the arm: 'story' or 'current' (the starter world and its guided first five minutes). Only NEW browsers are split, only while AB is on;
-  // ?arm=story|current forces one (tests, links). A browser that already has a world keeps it, whatever its arm.
-  function variant(fresh0) { const f = Q.get('arm'); if (f === 'story' || f === 'current') { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
-    let v = null; try { v = localStorage.getItem(GV); } catch (e) {} if (v === 'story' || v === 'current') return v; if (AB !== 'on' || !fresh0) return null;
-    v = Math.random() < 0.5 ? 'story' : 'current'; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
-  // called by the arena for a browser with no world of its own (fresh0), before the guided start would load the starter world
-  function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; return !!fresh0 && variant(fresh0) === 'story'; }
+  // the arm (v15, Nico: "maybe we need to do A/B/C testing... A: user goes into storyline mode, B: user sees choice screen, C: user goes
+  // directly to playground"): 'story' (straight into the storyline: the title card), 'choose' (the chooser: 📖 the storyline / 🛝 the
+  // playground), 'play' (straight into the playground's ready world; the Operator welcomes them once and offers the story). A third each,
+  // only NEW browsers, only while AB is on; stored in this browser only (idle.gv). The two-arm keys migrate: 'current' (the starter world)
+  // is 'play'. ?arm=story|choose|play forces one where the storyline is out (staging, local copies, or once the A/B runs). A browser that
+  // already has a world keeps it, whatever its arm.
+  const ARMS = ['story', 'choose', 'play'], OLD_ARM = { current: 'play' }, armOf = v => OLD_ARM[v] || v;
+  function variant(fresh0) { const f = armOf(Q.get('arm')); if (ARMS.includes(f) && storyLive()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
+    let v = null; try { v = localStorage.getItem(GV); } catch (e) {} if (OLD_ARM[v]) { v = armOf(v); try { localStorage.setItem(GV, v); } catch (e) {} }
+    if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0) return null;
+    v = ARMS[Math.floor(Math.random() * ARMS.length)]; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
+  // called by the arena for a browser with no world of its own (fresh0), before the guided start would load the starter world:
+  // the story and choose arms begin here; the play arm gets the ready world (the guided start), then the Operator's welcome (playWelcome)
+  function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
   const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // the Operator window's status line (Nico, v7: no second title; "consciousness 24 · epoch 0 · genesis", the epoch advancing with the story)
@@ -494,7 +501,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
 ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 the storyline</b>Doc's story, epoch by epoch: a training run that won't stop, a crash, and a consciousness to raise into autonomy<br><small>recommended</small></button>` : ''}
 <button data-m="ready"><b>${esc(PG().icon + ' ' + PG().short)}</b>every feature, free play, your own worlds: it starts with creatures already living</button>
 <button class="pgv" data-m="free"><b>✦ ${esc(PG().short)}, from nothing</b>the void and the Operator's console, every step by hand, no guide</button></div>`;
-    document.body.appendChild(el); const end = m => { el.classList.add('out'); setTimeout(() => el.remove(), 600); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_choose', extra: { mode: m } } })); } catch (e) {} res(m); };
+    document.body.appendChild(el); const end = m => { mark(m === 'story' ? 'ch_story' : 'ch_play'); if (m !== 'story') { try { localStorage.getItem(OFFER) || localStorage.setItem(OFFER, 'chose'); } catch (e) {} } el.classList.add('out'); setTimeout(() => el.remove(), 600); try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_choose', extra: { mode: m } } })); } catch (e) {} res(m); };
     el.addEventListener('click', e => { const b = e.target.closest('button[data-m]'); if (b) end(b.dataset.m); });
     setTimeout(() => { const b = el.querySelector('button.rec'); if (b && !matchMedia('(pointer: coarse)').matches) b.focus(); }, 50); }); }
   // a ready world: the starter world (the guided first five minutes start with it); a browser that has played gets it restored directly
@@ -847,9 +854,32 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
   // ?genesis on a browser that already has a world: a new universe (the world is kept as a snapshot first, its creatures rest)
   if (Q.has('genesis') || Q.has('story')) { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh && window.__restored && !window.__genesisVoid) { clearInterval(iv); newUniverse(); } else if (window.__genesisVoid || ++k > 120) clearInterval(iv); }, 500); }
 
+  // ---------- the play arm's welcome (v15, Nico: "C: user goes directly to playground (they get some notice/modal telling them they are on
+  // freeplay and that they can switch to story mode if they want (maybe the operator can tell them that on the first visit, offer them a
+  // quick action they can click if they want and tell them they can alway switch from... [wherever the control is])"): once per browser, ~20 s
+  // after the world is up or right after the first tap/key, the floating Operator opens and says it; the 🛠 tray holds [ 📖 start the story ]
+  // (the world is kept as a snapshot first: newUniverse), and ⚙ glows where the story's switch lives. It takes the storyline offer's place.
+  // DRAFT: the words below are drafts for Nico (line 2 is his, grammar fixed by the manager)
+  const WELCOME = { draft: true, lines: ['welcome to the playground: every feature is open, play however you like',
+      "here you get to try new features, new creatures and all the cutting-edge things Id|le's consciousness is dreaming up",
+      "there's also a story, if you want one: Doc's training run, epoch by epoch"],
+    chip: '📖 start the story', after: 'you can always switch from ⚙ → 📖 Storyline mode', note: '📖 Storyline mode is in ⚙', ms: 20000, afterTap: 1500, gap: 1400 };
+  const PW = 'idle.playWelcome';
+  function playWelcome() { let st = null; try { st = localStorage.getItem(PW); } catch (e) {} if (st || variant() !== 'play' || storyMode() || window.__genesisVoid || document.querySelector('#idleIntro')) return false;
+    const O = window.__opwin; if (!O) return false; try { localStorage.setItem(PW, 'shown'); localStorage.getItem(OFFER) || localStorage.setItem(OFFER, 'welcome'); } catch (e) {} mark('pw_shown');
+    O.open(); let i = 0; const next = () => { if (i < WELCOME.lines.length) { O.say(WELCOME.lines[i++]); setTimeout(next, WELCOME.gap); return; }
+      O.setChips([{ text: WELCOME.chip, glow: true, act: () => { O.setChips(null); mark('pw_story'); try { localStorage.setItem(PW, 'story'); } catch (e) {} newUniverse('story'); } }]);
+      O.say(WELCOME.after); setTimeout(() => O.highlight('#settingsBtn', { ms: 4000, note: WELCOME.note }), 300);
+      setTimeout(() => { if (!storyMode()) O.setChips(null); }, 120000); };   // the chip stays two minutes; ⚙ keeps the way in
+    next(); return true; }
+  { let up = 0, tapAt = 0; const tap = () => { if (up && !tapAt) tapAt = now(); }; ['pointerdown', 'keydown'].forEach(t => addEventListener(t, tap, true));
+    const iv = setInterval(() => { if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting') || document.querySelector('#idleIntro')) return; if (!up) up = now();
+      if (now() - up < 400000 && (now() - up >= WELCOME.ms || (tapAt && now() - tapAt >= WELCOME.afterTap))) { clearInterval(iv); ['pointerdown', 'keydown'].forEach(t => removeEventListener(t, tap, true)); playWelcome(); }
+      else if (now() - up >= 400000) clearInterval(iv); }, 300); }
+
   // ---------- the storyline offer: for browsers that didn't start in it (the other arm, returning players); shown once, remembered
   const OFFER = 'idle.storyOffer';
-  function offer(now_) { if (!storyLive() && !Q.has('offer')) return false; if (Q.has('test') && !Q.has('offer')) return false;
+  function offer(now_) { if (!storyLive() && !Q.has('offer')) return false; if (variant() === 'play' && !Q.has('offer')) return false;   // the play arm gets the Operator's welcome instead if (Q.has('test') && !Q.has('offer')) return false;
     let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false;
     if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || $('#storyOffer')) return false;
     const el = document.createElement('div'); el.id = 'storyOffer'; el.setAttribute('role', 'dialog');
@@ -865,6 +895,6 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
   { let k = 0; const iv = setInterval(() => { if (++k > 400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return; if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); }, 500); }
   if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && (S.steps.music || S.steps.words)) && !genesisDone() && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
   applyUnlocks();
-  window.__genesis = { chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
