@@ -2223,8 +2223,8 @@ def t_reviews_invite(P):
         typing: document.body.innerText.includes('Nico is typing'), firstInView: lr.top >= hr.top - 1 && lr.top < hr.bottom, btns: [...document.querySelectorAll('.rvbtns button')].map(b => b.textContent), nico: document.querySelectorAll('.rvnico').length }; }""")
     need(seq["op"][-1] == "I have a message from Nico:" and seq["who"] == "📨 from Nico" and seq["lines"] == T["hello"][0] and not seq["typing"] and seq["nico"] == 0 and seq["firstInView"] and seq["btns"] == [T["yes"], T["no"]], f"the relayed letter: {seq}")
     pg.click(".rvbtns button.alt"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.includes('come join us'))", 10, P=P)
-    nn = pg.evaluate("() => ({ line: [...document.querySelectorAll('.rvop')].pop().textContent, hl: window.__reviews.test.lastHighlight(), ring: !!document.querySelector('.rvhl'), inv: JSON.parse(localStorage.getItem('idle.invite')) })")
-    need(nn["line"].startswith(T["notNow"]) and nn["hl"] == "hitlBtn" and nn["ring"] and nn["inv"]["answer"] == "no", f"not now: {nn}")
+    nn = pg.evaluate("() => ({ want: window.__reviews.text.notNow(false), knows: window.__reviews.test.knows(), line: [...document.querySelectorAll('.rvop')].pop().textContent, hl: window.__reviews.test.lastHighlight(), ring: !!document.querySelector('.rvhl'), inv: JSON.parse(localStorage.getItem('idle.invite')) })")
+    need(not nn["knows"] and nn["line"].startswith(nn["want"]) and "players who help decide what ships" in nn["line"] and nn["hl"] == "hitlBtn" and nn["ring"] and nn["inv"]["answer"] == "no", f"not now: {nn}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "invite-not-now.png"))
     n = lambda: pg.evaluate("() => document.querySelectorAll('.rvletter').length")
     pg.evaluate("() => window.__reviews.test.auto(true, 200000)"); pg.wait_for_timeout(6500); need(n() == 1, "asked again within a day")
@@ -2241,7 +2241,7 @@ def t_reviews_invite(P):
     joins = [json.loads(b) for k, b in P.fb if k == "join"]; bk = pg.evaluate("() => localStorage.getItem('idle.bkey')")
     need(len(joins) == 1 and joins[0]["bkey"] == bk, f"the join: {joins}")
     pg.click(".rvbtns button:not([disabled])"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 30, P=P)
-    pg.evaluate("() => window.__reviews.close()"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedNone))", 10, P=P)
+    pg.evaluate("() => window.__reviews.close()"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedNone(true)))", 10, P=P)
     need(pg.evaluate("() => window.__reviews.test.lastHighlight()") == "hitlBtn", "the 🌱 didn't light up after closing")
     pg.close(); P.clean()
     return f"relayed: Operator dots → 'I have a message from Nico:' → one 📨 card ({len(T['hello'][0])} lines, first in view, no 'typing'); not now → its line + 🌱 lit, once more a day later, never a third; I'm in → key, Nico's logo lines, pledge → deck; closed with none judged → 'more time' + 🌱"
@@ -2259,14 +2259,20 @@ def t_reviews_tab(P):
             need(False, f"click {sel}: {info}")
     hb = pg.evaluate("() => { const b = document.getElementById('hitlBtn'); if (!b) return 'missing'; const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { con: b.isConnected, disp: getComputedStyle(b).display, r: [r.left, r.top, r.width, r.height], top: e ? (e.id || e.className || e.tagName) : null }; }")
     need(isinstance(hb, dict) and hb["disp"] != "none" and hb["r"][2] > 0 and hb["top"] == "hitlBtn", f"the 🌱 button: {hb}")
+    k0 = pg.evaluate("() => window.__reviews.test.knows()")
     click("#hitlBtn"); wait_for(pg, "() => document.querySelector('#hitl.on [data-a=join]')", 10, P=P)
+    k1 = pg.evaluate("() => window.__reviews.test.knows()"); need(not k0 and k1, f"knows HITL: before the tab {k0}, after {k1}")
+    # the team named and explained, or just named (Nico: "'Nico has another one for the Humans in the Loop: the logo' if I have no idea what HITL is")
+    v = pg.evaluate("() => { const T = window.__reviews.text, rv = { title: 'the logo', n: 3 }; return { k: T.another(rv, true), u: T.another(rv, false), nk: T.notNow(true), nu: T.notNow(false), pk: T.publicAsk(rv, true)[0][0], pu: T.publicAsk(rv, false)[0][0], ck: T.closedNone(true), cu: T.closedNone(false) }; }")
+    need(v["k"] == "Nico has a new review for the Humans in the Loop: the logo" and v["u"] == "Nico has a new review: the logo. it's for the Humans in the Loop, players who help decide what ships"
+         and "HITL team here" in v["nk"] and "players who help decide what ships" in v["nu"] and "players who help decide what ships" in v["pu"] and "(" not in v["pk"] and "HITL tab" in v["ck"] and "where your reviews live" in v["cu"], f"the two variants: {v}")
     click("#hitl [data-a=join]"); wait_for(pg, "() => document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 30, P=P)
     click(".rvbtns button:not(.alt):not([disabled])"); wait_for(pg, "() => [...document.querySelectorAll('.rvbtns button:not([disabled])')].some(b => b.textContent.includes('check them out'))", 30, P=P)
     click(".rvbtns button:not([disabled])"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 30, P=P); pg.wait_for_timeout(400)
     first = []
     for k in ("ArrowRight", "ArrowUp", "ArrowLeft"): first.append(pg.evaluate("() => window.__reviews.state().current")); pg.keyboard.press(k); pg.wait_for_timeout(450)
     nxt = pg.evaluate("() => window.__reviews.state().current"); pg.evaluate("() => window.__reviews.close()")
-    wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedSome))", 10, P=P)
+    wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedSome(true)))", 10, P=P)
     click(".rvop .rvtabbtn >> nth=-1"); wait_for(pg, "() => document.querySelectorAll('#hitl .rv').length >= 2", 10, P=P)   # the 🌱 in the Operator's line
     t1 = pg.evaluate("() => ({ txt: document.getElementById('hitl').innerText, resume: [...document.querySelectorAll('#hitl [data-open=logos]')].map(b => b.textContent) })")
     need("in the loop (vesting)" in t1["txt"] and "3 of 12 judged" in t1["txt"] and "0 of 8 judged" in t1["txt"] and t1["resume"] == ["resume ›"], f"the tab: {t1}")
@@ -2284,8 +2290,8 @@ def t_reviews_tab(P):
     # a member arriving by a link: a nudge, not the deck
     pg = P.open("/arena.html?review=fonts&test"); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); }")
     wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.includes('our fonts'))", 30, P=P); pg.wait_for_timeout(800)
-    nd = pg.evaluate("() => ({ deck: !!window.__reviews.state(), btns: [...document.querySelectorAll('.rvbtns button:not([disabled])')].map(b => b.textContent), letters: document.querySelectorAll('.rvletter').length })")
-    need(not nd["deck"] and nd["btns"] == ["open ›", "later"] and nd["letters"] == 0, f"a member's link: {nd}")
+    nd = pg.evaluate("() => ({ line: [...document.querySelectorAll('.rvop')].pop().textContent, deck: !!window.__reviews.state(), btns: [...document.querySelectorAll('.rvbtns button:not([disabled])')].map(b => b.textContent), letters: document.querySelectorAll('.rvletter').length })")
+    need(not nd["deck"] and nd["line"] == "Nico has a new review for the Humans in the Loop: our fonts" and nd["btns"] == ["open ›", "later"] and nd["letters"] == 0, f"a member's link: {nd}")
     pg.close(); P.clean()
     return f"non-member: 🌱 → join → invite; member: status + '3 of 12 judged' + resume (at {nxt}, nothing twice) → done → 'sent' with ★ {first[1]}; closed after judging → 'already liked some'; a member's ?review=fonts → one line + [open ›], no deck"
 

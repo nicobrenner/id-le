@@ -31,7 +31,7 @@
   // ---------- the words (DRAFT: Nico rewrites any of it) ----------
   // the team: Humans in the Loop (Nico, 11-03: "I like Humans in the Loop"). Every word about it is made from this one line.
   // name: the team ("one of the Humans in the Loop"); member: the status before (vesting) / ✓; id: the server's key (keep it if it's ever renamed)
-  const TEAM = { id: 'loop', name: 'Humans in the Loop', short: 'HITL', member: 'in the loop' };   // short: for tight spaces like ⚙ (Nico: "Humans in the Loop/HITL 👩🏻‍💻👨🏿‍💻")   // another name later: change name/short/member here (keep the id), e.g. { name: 'Reviewers', short: 'the Reviewers', member: 'Reviewer' }
+  const TEAM = { id: 'loop', name: 'Humans in the Loop', short: 'HITL', member: 'in the loop', what: 'players who help decide what ships' };   // short: for tight spaces like ⚙ (Nico: "Humans in the Loop/HITL 👩🏻‍💻👨🏿‍💻")   // another name later: change name/short/member here (keep the id), e.g. { name: 'Reviewers', short: 'the Reviewers', member: 'Reviewer' }
   const DRAFT_END = 'to be the logo that opens the story, for everyone who plays after you 🙌';   // DRAFT (Nico kept it): his message stopped at "…the default logo animation for the story that"
   const TEXT = {
     operator: 'I have a message from Nico:',
@@ -51,18 +51,21 @@
     },
     go: 'check them out ›',
     // Nico (v3): "if the user says 'not now', Operator should say: 'All good. If you ever change your mind, just come join us at the HITL team here..'"
-    notNow: `all good. if you ever change your mind, just come join us at the ${TEAM.short} team here 👉`,
+    // every line that names the team explains it in a few words (TEAM.what) unless this player knows it (joined, or opened the 🌱 tab).
+    // Nico: "'Nico has another one for the Humans in the Loop: the logo' if I have no idea what HITL is..."
+    notNow: knows => knows ? `all good. if you ever change your mind, just come join us at the ${TEAM.short} team here 👉`
+      : `all good. if you ever change your mind, just come join us at the ${TEAM.name} team (${TEAM.what}) here 👉`,
     // Nico (v3): "after closing the reviews… 'Excellent, [I see you already liked some]/[I'll give you some more time to review]. You can always go back to the HITL tab/section here'"
-    closedSome: `excellent, I see you already liked some. you can always go back to the ${TEAM.short} tab here 👉`,
-    closedNone: `excellent, I'll give you some more time to review. you can always go back to the ${TEAM.short} tab here 👉`,
+    closedSome: knows => `excellent, I see you already liked some. you can always go back to the ${knows ? TEAM.short + ' tab' : TEAM.name + ' tab (🌱, where your reviews live)'} here 👉`,
+    closedNone: knows => `excellent, I'll give you some more time to review. you can always go back to the ${knows ? TEAM.short + ' tab' : TEAM.name + ' tab (🌱, where your reviews live)'} here 👉`,
     // the pledge, after "I'm in" (DRAFT)
     pledge: { title: `🌱 you're one of the ${TEAM.name} now`, ask: 'what we’ll ask: a few quick reviews now and then (a minute or two: swipe, pick, a word if you like)',
       // DRAFT
       get: `what you get: a say in what ships, a 🌱 ${TEAM.member} badge, and your name on the ${TEAM.name} list when you're vested (if you want it)`,
       cliff: `the cliff: ${CLIFF_DAYS} days and ${CLIFF_REVIEWS} reviews. until then you’re ${TEAM.member} (vesting); after it, ${TEAM.member} ✓ for good` },
     // a member (a link, or a new review): one line and a button, never the deck taking over by itself
-    another: rv => `Nico has a review for the ${TEAM.short} team: ${rv.title}`, open: 'open ›', later: 'later',
-    publicAsk: rv => [[`the ${TEAM.name} narrowed ${rv.title} down to ${rv.n}`, 'help pick the winner?']], publicYes: 'sure ›',
+    another: (rv, knows) => knows ? `Nico has a new review for the ${TEAM.name}: ${rv.title}` : `Nico has a new review: ${rv.title}. it's for the ${TEAM.name}, ${TEAM.what}`, open: 'open ›', later: 'later',
+    publicAsk: (rv, knows) => [[knows ? `the ${TEAM.name} narrowed ${rv.title} down to ${rv.n}` : `the ${TEAM.name} (${TEAM.what}) narrowed ${rv.title} down to ${rv.n}`, 'help pick the winner?']], publicYes: 'sure ›',
     vested: `you're vested: ${TEAM.member} ✓. thank you for sticking around 🌱`,
     thanks: 'thank you!! Nico reads every one 🧪',
     short: TEAM.short,
@@ -83,6 +86,8 @@
   // ---------- the team (local; the key ties it) ----------
   const TK = 'idle.team', SENT = 'idle.reviews', INV = 'idle.invite';
   const team = () => ld(TK, null);
+  // does this player know what the HITL is? (joined, or opened the 🌱 tab once: idle.hitlSeen)
+  const knows = () => !!team() || !!ld('idle.hitlSeen', null);
   const sentAll = () => ld(SENT, {}) || {};
   const until = () => { try { return Date.parse(window.__founder.dates().until); } catch (e) { return Infinity; } };
   function teamStatus() { const t = team(); if (!t) return null; const done = Object.values(sentAll()).filter(r => r.done).length, contrib = t.c || 0;
@@ -141,7 +146,7 @@
     try { const I = inv(); I.asks = (I.asks || 0) + 1; I.last = now(); I.rid = rid; sv(INV, I); mark('rv_invite');
       await opTyping(700); opSay(TEXT.operator); await opTyping(500); letter(TEXT.hello);
       const pick = await buttons([{ label: TEXT.yes }, { label: TEXT.no, alt: true }]);
-      if (pick === 1) { const J = inv(); J.answer = 'no'; sv(INV, J); mark('rv_notnow'); await opTyping(400); opPoint(TEXT.notNow); highlight(); return false; }
+      if (pick === 1) { const J = inv(); J.answer = 'no'; sv(INV, J); mark('rv_notnow'); await opTyping(400); opPoint(TEXT.notNow(knows())); highlight(); return false; }
       const J = inv(); J.answer = 'yes'; sv(INV, J); join(); paintTab();
       await opTyping(500); letter(afterFor(rid, rv)); await wait(300); pledge();
       const go = await buttons([{ label: TEXT.go }]); delivering = false; if (go === 0) open(rid, how === 'link' ? 'link' : 'invite'); return true;
@@ -149,8 +154,8 @@
   // a member: one Operator line and [open ›] (never the deck by itself); a public review for a non-member: a short relayed note
   async function nudge(rv, how = 'auto') { if (delivering) return; delivering = true; openOperator(); await wait(500);
     try { const all = sentAll(); all[rv.rid] = all[rv.rid] || { rated: {}, pairs: [] }; all[rv.rid].asked = now(); sv(SENT, all);
-      if (rv.stage === 'public' && !team()) { await opTyping(500); opSay(TEXT.operator); letter(TEXT.publicAsk(rv)); const p = await buttons([{ label: TEXT.publicYes }, { label: TEXT.later, alt: true }]); delivering = false; if (p === 0) open(rv.rid, 'invite'); }
-      else { await opTyping(500); opSay(TEXT.another(rv)); const p = await buttons([{ label: TEXT.open }, { label: TEXT.later, alt: true }]); delivering = false; if (p === 0) open(rv.rid, how === 'link' ? 'link' : 'invite'); }
+      if (rv.stage === 'public' && !team()) { await opTyping(500); opSay(TEXT.operator); letter(TEXT.publicAsk(rv, knows())); const p = await buttons([{ label: TEXT.publicYes }, { label: TEXT.later, alt: true }]); delivering = false; if (p === 0) open(rv.rid, 'invite'); }
+      else { await opTyping(500); opSay(TEXT.another(rv, knows())); const p = await buttons([{ label: TEXT.open }, { label: TEXT.later, alt: true }]); delivering = false; if (p === 0) open(rv.rid, how === 'link' ? 'link' : 'invite'); }
     } finally { delivering = false; } }
   const offerAnother = rv => nudge(rv);
 
@@ -255,7 +260,7 @@
     paint(); return true; }
   function close() { if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true);
     // opened from the Operator's message (or a link): it says where to find the reviews again, and the 🌱 lights up
-    const after = (cur.from === 'invite' || cur.from === 'link') && cur.cfg ? (Object.keys((cur.mine && cur.mine.rated) || {}).length ? TEXT.closedSome : TEXT.closedNone) : null;
+    const after = (cur.from === 'invite' || cur.from === 'link') && cur.cfg ? (Object.keys((cur.mine && cur.mine.rated) || {}).length ? TEXT.closedSome : TEXT.closedNone)(knows()) : null;
     cur = null; el.classList.remove('on'); el.innerHTML = ''; hushGame(false); paintTab();
     if (after) setTimeout(async () => { openOperator(); await opTyping(400); opPoint(after); highlight(); }, 250);
     if (/[?&]review=/.test(location.search)) try { const u = new URL(location.href); u.searchParams.delete('review'); history.replaceState(history.state, '', u); } catch (e) {} }
@@ -348,7 +353,7 @@
   // in the storyline the 🌱 appears with 🧪 (the epochs unlock 🧪; idle-genesis.js UNLOCK)
   setInterval(() => { const o = $('#oracleBtn'); if (o) hb.style.display = getComputedStyle(o).display === 'none' ? 'none' : ''; }, 1500);
   let tabOpen = false; hb.addEventListener('click', () => toggleTab());
-  function toggleTab(on) { tabOpen = on ?? !tabOpen; tab.classList.toggle('on', tabOpen); hb.classList.toggle('on', tabOpen); if (tabOpen) { try { window.__feedback && window.__feedback.close(); } catch (e) {} mark('rv_tab'); paintTab(); } }
+  function toggleTab(on) { tabOpen = on ?? !tabOpen; tab.classList.toggle('on', tabOpen); hb.classList.toggle('on', tabOpen); if (tabOpen) { if (!ld('idle.hitlSeen', null)) sv('idle.hitlSeen', Date.now()); try { window.__feedback && window.__feedback.close(); } catch (e) {} mark('rv_tab'); paintTab(); } }
   async function paintTab() { if (!tabOpen) return; const st = teamStatus(), rvs = await list(), all = sentAll(), member = !!team();
     const row = r => { const m = all[r.rid] || {}, n = Object.keys(m.rated || {}).length, pct = Math.round(n / Math.max(1, r.n) * 100);
       return `<div class="rv"><div><b>${esc(r.title || r.rid)}</b><small>${esc(TEXT.tab.judged(n, r.n))}</small><div class="bar"><i style="width:${pct}%"></i></div></div><button class="go" data-open="${esc(r.rid)}">${esc(n ? TEXT.tab.resume : TEXT.tab.start)}</button></div>`; };
@@ -397,5 +402,5 @@
       rated: { ...((cur.mine && cur.mine.rated) || {}) }, pairs: ((cur.mine && cur.mine.pairs) || []).slice(), pair: cur.pair || null, playing: !!(cur.live && cur.live.playing && cur.live.playing()) },
     sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), tab: { open: () => toggleTab(true), close: () => toggleTab(false), isOpen: () => tabOpen }, highlight, arrive, nudge, hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },
     badge: () => { const s = teamStatus(), rids = Object.keys(sentAll()).filter(k => sentAll()[k].done); return s || rids.length ? { rids, status: s } : null; }, plugins: () => Object.keys(PLUGINS),
-    text: TEXT, test: { fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) t0 = Date.now() - since; }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl } };
+    text: TEXT, test: { fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) t0 = Date.now() - since; }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl, knows } };
 })();
