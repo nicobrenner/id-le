@@ -3707,7 +3707,7 @@ def t_offer_v3(P, phone=False):
         top: !!(at && at.closest('#offerModal')), modal: window.__modal.up(), ntf: n ? getComputedStyle(n).visibility : 'none', bd: !!document.querySelector('#genModalBd'),
         frames: c ? +c.dataset.frames || 0 : -1, text: m.innerText }; }""")
     need(abs(r["cx"]) < 4 and abs(r["cy"]) < 4 and r["in"] and r["top"] and r["modal"] and r["bd"] and r["ntf"] == "hidden", f"the modal centred, on top, tips held: {r}")
-    need("doc" in r["text"].lower() and "3-minute" in r["text"] and "logo" not in r["text"].lower(), f"the copy: {r['text']!r}")
+    need("story mode" in r["text"].lower() and "3-minute" in r["text"] and "save your current world" in r["text"] and "logo" not in r["text"].lower(), f"the copy: {r['text']!r}")
     pg.wait_for_timeout(1200); need(pg.evaluate("() => +document.querySelector('#offerModal canvas.pv').dataset.frames || 0") > 10 or pg.evaluate("() => !!document.querySelector('#offerModal canvas.pv').dataset.still"), "the logo preview doesn't play")
     f = pg.evaluate("() => window.__funnel.reached()"); need("offer_shown_v3" in f, f"funnel: {f}")
     pg.click("#offerModal .lt"); wait_for(pg, "() => !!(window.__genesis.offerState().notNow)", 10, P=P); pg.wait_for_timeout(3500)

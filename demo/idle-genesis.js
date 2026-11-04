@@ -1124,7 +1124,8 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     c: { lines: ["psst, something new: Doc's story. a training run that won't stop, and a consciousness to raise", "about 3 minutes. your world stays safe, it's kept as a snapshot first"], chip: '📖 start the story', later: 'maybe later', after: 'no problem. it lives in ⚙ → 📖 Storyline whenever you want it' },
     // v3 (Nico on b: "by far the b option was the best in terms of engagement, as it shows the logo animation… it should be more like a modal,
     // more similar to what the Epoch finish notice is. If the user dismisses it… a little animation/'cut-scene' to let the user know where it is")
-    v3: { stamp: '📖 NEW: DOC\'S STORY', line: "a 3-minute story about how this consciousness began. your world stays safe (it's saved as a snapshot first)", go: '▶ play the story', later: 'not now', note: '📖 Storyline lives in ⚙' },
+    // copy (Nico, Nov 4): "Thank you for playing Id|le, check out Story mode! (don't worry we'll save your current world and you can always come back to it later)"
+    v3: { stamp: '📖 NEW: STORY MODE', line: "thank you for playing Id|le! check out story mode: a 3-minute adventure about how it all began", sub: "don't worry, we'll save your current world, and you can always come back to it later", go: '▶ try story mode', later: 'not now', note: '📖 Story mode lives in ⚙' },
     activeS: 75, laterDays: 3, maxAsks: 2 };
   const offerVariant = () => { const f = Q.get('offer'); if (/^([abc]|old|v3)$/.test(f || '') && testHostG()) return f; return testHostG() ? OFFER_TEST : OFFER_PROD; };
   // what this browser has been asked so far: { n: asks, at: last ask (ms), v: variant, ans: 'later' | 'accepted' }; v1's single key migrates
@@ -1173,7 +1174,7 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
       frame(); }).catch(() => { still(); cv.dataset.still = '1'; }); }
   // v3: a centred modal like the EPOCH 0 COMPLETE moment (html.gen-modal: a backdrop, the guided start's tips and toasts held until it closes)
   function offerModal() { const T = OFFERV.v3, el = document.createElement('div'); el.id = 'offerModal'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
-    el.innerHTML = `<div class="gstamp">${esc(T.stamp)}</div><canvas class="pv" width="560" height="200" aria-hidden="true"></canvas><p>${esc(T.line)}</p><div class="gm"><button class="go">${esc(T.go)}</button><button class="lt">${esc(T.later)}</button></div>`;
+    el.innerHTML = `<div class="gstamp">${esc(T.stamp)}</div><canvas class="pv" width="560" height="200" aria-hidden="true"></canvas><p>${esc(T.line)}${T.sub ? `<br><small style="opacity:.75">${esc(T.sub)}</small>` : ''}</p><div class="gm"><button class="go">${esc(T.go)}</button><button class="lt">${esc(T.later)}</button></div>`;
     document.body.appendChild(el); el.querySelector('.go').onclick = () => offerGo('v3', el); el.querySelector('.lt').onclick = () => offerNotNow(el);
     teaser(el.querySelector('canvas.pv'), el, 64); setTimeout(() => { try { el.querySelector('.go').focus(); } catch (e) {} }, 50); return true; }
   // not now: the modal shrinks into ⚙ (☰ on a phone), the Operator's cut-scene rings it and it glows for 2 minutes; the next time ⚙ opens, its 📖 Storyline row lights up
