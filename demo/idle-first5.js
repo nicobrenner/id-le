@@ -108,7 +108,7 @@
 
   // ---------- boot: called by the arena once it knows there is no saved world anywhere (fresh0) or when ?fresh asks
   const LABEL = { card: 'opened a card', name: 'named a creature', feed: 'fed someone', dream: 'watched a dream', gazette: 'followed a Gazette pill', weather: 'opened the weather', reel: 'played a reel', keep: 'kept something', first_reel_made: 'first reel made', first_gazette: 'first Gazette pill', world_named: 'named the world', backup_saved: 'saved a backup' };
-  async function boot(fresh0) { if (Q.has('nofirst5') || window.__intentEntry === 'lab' || window.__intentEntry === 'offer') return false; const want = Q.has('fresh');   // ?lab: the data lab's own walkthrough instead; ?offer (staging): a returning world
+  async function boot(fresh0) { if (Q.has('nofirst5') || window.__intentEntry === 'lab') return false; const want = Q.has('fresh');   // ?lab: the data lab's own walkthrough instead (?offer, staging: the starter world loads in its sandbox, with no tips)
     if (!fresh0) return false;
     if (S && !want) return false;   // the trail ran here before (done or skipped): a fresh browser that has played keeps its own world
     // one retry: a first download can fail on a flaky network (a page being left doesn't retry: the next load starts over)

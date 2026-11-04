@@ -1132,7 +1132,7 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     try { if (window.__opwin && (window.__opwin.yielding() || (window.__opwin.cutting && window.__opwin.cutting()))) return false; } catch (e) {}
     const shown = el => { const st = getComputedStyle(el), r = el.getBoundingClientRect(); return st.display !== 'none' && st.visibility !== 'hidden' && +st.opacity > 0 && r.width > 0 && r.height > 0; };
     return ![...document.querySelectorAll('#genDay.end, #oracle.on, #hitl.on, #review.on, #genConfirm, #genChoose, #genFront, #genStoryModal, #oracleBox:not([hidden]), #almanac.on, #drawerView, #founderLetter, #founderLab, #settingsPanel.on, #settings.on, #storyOffer, #ntf .np')].some(shown); }
-  const offerWait = () => { const ms = +Q.get('offerms'); return Number.isFinite(ms) && ms >= 0 && testHostG() ? ms / 1000 : Q.has('offer') ? 10 : OFFERV.activeS; };
+  const offerWait = () => { const ms = Q.has('offerms') ? +Q.get('offerms') : NaN; return Number.isFinite(ms) && ms >= 0 && testHostG() ? ms / 1000 : Q.has('offer') ? 10 : OFFERV.activeS; };   // (+null is 0: the hint once said ~0 s)
   function offerEligible() { if (ENTRY && !Q.has('offer')) return false; if (!storyLive() && !Q.has('offer')) return false; if (variant() === 'play' && !Q.has('offer')) return false;   // the play arm gets the Operator's welcome instead
     if (Q.has('test') && !Q.has('offer')) return false;
     if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || window.__storyKey || window.__traveling) return false;
@@ -1174,9 +1174,17 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     const o = offerSeen(); offerSave({ n: (o.n || 0) + 1, at: now(), v, ans: null }); mark('offer_shown'); mark('offer_shown_' + v); lastOffer = v;
     return v === 'c' ? offerOperator() : offerCard(v); }
   let lastOffer = null;
+  // the preview's hint (staging/local): what the offer is waiting for, live: a click, the seconds left, or what blocks it
+  function offerBlocker() { if (!offerEligible()) return storyMode() ? 'a story is running here' : !offerDue() ? 'already answered in this preview' : 'not eligible here';
+    if (window.__modal && window.__modal.up()) return 'a card is open'; const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.offsetParent !== null) return 'you are typing'; if (!offerQuiet()) return 'a panel or a popup is open: close it'; return null; }
   if (offerPreview() && /^[abc]$/.test(Q.get('offer'))) { const show = () => { if (!document.body || $('#offerHint')) return; const h = document.createElement('div'); h.id = 'offerHint';
-      h.textContent = `offer ${Q.get('offer')} preview: click anywhere, it appears in ~${Math.round(offerWait())} s`; h.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:70;padding:6px 12px;border-radius:12px;background:#ffd166;color:#222;font:13px var(--ui-font,system-ui);box-shadow:0 4px 18px #0004;pointer-events:none';
-      document.body.appendChild(h); const iv = setInterval(() => { if ($('#storyOffer') || lastOffer) { h.remove(); clearInterval(iv); } }, 400); };
+      h.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:70;padding:6px 12px;border-radius:12px;background:#ffd166;color:#222;font:13px var(--ui-font,system-ui);box-shadow:0 4px 18px #0004;pointer-events:none;max-width:calc(100vw - 32px);text-align:center';
+      document.body.appendChild(h); const v = Q.get('offer');
+      const tick = () => { if ($('#storyOffer') || lastOffer) { h.remove(); clearInterval(iv); return; } const left = Math.max(0, Math.ceil(offerWait() - offerOn)), why = offerBlocker();
+        h.textContent = `offer ${v} preview: ` + (!offerTouched ? `click anywhere in the world, then it appears in ~${Math.max(left, 1)} s` : why ? `waiting: ${why}` : left > 0 ? `appears in ~${left} s` : 'appearing…');
+        h.dataset.left = left; h.dataset.why = why || ''; };
+      const iv = setInterval(tick, 500); tick(); };
     setTimeout(show, 1500); }
   { const css2 = document.createElement('style'); css2.textContent = `#storyOffer{position:fixed;left:14px;bottom:14px;z-index:60;max-width:min(330px,calc(100vw - 28px));padding:12px 14px 12px;border-radius:12px;background:#0a0b16f0;border:1px solid #6b7cff88;color:#cfd6ff;font:13px/1.45 var(--ui-font,system-ui);box-shadow:0 10px 40px #0008;transition:opacity .4s}
 #storyOffer b{display:block;margin-bottom:4px;color:#e9ecff;font-size:14px}#storyOffer .go{margin-top:8px;font:600 13px var(--ui-font,system-ui);padding:6px 13px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff44;color:#e9ecff;cursor:pointer}#storyOffer .lt{margin:8px 0 0 8px;font:12px var(--ui-font,system-ui);padding:6px 10px;border-radius:14px;border:0;background:none;color:#aeb6e8;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
