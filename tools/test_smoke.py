@@ -389,6 +389,14 @@ out.visitsTotal = kvVisits + pendVisits;
   out.fbStatus = r.status; out.fbBody = await r.json(); failPut = 0;
   NOW += 61 * 60e3; await run(env, 1, 1000); await tick(); await tick();
   out.fbWritten = [...env.STATS.m.keys()].some(k => k.startsWith('fb:')); }
+// the engaged beacons through the accumulator (Nov 4: the deployed accumulator's older merge dropped dd/en/cb): they survive the
+// Durable Object's merge, and so does any newer flat count map ('zz', standing in for a key added later)
+{ const env2 = { STATS: kv(), PRESENCE: NS, ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' };
+  for (const b of [{ v: 1, dd: 'story' }, { v: 1, en: 'cr_card', ar: 'story' }, { v: 1, cb: 'none', b: 'd1' }]) { await W.fetch(new Request('https://id-le.com/lab/p', { method: 'POST', body: JSON.stringify(b), headers: { 'CF-Connecting-IP': '8.8.8.8', 'Content-Type': 'application/json' } }), env2, { waitUntil: p => p }); await tick(); await tick(); }
+  await NS.get('stats-live').fetch('https://presence/stats/add', { method: 'POST', body: JSON.stringify({ days: { '2026-11-09': { visits: 0, back: 0, ios: 0, batches: 0, secs: 0, safe: {}, ref: {}, utm: {}, m: {}, err: {}, pd: { visits: 0, back: 0, clips: 0, dev: {}, dw: {}, ref: {}, utm: {}, sec: {} }, zz: { a: 2 } } } }) });
+  const pk = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json(), all = Object.values(pk.acc || {});
+  const sum = k => all.reduce((a, r) => { for (const [x, n] of Object.entries(r[k] || {})) a[x] = (a[x] || 0) + n; return a; }, {});
+  out.accEngaged = { dd: sum('dd'), en: sum('en'), cb: sum('cb'), zz: sum('zz') }; }
 console.log(JSON.stringify(out));
 """
 
@@ -408,6 +416,8 @@ def kv_writes_unit():
         shutil.rmtree(tmp, ignore_errors=True)
     need(o["oldPuts"] >= 250, f"the old path should write per batch: {o['oldPuts']} writes for 300 reports")
     need(o["newPuts"] <= 25, f"the accumulator wrote KV {o['newPuts']} times in a day (≤ 25 expected)")
+    ae = o.get("accEngaged") or {}
+    need(ae.get("dd") == {"story": 1} and ae.get("en") == {"story|cr_card": 1} and ae.get("cb") == {"none|d1": 1} and ae.get("zz") == {"a": 2}, f"the engaged beacons (and any newer count map) must survive the accumulator: {ae}")
     need(o["visitsTotal"] == 790, f"visits kept {o['visitsTotal']} != 790 (KV + pending)")
     need(o["afterFailTotal"] == 793, f"after a failed KV write {o['afterFailTotal']} != 793")
     need(o["fbStatus"] == 200 and o["fbBody"].get("queued") and o["fbWritten"], f"a refused 🧪 write: {o['fbStatus']} {o['fbBody']}, written later {o['fbWritten']}")
