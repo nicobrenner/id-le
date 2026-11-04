@@ -1552,7 +1552,7 @@ def t_genesis(P):
     st = "() => ({ c: window.__arena.raw().filter(c => !c.lab).length, w: window.__genHooks.words().length, v: document.documentElement.classList.contains('gen-void'), calm: document.documentElement.classList.contains('gen-calm'), lit: document.documentElement.classList.contains('gen-lit'), next: window.__genesis.next(), pre: (document.getElementById('lab-text') || {}).value, g: window.__genesis.state(), ab: window.__genesis.ab })"
     v0 = pg.evaluate(st)
     need(v0["c"] == 0 and v0["w"] == 0 and v0["v"] and v0["calm"], f"genesis should start empty, dark and calm: {v0}")
-    need(v0["ab"] == "off", f"the A/B switch must ship off: {v0['ab']}")
+    need(v0["ab"] == "on", f"the A/B switch is on since the Nov 4 launch: {v0['ab']}")
     need(v0["next"] == "light" and v0["pre"] == "let there be light", f"the first guided step should be light, pre-filled: {v0['next']} / {v0['pre']!r}")
     wait_for(pg, "() => getComputedStyle(document.getElementById('topbar')).opacity === '0'", 8, P=P)   # it fades out (1.6 s)
     e0 = pg.evaluate("""() => { const vis = el => !!el && getComputedStyle(el).opacity !== '0' && el.offsetParent !== null;
@@ -2782,7 +2782,7 @@ def t_story_arms(P):
     (snapshot first, then the story) and points at ⚙; the two-arm 'current' migrates to 'play'; a browser that already has a world keeps it."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     off = pg.evaluate("() => ({ ab: window.__genesis.ab, v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), arms: window.__genesis.arms })")
-    need(off["ab"] == "off" and off["v"] is None and off["gv"] is None and off["arms"] == ["story", "choose", "play"], f"the A/B/C ships off, three arms: {off}")
+    need(off["ab"] == "on" and off["v"] is None and off["gv"] is None and off["arms"] == ["story", "choose", "play"], f"the A/B/C is on (Nov 4 launch), three arms; a ?test page gets no random arm: {off}")
     wait_for(pg, "() => !!localStorage.getItem('arena.autosave')", 30, P=P)
     ret = P.open("/arena.html?arm=story&test"); booted(ret); ret.wait_for_timeout(3000)   # this browser has a world: it keeps it
     r = ret.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid, c: window.__arena.raw().filter(c => !c.lab).length })")
@@ -2827,7 +2827,7 @@ def t_story_arms(P):
         finally:
             ctx.close()
     P.clean()
-    return "off by default, three arms; returning browser keeps its world; story → the title card; choose → the chooser (🛝 counted, no offer after); play → the ready world, the Operator's welcome (once), [ 📖 start the story ] → snapshot + story; 'current' → 'play'"
+    return "on (Nov 4), three arms; a ?test page gets no random arm; returning browser keeps its world; story → the title card; choose → the chooser (🛝 counted, no offer after); play → the ready world, the Operator's welcome (once), [ 📖 start the story ] → snapshot + story; 'current' → 'play'"
 
 
 def t_story_offer(P):
@@ -2883,33 +2883,38 @@ def t_story_v6(P):
 
 
 def t_prod_gates(P, root):
-    """id-le.com (the production hostname, served from the build, nothing leaves the browser): the fonts and 🧪 tell the scientists are
-    on; no boot or storyline intro, no storyline offer, no Storyline mode / Replay rows, no storyline in the chooser, no Founder gift
-    (?gift=founder and personal links do nothing)"""
+    """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
+    storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
+    world stays put and gets the storyline offer once; fonts, 🧪, presence and reviews are on; the Founder gift is off; keyframes are inert"""
     P.base, P.root = "https://id-le.com", root
-    pg = P.open("/arena.html?fresh=1"); booted(pg)
-    pg.wait_for_timeout(22000)   # past the storyline offer's 20 s
+    seed = P.open("/arena.html?fresh=1&test"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=P); seed.close()
+    pg = P.open("/arena.html"); booted(pg)   # a returning browser (it has a world): no arm, the world stays, the offer comes once
+    wait_for(pg, "() => !!document.querySelector('#storyOffer')", 40, P=P)
     r = pg.evaluate("""async () => { await document.fonts.ready; return { host: location.hostname, live: window.__genesis.storyLive(), void: !!window.__genesisVoid,
-      intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(),
+      intro: !!document.querySelector('#idleIntro'), offer: !!document.querySelector('#storyOffer'), founder: window.__founder.available(), v: window.__genesis.variant(),
+      c: window.__arena.raw().filter(c => !c.lab).length,
       f3: document.fonts.check('16px "Idle F3"') || [...document.fonts].some(f => /F3/.test(f.family) && f.status === 'loaded'),
       ui: getComputedStyle(document.body).fontFamily.split(',')[0], sci: !!document.getElementById('oracleBtn') }; }""")
-    need(r["host"] == "id-le.com" and not r["live"], f"not emulating production: {r}")
+    need(r["host"] == "id-le.com" and r["live"], f"not emulating production (or the story isn't live): {r}")
+    need(r["offer"] and not r["void"] and not r["intro"] and r["v"] is None and r["c"] > 0, f"a returning world keeps its world and gets the offer: {r}")
+    pg.evaluate("() => document.querySelector('#storyOffer .x').click()"); pg.wait_for_timeout(500)
+    need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
     # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
-    need(not P.here, f"a ?fresh page beat on production: {P.here[:1]}")
+    P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
     pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
     wait_for(pz, "() => window.__presence && window.__presence.state().running", 20, P=P)
     pr = pz.evaluate("() => ({ stats: window.__settings.statsLive(), on: window.__presence.state().on })"); pz.evaluate("() => window.__presence.bye()"); pz.close()
     beats = [json.loads(b) for b in P.here if b]
     need(pr["stats"] and pr["on"] and beats, f"presence must beat on production: {pr}, {len(beats)} beats")
     need(all(set(b) <= {"v", "id", "dev", "mode", "arm", "step", "ep", "p", "cr", "t", "back", "bye", "page", "ref", "tag"} for b in beats), f"a production beat outside the allowlist: {beats[:1]}")
-    full = [b for b in beats if not b.get("bye")][0]
+    full = next((b for b in beats if not b.get("bye") and b.get("tag") == "prod-check"), None) or [b for b in beats if not b.get("bye")][0]   # the returning tab above keeps beating too
     need(full.get("page") == "game" and full.get("ref") == "reddit.com" and full.get("tag") == "prod-check" and "WebGames" not in json.dumps(beats), f"production beat: {full}")
     P.here.clear()
-    need(not r["void"] and not r["intro"] and not r["offer"] and not r["founder"], f"story/offer/founder visible on production: {r}")
+    need(not r["founder"], f"the Founder gift on production: {r}")
     need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
     pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
     pg.evaluate("() => window.__settings.close()")
-    need("Tell the scientists" in txt and "📖 Storyline" not in txt and "Replay the intro" not in txt and "Founder gift" not in txt, "⚙ rows on production: " + ", ".join(k for k in ("Tell the scientists", "📖 Storyline", "Replay the intro", "Founder gift") if k in txt))
+    need("Tell the scientists" in txt and "📖 Storyline" in txt and "Founder gift" not in txt, "⚙ rows on production (🧪 and 📖 Storyline in, no Founder): " + ", ".join(k for k in ("Tell the scientists", "📖 Storyline", "Founder gift") if k in txt))
     # 🧪: sends (to the stub), the roadmap lists and votes once
     pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(300)
     pg.evaluate("() => document.querySelector('#oracle [data-kind=idea]').click()"); pg.fill("#oracle textarea", "prod gate check")
@@ -2920,11 +2925,11 @@ def t_prod_gates(P, root):
     pg.evaluate("() => document.querySelector('#oracle [data-vote=mods]').click()"); pg.wait_for_timeout(500)
     need(len([k for k, _ in P.fb if k == "oracle"]) == 1 and len([k for k, _ in P.fb if k == "vote"]) == 1, f"🧪 sends/votes: {P.fb}")
     pg.evaluate("() => window.__feedback.close()")
-    # the chooser (⚙ New consciousness): no storyline on production
+    # the chooser (⚙ New consciousness): the storyline is in it since the launch
     pg.evaluate("() => { window.__genesis.newUniverse(); }")
     wait_for(pg, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 30, P=P)
     ms = pg.evaluate("() => [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m)")
-    need(sorted(ms) == ["free", "ready"], f"chooser on production: {ms}")
+    need(sorted(ms) == ["free", "ready", "story"], f"chooser on production: {ms}")
     lbl = pg.evaluate("() => document.querySelector('#genChoose button[data-m=ready] b').textContent")
     need("the playground" in lbl, f"v13: the playground in the chooser: {lbl!r}")
     pg.close()
@@ -2934,11 +2939,25 @@ def t_prod_gates(P, root):
         pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
         g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
         need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
-    # v15: the A/B/C is off on id-le.com: ?arm= forces nothing (no intro, no chooser, no welcome, no arm stored)
-    for a in ("story", "choose", "play"):
-        pg = P.open(f"/arena.html?arm={a}"); booted(pg); pg.wait_for_timeout(2500)
-        ab = pg.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), intro: !!document.querySelector('#idleIntro'), ch: !!document.querySelector('#genChoose'), w: window.__genesis.playWelcome() })")
-        need(ab == {"v": None, "gv": None, "intro": False, "ch": False, "w": False}, f"?arm={a} on production: {ab}"); pg.close()
+    # the A/B/C on id-le.com (Nov 4): a NEW browser gets an arm at random (Math.random pinned per context here), ?arm= forces nothing
+    seen = {}
+    for rnd, want, forced in ((0.01, "story", "play"), (0.5, "choose", "story"), (0.99, "play", "story")):
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script(f"Math.random = () => {rnd};"); Q = Page(ctx, P.base); Q.root = root
+        try:
+            q = Q.open(f"/arena.html?arm={forced}")
+            if want == "story":
+                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            elif want == "choose":
+                wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
+            else:
+                booted(q); wait_for(q, "() => window.__arena.raw().filter(c => !c.lab).length >= 3", 30)
+            x = q.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), ms: [...document.querySelectorAll('#genChoose button[data-m]')].map(b => b.dataset.m), intro: !!document.querySelector('#idleIntro'), boot: !!window.__termBoot })")
+            need(x["v"] == want and x["gv"] == want, f"a new browser on id-le.com (?arm={forced} ignored) must get its random arm {want}: {x}")
+            if want == "choose": need(x["ms"][:2] == ["story", "ready"], f"the chooser on id-le.com: {x['ms']}")
+            if want == "play": need(not x["intro"], f"the play arm lands in the playground: {x}")
+            seen[want] = True
+        finally:
+            ctx.close()
     # ⭐ reviews and the Humans in the Loop are ON on id-le.com since Nov 4 (Nico's go): ?review=logos relays Nico's message at once, the 🌱
     # and 🧪's ⭐ tab are there; the Founder gift stays off (FOUNDER_ON = false)
     pg = P.open("/arena.html?review=logos"); booted(pg)
@@ -2951,7 +2970,7 @@ def t_prod_gates(P, root):
     need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
-    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal); reviews on (the link relays Nico's message, 🌱, ⭐ tab)"
+    return f"id-le.com (launched): UI in {r['ui']}, arms {sorted(seen)} at random (?arm= ignored), a returning world keeps it + one offer, 📖 in ⚙ and the chooser, 🧪 sent + voted, no Founder; reviews on; keyframes inert"
 
 
 def t_presence(P):
@@ -3465,7 +3484,7 @@ def t_story_row(P):
         ctx.close()
     ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)   # a browser with no story: the review link
     try:
-        q = Q.open("/?review=logos"); wait_for(q, "() => !!document.querySelector('#review.on') || /message from Nico/.test((document.querySelector('#ai-thread') || {}).textContent || '')", 60); q.close()
+        q = Q.open("/?review=logos&test"); wait_for(q, "() => !!document.querySelector('#review.on') || /message from Nico/.test((document.querySelector('#ai-thread') || {}).textContent || '')", 60); q.close()
     finally:
         ctx.close()
     pg = P.open("/pedia.html"); wait_for(pg, "() => document.querySelectorAll('a[href]').length > 20", 30, P=P)

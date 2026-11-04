@@ -22,7 +22,8 @@
 (() => {
   const Q = new URLSearchParams(location.search), $ = s => document.querySelector(s), now = () => Date.now();
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const AB = 'off';   // the A/B switch (stays OFF until Nico's go): 'on' gives NEW browsers the storyline or the current start 50/50 (stored in this browser only, as idle.gv: story | current)
+  // ON since Nov 4 (Nico's go, 11-03 before bed: "deploy the A/B/C testing when it lands, all the options looked good to me, at least for first launch")
+  const AB = 'on';   // the A/B switch: 'on' gives NEW browsers the storyline or the current start 50/50 (stored in this browser only, as idle.gv: story | current)
   const KEY = 'idle.genesis', GV = 'idle.gv';
   const H = () => window.__genHooks, W = () => window.__idleWorld;
   // a keyframe (idle-keys.js, staging/local only): which moment of the storyline to start at; null on id-le.com and in normal play
@@ -208,17 +209,19 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // directly to playground"): 'story' (straight into the storyline: the title card), 'choose' (the chooser: 📖 the storyline / 🛝 the
   // playground), 'play' (straight into the playground's ready world; the Operator welcomes them once and offers the story). A third each,
   // only NEW browsers, only while AB is on; stored in this browser only (idle.gv). The two-arm keys migrate: 'current' (the starter world)
-  // is 'play'. ?arm=story|choose|play forces one where the storyline is out (staging, local copies, or once the A/B runs). A browser that
+  // is 'play'. ?arm=story|choose|play forces one on staging and local copies only. A browser that
   // already has a world keeps it, whatever its arm.
   const ARMS = ['story', 'choose', 'play'], OLD_ARM = { current: 'play' }, armOf = v => OLD_ARM[v] || v;
-  function variant(fresh0) { const f = armOf(Q.get('arm')); if (ARMS.includes(f) && storyLive()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
+  function variant(fresh0) { const f = armOf(Q.get('arm')); if (ARMS.includes(f) && testHostG()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
     let v = null; try { v = localStorage.getItem(GV); } catch (e) {} if (OLD_ARM[v]) { v = armOf(v); try { localStorage.setItem(GV, v); } catch (e) {} }
-    if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0) return null;
+    if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0 || Q.has('test')) return null;   // tests (?test) get no random arm: ?arm= forces one
     v = ARMS[Math.floor(Math.random() * ARMS.length)]; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
   // called by the arena for a browser with no world of its own (fresh0), before the guided start would load the starter world:
   // the story and choose arms begin here; the play arm gets the ready world (the guided start), then the Operator's welcome (playWelcome)
   function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
+  // ?arm= forces an arm only on the test site and local copies (never on id-le.com, where the A/B decides)
+  const testHostG = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // the Operator window's status line (Nico, v7: no second title; "consciousness 24 · epoch 0 · genesis", the epoch advancing with the story)
   const epochNow = () => (S && S.day) || 0, statusLine = () => `consciousness 24 · epoch ${epochNow()}${epochNow() === 0 ? ' · genesis' : ''}`;
