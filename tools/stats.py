@@ -621,7 +621,7 @@ def main():
                 print(f"           skipped at: " + ", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in sorted(o["skips"].items(), key=lambda kv: -kv[1])))
             if o["offer"]:
                 print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
-                for vv in "abc":
+                for vv in ("a", "b", "c", "v3"):
                     if o['offer'].get('shown_' + vv): print(f"             offer {vv}: shown {o['offer'].get('shown_' + vv, 0)}, played {o['offer'].get('go_' + vv, 0)}, later {o['offer'].get('later_' + vv, 0)}")
             if o.get("rv"):
                 print("           ⭐ reviews: " + rv_line(o["rv"]))

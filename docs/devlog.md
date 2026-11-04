@@ -7,6 +7,16 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+
+## 2026-11-04 (offer v3)
+
+**The storyline offer v3: b's logo preview, as a modal (staging; the default for id-le.com once Nico gives the go).** Nico, on a/b/c: "by far the b option was the best in terms of engagement, as it shows the logo animation… it should be more like a modal, more similar to what the Epoch finish notice is. If the user dismisses it… a little animation/'cut-scene' to let the user know where it is after dismissal"; c's "ask is not very clear"; a and b waited behind the guided start's step cards.
+- `#offerModal` (idle-genesis.js): centred, the EPOCH 0 moment's stamp ("📖 NEW: DOC'S STORY"), the story's logo playing silently on a 560×200 canvas (this browser's logo arm; a still with reduced motion), one line (draft in `OFFERV.v3`: "a 3-minute story about how this consciousness began. your world stays safe (it's saved as a snapshot first)"), [ ▶ play the story ] [ not now ].
+- It is a modal (`__modal.up()`): a backdrop, the guided start's tips and every toast held until it closes (they come back after). It outranks the tips: it waits only for an open panel, a card or typing (not for toasts).
+- not now: the modal shrinks into ⚙ (☰ on a phone), the Operator's cut-scene rings it with "📖 Storyline lives in ⚙", it glows for 2 minutes, and the next time ⚙ opens (within 10 min) its 📖 Storyline row lights up. "later" rules as before (once more after 3 days, then never).
+- Eligibility unchanged (returning players; 75 s on screen + a click). `OFFER_PROD = 'v3'` and `OFFER_TEST = 'v3'`; `?offer=old|a|b|c|v3` previews any of them on staging (sandboxed). Funnel: `offer_shown_v3`, `offer_go_v3`, `offer_later_v3`.
+- Tests: 'offer v3' and 'offer v3 phone' (centred, on top of a tip, tips held, the logo plays, not now → ⚙ / ☰ + glow + ⚙'s row, play → snapshot → story, the `?offer=v3` preview in a fresh browser); 'prod gates' now triggers the offer after a click (its 75 s skipped) and checks the modal.
+
 ## 2026-11-04
 
 **Engaged numbers were dropped by the accumulator (fix).** After the engage deploy (~09:57 PT) the accumulator's pending record had `visits` and `aa` but no `dd`/`en`/`cb`. Cause: the stats accumulator runs inside the presence Worker (`idle-presence`), which bundles its own copy of `helper/worker.js` and was last deployed before engage, so its `mergeStat` didn't know the new keys and silently dropped them (reproduced: the pre-engage worker.js through `/lab/p` → the Durable Object keeps visits and aa only). Fix: `mergeStat` now also sums any other flat count map it doesn't know (and in the internal bucket), so a future key can't be dropped by an older accumulator; `idle-presence` must be redeployed once to pick up dd/en/cb. Test: 'kv writes' sends the three beacons through the accumulator and checks dd/en/cb plus an unknown map survive.
