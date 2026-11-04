@@ -1,4 +1,36 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="canonical" href="https://id-le.com/"><title>Id|le</title><meta name="description" content="A small world whose ground is made of words, and creatures that walk on them, eat them and cut them into pieces."><meta property="og:type" content="website"><meta property="og:site_name" content="Id|le"><meta property="og:url" content="https://id-le.com/"><meta property="og:title" content="Id|le"><meta property="og:description" content="A small world whose ground is made of words. Creatures with legs walk on them, eat them, carry them, cut them into pieces, name them and pile them up. Every creature has a genome, a job, feelings, a diary and a mind you can watch stream."><meta property="og:image" content="https://id-le.com/og-image.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="The Id|le wordmark over a pale floor scattered with 0s and 1s, word-bricks reading coffee, heap, loop and token, and six many-legged creatures walking among them."><meta name="twitter:card" content="summary_large_image">
+<style>/* the story's first frame (Nov 4, Nico: "?story briefly loads the full game in the background, I can see flash/flicker the floor, some
+   objects and creatures… none of that should be visible"): a story start is black from the very first paint until the story's own black
+   (#genBlack) or the intro (#idleIntro) is up; the loading cover's resident creature and the world never show */
+html.story-boot,html.story-boot body{background:#000!important}
+html.story-boot body>*:not(#idleIntro):not(#genBlack):not(#genChoose):not(script):not(style){visibility:hidden!important}</style>
+<script>/* decides, before anything is drawn, whether this load starts the story: ?story, or a new browser whose arm is the story. A new browser's
+   arm is drawn here (idle.gvPre) so the decision is known before the first paint; idle-genesis.js variant() takes that draw instead of
+   its own, so the arm, its storage and its beacon stay where they were. Keep AB_ON in step with AB in idle-genesis.js. */
+(() => { try {
+  const AB_ON = true, ARMS = ['story', 'choose', 'play'], q = new URLSearchParams(location.search), h = location.hostname, ls = localStorage;
+  const testHost = /^staging\./.test(h) || h === 'localhost' || h === '127.0.0.1';
+  let story = q.has('story');
+  if (!story && !q.has('genesis') && !q.has('start')) {
+    let snaps = 0; try { snaps = (JSON.parse(ls.getItem('arena.snaps') || '[]') || []).length; } catch (e) {}
+    const fresh = !ls.getItem('arena.autosave') && !ls.getItem('arena.genomes') && !snaps;   // the same test as fresh0 in the arena below
+    if (fresh) {
+      let gv = ls.getItem('idle.gv'); if (gv === 'current') gv = 'play';
+      const forced = q.get('arm') === 'current' ? 'play' : q.get('arm');
+      if (testHost && ARMS.includes(forced)) gv = forced;
+      else if (!ARMS.includes(gv) && AB_ON && !q.has('test')) {
+        gv = ls.getItem('idle.gvPre'); if (!ARMS.includes(gv)) { gv = ARMS[Math.floor(Math.random() * ARMS.length)]; ls.setItem('idle.gvPre', gv); } }
+      story = gv === 'story'; } }
+  if (!story) return;
+  const de = document.documentElement; de.classList.add('story-boot');
+  // lifted as soon as the story's own black or the intro is up (they cover everything from then on), or the chooser shows, or genesis says
+  // this load isn't a story after all; never longer than 20 s, so nobody is ever left on a black page
+  const lift = () => { de.classList.remove('story-boot'); try { mo.disconnect(); } catch (e) {} clearTimeout(cap); };
+  window.__storyBootLift = lift;
+  const mo = new MutationObserver(() => { if (document.getElementById('genBlack') || document.getElementById('idleIntro') || document.getElementById('genChoose')) lift(); });
+  mo.observe(de, { childList: true, subtree: true });
+  const cap = setTimeout(lift, 20000);
+} catch (e) {} })();</script>
 <script>/* tests only (Nov 4): ?timescale=N runs the page's own clock N× faster (timers, performance.now, Date.now, animation frames) so the suite
    doesn't sit through the intro in real time. Honoured on localhost/127.0.0.1, and on staging only with ?test; never on id-le.com.
    The audio clock can't be sped up: anything scheduled on it still plays in real time. */
@@ -2013,7 +2045,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
           if (da && (da.words || []).length + (da.things || []).length > 0) { fromDisk = true; restoreSnap(da); say('lab', 'this browser had no saved world, so the disk copy is back (' + (da.words || []).length + ' words)', 'lab'); } } catch (e) { console.error(e); } }
       if (!window.__restored && !window.__recovering && !fromDisk) { const genQ = /[?&](genesis|story)\b/.test(location.search);   /* ?genesis: in the beginning there was nothing (idle-genesis.js) */
         if ((genQ || fresh0) && !window.__genesis) await new Promise(r => {   /* a new browser may be in the storyline's arm (idle-genesis.js decides): wait for it */ let k = 0; const iv = setInterval(() => { if (window.__genesis || ++k > 50) { clearInterval(iv); r(); } }, 200); });
-        if (window.__genesis && window.__genesis.wants(fresh0)) { try { await window.__genesis.boot(); } catch (e) { console.error(e); } } else if (window.__first5) { try { await window.__first5.boot(fresh0); } catch (e) { console.error(e); } } else { await new Promise(r => { window.__pendingFirst5 = { fresh0, done: r }; setTimeout(r, 20000); }); } }   /* idle-first5.js isn't loaded yet: wait for its boot before the page counts as ready (ready too early, an autosave would keep the empty default world and the next load would take it for the player's own) */   /* nothing came back from anywhere: a first visit gets the starter world */
+        if (window.__genesis && window.__genesis.wants(fresh0)) { try { await window.__genesis.boot(); } catch (e) { console.error(e); try { window.__storyBootLift && window.__storyBootLift(); } catch (e2) {} } } else if ((() => { try { window.__storyBootLift && window.__storyBootLift(); } catch (e) {} return false; })()) {} else if (window.__first5) { try { await window.__first5.boot(fresh0); } catch (e) { console.error(e); } } else { await new Promise(r => { window.__pendingFirst5 = { fresh0, done: r }; setTimeout(r, 20000); }); } }   /* idle-first5.js isn't loaded yet: wait for its boot before the page counts as ready (ready too early, an autosave would keep the empty default world and the next load would take it for the player's own) */   /* nothing came back from anywhere: a first visit gets the starter world */
       if (!window.__recovering && !window.__leavingPage) window.__restoredOrFresh = true; if (window.__boot) { window.__boot.step('creatures'); window.__boot.step('words'); } }, 0); }
   // ---------- connected worlds (local relay in demo_server.py): codes, approval, portals, wanderlust, guests and souvenirs ----------
   let portals = [];

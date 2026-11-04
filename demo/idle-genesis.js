@@ -215,7 +215,9 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function variant(fresh0) { const f = armOf(Q.get('arm')); if (ARMS.includes(f) && testHostG()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
     let v = null; try { v = localStorage.getItem(GV); } catch (e) {} if (OLD_ARM[v]) { v = armOf(v); try { localStorage.setItem(GV, v); } catch (e) {} }
     if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0 || Q.has('test')) return null;   // tests (?test) get no random arm: ?arm= forces one
-    v = ARMS[Math.floor(Math.random() * ARMS.length)]; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
+    // the draw may already have been made in arena.html's <head> (idle.gvPre), so the first paint knew whether this is a story start (Nov 4)
+    let pre = null; try { pre = localStorage.getItem('idle.gvPre'); localStorage.removeItem('idle.gvPre'); } catch (e) {}
+    v = ARMS.includes(pre) ? pre : ARMS[Math.floor(Math.random() * ARMS.length)]; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
   // called by the arena for a browser with no world of its own (fresh0), before the guided start would load the starter world:
   // the story and choose arms begin here; the play arm gets the ready world (the guided start), then the Operator's welcome (playWelcome)
   function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
@@ -547,6 +549,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     // which start: ?story → the storyline; ?start=free|story|ready; otherwise the chooser (script section E)
     // ('guided': the earlier guided genesis, light → words → life → weather or music, kept for links and tests)
     let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !(S && S.n) ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
+    if (mode !== 'story') { try { window.__storyBootLift && window.__storyBootLift(); } catch (e) {} }   // not a story after all: lift the first-paint black (arena.html <head>)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { if (S) { S.on = false; save(); } applyUnlocks(); dropFlag(); return readyWorld(); }
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode, ev: 2 }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)

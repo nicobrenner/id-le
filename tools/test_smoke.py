@@ -2964,6 +2964,74 @@ def t_story_v6(P):
     return f"?intro=epoch0 → ?story; logo on ~3 s, cycling {r['cols']}, then black; 'conscious' clear of the dialog (desktop {len(r['clear']['desktop'])}, phone {len(r['clear']['phone'])} frames); {len(shots)} frames over the transition, ≤{worst[1] * 100:.2f}% bright, black from 0.9 s"
 
 
+
+def t_story_first_paint(P, root, phone=False):
+    """A story start is black from the first paint (Nov 4, Nico: "?story briefly loads the full game in the background, I can see
+    flash/flicker the floor, some objects and creatures"): on the production hostname, /?story and a new browser drawn into the story arm
+    are filmed from navigation with the browser's own screencast (every painted frame) and again across a reload (the service worker's
+    first-visit reload), while the page logs every animation frame; every frame painted before the story's own black (#genBlack) or the
+    intro (#idleIntro) is up must be black, and the world and the loading cover's resident are never visible before it. The choose and play
+    arms never get the black (their loading is unchanged)."""
+    import io
+    from PIL import Image
+    P.base, P.root = "https://id-le.com", root
+    opts = dict(PHONE) if phone else {"viewport": {"width": 1400, "height": 900}}
+    LOG = """(() => { const t0 = Date.now(), fp = window.__fp = { cover: 0, bad: [], frames: 0, origin: performance.timeOrigin };
+      const vis = e => { if (!e) return false; const s = getComputedStyle(e); return s.visibility === 'visible' && s.display !== 'none' && +s.opacity > 0; };
+      const tick = () => { fp.frames++; const c = document.getElementById('genBlack') || document.getElementById('idleIntro') || document.getElementById('genChoose');
+        if (c && !fp.cover) fp.cover = Date.now();
+        if (!fp.cover && document.body && (vis(document.getElementById('arena')) || vis(document.getElementById('boot')))) fp.bad.push(Date.now() - t0);
+        if (Date.now() - t0 < 20000) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick); })();"""
+    def film(q, cdp, go):
+        shots = []
+        def on_frame(ev):
+            try:
+                img = Image.open(io.BytesIO(base64.b64decode(ev["data"]))).convert("L"); px = list(img.getdata())
+                shots.append({"ts": ev["metadata"]["timestamp"], "mean": sum(px) / len(px)})
+            except Exception: pass
+            try: cdp.send("Page.screencastFrameAck", {"sessionId": ev["sessionId"]})
+            except Exception: pass
+        cdp.on("Page.screencastFrame", on_frame)
+        cdp.send("Page.startScreencast", {"format": "jpeg", "quality": 40, "maxWidth": 240, "maxHeight": 240, "everyNthFrame": 1})
+        go(); wait_for(q, "() => window.__fp && window.__fp.cover > 0", 60)
+        q.wait_for_timeout(300); cdp.send("Page.stopScreencast")
+        fp = q.evaluate("() => window.__fp"); return shots, fp
+    def check(shots, fp, what):
+        cover = fp["cover"] / 1000
+        # painted by this document (after its navigation began; earlier frames are the previous page or the blank tab) and before the story's black was in it
+        before = [s for s in shots if fp["origin"] / 1000 + 0.05 < s["ts"] < cover - 0.02]
+        need(fp["frames"] >= 3, f"{what}: the page logged no frames: {fp}")
+        need(not fp["bad"], f"{what}: the world or the loading cover was visible before the story's black, at ms {fp['bad'][:6]}")
+        bright = [round(s["mean"], 1) for s in before if s["mean"] > 6]
+        need(not bright, f"{what}: {len(bright)} of {len(before)} frames before the story's black were not black (mean luminance {bright[:6]})")
+        return len(shots), len(before)
+    out_ = []
+    for rnd, path, what in ((0.5, "/?story", "/?story"), (0.01, "/", "a new browser in the story arm")):
+        ctx = P.ctx.browser.new_context(service_workers="block", **opts); ctx.add_init_script(f"Math.random = () => {rnd};"); ctx.add_init_script(LOG)
+        Q = Page(ctx, P.base); Q.root = root
+        try:
+            q = ctx.new_page(); cdp = ctx.new_cdp_session(q)
+            out_.append(check(*film(q, cdp, lambda: q.goto(P.base + path, wait_until="commit")), what))
+            wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            need(not q.evaluate("() => document.documentElement.classList.contains('story-boot')"), f"{what}: the first-paint black must lift once the story is up")
+            # the service worker's first-visit reload comes moments after the first load: the same address again, nothing kept from the story yet
+            q.goto(P.base + "/about:blank".replace("/about:blank", "/privacy.html"), wait_until="commit"); q.evaluate("() => { for (const k of Object.keys(localStorage)) if (!/^idle\\.gv/.test(k)) localStorage.removeItem(k); }")
+            out_.append(check(*film(q, cdp, lambda: q.goto(P.base + path, wait_until="commit")), what + " (loaded again)"))
+        finally:
+            ctx.close()
+    for rnd, want in ((0.5, "choose"), (0.99, "play")):   # the other arms: no black, their loading as before
+        ctx = P.ctx.browser.new_context(service_workers="block", **opts); ctx.add_init_script(f"Math.random = () => {rnd};"); Q = Page(ctx, P.base); Q.root = root
+        try:
+            q = ctx.new_page(); q.goto(P.base + "/", wait_until="domcontentloaded")
+            need(not q.evaluate("() => document.documentElement.classList.contains('story-boot')"), f"the {want} arm must not get the story's black")
+            if want == "choose": wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
+            else: wait_for(q, "() => window.__arena && window.__arena.raw().filter(c => !c.lab).length >= 3", 40)
+            v = q.evaluate("() => localStorage.getItem('idle.gv')"); need(v == want, f"the {want} arm: idle.gv={v}")
+        finally:
+            ctx.close()
+    return f"{'phone' if phone else 'desktop'}: {sum(a for a, b in out_)} frames filmed, {sum(b for a, b in out_)} before the story's black, all black; choose and play unchanged"
+
 def t_prod_gates(P, root):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
     storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
@@ -3774,7 +3842,8 @@ def browser_tests(a, out):
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
         ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
-        ("prod gates", t_prod_gates, (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
+        ("prod gates", t_prod_gates, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
+        ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
     if a.full: T.append(("fps", t_fps, (), {}, C))
@@ -3788,7 +3857,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"js syntax", "conflict markers", "worker", "static build", "prod gates", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+LAUNCH = {"js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
