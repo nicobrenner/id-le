@@ -11,7 +11,8 @@ html.story-boot body>*:not(#idleIntro):not(#genBlack):not(#genChoose):not(script
   const AB_ON = true, ARMS = ['story', 'choose', 'play'], q = new URLSearchParams(location.search), h = location.hostname, ls = localStorage;
   const testHost = /^staging\./.test(h) || h === 'localhost' || h === '127.0.0.1';
   let story = q.has('story');
-  if (!story && !q.has('genesis') && !q.has('start')) {
+  const offerPreview = testHost && /^(a|b|c|old)$/.test(q.get('offer') || '');   // ?offer=a|b|c on staging: a returning-world preview, no arm
+  if (!story && !q.has('genesis') && !q.has('start') && !offerPreview) {
     let snaps = 0; try { snaps = (JSON.parse(ls.getItem('arena.snaps') || '[]') || []).length; } catch (e) {}
     const fresh = !ls.getItem('arena.autosave') && !ls.getItem('arena.genomes') && !snaps;   // the same test as fresh0 in the arena below
     if (fresh) {

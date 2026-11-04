@@ -212,7 +212,8 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // is 'play'. ?arm=story|choose|play forces one on staging and local copies only. A browser that
   // already has a world keeps it, whatever its arm.
   const ARMS = ['story', 'choose', 'play'], OLD_ARM = { current: 'play' }, armOf = v => OLD_ARM[v] || v;
-  function variant(fresh0) { const f = armOf(Q.get('arm')); if (ARMS.includes(f) && testHostG()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
+  function variant(fresh0) { if (offerPreview()) return null;   // ?offer=a|b|c on staging/local: a returning player's world, no arm (Nico: '?offer=a… even opened the whole story')
+    const f = armOf(Q.get('arm')); if (ARMS.includes(f) && testHostG()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
     let v = null; try { v = localStorage.getItem(GV); } catch (e) {} if (OLD_ARM[v]) { v = armOf(v); try { localStorage.setItem(GV, v); } catch (e) {} }
     if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0 || Q.has('test')) return null;   // tests (?test) get no random arm: ?arm= forces one
     // the draw may already have been made in arena.html's <head> (idle.gvPre), so the first paint knew whether this is a story start (Nov 4)
@@ -223,6 +224,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
   // ?arm= forces an arm only on the test site and local copies (never on id-le.com, where the A/B decides)
+  const offerPreview = () => testHostG() && /^(a|b|c|old)$/.test(Q.get('offer') || '');
   const testHostG = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // the Operator window's status line (Nico, v7: no second title; "consciousness 24 · epoch 0 · genesis", the epoch advancing with the story)
@@ -1055,9 +1057,9 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   const OFFER_PROD = 'old';   // what id-le.com shows until Nico picks: 'old' (v1, 20 s after load) | 'a' | 'b' | 'c'
   const OFFER_TEST = 'a';     // staging/local default
   const OFFERV = { draft: true,   // DRAFT: the words are drafts for Nico
-    a: { title: "✦ new: Doc's story", line: "A training run that won't stop, a crash, and a consciousness to raise. About 5 minutes. Your world stays safe: it's kept as a snapshot first.", go: '▶ play the story', later: 'later' },
-    b: { line: "new: Doc's story — 5 minutes, your world stays safe", go: '▶ play the story', later: 'later' },
-    c: { lines: ["psst, something new: Doc's story. a training run that won't stop, and a consciousness to raise", "about 5 minutes. your world stays safe, it's kept as a snapshot first"], chip: '📖 start the story', later: 'maybe later', after: 'no problem. it lives in ⚙ → 📖 Storyline whenever you want it' },
+    a: { title: "✦ new: Doc's story", line: "A training run that won't stop, a crash, and a consciousness to raise. About 3 minutes. Your world stays safe: it's kept as a snapshot first.", go: '▶ play the story', later: 'later' },
+    b: { line: "new: Doc's story — 3 minutes, your world stays safe", go: '▶ play the story', later: 'later' },
+    c: { lines: ["psst, something new: Doc's story. a training run that won't stop, and a consciousness to raise", "about 3 minutes. your world stays safe, it's kept as a snapshot first"], chip: '📖 start the story', later: 'maybe later', after: 'no problem. it lives in ⚙ → 📖 Storyline whenever you want it' },
     activeS: 75, laterDays: 3, maxAsks: 2 };
   const offerVariant = () => { const f = Q.get('offer'); if (/^([abc]|old)$/.test(f || '') && testHostG()) return f; return testHostG() ? OFFER_TEST : OFFER_PROD; };
   // what this browser has been asked so far: { n: asks, at: last ask (ms), v: variant, ans: 'later' | 'accepted' }; v1's single key migrates
@@ -1120,6 +1122,10 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     const o = offerSeen(); offerSave({ n: (o.n || 0) + 1, at: now(), v, ans: null }); mark('offer_shown'); mark('offer_shown_' + v); lastOffer = v;
     return v === 'c' ? offerOperator() : offerCard(v); }
   let lastOffer = null;
+  if (offerPreview() && /^[abc]$/.test(Q.get('offer'))) { const show = () => { if (!document.body || $('#offerHint')) return; const h = document.createElement('div'); h.id = 'offerHint';
+      h.textContent = `offer ${Q.get('offer')} preview: click anywhere, it appears in ~${Math.round(offerWait())} s`; h.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:70;padding:6px 12px;border-radius:12px;background:#ffd166;color:#222;font:13px var(--ui-font,system-ui);box-shadow:0 4px 18px #0004;pointer-events:none';
+      document.body.appendChild(h); const iv = setInterval(() => { if ($('#storyOffer') || lastOffer) { h.remove(); clearInterval(iv); } }, 400); };
+    setTimeout(show, 1500); }
   { const css2 = document.createElement('style'); css2.textContent = `#storyOffer{position:fixed;left:14px;bottom:14px;z-index:60;max-width:min(330px,calc(100vw - 28px));padding:12px 14px 12px;border-radius:12px;background:#0a0b16f0;border:1px solid #6b7cff88;color:#cfd6ff;font:13px/1.45 var(--ui-font,system-ui);box-shadow:0 10px 40px #0008;transition:opacity .4s}
 #storyOffer b{display:block;margin-bottom:4px;color:#e9ecff;font-size:14px}#storyOffer .go{margin-top:8px;font:600 13px var(--ui-font,system-ui);padding:6px 13px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff44;color:#e9ecff;cursor:pointer}#storyOffer .lt{margin:8px 0 0 8px;font:12px var(--ui-font,system-ui);padding:6px 10px;border-radius:14px;border:0;background:none;color:#aeb6e8;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
 #storyOffer.vb{padding:8px 8px 10px}#storyOffer .pv{display:block;width:100%;height:auto;aspect-ratio:300/112;border-radius:8px;background:#000}#storyOffer.vb .ln{margin:8px 4px 0;color:#e9ecff}#storyOffer.vb .bt{margin:0 4px}
