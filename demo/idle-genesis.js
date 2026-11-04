@@ -929,6 +929,10 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   let resumedG = false;
   function resumeGenesis() { if (resumedG || bootedHere || !genPending() || !S.tc || $('#genConsole') || $('#idleIntro') || !H()) return false; resumedG = true;
     cls('gen-void', 1); cls('gen-calm', 1); window.__genesisVoid = true; cosmos.start();
+    // no creature before life after a reload either (Nov 4, prelife): the page always boots with the two originals (arena.html), and the
+    // first boot hides them in toVoid(); a resume has to do the same, or Crawly and Id|le stand in the void before 'let there be life'
+    if (!did('creatures')) { const h = H(), cs = h.creatures(); hold = cs.splice(0).filter(c => !c.lab);
+      for (const c of hold) { if (c.bub) c.bub.classList.remove('on'); if (c.el) c.el.style.visibility = 'hidden'; c.held = false; c.carrying = null; } }
     if (did('light')) { cls('gen-lit', 1); night(false); cosmos.light(); cls('gen-float', 1); } else night(true);
     silence(!did('creatures')); applyUnlocks(); tag(); openConsole(); opTitle(); wakeBusy = false; wakeShown = did('light') ? [] : WAKE.slice();
     renderConsole(did('light') ? introOf(nextGuide() || 'light') : WAKE[WAKE.length - 1]);
