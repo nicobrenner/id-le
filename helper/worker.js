@@ -163,7 +163,9 @@ const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
   'rv_open_link', 'rv_open_lab', 'rv_open_end', 'rv_play', 'rv_sent', 'rv_already',
   // v2: the Operator's invitation (shown, I'm in, not now), the pledge, swipes (✕ ✓ ★), keep going / done, which one?, the cliff passed
-  'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested'];
+  'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested',
+  // v3: the 🌱 HITL tab opened
+  'rv_tab'];
 const ARM = g => g === 'story' || g === 'choose' || g === 'play' ? g : g === 'current' ? 'play' : 'none';   // v15: the storyline's three arms
 const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
