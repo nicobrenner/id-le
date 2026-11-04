@@ -131,8 +131,9 @@ await post('/lab/stats', { v: 1, page: 'pedia', dw: '5-20', dw0: '1-5', ps: ['ha
 await post('/lab/stats', { v: 1, x: { did: ['w_reel', 'w_dream', 'rage', 'p_music', 'w_reel', 'hacked'], ws: { reel: 40, dream: 12, mind: 7, evil: 5 }, pt: { music: 30, studio: 10, nope: 9 },
   ct: { reelplay: 2, reelend: 1, irc: 3, inbox: 1, op: 2, pedia: 1, bad: 4 }, opa: { weather: 1, ai_spawn: 1, rm_rf: 1 }, fav: { 'job:math': 3, 'fam:crawly': 1, 'name:Plotkin': 2, 'name:<script>': 1, 'secret:x': 1 },
   rage: { studioBtn: 1, world: 2, 'whisper:keep': 1, 'world:creature': 1, 'whisper:evil': 1, 'body > div': 1 } }, path: 'card>studio', eg: { reels: '1-5', errs: '0' } });
-await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit', 'ni_seen'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
+await post('/lab/stats', { v: 1, bi: 2, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit', 'ni_seen'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
 await post('/lab/stats', { v: 1, path: 'card>card', x: { ct: { op: 9999 } } });
+await post('/lab/stats', { v: 1, bi: 7, x: {} }); await post('/lab/stats', { v: 1, bi: 9999 }); await post('/lab/stats', { v: 1, bi: 'x' });
 await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
 // the Operator (11-01): only fixed keys, small positive integers; text-like keys and junk dropped; op flags once
 await post('/lab/stats', { v: 1, x: { op: { 'out:acted': 3, 'out:unsure': 1, 'opt:light': 2, 'cf:hi': 3, 'fr:rephrase': 1, 'mood:negative': 1, 'mm:negative': 1, 'gd:light': 1, 'gt:light': 2, 'gn:light': 1, 'text:make it rain': 1, 'opt:rm -rf': 1, 'out:acted ': 1, 'fr:caps': -2, 'cf:lo': 1.5 }, did: ['op_miss', 'op_rephrase', 'op_secret'] } });
@@ -143,6 +144,7 @@ out.too_big = (await go('/lab/stats', { method: 'POST', body: 'x'.repeat(9000) }
 const days = [...env.STATS.m.values()].map(v => JSON.parse(v));
 out.stats = days.reduce((a, d) => { for (const k of ['visits', 'dev', 'ref', 'utm', 'dw', 'fl', 'feat']) a[k] = typeof d[k] === 'number' ? (a[k] || 0) + d[k] : { ...(a[k] || {}), ...d[k] }; return a; }, {});
 out.stat_keys = [...new Set(days.flatMap(d => Object.keys(d)))].sort();
+out.bi = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.bi || {})) a[k] = (a[k] || 0) + n; return a; }, {});
 out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})) a[k] = (a[k] || 0) + n; return a; }, {}); out.secs = days.reduce((a, d) => a + (d.secs || 0), 0);
 out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
 // a lone report, with no later request to that isolate, must still be written (the 2-min buffer of 11-01 lost these: 180 received, 50 stored)
@@ -382,6 +384,7 @@ def worker_unit():
     need("x is null @pedia-draw.js:3:9" in o["err_all"], "a pedia error was not kept")
     x = {k: {a: n for a, n in v.items() if n} for k, v in o["x"].items()}
     need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1, "ni_seen": 1, "op_miss": 1, "op_rephrase": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
+    need({k: v for k, v in (o.get("bi") or {}).items() if v} == {"2": 1, "4+": 1}, f"report order {o.get('bi')} (1..500 kept, 4+ folded, junk dropped)")
     need(x["ws"] == {"reel": 40, "dream": 12, "mind": 7}, f"v2 watch seconds {x['ws']} (negative, fractional, absurd and unknown dropped)")
     need(x["pt"] == {"music": 30, "studio": 10}, f"v2 panel seconds {x['pt']}")
     need(x["ct"] == {"reelplay": 2, "reelend": 1, "irc": 3, "inbox": 1, "op": 2, "pedia": 1}, f"v2 counts {x['ct']} (an absurd count must be dropped)")
@@ -946,7 +949,7 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -1007,6 +1010,27 @@ def t_stats_v2(P):
     P.clean()
     return f"card {name}: pt {x.get('pt')}, ws {x.get('ws')}, path {path}, rage {x.get('rage')}, {len(x.get('fav', {}))} favorite keys"
 
+
+def t_stats_once(P):
+    """ni_seen is counted once per page load (Nov 4: 160 'left without clicking' against 42 in-page visits looked like a repeat): a page
+    seen 7 s with no click, then hidden and shown again four times, sends ni_seen in exactly one report; each report carries its order
+    within the page load (bi = 1, 2, 3…), and the visit rides on report 1"""
+    HID = """window.__vis = 'visible'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
+      get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
+    flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
+    pg = P.ctx.new_page(); pg.add_init_script(HID); pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg)
+    pg.wait_for_timeout(7000)
+    for _ in range(4):
+        flip(pg, "hidden"); pg.wait_for_timeout(500); flip(pg, "visible"); pg.wait_for_timeout(1200)
+        pg.evaluate("() => window.__stats._send('peek')"); pg.wait_for_timeout(200)
+    flip(pg, "hidden"); pg.wait_for_timeout(500); pg.evaluate("() => window.__stats._send('leave')"); pg.wait_for_timeout(300)
+    rep = [json.loads(b) for b in P.stats]
+    ni = [r for r in rep if "ni_seen" in ((r.get("x") or {}).get("did") or [])]
+    need(len(ni) == 1, f"ni_seen in {len(ni)} reports of one page load: {[(r.get('why'), r.get('bi')) for r in rep]}")
+    need([r.get("bi") for r in rep] == list(range(1, len(rep) + 1)), f"report order: {[r.get('bi') for r in rep]}")
+    need(rep and rep[0].get("visit") == 1 and rep[0].get("bi") == 1 and all(r.get("visit") is None for r in rep[1:]), f"the visit rides on report 1 only: {[(r.get('bi'), r.get('visit')) for r in rep]}")
+    P.clean()
+    return f"{len(rep)} reports from one page load, ni_seen in 1 (#{ni[0].get('bi')}), visit in #1"
 
 def t_stats_seen(P):
     """left without clicking only counts tabs that were on screen (11-03): a page loaded hidden (a background tab, a prerender) sends
@@ -3404,7 +3428,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "stats once", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3433,6 +3457,7 @@ def main():
                 run("haunted music", t_haunted)
                 run("stats", t_stats)
                 run("stats v2", t_stats_v2)
+                run("stats once", t_stats_once)
                 run("stats seen", t_stats_seen)
                 run("stats return", t_stats_return)
                 run("op stats", t_op_stats)

@@ -43,7 +43,18 @@ def engage2(tot):
     lines.append(f"frustration: {pc(did.get('rage', 0))} of visits rage-clicked ({did.get('rage', 0)}); {did.get('quick_exit', 0)} left within 30 s of their first click; {did.get('no_interact', 0)} left without clicking"
                  " (these two also count tabs that were never on screen: background tabs, prerendered pages)")
     if did.get('ni_seen') or did.get('qe_seen'):   # from Nov 3's fix on: only page loads that were on screen at least 5 s
-        lines.append(f"  on screen ≥ 5 s (from the Nov 3 fix on): {did.get('ni_seen', 0)} left without clicking, {did.get('qe_seen', 0)} left within 30 s of their first click")
+        # each page load sends these at most once, but its in-page visit (the first report, ~3 s in) often never arrives (Nov 4: 42 visits
+        # reported vs 158 counted by the server, while ~160 page loads reported leaving), so they're shares of the server's game page loads
+        sv = ((tot.get("pv") or {}).get("views") or {}).get("game", 0)   # page loads: a reload within 30 min is one visit but two loads
+        share = (lambda n: f"{n} ({100 * n / sv:.0f}% of the server's {sv} game page loads)") if sv else (lambda n: str(n))
+        lines.append(f"  on screen ≥ 5 s (from the Nov 3 fix on): {share(did.get('ni_seen', 0))} left without clicking, {share(did.get('qe_seen', 0))} left within 30 s of their first click")
+    bi = tot.get("bi") or {}
+    if bi:   # which report of its page load each batch was (from Nov 4): batch 1 carries the visit; if 1s are short of 2s, first reports go missing
+        lines.append("  reports by order within a page load (from Nov 4): " + ", ".join(f"#{k} {bi.get(k, 0)}" for k in ("1", "2", "3", "4+")) +
+                     "; the visit arrived in " + ", ".join(f"#{k[1:]} {n}" for k, n in sorted(bi.items()) if k.startswith("v")))
+    iv, sv0 = tot.get("visits", 0), ((tot.get("pv") or {}).get("visits") or {}).get("game", 0)
+    if sv0 and iv < 0.6 * sv0:
+        lines.append(f"  ⚠ in-page visits ({iv}) are {100 * iv / sv0:.0f}% of the server's game visits ({sv0}): in-page shares above use reported visits, which undercount (first reports go missing)")
     panels = sorted(((PANELS[k], did.get("p_" + k, 0), pt.get(k, 0)) for k in PANELS if did.get("p_" + k)), key=lambda r: -r[2])
     groups = [
         ("Average seconds with each panel open (visits that opened it, in brackets)", [(f"{lab} ({n})", round(secs / n)) for lab, n, secs in panels], None),
