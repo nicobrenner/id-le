@@ -542,11 +542,11 @@
   function keyOffset(at, ct) { if (!at || !ct || !ct.story || at === 'title') return null; const TB = window.__termBoot, R = arrOf(ct), b = bootOf(ct);
     const t = { computer: 0, labchat: R && TB ? TB.arrive.scenes.chat[0] : null, boot: R, run: b, crash: b + CS.panic - 0.6, logo: b + CS.split - 0.3 }[at];
     return t == null ? null : Math.max(0, t); }
-  // the boot plays on staging and local copies (where Nico tries things), or when asked for; never on id-le.com unless asked; ?noboot skips it
+  // the boot plays on staging and local copies (where Nico tries things), in the storyline (everywhere, since Nov 4), or when asked for; ?noboot skips it
   const bootHost = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // arriving at the lab (v2) comes before the boot in the storyline and with ?intro=boot; ?noarrive leaves it out
   function wantArrive(o = {}, story) { if (Q.has('noarrive') || o.arrive === false) return false; return o.arrive === true || !!story || o.tone === 'boot' || Q.get('intro') === 'boot' || Q.has('boot'); }
-  function wantBoot(o = {}) { if (!window.__termBoot || Q.has('noboot') || o.boot === false) return false; return o.boot === true || o.tone === 'boot' || Q.has('boot') || Q.get('intro') === 'boot' || bootHost(); }
+  function wantBoot(o = {}) { if (!window.__termBoot || Q.has('noboot') || o.boot === false) return false; return o.boot === true || o.story === true || o.tone === 'boot' || Q.has('boot') || Q.get('intro') === 'boot' || bootHost(); }   // the storyline always boots (live on id-le.com since Nov 4)
   // reduced motion: whole lines one epoch at a time (no scroll, no stutter), the cut as a single frame, the halves still, then "your turn"
   function rmTime(T, ct) { if (ct.story) return T; const S = C.split + extraOf(ct); return T < S ? T : T < S + 1.8 ? S + (C.crawl - 0.1 - C.split) : S + (C.turn + 1.2 - C.split) + (T - S - 1.8); }
   const rmTotal = ct => ct.story ? totalOf(ct) : C.split + extraOf(ct) + 3.4;
