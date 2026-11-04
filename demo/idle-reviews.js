@@ -145,7 +145,7 @@
   const afterFor = (rid, rv) => TEXT.after[rid] || TEXT.after.other(rv || { title: rid });
   async function invite(rid = 'logos', how = 'auto', rv = null) {
     if (delivering) return false; delivering = true; openOperator(); await wait(how === 'link' ? 300 : 700);
-    try { const I = inv(); I.asks = (I.asks || 0) + 1; I.last = now(); I.rid = rid; sv(INV, I); mark('rv_invite');
+    try { const I = inv(); I.asks = (I.asks || 0) + 1; I.last = now(); I.rid = rid; sv(INV, I); mark('rv_invite'); mark(how === 'link' ? 'rv_inv_link' : how === 'auto' ? 'rv_inv_auto' : 'rv_inv_other');   // where it came from (Nov 4: 13 invites on day one were links, not the 3-minute rule)
       await opTyping(700); opSay(TEXT.operator); await opTyping(500); letter(TEXT.hello);
       const pick = await buttons([{ label: TEXT.yes }, { label: TEXT.no, alt: true }]);
       if (pick === 1) { const J = inv(); J.answer = 'no'; sv(INV, J); mark('rv_notnow'); await opTyping(400); opPoint(TEXT.notNow(knows())); highlight(); return false; }

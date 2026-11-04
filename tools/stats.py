@@ -195,7 +195,7 @@ def sf_split(sf):
 
 
 # ⭐ reviews and the Humans in the Loop (idle-reviews.js), per arm: the invitation, the answers, the decks, the swipes
-RV_STEPS = [("invite", "invited"), ("in", "I'm in"), ("notnow", "not now"), ("pledge", "pledge"), ("open_link", "opened by a link"), ("open_lab", "opened in the game"),
+RV_STEPS = [("invite", "invited"), ("inv_link", "· by a link"), ("inv_auto", "· by the timing rule"), ("inv_other", "· from 🌱 / the game"), ("in", "I'm in"), ("notnow", "not now"), ("pledge", "pledge"), ("open_link", "opened by a link"), ("open_lab", "opened in the game"),
             ("open_end", "opened from the end card"), ("play", "played an item"), ("nah", "✕"), ("like", "✓"), ("love", "★"), ("more", "kept going"), ("done", "done"),
             ("h2h", "which one?"), ("sent", "finished a review"), ("tab", "opened 🌱"), ("vested", "vested")]
 
