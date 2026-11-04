@@ -232,6 +232,7 @@ out.rate_61st = last;
   { const w = await (await live('k'.repeat(40))).json(), f = a => w.players.find(x => x.a === a.slice(0, 6));
     P.ref3 = f(id3); P.ref4 = f(id4); P.ref5 = f(id5); P.ref_tot = w.tot.ref; P.page_tot = w.tot.page; P.ref_leak = /path|secret|Bad Tag/.test(JSON.stringify(w));
     for (const i of [id3, id4, id5]) await beat({ v: 1, id: i, bye: 1 }); }
+  { const k0 = env.LIVE_KEY; env.LIVE_KEY = k0 + '\n'; P.newline_key = (await live('k'.repeat(40))).status; env.LIVE_KEY = k0; }   // a secret pasted with its trailing newline
   P.nokey = (await live()).status; P.wrong = (await live('wrong')).status; P.short = (env.LIVE_KEY = 'short', (await live('short')).status); env.LIVE_KEY = 'k'.repeat(40);
   const v = await (await live('k'.repeat(40))).json(); P.online = v.online;
   P.p1 = v.players.find(x => x.a === id1.slice(0, 6)); P.p2 = v.players.find(x => x.a === id2.slice(0, 6)); P.tot = v.tot; P.hist = v.hist.length ? v.hist[v.hist.length - 1] : null;
@@ -246,6 +247,15 @@ out.rate_61st = last;
   // the Durable Object class answers the same beat and view
   const D = new M.Presence({}, {}); const r1 = await (await D.fetch(new Request('https://presence/beat', { method: 'POST', body: JSON.stringify({ v: 1, id: id1, mode: 'ready' }), headers: { 'X-Country': 'CL' } }))).json();
   const r2 = await (await D.fetch(new Request('https://presence/view'))).json(); P.do = { ok: r1.ok, online: r2.online, cc: r2.players[0] && r2.players[0].cc, mode: r2.players[0] && r2.players[0].mode };
+  // one table per site in one Durable Object namespace: staging (IDLE_ENV=staging, or a staging.* host) and id-le.com never mix
+  { const inst = {}, names = []; env.PRESENCE = { idFromName: n => { names.push(n); return n; }, get: id => { const o = inst[id] || (inst[id] = new M.Presence({}, {})); return { fetch: (u, i) => o.fetch(new Request(u, i)) }; } };   // like a stub: the object gets a Request
+    const at = (host, path, init = {}) => W.fetch(new Request('https://' + host + path, { ...init, headers: { 'CF-Connecting-IP': '6.7.8.9', 'Content-Type': 'application/json', Authorization: 'Bearer ' + 'k'.repeat(40) } }), env, { waitUntil() {} });
+    const hb = (host, id) => at(host, '/lab/here', { method: 'POST', body: JSON.stringify({ v: 1, id, mode: 'world' }) });
+    await hb('id-le.com', 'aaaaaaaaaaaaaaa1'); await hb('id-le.com', 'aaaaaaaaaaaaaaa2'); await hb('staging.id-le.com', 'bbbbbbbbbbbbbbb1');
+    env.IDLE_ENV = 'staging'; await hb('abc123.id-le.pages.dev', 'bbbbbbbbbbbbbbb2'); const vs = await (await at('abc123.id-le.pages.dev', '/lab/live')).json(); delete env.IDLE_ENV;
+    const vp = await (await at('id-le.com', '/lab/live')).json(), vsh = await (await at('staging.id-le.com', '/lab/live')).json();
+    P.split = { prod: vp.players.map(x => x.a).sort().join(','), staging: vsh.players.map(x => x.a).sort().join(','), preview: vs.online, tables: Object.keys(inst).sort().join(','), names: [...new Set(names)].sort().join(',') };
+    delete env.PRESENCE; }
   delete env.LIVE_KEY; out.presence = P; }
 // reviews (11-03, v2): team stage (403 before joining), join once, per-item and per-pair dedupe by browser key (nothing new → 409, no
 // writes), notes private, team contributions counted, the order hint, totals with like-rate and Bradley-Terry only when shown, closed → 410
@@ -389,6 +399,7 @@ def worker_unit():
     pr = o["presence"]
     need(pr["prod"] == 204 and pr["view_before_prod_beat"] == 0, f"with the kill switch (PRESENCE_ON=0) beats must be accepted and dropped: {pr['prod']}, then online {pr['view_before_prod_beat']}")
     need(pr["b1"].get("ok") and pr["b2"].get("ok") and pr["bad"].get("ok") is False and pr["big"] == 413, f"beats: {pr['b1']} {pr['b2']} bad id {pr['bad']} too big {pr['big']}")
+    need(pr["newline_key"] == 200, f"a LIVE_KEY saved with a trailing newline must still match: {pr['newline_key']}")
     need(pr["nokey"] == 404 and pr["wrong"] == 404 and pr["short"] == 404, f"the live view without the right key must be 404: none {pr['nokey']}, wrong {pr['wrong']}, a short server key {pr['short']}")
     p1, p2 = pr["p1"] or {}, pr["p2"] or {}
     need(pr["online"] == 2 and p1.get("mode") == "story" and p1.get("step") == "words" and p1.get("ep") == 0 and p1.get("p") == ["operator", "card"] and p1.get("cr") == "0-12" and p1.get("t") == 42 and p1.get("back") == 1 and p1.get("dev") == "phone", f"story beat: {p1}")
@@ -404,6 +415,8 @@ def worker_unit():
     need(pr["rate_31st"] == 429, f"31st beat in a minute from one address: {pr['rate_31st']}")
     need(pr["expiry"] == {"online": 1, "left": 1, "arr": 2}, f"expiry 60 s after the last beat: {pr['expiry']}")
     need(pr["do"] == {"ok": True, "online": 1, "cc": "CL", "mode": "ready"}, f"the Durable Object: {pr['do']}")
+    sp = pr["split"]
+    need(sp == {"prod": "aaaaaa,aaaaaa", "staging": "bbbbbb,bbbbbb", "preview": 2, "tables": "live,staging", "names": "live,staging"}, f"staging and id-le.com must keep separate tables: {sp}")
     gf = o["gift"]
     need(gf == {"letter": "Hi Sam!", "label": False, "claimed0": False, "c1": True, "writes": 1, "c2": True, "claimed1": True, "unknown": 404, "revoked": 404, "bad": 404}, f"gift links: {gf}")
     rv = o["review"]
