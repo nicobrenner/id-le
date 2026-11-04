@@ -528,11 +528,15 @@ export class Presence {
     return json({ error: 'unknown' }, 404);
   }
 }
-const prMem = { table: null };
+const prMem = {};
 const presenceOn = env => env.PRESENCE_ON !== '0';
-async function prCall(env, path, init) {   // the Durable Object when bound, else this isolate's own table (local copies and tests)
-  if (env.PRESENCE) { const stub = env.PRESENCE.get(env.PRESENCE.idFromName('live')); return stub.fetch('https://presence' + path, init); }
-  const T = prMem.table || (prMem.table = new PresenceTable());
+// one table per site, in the same Durable Object namespace: staging (the Pages preview environment, IDLE_ENV=staging, or a staging.*
+// host) gets the instance named 'staging'; id-le.com keeps the instance it has used from the start, 'live'. Test visits on staging
+// never show in the live view of id-le.com, and the other way round
+const prTable = (env, req) => env.IDLE_ENV === 'staging' || /^staging\./.test(new URL(req.url).hostname) ? 'staging' : 'live';
+async function prCall(env, path, init, name = 'live') {   // the Durable Object when bound, else this isolate's own table (local copies and tests)
+  if (env.PRESENCE) { const stub = env.PRESENCE.get(env.PRESENCE.idFromName(name)); return stub.fetch('https://presence' + path, init); }
+  const T = prMem[name] || (prMem[name] = new PresenceTable());
   if (path === '/beat') { let q = null; try { q = JSON.parse(init.body); } catch (e) {} return json(T.beat(q, init.headers['X-Country'])); }
   return json(T.view());
 }
@@ -545,12 +549,12 @@ async function liveKeyOk(req, env) {   // compares SHA-256 digests, so the compa
 }
 async function presence(req, env, path) {
   if (path === '/lab/live') { if (req.method !== 'GET' || !(await liveKeyOk(req, env))) return json({ error: 'unknown path' }, 404);
-    const r = await prCall(env, '/view', { method: 'GET' }); return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }
+    const r = await prCall(env, '/view', { method: 'GET' }, prTable(env, req)); return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }
   if (!presenceOn(env)) return new Response(null, { status: 204 });   // the kill switch (PRESENCE_ON=0): beats are accepted and dropped
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
   const txt = await req.text(); if (txt.length > 700) return json({ error: 'too big' }, 413);
   const cc = req.cf && typeof req.cf.country === 'string' ? req.cf.country : '';
-  const r = await prCall(env, '/beat', { method: 'POST', body: txt, headers: { 'Content-Type': 'application/json', 'X-Country': cc } });
+  const r = await prCall(env, '/beat', { method: 'POST', body: txt, headers: { 'Content-Type': 'application/json', 'X-Country': cc } }, prTable(env, req));
   return new Response(r.body, { status: r.status, headers: { 'Content-Type': 'application/json' } });
 }
 
