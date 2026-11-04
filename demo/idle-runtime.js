@@ -30,7 +30,7 @@ window.__funnel = (() => { const K = 'idle.funnel', KD = 'idle.funnelDt', KA = '
       if (last !== null && /^\d+$/.test(last)) dt[step] = Math.max(0, Math.round((a - +last) / 1000));
       try { localStorage.setItem(K, JSON.stringify(m)); localStorage.setItem(KD, JSON.stringify(dt)); localStorage.setItem(KL, String(Math.round(a))); } catch (e) {} try { dispatchEvent(new CustomEvent('idle:funnel', { detail: { step } })); } catch (e) {} },
     durations: () => ({ ...dt }), active,
-    reached: () => Object.keys(m), arm: () => { try { const v = localStorage.getItem('idle.gv'); return v === 'story' || v === 'current' ? v : null; } catch (e) { return null; } } }; })();
+    reached: () => Object.keys(m), arm: () => { try { const v = localStorage.getItem('idle.gv'), a = v === 'current' ? 'play' : v; return a === 'story' || a === 'choose' || a === 'play' ? a : null; } catch (e) { return null; } } }; })();   // v15: three arms (the two-arm 'current' is 'play')
 (() => {
   // crash guard: a page that dies while loading (iOS Safari kills tabs that use too much memory, then reloads them) leaves its
   // record 'alive: false'. The next load starts safer: level 1 = the Oracle on one thread and light quality, level 2 = no Oracle.

@@ -94,7 +94,7 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   { const vv = window.visualViewport; if (vv) { const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h + 'px'); }; vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); kb(); } }
 
   // ---------- stepping aside for lightboxes (never stacked underneath one)
-  const OVER = ['#mSheet.on', '#ntfpanel.on', '#oracle.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront'];
+  const OVER = ['#mSheet.on', '#ntfpanel.on', '#oracle.on', '#hitl.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront'];
   const shown = el => { if (!el || !el.isConnected) return false; const s = getComputedStyle(el); if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity === 0) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const over = () => OVER.find(s => shown($(s))) || null;
   let yieldTo = null;
@@ -105,19 +105,50 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
 @keyframes opHi{0%{box-shadow:0 0 0 0 #ffcf7acc}100%{box-shadow:0 0 0 14px #ffcf7a00}}.opHiA{position:fixed;z-index:2147482900;pointer-events:none;font:700 22px/1 var(--ui-font,system-ui);color:#ffcf7a;text-shadow:0 1px 6px #000a;animation:opHiA .9s ease-in-out infinite alternate}
 .opHiA small{display:block;font:600 11.5px/1.3 var(--ui-font,system-ui);margin-top:2px;max-width:180px;white-space:normal}@keyframes opHiA{from{translate:0 0}to{translate:0 -6px}}
 @media (prefers-reduced-motion:reduce){.opHi,.opHiA{animation:none}}`; document.head.appendChild(c2); }
-  function highlight(sel, { ms = 4000, note = '' } = {}) { const el = typeof sel === 'string' ? $(sel) : sel; if (!el || !el.getBoundingClientRect) return false; const r = el.getBoundingClientRect(); if (!r.width) return false;
+  function highlight(sel, { ms = 4000, note = '', cutscene: cut = false } = {}) { if (cut) return cutscene(sel, { ms: ms === 4000 ? 2500 : ms, note }); const el = typeof sel === 'string' ? $(sel) : sel; if (!el || !el.getBoundingClientRect) return false; const r = el.getBoundingClientRect(); if (!r.width) return false;
     const ring = document.createElement('div'); ring.className = 'opHi'; Object.assign(ring.style, { left: r.left - 5 + 'px', top: r.top - 5 + 'px', width: r.width + 10 + 'px', height: r.height + 10 + 'px' });
     const below = r.top < innerHeight / 2, a = document.createElement('div'); a.className = 'opHiA'; a.innerHTML = (below ? '↑' : '↓') + (note ? `<small>${esc(note)}</small>` : '');
     a.style.left = Math.max(6, Math.min(innerWidth - 190, r.left + r.width / 2 - 8)) + 'px'; if (below) a.style.top = r.bottom + 10 + 'px'; else a.style.bottom = innerHeight - r.top + 10 + 'px';
     document.body.append(ring, a); setTimeout(() => { ring.remove(); a.remove(); }, ms); return true; }
+  // ---------- the cut-scene (Nico: "the icon is partly hidden by the Operator chat... in times like this, we should just do a temporary
+  // 'cut-scene', in which we hide operator, animate it nicely, show the thing, then come back, and maybe for a few secs/mins after we can
+  // keep a little glow on the icon until either some time has gone by, or the user clicks it"): the window shrinks into its 📟 (a fade with
+  // reduced motion), the ring and the arrow play on the now uncovered target, the window comes back where it was, and the target keeps a
+  // soft glow until it's clicked or for 2 minutes (remembered across a reload: idle.opGlow { sel, until }).
+  { const c3 = document.createElement('style'); c3.textContent = `#lab.op-cut{transform:var(--opcut,scale(.1))!important;opacity:0!important;pointer-events:none!important;transition:transform .35s ease-in,opacity .35s ease-in!important}
+#lab.op-cut.op-rm{transform:none!important;transition:opacity .25s!important}#lab.op-back{transition:transform .35s ease-out,opacity .35s ease-out!important}
+.opGlow{box-shadow:0 0 0 2px #ffcf7a99,0 0 14px 3px #ffcf7a66!important;border-radius:10px;animation:opGlowS 2.4s ease-in-out infinite}@keyframes opGlowS{50%{box-shadow:0 0 0 2px #ffcf7a55,0 0 8px 1px #ffcf7a33}}
+@media (prefers-reduced-motion:reduce){.opGlow{animation:none}}`; document.head.appendChild(c3); }
+  const GLOW = 'idle.opGlow', GLOW_MS = 120e3;
+  let glowSel = null, glowT = 0;
+  function clearGlow() { clearTimeout(glowT); if (glowSel) { const el = $(glowSel); if (el) el.classList.remove('opGlow'); } glowSel = null; try { localStorage.removeItem(GLOW); } catch (e) {} }
+  function glow(sel, until) { if (typeof sel !== 'string') return; clearGlow(); glowSel = sel; try { localStorage.setItem(GLOW, JSON.stringify({ sel, until })); } catch (e) {}
+    const put = (k = 0) => { if (glowSel !== sel) return; const el = $(sel); if (!el) return k < 40 && setTimeout(() => put(k + 1), 500); el.classList.add('opGlow');
+      el.addEventListener('click', () => { if (glowSel === sel) clearGlow(); }, { once: true }); }; put();
+    glowT = setTimeout(() => { if (glowSel === sel) clearGlow(); }, Math.max(0, until - Date.now())); }
+  try { const g = JSON.parse(localStorage.getItem(GLOW) || 'null'); if (g && g.sel && g.until > Date.now()) glow(g.sel, g.until); else localStorage.removeItem(GLOW); } catch (e) {}
+  let cutting = false;
+  function cutscene(sel, { ms = 2500, note = '' } = {}) { const el = typeof sel === 'string' ? $(sel) : sel; if (!el || !el.getBoundingClientRect().width) return false;
+    const rm = matchMedia('(prefers-reduced-motion: reduce)').matches, wasOpen = isOpen() && !document.documentElement.classList.contains('op-yield'), out = rm ? 250 : 350;
+    const done = () => { if (typeof sel === 'string') glow(sel, Date.now() + GLOW_MS); };
+    if (!wasOpen || cutting) { highlight(el, { ms, note }); setTimeout(done, ms); return true; }
+    cutting = true; const lr = lab.getBoundingClientRect(), h = $('#toHandle'), hr = h && !h.hidden && h.getBoundingClientRect().width ? h.getBoundingClientRect() : { left: innerWidth - 44, top: innerHeight - 44, width: 32, height: 32 };
+    lab.style.setProperty('--opcut', `translate(${Math.round(hr.left + hr.width / 2 - (lr.left + lr.width / 2))}px, ${Math.round(hr.top + hr.height / 2 - (lr.top + lr.height / 2))}px) scale(.08)`);
+    lab.classList.toggle('op-rm', rm); lab.classList.add('op-cut');
+    setTimeout(() => highlight(el, { ms, note }), out);
+    setTimeout(() => { lab.classList.add('op-back'); lab.classList.remove('op-cut'); setTimeout(() => { lab.classList.remove('op-back', 'op-rm'); cutting = false; }, 400); done(); }, out + ms);
+    return true; }
   const isOpen = () => lab.classList.contains('open');
   const openWin = () => { if (!isOpen()) { const t = $('#lab-toggle'); if (t) t.click(); } }, closeWin = () => { if (isOpen()) { const t = $('#lab-toggle'); if (t) t.click(); } };
   // the window's API, for other features (reviews, the playground's welcome, the storyline):
   //   open() / close() / isOpen()            the window (the 📟 does the same)
   //   say(text)                               a line in the Operator's voice in its chat (lowercase, no trailing period: the chat style)
   //   setChips([{ text, act?, glow? }] | null) chips in the 🛠 tray until cleared (act: a function, or 'oracle'; no act: fills or sends the text)
-  //   highlight(selectorOrElement, { ms, note }) a pulsing ring and an arrow on any element for ms (4 s)
+  //   highlight(selectorOrElement, { ms, note, cutscene }) a pulsing ring and an arrow on any element for ms (4 s); cutscene: true → the window
+  //                                           shrinks into its 📟, the ring plays (2.5 s) on the uncovered target, the window comes back, and a
+  //                                           selector target keeps a soft glow until clicked or for 2 minutes (survives a reload)
+  //   glowing() / clearGlow()                 the lingering glow's selector, and clearing it
   //   refresh(), tray(), toggleTray(), yielding(), pos()/setPos(), templates()   (tests and the tray's own state)
   //   window.__opSuggest(ctx) → chips | Promise<chips>: the hook for generated suggestions (ctx: { genesis, step, phone })
-  window.__opwin = { open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text) }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
+  window.__opwin = { open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, glowing: () => glowSel, clearGlow, cutting: () => cutting, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text) }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
 })();
