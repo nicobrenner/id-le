@@ -1591,7 +1591,7 @@ def t_story(P):
     wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genBackdrop')", 20, P=P)
     pg.click("#genConsole")   # a tap finishes the line being typed
     wait_for(pg, "() => window.__genesis.ready()", 40, P=P)
-    w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.getElementById('lab-text').value, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').innerText })")
+    w = pg.evaluate("() => ({ mode: window.__genesis.mode(), pre: document.getElementById('lab-text').value, say: document.getElementById('lab-text').value, cos: window.__genesis.cosmos(), creatures: window.__arena.raw().filter(c => !c.lab).length, words: window.__genHooks.words().length, thread: document.querySelector('#ai-thread').textContent })")   # (v15: hidden during Genesis, still in the thread)
     need(w["mode"] == "story" and w["pre"] == "lights on" and "lights on" in w["say"], f"the waking up should end on 'lights on', pre-filled: {w}")
     need(w["cos"]["on"] and not w["cos"]["lit"] and w["creatures"] == 0 and w["words"] == 0, f"before the lights: an empty universe, the cosmos dim: {w}")
     fs = pg.evaluate("() => { const l = document.querySelector('#genConsole .gw p, #genConsole .gl'), lab = document.querySelector('#lab'); return { fz: l ? getComputedStyle(l).fontSize : null, lh: l ? parseFloat(getComputedStyle(l).lineHeight) / parseFloat(getComputedStyle(l).fontSize) : 0, over: lab.scrollWidth - lab.clientWidth, fam: getComputedStyle(document.documentElement).getPropertyValue('--op-font').trim() }; }")
@@ -1710,15 +1710,12 @@ def t_story(P):
     need(un["story"] and un["epoch"] == 1 and "data lab" in un["hidden"] and "gloamhold" in un["hidden"] and "creatures" not in un["hidden"], f"the unlock map at Epoch 1: {un}")
     need(shown("#herdBtn") and shown("#rc-open") and not shown("#labBtn") and not shown("#studioBtn") and not shown("#connBtn"), "Epoch 1: creatures and IRC shown; data lab, studio, connect hidden")
     need(pg.evaluate("() => [...document.querySelectorAll('#placesBar [data-kind=keep], #placesBar [data-kind=lab]')].every(e => getComputedStyle(e).display === 'none')"), "Gloamhold and data lab places hidden in the storyline")
-    # v10: the tour's last step is the Oracle: a line and a glowing 🔮 that opens the Oracle's lightbox (the end card closed first: the Operator steps aside for it)
-    pg.click("#genDay .x"); wait_for(pg, "() => !document.querySelector('#genDay.end')", 5, P=P)
-    wait_for(pg, "() => !!document.querySelector('#genConsole [data-goracle]')", 10, P=P)
-    need(pg.evaluate("() => document.querySelector('#ai-thread').textContent.includes(window.__genesis.oracleLine)"), "the Operator should say the Oracle line")
-    pg.click("#toHandle"); wait_for(pg, "() => +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 5, P=P)
-    pg.click("#genConsole [data-goracle]"); pg.wait_for_timeout(300)
-    need(pg.evaluate("() => window.__oracleBox.isOpen() && !!document.querySelector('#oracleBox #ai-brain') && window.__opwin.yielding() === '#oracleBox:not([hidden])'"), "the tour's 🔮 should open the Oracle lightbox, the Operator stepping aside")
-    pg.keyboard.press("Escape"); pg.wait_for_timeout(500)
-    need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-goracle]')") and not pg.evaluate("() => window.__opwin.yielding()"), "once opened, the tour's 🔮 goes, and the Operator comes back")
+    # v15 (Nico: "the oracle should be inside the settings, and let's just hide it in storyline for now"): no Oracle tour line or 🔮 in the
+    # storyline's Operator; the closed end card is kept in ✅ (the corner card goes into the window)
+    pg.click("#genDay .x"); wait_for(pg, "() => !document.querySelector('#genDay.end')", 5, P=P); pg.wait_for_timeout(3500)
+    need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-goracle]')") and not pg.evaluate("() => document.querySelector('#ai-thread').textContent.includes('connect it to the Oracle')"), "no Oracle tour step in the storyline's Operator")
+    pg.evaluate("() => { const x = document.querySelector('#genDay:not(.end) .x'); if (x) x.click(); }"); pg.wait_for_timeout(400)
+    need(pg.evaluate("() => { const d = document.querySelector('#genDay'); return !d || !!d.closest('#lab'); }"), "a closed epoch card is kept in the Operator's ✅")
     stuck_check(pg, P, "storyline")
     P.clean()
     return f"v13: the dawn (window hidden, brightness rising), hum → word chimes → music + ambience at life, no close or Oracle caption; v11: the dark's lines in order (no sound, is that a black…), silent lightning, Genesis = Epoch 0 (lights, words, life) → front page → Epoch 1 (soon); v10: words without topic or fetch, no creature before life, no ovals, 📟 handle, Oracle from the tour; unlocked at epoch {un['epoch']}: data lab/Gloamhold hidden; {end['c']} creatures"
@@ -2183,9 +2180,10 @@ def t_never_stuck(P):
     pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
     wait_for(pg, "() => !!(window.__genesis && document.querySelector('[data-gsay]'))", 40, P=P)
     pg.wait_for_timeout(900)
-    need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the 📟 should hide while the Operator's window is open")
+    # v15: the 📟 lives at the top and stays there as the window's toggle (marked .on while the window is open)
+    need(pg.evaluate("() => !document.querySelector('#toHandle').hidden && document.querySelector('#toHandle').classList.contains('on')"), "the 📟 stays at the top, lit, while the Operator's window is open")
     w, _ = stuck_check(pg, P, "guided start")
-    need(pg.evaluate("() => document.querySelector('#toHandle').hidden"), "the 📟 should hide again once the window is open")
+    need(pg.evaluate("() => document.querySelector('#toHandle').classList.contains('on')"), "the 📟 is lit again once the window is open")
     P.clean()
     return f"closed everything in the guided start (menus hidden: {w['calm']}, Operator button visible: {w['toggle']}) → the 📟 on top → tap → Operator open, menus back"
 
@@ -3048,10 +3046,10 @@ def t_operator_float(P):
         out.append(name)
     # dragged by its header, remembered across a reload
     hb = pg.evaluate("() => { const r = document.querySelector('#lab-head').getBoundingClientRect(); return { x: r.left + 30, y: r.top + r.height / 2 }; }")
-    pg.mouse.move(hb["x"], hb["y"]); pg.mouse.down(); pg.mouse.move(hb["x"] - 120, hb["y"] - 60, steps=6); pg.mouse.up()
-    r2 = pg.evaluate(R); need(abs((r2["right"] - r["right"]) - 120) < 6 and abs((r2["bottom"] - r["bottom"]) - 60) < 6, f"dragging the header moves the window: {r} → {r2}")
+    pg.mouse.move(hb["x"], hb["y"]); pg.mouse.down(); pg.mouse.move(hb["x"] - 120, hb["y"] + 40, steps=6); pg.mouse.up()   # (v15: it opens at the top, below the 📟)
+    r2 = pg.evaluate(R); need(abs((r2["l"] - r["l"]) + 120) < 6 and abs((r2["t"] - r["t"]) - 40) < 6, f"dragging the header moves the window: {r} → {r2}")
     pg.reload(); booted(pg); pg.wait_for_timeout(800)
-    r3 = pg.evaluate(R); need(pg.evaluate("() => document.querySelector('#lab').classList.contains('open')") and abs(r3["right"] - r2["right"]) < 4 and abs(r3["bottom"] - r2["bottom"]) < 4, f"open and its place remembered after a reload: {r2} → {r3}")
+    r3 = pg.evaluate(R); need(pg.evaluate("() => document.querySelector('#lab').classList.contains('open')") and abs(r3["l"] - r2["l"]) < 4 and abs(r3["t"] - r2["t"]) < 4, f"open and its place remembered after a reload: {r2} → {r3}")
     P.clean()
     return f"floating {round(r['w'])}×{round(r['h'])} (off the edges by {round(r['right'])}/{round(r['bottom'])} px), the tray ({len(t1['tray']['chips'])} chips, a hook), steps aside for {', '.join(out)}, dragged and remembered"
 
@@ -3060,8 +3058,8 @@ def t_operator_float_phone(P):
     """v14 on a phone: the Operator is a bottom sheet of at most ~45% of the screen; the 📟 opens it; a tray chip is sent at once."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     pg.click("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(400)
-    r = pg.evaluate("() => { const r = document.querySelector('#lab').getBoundingClientRect(); return { h: r.height, H: innerHeight, w: r.width, W: innerWidth, bottom: innerHeight - r.bottom }; }")
-    need(r["h"] <= r["H"] * 0.46 + 1 and abs(r["w"] - r["W"]) < 2 and abs(r["bottom"]) < 2, f"phone: a bottom sheet of at most 45%: {r}")
+    r = pg.evaluate("() => { const r = document.querySelector('#lab').getBoundingClientRect(), h = document.querySelector('#toHandle').getBoundingClientRect(); return { h: r.height, H: innerHeight, w: r.width, W: innerWidth, top: r.top, hb: h.bottom }; }")
+    need(r["h"] <= r["H"] * 0.46 + 1 and abs(r["w"] - r["W"]) < 2 and r["top"] >= r["hb"] - 2 and r["top"] < 80, f"phone: a sheet from the top (below the 📟) of at most 45%: {r}")   # v15
     pg.evaluate("() => { window.__sent = []; window.addEventListener('click', e => { if (e.target && e.target.closest && e.target.closest('#lab-send')) window.__sent.push(document.querySelector('#lab-text').value); }, true); window.addEventListener('idle:optext', e => window.__sent.push('optext:' + e.detail.text)); }")
     pg.tap("#op-tools"); wait_for(pg, "() => window.__opwin.tray().open", 3, P=P)
     pg.tap("#opTray [data-opc='5']"); pg.wait_for_timeout(300)
