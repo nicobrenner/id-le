@@ -796,6 +796,24 @@ def booted(pg):
 
 
 # ---------------------------------------------------------------- browser checks
+def t_build_looks(P):
+    """building materials (crates, bricks, stones, rocks, racks, pillars) each have their own drawing, light and dark, normal and
+    Gloamhold: none is a plain one-colour box (Nov 4: stones and pillars fell through to a grey rounded rectangle that looked like a
+    broken creature in Nico's dark world)"""
+    pg = P.open("/arena.html?start=ready&test"); booted(pg)
+    wait_for(pg, "() => typeof window.__buildDrawObj === 'function'", 30, P=P)
+    r = pg.evaluate("""() => { const out = {}; for (const dark of [false, true]) for (const keep of [false, true]) for (const k of window.__buildObjKinds()) {
+        const c = document.createElement('canvas'); c.width = c.height = 120; const g = c.getContext('2d');
+        window.__buildDrawObj(g, { k, x: 60, y: 60 }, 60, 60, keep, dark);
+        const d = g.getImageData(0, 0, 120, 120).data, cols = new Set(); let lit = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 40) { lit++; cols.add((d[i] >> 4) + ',' + (d[i + 1] >> 4) + ',' + (d[i + 2] >> 4)); }
+        out[(dark ? 'dark ' : 'light ') + (keep ? 'keep ' : '') + k] = { lit, cols: cols.size }; } return out; }""")
+    flat = {k: v for k, v in r.items() if v["lit"] < 40 or v["cols"] < (2 if " keep " in k else 3)}   # Gloamhold is 1-bit: ink + paper
+    need(not flat, f"materials drawn as a plain box or not at all: {flat}")
+    P.clean()
+    return f"{len(r)} kind × look combinations, each with its own drawing (min colours {min(v['cols'] for v in r.values())})"
+
+
 def t_fresh_load(P):
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__arena.raw().length >= 8", 30)   # the starter world arrives a moment after boot
@@ -4426,7 +4444,7 @@ def browser_tests(a, out):
     """every browser check, in the order a single worker runs them: (name, fn, args, context options, engine)"""
     C, W = "chromium", "webkit"
     T = [
-        ("fresh load", t_fresh_load, (), {}), ("fresh slow", t_fresh_slow, (), {}), ("crash guard", t_crash_guard, (), {}),
+        ("fresh load", t_fresh_load, (), {}), ("build looks", t_build_looks, (), {}), ("fresh slow", t_fresh_slow, (), {}), ("crash guard", t_crash_guard, (), {}),
         ("camera desktop", t_camera, (), {}), ("panels", t_panels, (), {}), ("sound", t_sound, (), {}), ("haunted music", t_haunted, (), {}),
         ("stats", t_stats, (), {}), ("stats v2", t_stats_v2, (), {}), ("stats once", t_stats_once, (), {}), ("stats seen", t_stats_seen, (), {}),
         ("stats return", t_stats_return, (), {}), ("op stats", t_op_stats, (), {}), ("op actions", t_op_actions, (), {}), ("pedia stats", t_pedia_stats, (), {}),
@@ -4470,7 +4488,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"arm reload", "arm stats", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "presence", "prod gates", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "worker"}
+LAUNCH = {"build looks", "arm reload", "arm stats", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "presence", "prod gates", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "worker"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
