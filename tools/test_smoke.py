@@ -247,6 +247,15 @@ out.rate_61st = last;
   // the Durable Object class answers the same beat and view
   const D = new M.Presence({}, {}); const r1 = await (await D.fetch(new Request('https://presence/beat', { method: 'POST', body: JSON.stringify({ v: 1, id: id1, mode: 'ready' }), headers: { 'X-Country': 'CL' } }))).json();
   const r2 = await (await D.fetch(new Request('https://presence/view'))).json(); P.do = { ok: r1.ok, online: r2.online, cc: r2.players[0] && r2.players[0].cc, mode: r2.players[0] && r2.players[0].mode };
+  // one table per site in one Durable Object namespace: staging (IDLE_ENV=staging, or a staging.* host) and id-le.com never mix
+  { const inst = {}, names = []; env.PRESENCE = { idFromName: n => { names.push(n); return n; }, get: id => { const o = inst[id] || (inst[id] = new M.Presence({}, {})); return { fetch: (u, i) => o.fetch(new Request(u, i)) }; } };   // like a stub: the object gets a Request
+    const at = (host, path, init = {}) => W.fetch(new Request('https://' + host + path, { ...init, headers: { 'CF-Connecting-IP': '6.7.8.9', 'Content-Type': 'application/json', Authorization: 'Bearer ' + 'k'.repeat(40) } }), env, { waitUntil() {} });
+    const hb = (host, id) => at(host, '/lab/here', { method: 'POST', body: JSON.stringify({ v: 1, id, mode: 'world' }) });
+    await hb('id-le.com', 'aaaaaaaaaaaaaaa1'); await hb('id-le.com', 'aaaaaaaaaaaaaaa2'); await hb('staging.id-le.com', 'bbbbbbbbbbbbbbb1');
+    env.IDLE_ENV = 'staging'; await hb('abc123.id-le.pages.dev', 'bbbbbbbbbbbbbbb2'); const vs = await (await at('abc123.id-le.pages.dev', '/lab/live')).json(); delete env.IDLE_ENV;
+    const vp = await (await at('id-le.com', '/lab/live')).json(), vsh = await (await at('staging.id-le.com', '/lab/live')).json();
+    P.split = { prod: vp.players.map(x => x.a).sort().join(','), staging: vsh.players.map(x => x.a).sort().join(','), preview: vs.online, tables: Object.keys(inst).sort().join(','), names: [...new Set(names)].sort().join(',') };
+    delete env.PRESENCE; }
   delete env.LIVE_KEY; out.presence = P; }
 // reviews (11-03, v2): team stage (403 before joining), join once, per-item and per-pair dedupe by browser key (nothing new → 409, no
 // writes), notes private, team contributions counted, the order hint, totals with like-rate and Bradley-Terry only when shown, closed → 410
@@ -406,6 +415,8 @@ def worker_unit():
     need(pr["rate_31st"] == 429, f"31st beat in a minute from one address: {pr['rate_31st']}")
     need(pr["expiry"] == {"online": 1, "left": 1, "arr": 2}, f"expiry 60 s after the last beat: {pr['expiry']}")
     need(pr["do"] == {"ok": True, "online": 1, "cc": "CL", "mode": "ready"}, f"the Durable Object: {pr['do']}")
+    sp = pr["split"]
+    need(sp == {"prod": "aaaaaa,aaaaaa", "staging": "bbbbbb,bbbbbb", "preview": 2, "tables": "live,staging", "names": "live,staging"}, f"staging and id-le.com must keep separate tables: {sp}")
     gf = o["gift"]
     need(gf == {"letter": "Hi Sam!", "label": False, "claimed0": False, "c1": True, "writes": 1, "c2": True, "claimed1": True, "unknown": 404, "revoked": 404, "bad": 404}, f"gift links: {gf}")
     rv = o["review"]
