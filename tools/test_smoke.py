@@ -2872,6 +2872,131 @@ def t_story_phone_steps(P):
     return f"{len(samples)} samples over lights and words: the window hidden {len(hidden)}/20 and {len(hidden_w)}/15 after each command, nothing moved under a finger"
 
 
+def t_story_v15(P):
+    """v15 (Nico on his iPhone): the run's red line dives fully before the twirl starts, gently; in Genesis no command buttons anywhere, the
+    epoch's checklist inside the Operator under ✅ (never a card over the world), the 📟 badge counting the tasks left (3 → 2 → 1 → none),
+    the chat showing at most the current exchange (the whole history after Genesis), no Oracle in the storyline's Operator."""
+    pg = P.open("/arena.html?at=lights")
+    wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+    wait_for(pg, "() => window.__genesis.ready() && window.__genesis.next() === 'light'", 40, P=P)
+    # the run: the dive reaches ≥ 90% before the vortex has turned more than a hair (0.05 rad), and the twirl starts slowly
+    tm = pg.evaluate("""() => { const out = []; for (let T = 22; T <= 29.8; T += 0.05) { const x = window.__epoch0.timing(T); out.push([+T.toFixed(2), x.dive, x.rot]); } return out; }""")
+    first = next((r for r in tm if r[2] > 0.05), None)
+    need(first and first[1] >= 0.9, f"the red line should finish its dive before the spin: first turning frame {first}")
+    early = [r for r in tm if 0 < r[2]][:6]
+    need(early and early[-1][2] < 0.3, f"the twirl should start gently: {early}")
+    js = """() => { const vis = el => { if (!el) return false; const s = getComputedStyle(el), r = el.getBoundingClientRect(); let o = 1; for (let e = el; e; e = e.parentElement) o *= +getComputedStyle(e).opacity;
+        return s.display !== 'none' && s.visibility !== 'hidden' && o > 0.05 && r.width > 0 && r.height > 0; };
+      const cmd = [...document.querySelectorAll('button,[role=button],.opc,.chip,a')].filter(vis).map(b => (b.innerText || '').trim()).filter(t => /^(▶ )?(lights on|let there be (light|words|life)|bring life)$/i.test(t));
+      const day = document.querySelector('#genDay'); const lab = document.querySelector('#lab');
+      return { cmd, dayOutside: !!(day && vis(day) && !lab.contains(day)), dayIn: !!(day && lab.contains(day)), chk: !!document.querySelector('#op-check'), badge: window.__toHandle.badge(),
+        oracle: [...lab.querySelectorAll('*')].filter(vis).some(e => /🔮|Oracle/.test(e.childElementCount ? '' : e.textContent || '')), next: window.__genesis.next() }; }"""
+    seen = []
+    for step in ("light", "words", "creatures"):
+        wait_for(pg, f"() => window.__genesis.ready() && window.__genesis.next() === '{step}'", 60, P=P); pg.wait_for_timeout(400)
+        s1 = pg.evaluate(js); seen.append(s1)
+        need(not s1["cmd"], f"no command button at '{step}': {s1['cmd']}")
+        need(not s1["dayOutside"] and s1["chk"], f"the checklist lives in the Operator under ✅ at '{step}': {s1}")
+        need(not s1["oracle"], f"no Oracle inside the storyline's Operator at '{step}'")
+        if step == "words":
+            # ✅ opens the checklist inside the window; the chat: six messages, only the last CHAT_KEEP (2) show beside the console's line
+            pg.click("#op-check"); need(pg.evaluate("() => { const d = document.querySelector('#lab > #genDay'); return !!d && getComputedStyle(d).display !== 'none' && d.innerText.includes('lights on'); }"), "✅ shows the tasks")
+            pg.click("#op-check")
+            pg.evaluate("() => { for (let i = 0; i < 6; i++) window.__idleAI.add(i % 2 ? 'TO' : 'you', 'chat ' + i, i % 2 ? 'ai' : 'you'); }"); pg.wait_for_timeout(300)
+            vis_rows = pg.evaluate("() => [...document.querySelectorAll('#ai-thread > *')].filter(r => getComputedStyle(r).display !== 'none' && r.getBoundingClientRect().height > 0).map(r => r.textContent)")
+            need(1 <= len(vis_rows) <= 2 and vis_rows[-1].endswith("chat 5"), f"Genesis shows at most the current exchange (2 rows + the console's line): {vis_rows}")
+        pg.focus("#lab-text"); pg.keyboard.press("Enter")
+    badges = [x["badge"] for x in seen]
+    need(badges == [3, 2, 1], f"the 📟 badge counts the tasks left: {badges}")
+    wait_for(pg, "() => !!window.__genesis.moment() && window.__genesis.moment().ready", 90, P=P)
+    need(pg.evaluate("() => window.__toHandle.badge()") == 0, "no badge once Genesis is done")
+    pg.click("#genConsole [data-gm=start]"); wait_for(pg, "() => !window.__genesis.moment()", 10, P=P); pg.wait_for_timeout(800)
+    pg.evaluate("() => window.__opwin.open()"); pg.wait_for_timeout(500)
+    allrows = pg.evaluate("() => [...document.querySelectorAll('#ai-thread > *')].filter(r => getComputedStyle(r).display !== 'none').length")
+    need(allrows >= 8, f"after Genesis the whole chat history is visible: {allrows} rows")
+    P.clean()
+    return f"dive {first[1]:.2f} at the first turn ({first[0]} s); no command buttons, ✅ in the window, badges {badges} → 0, Genesis chat ≤ 2 rows, {allrows} rows after"
+
+
+def t_v15_creatures(P):
+    """v15 (Nico: "Shuold we add some dialog on the creatures after they first show up? something kind of signalling the user to click them"):
+    the three say their first words in order as they appear, a ring pulses on them during the look-around and "👆 tap me" bobs after ~3 s;
+    tapping one opens its card, ends the look-around early (on to the moment) and logs e0_tap."""
+    pg = P.open("/arena.html?at=life")
+    wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+    wait_for(pg, "() => window.__genesis.ready() && window.__genesis.next() === 'creatures'", 60, P=P); pg.wait_for_timeout(300)
+    pg.focus("#lab-text"); pg.keyboard.press("Enter")
+    wait_for(pg, "() => (window.__genesis.gsound.state().first || []).length === 3", 30, P=P)
+    first = pg.evaluate("() => window.__genesis.gsound.state().first")
+    texts = pg.evaluate("() => window.__genesis.gsound.state().first.map(f => (window.__arena.raw().find(c => c.name === f.who) || {}).name)")
+    need([f["i"] for f in first] == [0, 1, 2] and all(texts), f"three first words, in order: {first}")
+    wait_for(pg, "() => !!document.querySelector('.gen-tap')", 12, P=P)
+    lk = pg.evaluate("() => window.__genesis.landing().look")
+    need(lk and lk.get("rings", 0) >= 1 and lk.get("hint"), f"a ring pulses and the hint shows during the look-around: {lk}")
+    hint = pg.evaluate("() => { const r = document.querySelector('.gen-tap').getBoundingClientRect(); return { fs: parseFloat(getComputedStyle(document.querySelector('.gen-tap')).fontSize), in: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, text: document.querySelector('.gen-tap').textContent }; }")
+    need(hint["fs"] >= 14 and "tap me" in hint["text"], f"the hint reads: {hint}")
+    pg.evaluate("() => { const f = window.__genesis.gsound.state().first[0]; window.__idleWorld.openCard(f.who); }")
+    wait_for(pg, "() => window.__genesis.landing().look.tap", 5, P=P)
+    wait_for(pg, "() => !!window.__genesis.moment()", 12, P=P)
+    need(not pg.evaluate("() => !!document.querySelector('.gen-tap')"), "the hint goes after the tap")
+    tapped = pg.evaluate("() => ('e0_tap' in (window.__funnel.durations() || {})) || localStorage.getItem('idle.e0tap') === '1'")
+    need(tapped, "e0_tap is logged")
+    P.clean()
+    return f"first words {[f['i'] for f in first]}, {lk['rings']} ring pulses, hint at {lk['hint'] - lk['t0']:.0f} ms; a tap opened the card and the moment came; e0_tap logged"
+
+
+def t_operator_top(P, phone=False):
+    """v15 (Nico: "the operator is also on top of the minimap... should we move the operator to the top, maybe next to the bell?", "the "Send"
+    button … should be on the righ side", "instead of a tools icon, use the ⚡️ icon"): the 📟 sits right after 🔔, the window opens below it and
+    never covers the minimap, ☰ / 🔔's panel hide it, Send is the right-most control of the input row, ⚡ toggles the quick actions."""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg); pg.wait_for_timeout(1500)
+    pg.evaluate("() => { document.documentElement.classList.remove('gen-calm'); }"); pg.wait_for_timeout(800)
+    pos = pg.evaluate("""() => { const b = document.querySelector('#ntfBtn'), h = document.querySelector('#toHandle'), rb = b && b.getBoundingClientRect(), rh = h.getBoundingClientRect();
+      const bv = !!(b && rb.width && getComputedStyle(b).visibility !== 'hidden'); return { bell: bv ? [rb.left, rb.right, rb.top] : null, h: [rh.left, rh.top, rh.width], iw: innerWidth }; }""")
+    if pos["bell"]: need(abs(pos["h"][0] - pos["bell"][1]) < 16 and abs(pos["h"][1] - pos["bell"][2]) < 16, f"the 📟 sits right after 🔔: {pos}")
+    else: need(pos["h"][1] < 20 and pos["h"][0] < 60, f"no 🔔 on screen: the 📟 sits in the top-left corner: {pos}")
+    pg.click("#toHandle"); wait_for(pg, "() => document.querySelector('#lab').classList.contains('open')", 5, P=P); pg.wait_for_timeout(700)
+    g = pg.evaluate("""() => { const r = e => { const x = e && e.getBoundingClientRect(); return x && x.width ? [x.left, x.top, x.right, x.bottom] : null; };
+      const lab = r(document.querySelector('#lab')), mm = document.querySelector('#minimap'), m = mm && mm.offsetParent ? r(mm) : null, h = r(document.querySelector('#toHandle'));
+      const row = [...document.querySelectorAll('#lab-form > *')].filter(e => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0).map(e => [e.id || e.tagName, e.getBoundingClientRect().right, e.getBoundingClientRect().top]);
+      return { lab, m, h, row, tools: (document.querySelector('#op-tools') || {}).textContent, ih: innerHeight }; }""")
+    lab, m = g["lab"], g["m"]
+    if m: need(lab[2] <= m[0] or lab[0] >= m[2] or lab[3] <= m[1] or lab[1] >= m[3], f"the window must not cover the minimap: {g}")
+    need(lab[1] >= g["h"][3] - 2, f"the window opens below the 📟: {g}")
+    send = [x for x in g["row"] if x[0] == "lab-send"]; text = [x for x in g["row"] if x[0] == "lab-text"]
+    need(send and text and send[0][1] >= text[0][1] and abs(send[0][2] - text[0][2]) < 80, f"Send is right of the input: {g['row']}")
+    need(g["tools"] == "⚡", f"the quick-actions toggle is ⚡: {g['tools']!r}")
+    pg.click("#op-tools"); need(pg.evaluate("() => window.__opwin.tray().open && window.__opwin.tray().chips.length > 3"), "⚡ opens the quick actions")
+    need(pg.evaluate("() => document.querySelector('#lab-text').getBoundingClientRect().bottom <= innerHeight"), "the input stays on screen with ⚡ open")
+    if phone:
+        opened = pg.evaluate("() => { const m = document.querySelector('#mMore'); if (!m) return false; m.click(); return true; }")
+        if opened:
+            wait_for(pg, "() => document.documentElement.classList.contains('op-yield')", 5, P=P)
+            pg.evaluate("() => { const x = document.querySelector('#mSheet .mx'); if (x) x.click(); }")
+            wait_for(pg, "() => !document.documentElement.classList.contains('op-yield')", 5, P=P)
+    else:
+        pg.click("#ntfBtn"); wait_for(pg, "() => document.documentElement.classList.contains('op-yield')", 5, P=P); pg.click("#ntfBtn")
+        wait_for(pg, "() => !document.documentElement.classList.contains('op-yield')", 5, P=P)
+    P.clean()
+    return f"📟 at {[round(x) for x in g['h'][:2]]}, window {[round(x) for x in lab]}, minimap {[round(x) for x in m] if m else None}; Send right, ⚡ tray, yields to {'☰' if phone else '🔔'}"
+
+
+def t_new_build(P):
+    """v15 (Nico's phone kept an older build open): the page knows its build (IDLE_REV), version.json names the live one; a page restored from
+    the back/forward cache with a newer build live reloads; otherwise a small "a new version of Id|le is here" offers it."""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    mine = pg.evaluate("() => window.IDLE_REV || null")
+    need(mine, "the build names its revision (window.IDLE_REV)")
+    pg.context.route("**/version.json*", lambda r: r.fulfill(status=200, content_type="application/json", body='{"rev":"zz-newer"}'))   # (context-wide: the service worker's fetches too)
+    pg.evaluate("() => window.__newBuild.check(false)"); wait_for(pg, "() => !!document.querySelector('#newBuild')", 5, P=P)
+    pg.evaluate("() => { window.__reloaded = 0; }")
+    nav = []; pg.on("framenavigated", lambda f: nav.append(f.url))
+    pg.evaluate("() => window.__newBuild.check(true)"); pg.wait_for_timeout(1500)
+    need(nav, "a page restored from the cache with a newer build live reloads")
+    P.clean()
+    return f"IDLE_REV {mine}: a newer version.json shows the update offer; a restored page reloads"
+
+
 def t_operator_float(P):
     """v14 (Nico: "the operator should always be a floating window, never a fixed sidebar chat… during gameplay the user can toggle it from the
     bottom right operator button"; "The roadmap loads under the Operator... it should maybe close the operator"; "a tools icon to toggle a
@@ -3129,7 +3254,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3190,6 +3315,11 @@ def main():
                 run("story phone steps", t_story_phone_steps, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story input visible", t_story_input_visible)
                 run("operator float", t_operator_float)
+                run("v15 story", t_story_v15)
+                run("v15 creatures", t_v15_creatures)
+                run("v15 operator top", t_operator_top)
+                run("v15 operator top phone", lambda P: t_operator_top(P, phone=True), viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
+                run("v15 new build", t_new_build)
                 run("operator float phone", t_operator_float_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story end phone", t_story_end_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story v6", t_story_v6)

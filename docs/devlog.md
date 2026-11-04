@@ -6,6 +6,28 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-03
 
+**Story v15: from Nico's iPhone playthrough (staging).** He had been on an older build still open in a tab ("yes, that was the issue"); the newer
+one fixed most of it, and the rest is here.
+- **A newer build is never kept:** the build names its revision (window.IDLE_REV, build_static.py; version.json, never cached; `/`, `/arena`,
+  `/arena.html` no-cache in _headers). A page restored from the back/forward cache while a newer build is live reloads (unless someone is
+  typing); a tab that comes back after a while shows "a new version of Id|le is here · update ›". (The scripts were already fingerprinted.)
+- **The run:** the red line's plunge through the chart's floor now completes (an exponential dive, 23.2 → 28.2 s) before the vortex, and the twirl
+  starts gently (turn = k^2.6·14 rad; was k^2.2·16 from 26.6 s, when the dive was half done). The flash and the logo are unchanged (29.75 s, 31.0 s).
+- **The Operator at the top:** the 📟 sits right after 🔔 (top-left corner when the bar is hidden) and stays there as the window's toggle; the
+  window opens below it, never over the minimap (shorter or moved left when it would be); on phones a sheet from the top (≤ 45%). It steps
+  aside for ☰ and 🔔's panel too. Send is right of the box. ⚡ (quick actions) replaces 🛠.
+- **The Oracle out of the Operator:** no Oracle tour line, button, chip or caption in the storyline's Operator; the Oracle lives in ⚙ and
+  /oracle (and ⚡'s *bring your own AI* in the playground only). The Operator's greeting no longer mentions it.
+- **The epoch's tasks in the Operator:** the Genesis checklist sits under ✅ in the window's title bar (never a card over the world; it hid the
+  words falling on a phone); a later epoch's card, once closed, goes there too. The 📟 badge counts the tasks left (3 → 2 → 1 → none).
+- **No command buttons in the storyline**, after Genesis either (the playground's console keeps its chips).
+- **A short chat during Genesis:** the console's line plus at most the last 2 rows of the current step (what the player typed and the replies);
+  earlier rows are hidden, never removed, and the whole history shows once Genesis is over.
+- **The first creatures speak** (Nico: "Shuold we add some dialog on the creatures after they first show up?"): "…hello?", "is this… light?",
+  "who are you?" (drafts) as each appears; during the look-around a ring pulses on them and after 3 s "👆 tap me" bobs by the first (until
+  the player has tapped one, ever); a tap opens its card, ends the look-around early and logs e0_tap.
+- `__genesis.ready()` now also waits for the window to be up (not during the landing, the dawn or a step's aside).
+
 **iPhone sound in silent mode.** Nico's iPhone 12 mini had no sound at all in Safari and Chrome: the ring/silent switch was on. iOS mutes Web Audio in silent mode but not media playback, and no API exposes the switch. Now the one master (arena.html) asks iOS to treat the page's sound as media: `navigator.audioSession.type = 'playback'` before the AudioContext is made (Safari 16.4+); on older iOS a 50 ms silent looping `<audio>` (a generated data-URI wav) starts on the first gesture and pauses while Id|le is muted. iPhones and iPads only (`__isIOS`, incl. iPads that report a Mac UA with touch). A hint under the title card's "tap to start" ("🔊 best with sound / no sound? check your iPhone's silent switch") and a one-time toast on the playground's first sound (`idle.iosHint`, once per browser; the title card's hint counts). Trade-off: as 'playback', Id|le's sound pauses other apps' music while it plays. Test "ios sound" (WebKit, iPhone 12 Mini emulation: hint, audioSession → playback after a tap with the API stubbed, the fallback plays and pauses on mute, the toast) and "ios sound desktop" (no hint). Pedia: `#ios-silent` in "Music and the DJ deck".
 - **Bigger hint** (Nico: "pretty small, hard to read"): the title card's lines are 16–18 px in the subtitle face, amber then near-white, wrapped to the screen with a 16 px margin; the playground's toast is its own 16 px box (light on dark, inside a 16 px margin, above the 📟, 6 s or a tap), with no lone last word. The test checks both sizes and margins at 375 px.
 

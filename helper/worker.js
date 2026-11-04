@@ -157,14 +157,14 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
+const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown', 'offer_accepted', 'end_shown', 'end_roadmap', 'end_github', 'end_free',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
   'rv_open_link', 'rv_open_lab', 'rv_open_end', 'rv_play', 'rv_sent', 'rv_already',
   // v2: the Operator's invitation (shown, I'm in, not now), the pledge, swipes (✕ ✓ ★), keep going / done, which one?, the cliff passed
   'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested'];
-const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
+const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
 const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 // time per step (Nov 3): seconds of on-screen time since the moment before, per arm and moment: count, sum (for a mean) and buckets
 const SDB = ['<10s', '10-30s', '30-60s', '1-3m', '3-10m', '10m+'], sdBucket = v => v < 10 ? '<10s' : v < 30 ? '10-30s' : v < 60 ? '30-60s' : v < 180 ? '1-3m' : v < 600 ? '3-10m' : '10m+';

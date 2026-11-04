@@ -39,7 +39,12 @@
   // and comments in subtitles, gets excited, then scared: the curve keeps falling past the chart's floor, lines pour out and overlap,
   // "can we stop it?!", "run!!!!", a white flash and a tear, silence; then the cut (Idle → Id|le) and the halves crawl off into the dark.
   // No "in the beginning there was…" and no "your turn" here: the Tiny Operator takes over (idle-genesis.js, the waking up).
-  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 26.6, tear: 29.5, flash: 29.75, split: 31.0, crawl: 34.9, end: 36.9 };
+  // v15 (Nico on his iPhone: "the computer/training screen starts spinning a little bit too soon, or too fast too soon... the loss you don't
+  // fully get to see the red loss line going down exponentially"): the spin waits for the dive (spin 26.6 → 28.2), the red line's plunge through
+  // the floor completes by then (DIVE over over → spin, exponential), and the twirl starts gently (k^2.6); the flash and everything after it unchanged
+  const CS = { over: 23.2, panic: 25.0, run: 27.3, spin: 28.2, tear: 29.5, flash: 29.75, split: 31.0, crawl: 34.9, end: 36.9 };
+  const diveU = T => { const u = clamp((T - CS.over) / (CS.spin - CS.over)); return (Math.exp(3.2 * u) - 1) / (Math.exp(3.2) - 1); };   // 0 → 1, slow then plunging
+  const spinOf = k => Math.pow(clamp(k), 2.6) * 14;   // radians the inner ring has turned at vortex progress k (gentle start, a fast end)
   const LOGO_HOLD = 5.2, IDLE_BPM = 84, PURR = 4, PURR_GAP = 2.0;   // v9 (Nico: "the sound of the logo starts too early, it merges with the thunder"): the purr waits 2 s, the logo holds until it ends   // PURR: the signature purr's variant (1 warm FM, 2 saw + chime, 3 deep rumble, 4 b2's purr into noise: Nico's pick); it starts PURR_GAP s after the cut's thunder   // story v6: after the cut Id|le holds 3.2 s, its pipe cycling the rainbow at the engine's idle tempo; then black
   const STRIKES = [];   // v7: no run-up of strikes; the one lightning is the cut's
   // the engine's tempo during the run (boot-script.md v6): idle 84 → 110 bpm while it learns, → 170 when it runs away, → 260 at the vortex
@@ -202,8 +207,8 @@
     for (let i = 0; i < shown; i++) { const [px, py] = ptXY(ci, L, ci.ks[i]); g.fillStyle = '#4f7f8c'; g.beginPath(); g.arc(px, py, 2.5, 0, 7); g.fill(); }
     let v = ci.all[Math.round(kd)];
     if (story && T > CS.over) {   // past the end of the curve: it keeps falling, through the chart's floor and off the screen
-      const u = (T - CS.over) / (CS.flash - CS.over), [ex, ey] = ptXY(ci, L, ci.N), fall = u * u * (h + H * 0.9), ox = ex + (ci.s ? u * (w - 32) * 0.22 : Math.min(40, u * 60));
-      g.beginPath(); g.moveTo(ex, ey); g.quadraticCurveTo(ex + 20, ey + 4, ox, ey + fall); g.strokeStyle = MAG; g.lineWidth = 2; g.shadowColor = MAG; g.shadowBlur = 10; g.stroke(); g.shadowBlur = 0; dx = ox; dy = ey + fall; v = ci.all[ci.N] - u * u * 9; }
+      const u = diveU(T), [ex, ey] = ptXY(ci, L, ci.N), fall = u * (h + H * 0.9), ox = ex + (ci.s ? u * (w - 32) * 0.22 : Math.min(40, u * 60));
+      g.beginPath(); g.moveTo(ex, ey); g.quadraticCurveTo(ex + 20, ey + 4, ox, ey + fall); g.strokeStyle = MAG; g.lineWidth = 2; g.shadowColor = MAG; g.shadowBlur = 10; g.stroke(); g.shadowBlur = 0; dx = ox; dy = ey + fall; v = ci.all[ci.N] - u * 9; }
     g.shadowColor = CUR; g.shadowBlur = 14; g.fillStyle = '#e8fbff'; g.beginPath(); g.arc(dx, dy, 4.5, 0, 7); g.fill(); g.shadowBlur = 0;
     g.font = `${L.port ? 11 : 13}px ${TERMF}`; g.fillStyle = story && T > CS.over ? MAG : CUR;
     g.fillText(`loss ${v.toFixed(2)}`, Math.min(dx + 9, x + w - 80), clamp(dy - 9, y + 14, H - 30));
@@ -320,7 +325,7 @@
   let vbuf = null;
   function vortex(g, k) { const c = g.canvas; if (!vbuf || vbuf.width !== c.width || vbuf.height !== c.height) { vbuf = document.createElement('canvas'); vbuf.width = c.width; vbuf.height = c.height; }
     const o = vbuf.getContext('2d'); o.setTransform(1, 0, 0, 1, 0, 0); o.clearRect(0, 0, vbuf.width, vbuf.height); o.drawImage(c, 0, 0);
-    const cx = c.width / 2, cy = c.height / 2, R = Math.hypot(cx, cy), N = 12, spin = Math.pow(k, 2.2) * 16, shrink = 1 - 0.6 * Math.pow(k, 1.6);
+    const cx = c.width / 2, cy = c.height / 2, R = Math.hypot(cx, cy), N = 12, spin = spinOf(k), shrink = 1 - 0.6 * Math.pow(k, 2);
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
     for (let i = N - 1; i >= 0; i--) { const r0 = R * i / N, r1 = R * (i + 1) / N; g.save(); g.beginPath(); g.arc(cx, cy, r1, 0, 7); g.arc(cx, cy, r0, 0, 7, true); g.clip();
       g.translate(cx, cy); g.rotate(spin * (1.7 - i / N)); const s2 = shrink * (1 - 0.25 * k * (1 - i / N)); g.scale(s2, s2); g.drawImage(vbuf, -cx, -cy); g.restore(); }
@@ -558,7 +563,7 @@
   // sizes for tests: the model's text, the subtitles, the pane titles (Nico: subtitles must not be smaller than the text on screen)
   function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [], sciY: H / 2,
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
-  window.__epoch0 = { play, sounding: () => !!(cur && cur.sounding && cur.sounding()), logoArm, logoArms: LOGO_ARMS, prepLogo, logoOf, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
+  window.__epoch0 = { timing: T => ({ dive: diveU(T), rot: T < CS.spin ? 0 : spinOf((T - CS.spin) / (CS.flash - CS.spin)) }), play, sounding: () => !!(cur && cur.sounding && cur.sounding()), logoArm, logoArms: LOGO_ARMS, prepLogo, logoOf, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, keyOffset, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();
