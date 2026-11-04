@@ -484,14 +484,45 @@
   const css = () => { if (document.getElementById('idleE0css')) return; const s = document.createElement('style'); s.id = 'idleE0css';
     s.textContent = `#idleIntro{position:fixed;inset:0;z-index:2147483000;background:#000;cursor:default;transition:opacity .6s;touch-action:none;user-select:none;-webkit-user-select:none}#idleIntro canvas{width:100%;height:100%;display:block}
 #idleIntro .hint{position:absolute;bottom:20px;right:88px;font:12px var(--ui-font,system-ui);color:#7f8a95;pointer-events:none;user-select:none}#idleIntro.paused .hint{color:#7ee3f5}@media (max-width:420px){#idleIntro .hint{right:14px;bottom:50px}}
-#idleIntro .ib{position:absolute;bottom:14px;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro .snd.tap{left:50%;right:auto;transform:translateX(-50%);bottom:22px;font-size:16px;padding:9px 18px;opacity:1;color:#ffe2b8;border-color:#ffcf8a;background:#0b0f18e6;box-shadow:0 0 14px #ffcf8a55;animation:idleSndPulse 1.6s ease-in-out infinite}@keyframes idleSndPulse{50%{box-shadow:0 0 22px #ffcf8aaa}}@media (prefers-reduced-motion:reduce){#idleIntro .snd.tap{animation:none}}@media (max-width:420px){#idleIntro .snd.tap{bottom:92px}}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
+#idleIntro .ib{position:absolute;bottom:14px;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}@keyframes idleSndPulse{50%{box-shadow:0 0 22px #ffcf8aaa}}#storySnd{position:fixed;left:14px;bottom:14px;right:auto;z-index:2147483001;font:600 12px var(--ui-font,system-ui);line-height:1.2;color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75;transition:left .55s cubic-bezier(.3,.7,.2,1),bottom .55s cubic-bezier(.3,.7,.2,1),transform .55s cubic-bezier(.3,.7,.2,1),font-size .55s,padding .55s,opacity .4s,box-shadow .4s,border-color .4s}#storySnd:hover{opacity:1}#storySnd.chip{left:50%;transform:translateX(-50%);bottom:22px;font-size:16px;padding:9px 18px;opacity:1;color:#ffe2b8;border-color:#ffcf8a;background:#0b0f18e6;box-shadow:0 0 14px #ffcf8a55;animation:idleSndPulse 1.6s ease-in-out infinite}#storySnd.pulse{opacity:1;border-color:#ffcf8a;animation:idleSndPulse 1.6s ease-in-out infinite}#storySnd.gone{opacity:0;pointer-events:none}@media (pointer:coarse){#storySnd:not(.chip){min-width:44px;min-height:44px;font-size:18px;padding:0 10px}}@media (max-width:420px){#storySnd.chip{bottom:92px}}@media (prefers-reduced-motion:reduce){#storySnd{transition:opacity .2s}#storySnd.chip,#storySnd.pulse{animation:none}}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
+  // the sound toggle (Nov 4, Nico: "the 'tap for sound' message/prompt could animate/minimize to a speaker icon that stays at the bottom left of the
+  // screen, like opposite/mirror of skip... and maybe it can stay there as a toggle too, so people can also turn it off"): a body-level button,
+  // so it outlives the intro into the dark landing; the chip ("🔊 tap for sound") shows ~4 s, then shrinks into it. 🔇/🔊 is the game's own mute
+  // (window.__audio: kept in the player's sound setting), so muting here mutes the game too. One at a time.
+  let spk = null;
+  function speaker(story) {
+    if (spk) spk.kill(true);
+    const b = document.createElement('button'); b.id = 'storySnd'; b.type = 'button'; b.className = 'gone'; b.dataset.on = '0'; document.body.appendChild(b);
+    let mode = 'hidden', alive = true, pulseT = 0, chipT = 0, onOn = null, onOff = null, keep = null, keepFrom = 0;
+    const A = () => window.__audio;
+    const audible = () => { const a = A(); try { return !!a && !a.muted() && a.ctx().state === 'running'; } catch (e) { return false; } };
+    const fmark = k => { if (story && window.__funnel) try { window.__funnel.mark(k); } catch (e) {} };
+    const paint = () => { if (!alive || mode === 'hidden') return; if (mode === 'chip') { b.textContent = '🔊 tap for sound'; b.setAttribute('aria-label', 'tap for sound'); return; }
+      const on = audible(); b.textContent = on ? '🔊' : '🔇'; b.title = on ? 'sound on · tap to mute' : 'sound off · tap for sound'; b.setAttribute('aria-label', b.title); b.setAttribute('aria-pressed', String(on));
+      b.dataset.on = on ? '1' : '0'; if (on) b.classList.remove('pulse'); };
+    const mini = () => { if (!alive || mode === 'mini') return; mode = 'mini'; clearTimeout(chipT); b.classList.remove('gone', 'chip'); paint();
+      if (b.dataset.on !== '1' && !reduce()) { b.classList.add('pulse'); clearTimeout(pulseT); pulseT = setTimeout(() => b.classList.remove('pulse'), 10000); } };
+    const chip = () => { if (!alive) return; mode = 'chip'; b.classList.remove('gone'); b.classList.add('chip'); paint(); clearTimeout(chipT); chipT = setTimeout(mini, 4000); };
+    const turnOn = () => { const a = A(); if (!a) return; try { if (a.muted()) a.setMuted(false); a.resume(); } catch (e) {} fmark('sound_on'); if (onOn) onOn(); setTimeout(paint, 300); setTimeout(paint, 900); };
+    const turnOff = () => { const a = A(); if (!a) return; try { a.setMuted(true); } catch (e) {} fmark('sound_off'); if (onOff) onOff(); };
+    // the state the player saw decides the toggle (a tap's own pointerdown wakes the audio before this click runs)
+    b.addEventListener('pointerdown', e => e.stopPropagation());
+    b.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); const wasOn = mode === 'mini' && b.dataset.on === '1'; if (wasOn) turnOff(); else turnOn(); if (mode !== 'mini') mini(); b.dataset.on = wasOn ? '0' : '1'; paint(); });
+    const onAudio = () => paint(); addEventListener('idle:audio', onAudio);
+    const poll = setInterval(() => { if (!alive) return; paint(); if (keep && performance.now() - keepFrom > 3000 && !keep()) kill(); }, 500);
+    function kill(now) { if (!alive) return; alive = false; clearInterval(poll); clearTimeout(chipT); clearTimeout(pulseT); removeEventListener('idle:audio', onAudio); b.classList.add('gone'); if (now) b.remove(); else setTimeout(() => b.remove(), 450); if (spk === api) spk = null; }
+    const api = { el: b, chip, mini, paint, kill, audible, mode: () => mode, hooks(on, off) { onOn = on; onOff = off; }, keepWhile(fn) { keep = fn; keepFrom = performance.now(); onOn = null; onOff = null; } };
+    spk = api; return api;
+  }
+  // the dark landing (idle-genesis.js) still under way: the toggle stays until the lights come on
+  const landingDark = () => { try { const L = window.__genesis && window.__genesis.landing && window.__genesis.landing(); return !!(L && ['dark', 'arriving', 'sonar'].includes(L.phase)); } catch (e) { return false; } };
   function play(opts = {}) {
     if (cur) return cur.promise; css(); if (opts.at && window.__audioPastShim) window.__audioPastShim(); /* a mid-film start schedules sounds in the past (idle-keys.js) */ const P = phone(), RM = reduce(), safe = (window.__safeLevel | 0) > 0, liveOK = !P && !safe && !Q.has('intro_bank'), boot = wantBoot(opts);
     const el = document.createElement('div'); el.id = 'idleIntro'; el.dataset.tone = 'epoch0'; el.dataset.boot = boot ? '1' : '0'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)');
     const cv = document.createElement('canvas'); el.appendChild(cv); const g = cv.getContext('2d');
     const skipB = document.createElement('button'); skipB.className = 'ib skip'; skipB.textContent = 'skip ›'; el.appendChild(skipB);
     const hint = document.createElement('span'); hint.className = 'hint'; hint.textContent = 'hold to read ·'; el.appendChild(hint);
-    const sndB = document.createElement('button'); sndB.className = 'ib snd'; sndB.textContent = '🔊 sound'; el.appendChild(sndB); document.body.appendChild(el);
+    document.body.appendChild(el); const spkC = speaker(!!(opts.story || Q.has('story')));
     let frameErr = 0, lastTry = 0, ct = null, st = null, done = false, raf = 0, S = null, start = performance.now(), res; const promise = new Promise(r => res = r);
     // the storyline (v12, Nico: "there should only be the animation sound, nothing else"): the game's own sounds (its music, the world) are hushed
     // for the whole intro; the intro plays past the hush (storyOut). The genesis flow hushes first and keeps it until its music step; a replay restores it
@@ -506,8 +537,9 @@
     size(); addEventListener('resize', size);
     const audioReady = () => { const A = window.__audio; try { return A && !A.muted() && A.ctx().state === 'running'; } catch (e) { return false; } };
     const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, ct.story && A.storyOut ? A.storyOut() : A.out(), ctx.currentTime - (elapsed() - B())); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); if (ct.story) try { S.fans(ct, soundT); } catch (e) {} try { preBeds(ctx, S.out, ct, soundT, ctx.currentTime); } catch (e) {} syncSnd(); };
-    const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) && !autoSnd ? 'none' : ''; };
-    sndB.addEventListener('click', e => { e.stopPropagation(); if (soundOn()) return; const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
+    const syncSnd = () => spkC.paint();
+    // the toggle's hooks: on joins the film's sound in sync; off (the game's own mute) stops it at once, so a later "on" starts it again in sync
+    spkC.hooks(() => { autoSnd = false; setTimeout(() => { if (!done && audioReady()) startSound(); }, 250); }, () => { autoSnd = false; if (S) { try { S.stop(0.12); } catch (e) {} S = null; } });
     const mark = k => { if (ct && ct.story && window.__funnel) window.__funnel.mark(k); };
     // which scene of the story intro this moment is in (for the funnel): title, messages, chat, boot, run, crash
     const sceneOf = A => { if (waiting) return 'title'; const TB = window.__termBoot, R = arrOf(ct), b = B(); if (R && A < TB.arrive.scenes.chat[0]) return 'messages'; if (R && A < R) return 'chat'; if (A < b) return 'boot'; return A - b < CS.flash ? 'run' : 'crash'; };
@@ -516,19 +548,19 @@
     // (no gesture yet, so the browser keeps the audio suspended); a "🔊 tap for sound" chip shows, and the first tap or key anywhere turns it on.
     // The film runs on performance.now() (elapsed()), never on the audio clock, so it keeps moving silently; the sound joins in sync when allowed.
     let autoSnd = false;
-    const soundOn = () => { if (!autoSnd || done) return false; autoSnd = false; sndB.classList.remove('tap'); sndB.textContent = '🔊 sound'; const A = window.__audio;
+    const soundOn = () => { if (!autoSnd || done) return false; autoSnd = false; spkC.mini(); const A = window.__audio;
       try { if (A && !A.muted()) A.resume(); } catch (e) {} mark('sound_on'); setTimeout(() => { if (audioReady()) startSound(); syncSnd(); }, 250); return true; };
     const begin = auto => { if (!waiting || done) return; waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now(); pausedMs = 0; pausedAt = 0; el.classList.remove('paused');
-      if (auto === true && !audioReady()) { mark('title_auto'); if (S) { try { S.stop(0); } catch (e) {} S = null; } const A = window.__audio; let muted = true; try { muted = !A || A.muted(); } catch (e) {} if (!muted && !RM) { autoSnd = true; el.dataset.auto = '1'; sndB.classList.add('tap'); sndB.textContent = '🔊 tap for sound'; sndB.style.display = ''; } return; }
-      const A = window.__audio; try { if (A && !A.muted()) A.resume(); } catch (e) {} setTimeout(() => { if (audioReady()) startSound(); syncSnd(); }, 250); };
-    const finish = skipped => { if (done) return; if (skipped && ct) mark('skip:' + sceneOf(elapsed())); done = true; if (hushOwn) setTimeout(() => { try { window.__audio.hush(false); } catch (e) {} }, skipped ? 300 : 800); cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
+      if (auto === true && !audioReady()) { mark('title_auto'); if (S) { try { S.stop(0); } catch (e) {} S = null; } const A = window.__audio; let muted = true; try { muted = !A || A.muted(); } catch (e) {} if (!muted && !RM) { autoSnd = true; el.dataset.auto = '1'; spkC.chip(); } else spkC.mini(); return; }
+      const A = window.__audio; try { if (A && !A.muted()) A.resume(); } catch (e) {} spkC.mini(); setTimeout(() => { if (audioReady()) startSound(); syncSnd(); }, 250); };
+    const finish = skipped => { if (done) return; if (skipped && ct) mark('skip:' + sceneOf(elapsed())); done = true; if (ct && ct.story) spkC.keepWhile(() => landingDark() || !!document.querySelector('#idleIntro')); else spkC.kill(); if (hushOwn) setTimeout(() => { try { window.__audio.hush(false); } catch (e) {} }, skipped ? 300 : 800); cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
       const out = { tone: 'epoch0', story: !!(ct && ct.story), boot, arrive: !!(ct && ct.arrive), skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
       try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'end', ...out } })); } catch (e) {}
       if (opts.keep && !skipped) { cur = { promise, el, close: () => { el.classList.add('out'); setTimeout(() => el.remove(), 650); cur = null; } }; res(out); return; }
       el.classList.add('out'); setTimeout(() => { el.remove(); cur = null; res(out); }, skipped ? 350 : 650); };
     const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(true); } else if (waiting) { e.preventDefault(); e.stopPropagation(); if (!e.repeat) begin(); } else if (autoSnd && !e.repeat) { e.preventDefault(); e.stopPropagation(); soundOn(); } else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) pause(); } };
     const onKeyUp = e => { if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); resume(); } };
-    el.addEventListener('pointerdown', e => { if (e.target === sndB || e.target === skipB) return; e.preventDefault(); if (waiting) { begin(); return; } if (autoSnd) { soundOn(); return; } pause(); });
+    el.addEventListener('pointerdown', e => { if (e.target === skipB) return; e.preventDefault(); if (waiting) { begin(); return; } if (autoSnd) { soundOn(); return; } pause(); });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
     skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
     cur = { promise, el, close: () => finish(true), time: () => elapsed(), sounding: () => !!S, paused: () => !!pausedAt, waiting: () => waiting, start: () => begin(), autoMuted: () => autoSnd, soundOn: () => soundOn(), scene: () => ct ? sceneOf(elapsed()) : null };
@@ -537,7 +569,7 @@
       if (ct.story && ct.arrive && window.__termBoot && window.__termBoot.title && opts.title !== false && !Q.has('notitle')) { waiting = true; titleT0 = performance.now(); el.dataset.title = '1'; hint.style.display = 'none'; }
       // a keyframe (idle-keys.js, staging/local: ?story&at=run): the film starts at that second, past the title card
       { const off = keyOffset(opts.at, ct); if (off != null) { waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now() - off * 1000; } }
-      if (liveOK) fillLive(ct, () => elapsed() - B()).catch(() => {}); if (audioReady()) startSound(); syncSnd();
+      if (liveOK) fillLive(ct, () => elapsed() - B()).catch(() => {}); if (audioReady()) startSound(); if (!waiting) spkC.mini(); syncSnd();
       const loop = () => { if (done) return;
         if (waiting) { start = performance.now(); mark('title'); if (performance.now() - titleT0 >= AUTO_MS && !Q.has('noauto')) { begin(true); raf = requestAnimationFrame(loop); return; } try { window.__termBoot.title(g, innerWidth, innerHeight, (performance.now() - titleT0) / 1000, P, RM); } catch (e) {} raf = requestAnimationFrame(loop); return; }
         const T = elapsed(); { const sc = sceneOf(T); if (sc !== scene) { scene = sc; mark(sc); } }

@@ -17,6 +17,13 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 - Test "kv writes" (launch tier): a day of 790 reports → 23 KV writes (old path: one per batch); every visit kept (KV + pending); a failed KV write after a take loses and doubles nothing; a refused 🧪 is queued and written later.
 - Free-plan Durable Object limits (Cloudflare pricing page, read Nov 4): 100,000 requests/day (HTTP, RPC, WebSocket messages, alarms), 13,000 GB-s duration/day, SQLite rows read 5M/day, rows written 100,000/day, 5 GB stored.
 
+**The sound toggle (staging).** Since auto-start, 4 intros auto-started and 1 turned the sound on. Nico: "the 'tap for sound' message/prompt could animate/minimize to a speaker icon that stays at the bottom left of the screen, like opposite/mirror of skip... and maybe it can stay there as a toggle too, so people can also turn it off".
+- `#storySnd` (idle-epoch0.js `speaker()`): a body-level button. On an auto-start the "🔊 tap for sound" chip shows ~4 s, then shrinks and slides into a bottom-left button that mirrors "skip ›" (same style; 44 px on touch screens). 🔇 when silent (a gentle pulse for 10 s, none with reduced motion), 🔊 when sounding.
+- A tap turns the sound on (joins the film in sync); another mutes for real: `__audio.setMuted(true)` (gain 0, the audio suspended), the film's sound stopped, and the mute kept in the game's own sound setting (idle.audio), so the game stays muted; a third turns it back on in sync. The toggle decides from the state the player saw (a tap's own pointerdown wakes the audio before the click runs).
+- It outlives the intro: in the storyline it stays through the dark landing (the landing's dark / arriving / sonar phases) and goes when the lights come on; other intros remove it at the end.
+- Funnel: `sound_off` added next to `sound_on` (worker allowlist, stats.py line).
+- Tests: new 'speaker' and 'speaker phone' (chip → button at 14/14 px, mirrors skip ›, 44 px on phones, on → off (muted, kept in idle.audio, audio suspended) → on, stays into the dark landing and mutes the game there, clear of the Operator on phones); 'title auto' now expects the chip to shrink into the 🔊 toggle instead of disappearing.
+
 ## 2026-11-04 (offer v2, staging)
 
 **The storyline offer v2: three variants for Nico to pick from (staging only; id-le.com keeps v1).** On id-le.com the v1 card (shown 20 s after load to returning players) was shown 22 times and accepted 0: they come back for their world. v2 (`idle-genesis.js`):
