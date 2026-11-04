@@ -43,7 +43,18 @@ def engage2(tot):
     lines.append(f"frustration: {pc(did.get('rage', 0))} of visits rage-clicked ({did.get('rage', 0)}); {did.get('quick_exit', 0)} left within 30 s of their first click; {did.get('no_interact', 0)} left without clicking"
                  " (these two also count tabs that were never on screen: background tabs, prerendered pages)")
     if did.get('ni_seen') or did.get('qe_seen'):   # from Nov 3's fix on: only page loads that were on screen at least 5 s
-        lines.append(f"  on screen ≥ 5 s (from the Nov 3 fix on): {did.get('ni_seen', 0)} left without clicking, {did.get('qe_seen', 0)} left within 30 s of their first click")
+        # each page load sends these at most once, but its in-page visit (the first report, ~3 s in) often never arrives (Nov 4: 42 visits
+        # reported vs 158 counted by the server, while ~160 page loads reported leaving), so they're shares of the server's game page loads
+        sv = ((tot.get("pv") or {}).get("views") or {}).get("game", 0)   # page loads: a reload within 30 min is one visit but two loads
+        share = (lambda n: f"{n} ({100 * n / sv:.0f}% of the server's {sv} game page loads)") if sv else (lambda n: str(n))
+        lines.append(f"  on screen ≥ 5 s (from the Nov 3 fix on): {share(did.get('ni_seen', 0))} left without clicking, {share(did.get('qe_seen', 0))} left within 30 s of their first click")
+    bi = tot.get("bi") or {}
+    if bi:   # which report of its page load each batch was (from Nov 4): batch 1 carries the visit; if 1s are short of 2s, first reports go missing
+        lines.append("  reports by order within a page load (from Nov 4): " + ", ".join(f"#{k} {bi.get(k, 0)}" for k in ("1", "2", "3", "4+")) +
+                     "; the visit arrived in " + ", ".join(f"#{k[1:]} {n}" for k, n in sorted(bi.items()) if k.startswith("v")))
+    iv, sv0 = tot.get("visits", 0), ((tot.get("pv") or {}).get("visits") or {}).get("game", 0)
+    if sv0 and iv < 0.6 * sv0:
+        lines.append(f"  ⚠ in-page visits ({iv}) are {100 * iv / sv0:.0f}% of the server's game visits ({sv0}): in-page shares above use reported visits, which undercount (first reports go missing)")
     panels = sorted(((PANELS[k], did.get("p_" + k, 0), pt.get(k, 0)) for k in PANELS if did.get("p_" + k)), key=lambda r: -r[2])
     groups = [
         ("Average seconds with each panel open (visits that opened it, in brackets)", [(f"{lab} ({n})", round(secs / n)) for lab, n, secs in panels], None),
@@ -168,6 +179,8 @@ def sf_split(sf):
             o["skips"][step[5:]] = o["skips"].get(step[5:], 0) + n
         elif step.startswith("fd_"):
             o.setdefault("fd", {})[step[3:]] = o.setdefault("fd", {}).get(step[3:], 0) + n
+        elif step.startswith("rv_"):
+            o.setdefault("rv", {})[step[3:]] = o.setdefault("rv", {}).get(step[3:], 0) + n
         elif step.startswith("sc_"):
             o.setdefault("sc", {})[step[3:]] = o.setdefault("sc", {}).get(step[3:], 0) + n
         elif step.startswith("end_"):
@@ -178,6 +191,16 @@ def sf_split(sf):
             o["steps"][step] = o["steps"].get(step, 0) + n
     return out
 
+
+
+# ⭐ reviews and the Humans in the Loop (idle-reviews.js), per arm: the invitation, the answers, the decks, the swipes
+RV_STEPS = [("invite", "invited"), ("in", "I'm in"), ("notnow", "not now"), ("pledge", "pledge"), ("open_link", "opened by a link"), ("open_lab", "opened in the game"),
+            ("open_end", "opened from the end card"), ("play", "played an item"), ("nah", "✕"), ("like", "✓"), ("love", "★"), ("more", "kept going"), ("done", "done"),
+            ("h2h", "which one?"), ("sent", "finished a review"), ("tab", "opened 🌱"), ("vested", "vested")]
+
+
+def rv_line(rv):
+    return ", ".join(f"{lab} {rv.get(k, 0)}" for k, lab in RV_STEPS if rv.get(k))
 
 
 # the story's logo A/B (idle-epoch0.js, Nov 3): the worker also files the moments from the logo on under 'lg:<arm>|step'
@@ -484,6 +507,8 @@ def main():
                 print(f"           skipped at: " + ", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in sorted(o["skips"].items(), key=lambda kv: -kv[1])))
             if o["offer"]:
                 print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
+            if o.get("rv"):
+                print("           ⭐ reviews: " + rv_line(o["rv"]))
             if o.get("end"):
                 en = o["end"]; print(f"           end of what's built: shown {en.get('shown', 0)}, roadmap {en.get('roadmap', 0)}, GitHub {en.get('github', 0)}, the playground {en.get('free', 0)}")
         sc = sc_total(sfs)

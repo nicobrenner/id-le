@@ -170,7 +170,7 @@ const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 
   'sc_help', 'sc_operator', 'sc_card', 'sc_rename', 'sc_pedia', 'sc_settings', 'sc_scientists', 'sc_roadmap', 'sc_hitl', 'sc_oracle', 'sc_music', 'sc_deck', 'sc_stats', 'sc_ocean', 'sc_find', 'sc_weather', 'sc_evolve', 'sc_rave', 'sc_spawn', 'sc_name', 'sc_unknown'];
 const ARM = g => g === 'story' || g === 'choose' || g === 'play' ? g : g === 'current' ? 'play' : 'none';   // v15: the storyline's three arms
 const LGSTEP = ['lg_shown:c3', 'lg_shown:crt', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'skip:landing', 'end_shown', 'end_roadmap', 'end_github', 'end_free'];   // per logo arm (only from the logo on)
-const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
+const EMPTY = () => ({ pv: EMPTY_PV(), v2visits: 0, visits: 0, back: 0, ios: 0, safe: {}, dev: {}, fps: {}, feat: {}, m: {}, f5: {}, err: {}, ref: {}, utm: {}, dw: {}, fl: {}, dl: {}, eg: {}, gv: {}, gs: {}, gss: {}, sf: {}, sd: {}, rb: {}, bi: {}, secs: 0, pd: EMPTY_PD(), x: EMPTY_X(), batches: 0 });
 // time per step (Nov 3): seconds of on-screen time since the moment before, per arm and moment: count, sum (for a mean) and buckets
 const SDB = ['<10s', '10-30s', '30-60s', '1-3m', '3-10m', '10m+'], sdBucket = v => v < 10 ? '<10s' : v < 30 ? '10-30s' : v < 60 ? '30-60s' : v < 180 ? '1-3m' : v < 600 ? '3-10m' : '10m+';
 // coming back (Nov 3): a browser adds 1 to arm|first-visit day|days-since bucket, at most once per bucket (no identifier; the cohort is a UTC day)
@@ -180,6 +180,8 @@ const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
 function addStats(p) {
   const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
   d.batches++;
+  // which report of its page load this is (1 = the first, 'v' = the one carrying the visit): batch 1s that go missing show up here (Nov 4)
+  if (Number.isInteger(p.bi) && p.bi >= 1 && p.bi <= 500 && p.page !== 'pedia') { d.bi = d.bi || {}; bump(d.bi, p.bi >= 4 ? '4+' : String(p.bi)); if (p.visit === 1) bump(d.bi, 'v' + (p.bi >= 4 ? '4+' : p.bi)); }
   if (Array.isArray(p.err)) for (const e of p.err.slice(0, 5)) if (typeof e === 'string') bump(d.err, e.slice(0, 160));
   const mv = (o, B, v, v0) => { if (B.includes(v) && (v0 === undefined || B.includes(v0) && v0 !== v)) { bump(o, v); if (v0 !== undefined) bump(o, v0, -1); } };   // a page load moving bucket
   if (p.page === 'pedia') { const q = d.pd;   // the pedia counts on its own, never as a game visit
@@ -232,7 +234,7 @@ async function flushStats(env) {
   for (const [day, add] of Object.entries(buf)) {
     const key = `stats:${day}:${SHARD}`, cur = JSON.parse(await env.STATS.get(key) || 'null') || { ...EMPTY(), writes: 0 };
     cur.visits += add.visits; cur.back += add.back; cur.ios = (cur.ios || 0) + add.ios; cur.safe = cur.safe || {}; cur.batches += add.batches; cur.writes = (cur.writes || 0) + 1;
-    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss', 'sf']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
+    for (const k of ['dev', 'safe', 'fps', 'feat', 'f5', 'dw', 'fl', 'dl', 'eg', 'gv', 'gs', 'gss', 'sf', 'bi']) { cur[k] = cur[k] || {}; for (const [a, n] of Object.entries(add[k] || {})) if (n) bump(cur[k], a, n); }
     cur.secs = (cur.secs || 0) + add.secs; cur.v2visits = (cur.v2visits || 0) + (add.v2visits || 0);
     cur.pv = mergePv(cur.pv, add.pv);
     { const q = cur.x = cur.x || EMPTY_X(); for (const k of Object.keys(EMPTY_X())) { q[k] = q[k] || {}; for (const [a, n] of Object.entries((add.x || {})[k] || {})) if (n) (X_CAP[k] ? capped(q[k], a, n, X_CAP[k]) : bump(q[k], a, n)); } }

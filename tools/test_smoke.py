@@ -131,8 +131,9 @@ await post('/lab/stats', { v: 1, page: 'pedia', dw: '5-20', dw0: '1-5', ps: ['ha
 await post('/lab/stats', { v: 1, x: { did: ['w_reel', 'w_dream', 'rage', 'p_music', 'w_reel', 'hacked'], ws: { reel: 40, dream: 12, mind: 7, evil: 5 }, pt: { music: 30, studio: 10, nope: 9 },
   ct: { reelplay: 2, reelend: 1, irc: 3, inbox: 1, op: 2, pedia: 1, bad: 4 }, opa: { weather: 1, ai_spawn: 1, rm_rf: 1 }, fav: { 'job:math': 3, 'fam:crawly': 1, 'name:Plotkin': 2, 'name:<script>': 1, 'secret:x': 1 },
   rage: { studioBtn: 1, world: 2, 'whisper:keep': 1, 'world:creature': 1, 'whisper:evil': 1, 'body > div': 1 } }, path: 'card>studio', eg: { reels: '1-5', errs: '0' } });
-await post('/lab/stats', { v: 1, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit', 'ni_seen'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
+await post('/lab/stats', { v: 1, bi: 2, x: { ws: { reel: -5, dream: 1.5, mind: 99999999 }, did: ['quick_exit', 'ni_seen'] }, path: 'card>studio>reels', path0: 'card>studio', eg: { errs: '1' }, eg0: { errs: '0' } });
 await post('/lab/stats', { v: 1, path: 'card>card', x: { ct: { op: 9999 } } });
+await post('/lab/stats', { v: 1, bi: 7, x: {} }); await post('/lab/stats', { v: 1, bi: 9999 }); await post('/lab/stats', { v: 1, bi: 'x' });
 await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
 // the Operator (11-01): only fixed keys, small positive integers; text-like keys and junk dropped; op flags once
 await post('/lab/stats', { v: 1, x: { op: { 'out:acted': 3, 'out:unsure': 1, 'opt:light': 2, 'cf:hi': 3, 'fr:rephrase': 1, 'mood:negative': 1, 'mm:negative': 1, 'gd:light': 1, 'gt:light': 2, 'gn:light': 1, 'text:make it rain': 1, 'opt:rm -rf': 1, 'out:acted ': 1, 'fr:caps': -2, 'cf:lo': 1.5 }, did: ['op_miss', 'op_rephrase', 'op_secret'] } });
@@ -143,6 +144,7 @@ out.too_big = (await go('/lab/stats', { method: 'POST', body: 'x'.repeat(9000) }
 const days = [...env.STATS.m.values()].map(v => JSON.parse(v));
 out.stats = days.reduce((a, d) => { for (const k of ['visits', 'dev', 'ref', 'utm', 'dw', 'fl', 'feat']) a[k] = typeof d[k] === 'number' ? (a[k] || 0) + d[k] : { ...(a[k] || {}), ...d[k] }; return a; }, {});
 out.stat_keys = [...new Set(days.flatMap(d => Object.keys(d)))].sort();
+out.bi = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.bi || {})) a[k] = (a[k] || 0) + n; return a; }, {});
 out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})) a[k] = (a[k] || 0) + n; return a; }, {}); out.secs = days.reduce((a, d) => a + (d.secs || 0), 0);
 out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
 // a lone report, with no later request to that isolate, must still be written (the 2-min buffer of 11-01 lost these: 180 received, 50 stored)
@@ -382,6 +384,7 @@ def worker_unit():
     need("x is null @pedia-draw.js:3:9" in o["err_all"], "a pedia error was not kept")
     x = {k: {a: n for a, n in v.items() if n} for k, v in o["x"].items()}
     need(x["did"] == {"w_reel": 1, "w_dream": 1, "rage": 1, "p_music": 1, "quick_exit": 1, "ni_seen": 1, "op_miss": 1, "op_rephrase": 1}, f"v2 flags {x['did']} (once each, unknown ones dropped)")
+    need({k: v for k, v in (o.get("bi") or {}).items() if v} == {"2": 1, "4+": 1}, f"report order {o.get('bi')} (1..500 kept, 4+ folded, junk dropped)")
     need(x["ws"] == {"reel": 40, "dream": 12, "mind": 7}, f"v2 watch seconds {x['ws']} (negative, fractional, absurd and unknown dropped)")
     need(x["pt"] == {"music": 30, "studio": 10}, f"v2 panel seconds {x['pt']}")
     need(x["ct"] == {"reelplay": 2, "reelend": 1, "irc": 3, "inbox": 1, "op": 2, "pedia": 1}, f"v2 counts {x['ct']} (an absurd count must be dropped)")
@@ -946,7 +949,7 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -1007,6 +1010,27 @@ def t_stats_v2(P):
     P.clean()
     return f"card {name}: pt {x.get('pt')}, ws {x.get('ws')}, path {path}, rage {x.get('rage')}, {len(x.get('fav', {}))} favorite keys"
 
+
+def t_stats_once(P):
+    """ni_seen is counted once per page load (Nov 4: 160 'left without clicking' against 42 in-page visits looked like a repeat): a page
+    seen 7 s with no click, then hidden and shown again four times, sends ni_seen in exactly one report; each report carries its order
+    within the page load (bi = 1, 2, 3…), and the visit rides on report 1"""
+    HID = """window.__vis = 'visible'; for (const k of ['hidden', 'visibilityState']) Object.defineProperty(Document.prototype, k, { configurable: true,
+      get() { return k === 'hidden' ? window.__vis !== 'visible' : window.__vis; } });"""
+    flip = lambda pg, v: pg.evaluate("v => { window.__vis = v; document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); }", v)
+    pg = P.ctx.new_page(); pg.add_init_script(HID); pg.goto(P.base + "/arena.html?statstest&test", wait_until="load"); booted(pg)
+    pg.wait_for_timeout(7000)
+    for _ in range(4):
+        flip(pg, "hidden"); pg.wait_for_timeout(500); flip(pg, "visible"); pg.wait_for_timeout(1200)
+        pg.evaluate("() => window.__stats._send('peek')"); pg.wait_for_timeout(200)
+    flip(pg, "hidden"); pg.wait_for_timeout(500); pg.evaluate("() => window.__stats._send('leave')"); pg.wait_for_timeout(300)
+    rep = [json.loads(b) for b in P.stats]
+    ni = [r for r in rep if "ni_seen" in ((r.get("x") or {}).get("did") or [])]
+    need(len(ni) == 1, f"ni_seen in {len(ni)} reports of one page load: {[(r.get('why'), r.get('bi')) for r in rep]}")
+    need([r.get("bi") for r in rep] == list(range(1, len(rep) + 1)), f"report order: {[r.get('bi') for r in rep]}")
+    need(rep and rep[0].get("visit") == 1 and rep[0].get("bi") == 1 and all(r.get("visit") is None for r in rep[1:]), f"the visit rides on report 1 only: {[(r.get('bi'), r.get('visit')) for r in rep]}")
+    P.clean()
+    return f"{len(rep)} reports from one page load, ni_seen in 1 (#{ni[0].get('bi')}), visit in #1"
 
 def t_stats_seen(P):
     """left without clicking only counts tabs that were on screen (11-03): a page loaded hidden (a background tab, a prerender) sends
@@ -2474,6 +2498,37 @@ def t_reviews_cutscene(P, phone=False):
     return f"{'phone' if phone else 'desktop'}: the Operator shrinks off the {tid} (no overlap) while the ring plays, comes back open; glow kept across a reload, cleared by a click, and by its time limit"
 
 
+def t_reviews_timing(P):
+    """When the invitation comes by itself (fake clock, stubbed storyline state): the storyline only after the end card (not while it's
+    open, not before), or 20 s into its 🛝 playground; the playground after 3 minutes on screen and an interaction, at a quiet moment
+    (not with a panel open, not while typing); never during Genesis."""
+    pg = _rv_page(P); pg.evaluate("() => { localStorage.removeItem('idle.invite'); localStorage.removeItem('idle.team'); }")
+    ev = lambda js: pg.evaluate(js)
+    stub = "([st, end, un]) => { window.__genesis.state = () => st; window.__genesis.end = () => end; window.__genesis.unlocks = () => un; }"
+    R = "() => ({ ready: window.__reviews.test.ready(), m: window.__reviews.moment(), busy: window.__reviews.test.busy(), quiet: window.__reviews.quiet(), y: window.__opwin && window.__opwin.yielding(), ae: document.activeElement && document.activeElement.id })"
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": None}, {"story": True, "epoch": 0}]); g0 = ev(R)
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": None}, {"story": True, "epoch": 1}]); s0 = ev(R)
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": True, "at": 1}, {"story": True, "epoch": 1}]); s1 = ev(R)
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": 1}, {"story": True, "epoch": 1}]); s2 = ev(R)
+    pg.evaluate("() => window.__feedback.open('road')"); pg.wait_for_timeout(500); s3 = ev(R); pg.evaluate("() => window.__feedback.close()"); pg.wait_for_timeout(500)
+    pg.evaluate(stub, [{"on": True, "mode": "free", "fp": 1}, {"open": False, "at": 1}, {"story": False, "epoch": 1}]); f0 = ev(R)
+    pg.evaluate("() => window.__reviews.test.shift(21000)"); f1 = ev(R)
+    need(not g0["ready"] and not s0["ready"] and not s1["ready"] and s2["ready"] and not s3["ready"] and f0["m"]["mode"] == "story-play" and not f0["ready"] and f1["ready"],
+         f"storyline timing: genesis {g0} · before the end card {s0} · card open {s1} · after it {s2} · roadmap open {s3} · 🛝 at 0 s {f0} · at 21 s {f1}")
+    pg.evaluate(stub, [None, None, {"story": False, "epoch": 0}]); p0 = ev(R)
+    ev("() => window.__reviews.test.onScreen(200)"); p1 = ev(R)
+    ev("() => window.__reviews.test.onScreen(100)"); ev("() => window.__reviews.test.touch()"); p2 = ev(R)
+    ev("() => window.__reviews.test.onScreen(200)"); p3 = ev(R)
+    ev("() => window.__opwin.open()"); pg.wait_for_timeout(500); ev("() => document.getElementById('lab-text').focus()"); p4 = ev(R); ev("() => { document.activeElement && document.activeElement.blur(); window.__opwin.close(); }"); pg.wait_for_timeout(400)
+    pg.evaluate("() => window.__feedback.open('tell')"); pg.wait_for_timeout(500); p5 = ev(R); pg.evaluate("() => window.__feedback.close()"); pg.wait_for_timeout(500)
+    need(not p0["ready"] and not p1["ready"] and not p2["ready"] and p3["ready"] and p0["m"]["mode"] == "play" and not p5["ready"], f"playground timing: {p0} · 200 s, no touch {p1} · touch, 100 s {p2} · both {p3} · typing {p4} · 🧪 open {p5}")
+    need(not p4["ready"] and p4["ae"] == "lab-text", f"typing in the Operator: {p4}")
+    # and it really comes: auto on, the moment ready → Nico's message relayed once
+    ev("() => window.__reviews.test.auto(true)"); wait_for(pg, "() => !!document.querySelector('.rvletter')", 15, P=P)
+    pg.close(); P.clean()
+    return "storyline: not in Genesis, not before or during the end card, not with the roadmap open, after the card ✓; 🛝 after 20 s ✓; playground: 3 min + an interaction ✓, not while typing or with 🧪 open; the message then comes"
+
+
 def t_reviews_phone(P):
     """⭐ reviews at 375 px: the card is ≥ 70% of the lightbox and fills the width, no sideways scroll, ✕ ✓ ★ on screen."""
     pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()"); pg.wait_for_timeout(200)
@@ -2852,17 +2907,19 @@ def t_prod_gates(P, root):
         pg = P.open(f"/arena.html?arm={a}"); booted(pg); pg.wait_for_timeout(2500)
         ab = pg.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), intro: !!document.querySelector('#idleIntro'), ch: !!document.querySelector('#genChoose'), w: window.__genesis.playWelcome() })")
         need(ab == {"v": None, "gv": None, "intro": False, "ch": False, "w": False}, f"?arm={a} on production: {ab}"); pg.close()
-    # ⭐ reviews (idle-reviews.js) are off on id-le.com: ?review= opens nothing, 🧪 has no ⭐ tab
-    pg = P.open("/arena.html?review=logos"); booted(pg); pg.wait_for_timeout(3000)
-    rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: window.__reviews, box: !!document.querySelector('#review'), tab: t }; }")
-    need(rv["api"] is None and not rv["box"] and not rv["tab"], f"reviews on production: {rv}"); pg.close()
+    # ⭐ reviews and the Humans in the Loop are ON on id-le.com since Nov 4 (Nico's go): ?review=logos relays Nico's message at once, the 🌱
+    # and 🧪's ⭐ tab are there; the Founder gift stays off (FOUNDER_ON = false)
+    pg = P.open("/arena.html?review=logos"); booted(pg)
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => !!document.querySelector('.rvletter')", 30, P=P)
+    rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: !!window.__reviews, letter: !!document.querySelector('.rvletter'), hitl: !!document.getElementById('hitlBtn'), tab: t, founder: window.__founder.off === true && !window.__founder.available() }; }")
+    need(rv["api"] and rv["letter"] and rv["hitl"] and rv["tab"] and rv["founder"], f"reviews on production: {rv}"); pg.close()
     # keyframes (idle-keys.js) do nothing on id-le.com: no gate, no sandbox, no strip
     pg = P.open("/arena.html?at=end#keys"); booted(pg)
     k = pg.evaluate("() => ({ key: window.__storyKey || null, keys: !!window.__keys, gate: !!document.querySelector('#keyGate'), strip: !!document.querySelector('#keyStrip'), real: Object.getOwnPropertyDescriptor(window, 'localStorage') ? 'own' : 'proto' })")
     need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
-    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)/reviews"
+    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal); reviews on (the link relays Nico's message, 🌱, ⭐ tab)"
 
 
 def t_presence(P):
@@ -3494,7 +3551,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3523,6 +3580,7 @@ def main():
                 run("haunted music", t_haunted)
                 run("stats", t_stats)
                 run("stats v2", t_stats_v2)
+                run("stats once", t_stats_once)
                 run("stats seen", t_stats_seen)
                 run("stats return", t_stats_return)
                 run("op stats", t_op_stats)
@@ -3576,6 +3634,7 @@ def main():
                 run("reviews", t_reviews, viewport={"width": 1280, "height": 800})
                 run("reviews cliff", t_reviews_cliff)
                 run("reviews tab", t_reviews_tab)
+                run("reviews timing", t_reviews_timing)
                 run("reviews cutscene", t_reviews_cutscene)
                 run("reviews cutscene phone", t_reviews_cutscene, True, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("reviews link", t_reviews_link)
