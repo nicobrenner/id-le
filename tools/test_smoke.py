@@ -2749,7 +2749,7 @@ def t_founder_phone(P):
 def t_title_card(P):
     """The story's first frame (release): ø Id|le OS, "press any key to start"; the film waits there; a key starts the desktop scene (and the
     sound); the funnel marks title → messages, and where it was skipped."""
-    pg = P.open("/arena.html?story&test")
+    pg = P.open("/arena.html?story&test&noauto")
     wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
     pg.wait_for_timeout(1200)
     w = pg.evaluate("() => ({ t: window.__epoch0.time(), waiting: window.__epoch0.waiting(), scene: window.__epoch0.scene(), f: window.__funnel.reached(), skip: !!document.querySelector('#idleIntro .skip') })")
@@ -2764,11 +2764,60 @@ def t_title_card(P):
     return f"waits at the title ({w['t']:.2f} s), a key starts the messages, Esc marks skip:messages"
 
 
+def t_title_auto(P):
+    """The title card starts itself (Nov 4, HN: 19 of 26 story starts never pressed a key): with no key or tap for 2 s the intro starts muted
+    (the audio stays suspended: no gesture yet), shows "🔊 tap for sound", keeps moving to the dark on its own clock with the logo drawn; a tap
+    then turns the sound on and hides the chip; a key during the title card still starts it with sound; the story arm does the same"""
+    SUSP = "() => { try { const c = window.__audio && window.__audio.ctx(); if (c && c.state === 'running') c.suspend(); return true; } catch (e) { return false; } }"
+    # 1. no input at all: auto-start, muted, chip, and on to the dark without sound (headless allows autoplay, so the test suspends the audio first)
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+    pg.evaluate(SUSP); t0 = time.time()
+    wait_for(pg, "() => !window.__epoch0.waiting()", 6, P=P); t_auto = time.time() - t0
+    need(t_auto <= 2.6, f"the title card should start itself within ~2 s, took {t_auto:.1f} s")
+    a = pg.evaluate("""() => { const b = document.querySelector('#idleIntro .snd'), r = b && b.getBoundingClientRect();
+      return { auto: window.__epoch0.autoMuted(), chip: !!b && getComputedStyle(b).display !== 'none' && b.classList.contains('tap') && /tap for sound/.test(b.textContent), w: r ? r.width : 0,
+        state: window.__audio.ctx().state, f: window.__funnel.reached(), sounding: window.__epoch0.sounding() }; }""")
+    need(a["auto"] and a["chip"] and a["state"] != "running" and not a["sounding"] and "title_auto" in a["f"], f"auto-start should be muted with the chip shown: {a}")
+    t1 = pg.evaluate("() => window.__epoch0.time()"); s1 = pg.screenshot(); pg.wait_for_timeout(1500)
+    t2 = pg.evaluate("() => window.__epoch0.time()"); s2 = pg.screenshot()
+    need(t2 - t1 > 1.0 and s1 != s2, f"the film should keep moving while muted: {t1:.2f} → {t2:.2f}, frames differ {s1 != s2}")
+    wait_for(pg, "() => window.__funnel.reached().includes('landing') || (window.__genesis && window.__genesis.landing && window.__genesis.landing().phase === 'dark')", 120, P=P)
+    b = pg.evaluate("() => ({ state: window.__audio.ctx().state, f: window.__funnel.reached(), logo: window.__epoch0.last && window.__epoch0.last.logo ? { arm: window.__epoch0.last.logo.arm, shown: !!window.__epoch0.last.logo.shown, broken: !!window.__epoch0.last.logo.broken } : null })")
+    # (headless Chromium lets later code resume the audio without a gesture, which a real browser refuses; so this checks only that nothing counted as a tap)
+    need("sound_on" not in b["f"], f"no tap happened, so no sound_on: {b}")
+    need(not b["logo"] or (b["logo"]["shown"] and not b["logo"]["broken"] and ("lg_shown:" + b["logo"]["arm"]) in b["f"]), f"the logo should draw while muted: {b}")
+    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    # 2. auto-start, then a tap anywhere turns the sound on and hides the chip
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+    pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted()", 6, P=P)
+    pg.mouse.click(200, 200)
+    wait_for(pg, "() => window.__audio.ctx().state === 'running' && window.__epoch0.sounding() && !window.__epoch0.autoMuted()", 10, P=P)
+    c = pg.evaluate("() => { const b = document.querySelector('#idleIntro .snd'); return { chipTap: !!b && b.classList.contains('tap'), shown: !!b && getComputedStyle(b).display !== 'none', f: window.__funnel.reached(), paused: window.__epoch0.paused() }; }")
+    need(not c["chipTap"] and not c["shown"] and "sound_on" in c["f"] and not c["paused"], f"a tap should turn the sound on and hide the chip (not pause): {c}")
+    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    # 3. a key during the title card: starts at once, with sound, no chip
+    pg = P.open("/arena.html?story&test")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+    pg.keyboard.press("Enter")
+    wait_for(pg, "() => !window.__epoch0.waiting() && window.__epoch0.sounding()", 10, P=P)
+    d = pg.evaluate("() => ({ auto: window.__epoch0.autoMuted(), f: window.__funnel.reached() })")
+    need(not d["auto"] and "title_auto" not in d["f"], f"a key should start it with sound, not as an auto-start: {d}")
+    pg.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"); pg.close(); P.clean()
+    # 4. the story arm (a new browser) does the same
+    pg = P.open("/arena.html?arm=story")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
+    pg.evaluate(SUSP); wait_for(pg, "() => window.__epoch0.autoMuted() && !window.__epoch0.waiting()", 6, P=P)
+    P.clean()
+    return f"auto-start in {t_auto:.1f} s, muted with the chip; moved {t2 - t1:.1f} s in 1.5 s; reached the dark silent (logo {b['logo']['arm'] if b['logo'] else '-'}); tap → sound; key → sound; story arm auto-starts"
+
+
 def t_ios_sound(P, ios=True):
     """iPhones (Nov 3: the silent switch muted everything for Nico): the page asks iOS to treat its sound as media (audioSession 'playback',
     or a silent looping <audio> on older iOS), a hint under "tap to start", and a one-time toast in the playground; desktop gets none of it"""
     if not ios:
-        pg = P.open("/arena.html?story&test")
+        pg = P.open("/arena.html?story&test&noauto")
         wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
         pg.wait_for_timeout(800)
         d = pg.evaluate("() => ({ ios: window.__isIOS(), hint: window.__iosHint(), shown: window.__titleHint || null })")
@@ -2776,7 +2825,7 @@ def t_ios_sound(P, ios=True):
         return "desktop: no hint, no media session"
     # 1) the title card's hint, and audioSession set to playback on the first tap (the API stubbed: WebKit builds differ)
     P.ctx.add_init_script("try { Object.defineProperty(navigator, 'audioSession', { value: { type: 'auto' }, configurable: true }); } catch (e) {}")
-    pg = P.open("/arena.html?story&test")
+    pg = P.open("/arena.html?story&test&noauto")
     wait_for(pg, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40, P=P)
     wait_for(pg, "() => !!window.__titleHint", 10, P=P)
     h = pg.evaluate("() => window.__titleHint")
@@ -3110,7 +3159,7 @@ def t_story_first_paint(P, root, phone=False):
         try:
             q = ctx.new_page(); cdp = ctx.new_cdp_session(q)
             out_.append(check(*film(q, cdp, lambda: q.goto(P.base + path, wait_until="commit")), what))
-            wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title !== undefined", 40)
             need(not q.evaluate("() => document.documentElement.classList.contains('story-boot')"), f"{what}: the first-paint black must lift once the story is up")
             # the service worker's first-visit reload comes moments after the first load: the same address again, nothing kept from the story yet
             q.goto(P.base + "/about:blank".replace("/about:blank", "/privacy.html"), wait_until="commit"); q.evaluate("() => { for (const k of Object.keys(localStorage)) if (!/^idle\\.gv/.test(k)) localStorage.removeItem(k); }")
@@ -3926,7 +3975,7 @@ def browser_tests(a, out):
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
-        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}),
+        ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}),
         ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
@@ -3954,7 +4003,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
+LAUNCH = {"title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
