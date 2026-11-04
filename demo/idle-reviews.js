@@ -14,10 +14,10 @@
 //   many rated each, and its like-rate). After 6, "keep going / done"; then "which one?" between your two favourites. Swipes are scores
 //   (✕ 1, ✓ 3, ★ 5) and picks are pairs, sent in small batches. A review has a stage: 'team' (members only) or 'public' (everyone, the
 //   team's top N, made with tools/review.py promote).
-// - Off on id-le.com until Nico's go (ON_PROD); on staging and local copies it is on.
+// - On id-le.com since Nov 4 (Nico: "you decide when to show it to users on each mode at the appropriate time, would love to have feedback by morning").
 (() => {
   const H = location.hostname, TEST = /^staging\./.test(H) || H === 'localhost' || H === '127.0.0.1';
-  const ON_PROD = false;   // id-le.com: switch on with Nico's go
+  const ON_PROD = true;    // id-le.com: on since Nov 4 (Nico's go); the Founder gift stays off (idle-founder.js FOUNDER_ON)
   if (!(TEST || ON_PROD)) { window.__reviews = null; return; }
   const $ = s => document.querySelector(s), esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const mark = k => { try { window.__funnel && window.__funnel.mark(k); } catch (e) {} };
@@ -74,7 +74,7 @@
       judged: (n, of) => `${n} of ${of} judged`, start: 'start ›', resume: 'resume ›', again: 'see it ›', picks: 'your ★' },
   };
 
-  const INVITE_AFTER = 120e3, ASK_AGAIN_AFTER = 24 * 3600e3;
+  const PLAY_AFTER = 180, FREE_AFTER = 20e3, ASK_AGAIN_AFTER = 24 * 3600e3;   // the playground: 3 min on screen; the storyline's 🛝: 20 s in
 
   // ---------- the browser key (idle.bkey): random, made here, sent only with reviews and the team join; the server keeps a hash ----------
   const BKEY = 'idle.bkey', B32 = 'abcdefghijklmnopqrstuvwxyz234567';
@@ -390,7 +390,26 @@
   async function arrive(rid) { const cfg = await getCfg(rid); if (!cfg) return; const rv = { rid, title: cfg.title, n: cfg.items.length, stage: cfg.stage, team: cfg.team };
     if (cfg.stage === 'team' && !team()) return invite(rid, 'link', rv); return nudge(rv, 'link'); }
   if (want) { const w0 = Date.now(); const tick = () => { if (busy() && Date.now() - w0 < 90e3) return setTimeout(tick, 400); arrive(String(want).toLowerCase()); }; setTimeout(tick, 300); auto = false; }
-  async function maybeInvite() { if (!auto || busy() || Date.now() - t0 < INVITE_AFTER) return; const I = inv();
+  // ---------- when the invitation comes by itself (Nico: "you decide when to show it to users on each mode at the appropriate time"), once
+  // per browser, never during the intro, Genesis, a modal, a cut-scene or an open panel, never while typing:
+  //  - the storyline: once the player has left the end of what's built (closed its card, or the 🗺 roadmap it opened), or 20 s into the
+  //    playground they chose from it (🛝); never before Epoch 0 is complete (the card only comes after it)
+  //  - the playground, and a returning player's plain world: after 3 minutes on screen and at least one interaction (a click in the world
+  //    or on a top-bar button), at a quiet moment
+  //  - a link (?review=…): at once, as above
+  let onScreen = 0, touched = false, freeSeen = 0;
+  setInterval(() => { if (document.visibilityState === 'visible' && window.__restoredOrFresh) onScreen += 5; }, 5000);
+  addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#arena,#topbar,#creatures,.card,#whisper')) touched = true; }, true);
+  function quiet() { const ae = document.activeElement; if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.offsetParent !== null) return false;
+    try { if (window.__opwin && (window.__opwin.yielding() || (window.__opwin.cutting && window.__opwin.cutting()))) return false; } catch (e) {}
+    const shown = el => { const st = getComputedStyle(el), r = el.getBoundingClientRect(); return st.display !== 'none' && st.visibility !== 'hidden' && +st.opacity > 0 && r.width > 0 && r.height > 0; };
+    return ![...document.querySelectorAll('#genDay.end, #oracle.on, #hitl.on, #review.on, #genConfirm, #genChoose, #genFront, #oracleBox:not([hidden]), #almanac.on, #drawerView, #founderLetter, #founderLab')].some(shown); }
+  function moment() { const g = window.__genesis; let st = null, e = null; try { st = g && g.state && g.state(); e = g && g.end && g.end(); } catch (er) {}
+    if (st && st.on && st.mode === 'story') return { mode: 'story', ok: !!(e && e.at && !e.open) };   // after the end card, not before
+    if (st && st.on && st.fp) { if (!freeSeen) freeSeen = now(); return { mode: 'story-play', ok: now() - freeSeen >= FREE_AFTER }; }   // the end card's 🛝
+    return { mode: 'play', ok: onScreen >= PLAY_AFTER && touched }; }
+  const ready = () => !busy() && quiet() && moment().ok;
+  async function maybeInvite() { if (!auto || !ready()) return; const I = inv();
     if (!team()) {
       if (I.answer === 'yes') return;
       if (I.asks >= 1 && now() - (I.last || 0) < ASK_AGAIN_AFTER) return;   // "not now" (or no answer): once more, a day later at the soonest
@@ -406,5 +425,5 @@
       rated: { ...((cur.mine && cur.mine.rated) || {}) }, pairs: ((cur.mine && cur.mine.pairs) || []).slice(), pair: cur.pair || null, playing: !!(cur.live && cur.live.playing && cur.live.playing()) },
     sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), tab: { open: () => toggleTab(true), close: () => toggleTab(false), isOpen: () => tabOpen }, highlight, arrive, nudge, hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },
     badge: () => { const s = teamStatus(), rids = Object.keys(sentAll()).filter(k => sentAll()[k].done); return s || rids.length ? { rids, status: s } : null; }, plugins: () => Object.keys(PLUGINS),
-    text: TEXT, test: { fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) t0 = Date.now() - since; }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl, knows } };
+    moment, quiet, text: TEXT, test: { ready, busy: () => busy(), touch: () => { touched = true; }, onScreen: v => { if (v != null) onScreen = v; return onScreen; }, fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) { onScreen = Math.max(onScreen, since / 1000); touched = true; } }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl, knows } };
 })();

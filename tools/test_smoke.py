@@ -2496,6 +2496,37 @@ def t_reviews_cutscene(P, phone=False):
     return f"{'phone' if phone else 'desktop'}: the Operator shrinks off the {tid} (no overlap) while the ring plays, comes back open; glow kept across a reload, cleared by a click, and by its time limit"
 
 
+def t_reviews_timing(P):
+    """When the invitation comes by itself (fake clock, stubbed storyline state): the storyline only after the end card (not while it's
+    open, not before), or 20 s into its 🛝 playground; the playground after 3 minutes on screen and an interaction, at a quiet moment
+    (not with a panel open, not while typing); never during Genesis."""
+    pg = _rv_page(P); pg.evaluate("() => { localStorage.removeItem('idle.invite'); localStorage.removeItem('idle.team'); }")
+    ev = lambda js: pg.evaluate(js)
+    stub = "([st, end, un]) => { window.__genesis.state = () => st; window.__genesis.end = () => end; window.__genesis.unlocks = () => un; }"
+    R = "() => ({ ready: window.__reviews.test.ready(), m: window.__reviews.moment(), busy: window.__reviews.test.busy(), quiet: window.__reviews.quiet(), y: window.__opwin && window.__opwin.yielding(), ae: document.activeElement && document.activeElement.id })"
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": None}, {"story": True, "epoch": 0}]); g0 = ev(R)
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": None}, {"story": True, "epoch": 1}]); s0 = ev(R)
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": True, "at": 1}, {"story": True, "epoch": 1}]); s1 = ev(R)
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": 1}, {"story": True, "epoch": 1}]); s2 = ev(R)
+    pg.evaluate("() => window.__feedback.open('road')"); pg.wait_for_timeout(500); s3 = ev(R); pg.evaluate("() => window.__feedback.close()"); pg.wait_for_timeout(500)
+    pg.evaluate(stub, [{"on": True, "mode": "free", "fp": 1}, {"open": False, "at": 1}, {"story": False, "epoch": 1}]); f0 = ev(R)
+    pg.evaluate("() => window.__reviews.test.shift(21000)"); f1 = ev(R)
+    need(not g0["ready"] and not s0["ready"] and not s1["ready"] and s2["ready"] and not s3["ready"] and f0["m"]["mode"] == "story-play" and not f0["ready"] and f1["ready"],
+         f"storyline timing: genesis {g0} · before the end card {s0} · card open {s1} · after it {s2} · roadmap open {s3} · 🛝 at 0 s {f0} · at 21 s {f1}")
+    pg.evaluate(stub, [None, None, {"story": False, "epoch": 0}]); p0 = ev(R)
+    ev("() => window.__reviews.test.onScreen(200)"); p1 = ev(R)
+    ev("() => window.__reviews.test.onScreen(100)"); ev("() => window.__reviews.test.touch()"); p2 = ev(R)
+    ev("() => window.__reviews.test.onScreen(200)"); p3 = ev(R)
+    ev("() => window.__opwin.open()"); pg.wait_for_timeout(500); ev("() => document.getElementById('lab-text').focus()"); p4 = ev(R); ev("() => { document.activeElement && document.activeElement.blur(); window.__opwin.close(); }"); pg.wait_for_timeout(400)
+    pg.evaluate("() => window.__feedback.open('tell')"); pg.wait_for_timeout(500); p5 = ev(R); pg.evaluate("() => window.__feedback.close()"); pg.wait_for_timeout(500)
+    need(not p0["ready"] and not p1["ready"] and not p2["ready"] and p3["ready"] and p0["m"]["mode"] == "play" and not p5["ready"], f"playground timing: {p0} · 200 s, no touch {p1} · touch, 100 s {p2} · both {p3} · typing {p4} · 🧪 open {p5}")
+    need(not p4["ready"] and p4["ae"] == "lab-text", f"typing in the Operator: {p4}")
+    # and it really comes: auto on, the moment ready → Nico's message relayed once
+    ev("() => window.__reviews.test.auto(true)"); wait_for(pg, "() => !!document.querySelector('.rvletter')", 15, P=P)
+    pg.close(); P.clean()
+    return "storyline: not in Genesis, not before or during the end card, not with the roadmap open, after the card ✓; 🛝 after 20 s ✓; playground: 3 min + an interaction ✓, not while typing or with 🧪 open; the message then comes"
+
+
 def t_reviews_phone(P):
     """⭐ reviews at 375 px: the card is ≥ 70% of the lightbox and fills the width, no sideways scroll, ✕ ✓ ★ on screen."""
     pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()"); pg.wait_for_timeout(200)
@@ -2874,17 +2905,19 @@ def t_prod_gates(P, root):
         pg = P.open(f"/arena.html?arm={a}"); booted(pg); pg.wait_for_timeout(2500)
         ab = pg.evaluate("() => ({ v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), intro: !!document.querySelector('#idleIntro'), ch: !!document.querySelector('#genChoose'), w: window.__genesis.playWelcome() })")
         need(ab == {"v": None, "gv": None, "intro": False, "ch": False, "w": False}, f"?arm={a} on production: {ab}"); pg.close()
-    # ⭐ reviews (idle-reviews.js) are off on id-le.com: ?review= opens nothing, 🧪 has no ⭐ tab
-    pg = P.open("/arena.html?review=logos"); booted(pg); pg.wait_for_timeout(3000)
-    rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: window.__reviews, box: !!document.querySelector('#review'), tab: t }; }")
-    need(rv["api"] is None and not rv["box"] and not rv["tab"], f"reviews on production: {rv}"); pg.close()
+    # ⭐ reviews and the Humans in the Loop are ON on id-le.com since Nov 4 (Nico's go): ?review=logos relays Nico's message at once, the 🌱
+    # and 🧪's ⭐ tab are there; the Founder gift stays off (FOUNDER_ON = false)
+    pg = P.open("/arena.html?review=logos"); booted(pg)
+    with contextlib.suppress(AssertionError): wait_for(pg, "() => !!document.querySelector('.rvletter')", 30, P=P)
+    rv = pg.evaluate("() => { window.__feedback.open('road'); const t = !!document.querySelector('#oracle [data-tab=rev]'); window.__feedback.close(); return { api: !!window.__reviews, letter: !!document.querySelector('.rvletter'), hitl: !!document.getElementById('hitlBtn'), tab: t, founder: window.__founder.off === true && !window.__founder.available() }; }")
+    need(rv["api"] and rv["letter"] and rv["hitl"] and rv["tab"] and rv["founder"], f"reviews on production: {rv}"); pg.close()
     # keyframes (idle-keys.js) do nothing on id-le.com: no gate, no sandbox, no strip
     pg = P.open("/arena.html?at=end#keys"); booted(pg)
     k = pg.evaluate("() => ({ key: window.__storyKey || null, keys: !!window.__keys, gate: !!document.querySelector('#keyGate'), strip: !!document.querySelector('#keyStrip'), real: Object.getOwnPropertyDescriptor(window, 'localStorage') ? 'own' : 'proto' })")
     need(not k["key"] and not k["keys"] and not k["gate"] and not k["strip"], f"keyframes on production: {k}"); pg.close()
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
-    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal)/reviews"
+    return f"id-le.com: UI in {r['ui']}, 🧪 sent + voted, no intro/offer/story rows/storyline choice/Founder (link or personal); reviews on (the link relays Nico's message, 🌱, ⭐ tab)"
 
 
 def t_presence(P):
@@ -3452,7 +3485,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3531,6 +3564,7 @@ def main():
                 run("reviews", t_reviews, viewport={"width": 1280, "height": 800})
                 run("reviews cliff", t_reviews_cliff)
                 run("reviews tab", t_reviews_tab)
+                run("reviews timing", t_reviews_timing)
                 run("reviews cutscene", t_reviews_cutscene)
                 run("reviews cutscene phone", t_reviews_cutscene, True, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("reviews link", t_reviews_link)
