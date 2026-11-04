@@ -108,7 +108,7 @@ th{background:var(--box);font-weight:600}
 <p>The data lab only runs when you open it. Turning off the public helper in <b>⚙ settings</b> also turns this off.</p>
 
 <h2 id="presence">Who's playing right now (the live view)</h2>
-<p>So the maker can see, live, how many people are playing and where they are in the game, an open game tab says "I'm here" to <code>id-le.com/lab/here</code> about every 20 seconds while it is on screen, and "bye" when it is closed or hidden. It follows the same ⚙ switch as the anonymous stats, and it sends nothing if your browser sends <b>Global Privacy Control</b> or <b>Do Not Track</b>. Each "I'm here" carries only:</p>
+<p>So the maker can see, live, how many people are playing and where they are in the game, an open tab of the game, the Id|le-pedia or this page says "I'm here" to <code>id-le.com/lab/here</code> about every 20 seconds while it is on screen, and "bye" when it is closed or hidden. It follows the same ⚙ switch as the anonymous stats, and it sends nothing if your browser sends <b>Global Privacy Control</b> or <b>Do Not Track</b>. Each "I'm here" carries only:</p>
 <ul>
 <li>a random number made when the page loaded, kept only in that tab's memory (never stored; a reload makes a new one), so two tabs count as two players</li>
 <li>phone, tablet or desktop</li>
@@ -117,6 +117,9 @@ th{background:var(--box);font-weight:600}
 <li>how many creatures your world has, as a range (0–12, 13–30, 31–60, 61–150, more)</li>
 <li>how many seconds ago the page was opened</li>
 <li>whether this browser had been here before (a yes/no, not an identifier)</li>
+<li>which page: the game, the Id|le-pedia or this privacy page</li>
+<li>where the visit came from: the name of the site the link that brought you was on (its hostname only, lowercased, without "www.", at most 60 characters), never the full address, its path or its query; "direct" when there was no link or it came from our own pages</li>
+<li>the link's campaign tag, if it had one (<code>utm_source</code> or <code>ref</code>, letters, digits and dashes only, at most 24 characters)</li>
 </ul>
 <p>The server adds the country Cloudflare guesses from your address; the address itself is not kept. All of it is held <b>in memory only, for about a minute</b> after the last "I'm here", then dropped. It is never written to storage, never added to the daily totals and never linked to anything else. Only the maker can see the live view, with a private key. Never sent: words, messages, names, anything from your world, AI keys.</p>
 
@@ -149,5 +152,6 @@ th{background:var(--box);font-weight:600}
 <p>Write to <a href="mailto:privacy@id-le.com">privacy@id-le.com</a>, or open an issue on <a href="https://github.com/nicobrenner/id-le/issues">the project's repository</a>. Id|le is open source, so everything this page describes can be checked in <a href="https://github.com/nicobrenner/id-le">its code</a>.</p>
 <p class="lede">Last updated 2026-10-30.</p>
 </main>
+<script src="idle-ref.js"></script><script src="idle-presence.js"></script>
 </body>
 </html>

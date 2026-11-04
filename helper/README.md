@@ -52,5 +52,5 @@ Open game tabs beat `POST /lab/here` (demo/idle-presence.js); `GET /lab/live` re
    secrets → Preview; or the Pages API). Use a long random value and keep the only other copy on your own machine.
 
 Without the binding the table lives in each isolate's memory: fine locally (`node helper/dev_server.mjs` with `LIVE_KEY=…`), incomplete on
-Cloudflare. Beats are accepted only where `IDLE_ENV=staging` or `PRESENCE_ON=1` (or with no STATS namespace, i.e. locally); the page itself
-doesn't beat on id-le.com until `PRESENCE_ON_PROD` in demo/idle-presence.js is switched on.
+Cloudflare. Beats are accepted unless `PRESENCE_ON=0` (a kill switch on the Pages environment, no deploy needed). On id-le.com since
+11-03 (`PRESENCE_ON_PROD = true` in demo/idle-presence.js).
