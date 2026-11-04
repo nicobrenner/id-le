@@ -34,6 +34,16 @@ HEADERS = """/*
   Cache-Control: public, max-age=604800
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
+/version.json
+  Cache-Control: no-store
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/arena
+  Cache-Control: no-cache
+/arena.html
+  Cache-Control: no-cache
 """
 
 
@@ -72,6 +82,7 @@ def stamp_versions(out):
     for f in os.listdir(out):
         if f.endswith(".js") and not f.startswith("_"):
             ver[f] = hashlib.sha256(open(os.path.join(out, f), "rb").read()).hexdigest()[:8]
+    rev = hashlib.sha256((json.dumps(ver, sort_keys=True) + "".join(open(os.path.join(out, f), encoding="utf-8").read() for f in sorted(os.listdir(out)) if f.endswith(".html"))).encode("utf-8")).hexdigest()[:10]
     pat = re.compile(r"""(["'])((?:\./)?(%s))\1""" % "|".join(re.escape(f) for f in sorted(ver, key=len, reverse=True)))
     for f in os.listdir(out):
         if not f.endswith(".html"): continue
@@ -83,8 +94,11 @@ def stamp_versions(out):
         tag = '<script src="idle-runtime.js?v='
         if tag in html and "window.IDLE_V" not in html:
             iv = json.dumps({k: v for k, v in sorted(ver.items()) if k.startswith("idle-")}, separators=(",", ":"))
-            html = html.replace(tag, f"<script>window.IDLE_V = {iv};</script>" + tag, 1)
+            html = html.replace(tag, f"<script>window.IDLE_V = {iv};window.IDLE_REV = {json.dumps(rev)};</script>" + tag, 1)
         open(path, "w", encoding="utf-8").write(html)
+    # the build's revision (v15, Nico's iPhone kept a tab from an older build open for hours): one id for the whole deploy, served as
+    # version.json (never cached); idle-runtime.js compares it with the page's own IDLE_REV when the page comes back and offers the new one
+    open(os.path.join(out, "version.json"), "w").write(json.dumps({"rev": rev}))
 
 def main():
     ap = argparse.ArgumentParser()

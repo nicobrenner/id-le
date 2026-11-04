@@ -27,7 +27,12 @@
 #opTray .opc.big{font-size:15px;padding:9px 18px}
 @keyframes opGlow{0%,100%{box-shadow:0 0 0 0 #9fb0ff00}50%{box-shadow:0 0 14px 2px #9fb0ffaa}}
 @media (prefers-reduced-motion:reduce){#opTray .opc.glow{animation:none;box-shadow:0 0 10px 1px #9fb0ff88}}
-@media (max-width:500px){#opTray .opc{min-height:40px;font-size:14px}}`;
+@media (max-width:500px){#opTray .opc{min-height:40px;font-size:14px}}
+#lab-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}#lab-form>#lab-text{flex:1 1 200px;min-width:0;order:1}#lab-form>#lab-send{flex:none;order:2;min-height:40px;padding:0 14px}#lab-form>:not(#lab-text):not(#lab-send){order:3;flex-basis:100%}
+#lab>*{flex:none}#lab>:is(#ai-thread,#lab-thread){flex:1 1 auto;min-height:0;overflow:auto}
+html:not(.gen-box):not(.gen-float) #lab>:is(#genConsole,#ai-set,#ai-smart,#ai-bar,#opTray,#genDay){max-height:34%;overflow:auto}
+html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab #ai-set{display:none!important}
+@media (min-width:501px){html:not(.gen-box):not(.gen-float) #lab{top:var(--op-top,56px);left:var(--op-left,10px);right:auto;bottom:auto;height:min(560px,calc(100dvh - var(--op-top,56px) - 16px))}}`;
   document.head.appendChild(css);
 
   // ---------- 🛠 and the tray
@@ -35,7 +40,7 @@
   const COMMANDS = {};   // (/story lives in idle-slash.js, the slash commands' own table; this is for quick one-offs)
   text.addEventListener('keydown', e => { if (e.key !== 'Enter' || e.shiftKey) return; const m = /^\/([a-z]+)\s*$/i.exec(text.value.trim()); const f = m && COMMANDS[m[1].toLowerCase()]; if (!f) return;
     e.preventDefault(); e.stopImmediatePropagation(); text.value = ''; f(); }, true);
-  const tools = document.createElement('button'); tools.id = 'op-tools'; tools.type = 'button'; tools.title = 'suggestions: things to say to the Operator'; tools.textContent = '🛠';
+  const tools = document.createElement('button'); tools.id = 'op-tools'; tools.type = 'button'; tools.title = 'quick actions: things to say to the Operator'; tools.setAttribute('aria-label', 'quick actions'); tools.textContent = '⚡';   // v15: ⚡ (Nico: "instead of a tools icon, use the ⚡️ icon")
   const close = $('#lab-close'); if (close) head.insertBefore(tools, close); else head.appendChild(tools);
   const tray = document.createElement('div'); tray.id = 'opTray'; tray.hidden = true; tray.setAttribute('role', 'group'); tray.setAttribute('aria-label', 'suggestions');
   form.before(tray);
@@ -48,7 +53,11 @@
   // Genesis has no chips (v14, Nico: "let's drop the predefined button"): its command is pre-typed in the input; the tray stays closed there
   // the playground's way back to the story (v16): '📖 back to the story' first whenever there is story progress (idle-genesis.js __storyBack)
   const backChip = () => { try { return window.__storyBack ? window.__storyBack() : null; } catch (e) { return null; } };
-  function templateChips(c) { if (genChip()) return []; if (override) return override.slice(); const b = backChip(); return b ? [b, ...TEMPLATES] : TEMPLATES.slice(); }
+  // the 🔮 chip only in the playground (v15, Nico: "let's just hide it in storyline for now... only on freeplay")
+  const inStory = () => document.documentElement.classList.contains('gen-story');
+  // plus a few slash commands that take nothing (idle-slash.js: IdleSlash.list('operator'), already filtered by the storyline's unlocks): /music, /stats…
+  const slashChips = () => { try { const L = window.IdleSlash && window.IdleSlash.list ? window.IdleSlash.list('operator') : []; return L.filter(x => !x.args && !['help', 'operator', 'oracle'].includes(x.name)).slice(0, 4).map(x => ({ text: '/' + x.name, slash: 1 })); } catch (e) { return []; } };
+  function templateChips(c) { if (genChip()) return []; if (override) return override.slice(); const b = backChip(), T = TEMPLATES.filter(x => !(x.act === 'oracle' && inStory())).concat(slashChips()); return b ? [b, ...T] : T; }
   // the tray is open by default in Genesis (its chip is the step's glowing button), closed elsewhere unless the player opened it
   let userOpen = null; try { userOpen = localStorage.getItem('idle.opTray'); } catch (e) {}
   const trayOpen = () => genChip() ? false : override ? true : userOpen === '1';
@@ -70,15 +79,22 @@
     text.value = x.text; if (coarse()) { const s = $('#lab-send'); if (s) s.click(); } else { text.focus(); try { text.setSelectionRange(text.value.length, text.value.length); } catch (er) {} } });
 
   // ---------- the window: dragged by its header (desktop), its place remembered; never a sidebar
-  const POS = 'idle.opPos'; let pos = null; try { pos = JSON.parse(localStorage.getItem(POS) || 'null'); } catch (e) {}
+  // v15 (Nico: "the operator is also on top of the minimap... should we move the operator to the top, maybe next to the bell?"): the window opens
+  // anchored below the 📟 at the top (--op-top / --op-left, from idle-tohandle.js); dragged, it remembers its top-left (idle.opPos2); it never
+  // covers the minimap: if it would, it gets shorter (or moves left when that would leave too little)
+  const POS = 'idle.opPos2'; let pos = null; try { pos = JSON.parse(localStorage.getItem(POS) || 'null'); } catch (e) {}
   const story = () => document.documentElement.classList.contains('gen-box') || document.documentElement.classList.contains('gen-float');
-  function applyPos() { if (phone() || !pos) { lab.style.right = lab.style.bottom = ''; return; } const r = lab.getBoundingClientRect(), w = r.width || 380, h = r.height || 400;
-    const right = Math.max(8, Math.min(innerWidth - w - 8, pos.r)), bottom = Math.max(8, Math.min(innerHeight - Math.min(h, innerHeight - 16) - 8, pos.b));
-    lab.style.right = right + 'px'; lab.style.bottom = bottom + 'px'; }
+  const cssPx = v => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v)) || 0;
+  function applyPos() { if (phone() || story()) { lab.style.left = lab.style.top = lab.style.height = lab.style.right = lab.style.bottom = ''; return; }
+    const w = lab.offsetWidth || 380, top0 = pos ? pos.t : (cssPx('--op-top') || 56), left0 = pos ? pos.l : (cssPx('--op-left') || 10);
+    let left = Math.max(8, Math.min(innerWidth - w - 8, left0)), top = Math.max(8, Math.min(innerHeight - 220, top0)), h = Math.min(560, innerHeight - top - 16);
+    const mm = $('#minimap'); if (mm && mm.offsetParent) { const m = mm.getBoundingClientRect();
+      if (m.width && left < m.right + 8 && left + w > m.left - 8 && top + h > m.top - 8) { const fit = m.top - 8 - top; if (fit >= 260) h = fit; else left = Math.max(8, m.left - 8 - w); } }
+    lab.style.left = left + 'px'; lab.style.top = top + 'px'; lab.style.right = 'auto'; lab.style.bottom = 'auto'; lab.style.height = Math.max(220, h) + 'px'; }
   let drag = null;
   head.addEventListener('pointerdown', e => { if (phone() || story() || e.button !== 0 || e.target.closest('button,select,input,a')) return; const r = lab.getBoundingClientRect();
-    drag = { x: e.clientX, y: e.clientY, r: innerWidth - r.right, b: innerHeight - r.bottom }; head.classList.add('drag'); try { head.setPointerCapture(e.pointerId); } catch (er) {} e.preventDefault(); });
-  head.addEventListener('pointermove', e => { if (!drag) return; pos = { r: drag.r - (e.clientX - drag.x), b: drag.b - (e.clientY - drag.y) }; applyPos(); });
+    drag = { x: e.clientX, y: e.clientY, l: r.left, t: r.top }; head.classList.add('drag'); try { head.setPointerCapture(e.pointerId); } catch (er) {} e.preventDefault(); });
+  head.addEventListener('pointermove', e => { if (!drag) return; pos = { l: drag.l + (e.clientX - drag.x), t: drag.t + (e.clientY - drag.y) }; applyPos(); });
   const end = () => { if (!drag) return; drag = null; head.classList.remove('drag'); try { localStorage.setItem(POS, JSON.stringify(pos)); } catch (e) {} };
   head.addEventListener('pointerup', end); head.addEventListener('pointercancel', end);
   addEventListener('resize', applyPos); applyPos();
@@ -86,11 +102,11 @@
   { const vv = window.visualViewport; if (vv) { const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h + 'px'); }; vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); kb(); } }
 
   // ---------- stepping aside for lightboxes (never stacked underneath one)
-  const OVER = ['#oracle.on', '#hitl.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genResume', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront'];
+  const OVER = ['#mSheet.on', '#ntfpanel.on', '#oracle.on', '#hitl.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genResume', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront'];
   const shown = el => { if (!el || !el.isConnected) return false; const s = getComputedStyle(el); if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity === 0) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const over = () => OVER.find(s => shown($(s))) || null;
   let yieldTo = null;
-  function tick() { const o = over(); if (o !== yieldTo) { yieldTo = o; document.documentElement.classList.toggle('op-yield', !!o); } render(); }
+  function tick() { const o = over(); if (o !== yieldTo) { yieldTo = o; document.documentElement.classList.toggle('op-yield', !!o); } if (lab.classList.contains('open')) applyPos(); render(); }
   setInterval(tick, 300); addEventListener('load', () => { tick(); render(true); });
   // ---------- pointing at something: a pulsing ring around any element (a toolbar icon…) and an arrow to it, for a few seconds
   { const c2 = document.createElement('style'); c2.textContent = `.opHi{position:fixed;z-index:2147482900;pointer-events:none;border:2px solid #ffcf7a;border-radius:12px;box-shadow:0 0 0 0 #ffcf7a99;animation:opHi 1.1s ease-out infinite}
