@@ -1699,7 +1699,7 @@ def t_story(P):
     pg.click("#genConfirm [data-c=stay]"); wait_for(pg, "() => !document.querySelector('#genConfirm') && !window.__opwin.yielding() && window.__genesis.mode() === 'story'", 5, P=P)
     pg.click("#genConsole [data-gm=start]")
     wait_for(pg, "() => !!document.querySelector('#genDay.end')", 10, P=P)
-    wip = pg.inner_text("#genDay"); need("WORDS" in wip and "work in progress" in wip.lower(), f"start Epoch 1 → Epoch 1's card (for now the end of what's built): {wip!r}")
+    wip = pg.inner_text("#genDay"); need("ATTENTION" in wip and "work in progress" in wip.lower(), f"start Epoch 1 → Epoch 1's card (for now the end of what's built): {wip!r}")
     need(pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "after Genesis the tag reads epoch 1")
     need(all(k in pg.evaluate("() => window.__funnel.reached()") for k in ("landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1")), "the funnel should have every Epoch 0 moment, and start Epoch 1")
     end = pg.evaluate("() => { const s = window.__genesis.state(); return { days: s.days, day: s.day, free: !!s.free, alive: !!s.alive, c: window.__arena.raw().filter(c => !c.lab).length, cos: window.__genesis.cosmos(), box: document.documentElement.classList.contains('gen-box'), fl: document.documentElement.classList.contains('gen-float') } }")
@@ -1821,8 +1821,28 @@ def t_story_keys(P):
     f = pg.evaluate("() => ({ mode: window.__genesis.mode(), un: window.__genesis.unlocks(), story: document.documentElement.classList.contains('gen-story'), day: !!document.querySelector('#genDay'), tag: !!document.querySelector('#genTag'), hushed: window.__audio.hushed(), lab: getComputedStyle(document.querySelector('#labBtn')).display, studio: getComputedStyle(document.querySelector('#studioBtn')).display, fun: window.__funnel.reached(), resume: window.__genesis.canResume(), thread: document.querySelector('#ai-thread').innerText })")
     need(f["mode"] == "free" and not f["un"]["story"] and not f["un"]["hidden"] and not f["story"] and not f["day"] and not f["tag"] and not f["hushed"] and f["lab"] != "none" and f["studio"] != "none", f"free-play should open everything and leave the story: {f}")
     need(all(x in f["fun"] for x in ("end_shown", "end_roadmap", "end_github", "end_free")) and f["resume"] and "welcome to the playground" in f["thread"], f"free-play: funnel moments, ⚙ can resume, the Operator's line: {f}")
-    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); need("Back to the storyline" in pg.evaluate("() => document.body.innerText"), "⚙ should offer the way back to the storyline")
-    pg.evaluate("() => window.__settings.close()"); pg.close()
+    # v16 (Nico: "it's not clear how to go back... like Netflix shows maybe, it should ask: [Restart story mode] [Resume play (Epoch1 - Unamed)]"):
+    # the way back from the playground: the Operator says it, 🛠's first chip, /story, and ⚙ → 📖 Storyline asks resume / restart
+    wait_for(pg, "() => document.querySelector('#ai-thread').textContent.includes('whenever you want the story back')", 5, P=P)
+    ch = pg.evaluate("() => window.__opwin.tray().chips"); pg.evaluate("() => window.__opwin.toggleTray()"); pg.wait_for_timeout(400)
+    ch = pg.evaluate("() => window.__opwin.tray()")
+    need(ch["chips"][:1] == ["📖 back to the story"], f"the playground's 🛠: '📖 back to the story' first: {ch}")
+    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); st_txt = pg.evaluate("() => document.querySelector('#settings').innerText")
+    need("📖 Storyline" in st_txt and "Epoch 1 · unnamed" in st_txt and "Back to the storyline" not in st_txt and "Storyline mode" not in st_txt, f"⚙: one 📖 Storyline row with the story's progress: {st_txt[:400]!r}")
+    snaps = lambda: pg.evaluate("() => JSON.parse(localStorage.getItem('arena.snaps') || '[]').length")
+    s0 = snaps(); pg.click('#settings [data-k="storyline"]'); wait_for(pg, "() => !!document.querySelector('#genResume')", 5, P=P)
+    md = pg.evaluate("() => document.querySelector('#genResume').innerText")
+    need("the storyline" in md and "consciousness 24 · Epoch 1 · unnamed" in md and "▶ resume (Epoch 1 · unnamed)" in md and "↺ restart the story" in md, f"the resume / restart modal: {md!r}")
+    pg.click("#genResume [data-r=resume]"); wait_for(pg, "() => !!document.querySelector('#genDay.end')", 8, P=P)
+    rs = pg.evaluate("() => ({ mode: window.__genesis.mode(), story: document.documentElement.classList.contains('gen-story'), hidden: window.__genesis.unlocks().hidden, fun: window.__funnel.reached(), end: document.querySelector('#genDay.end').innerText })")
+    need(rs["mode"] == "story" and rs["story"] and "data lab" in rs["hidden"] and "st_resume" in rs["fun"] and "ATTENTION" in rs["end"] and snaps() > s0, f"resume: back in the story at its saved point (Epoch 1's card), unlocks back, the world kept as a snapshot: {rs}, snaps {s0} → {snaps()}")
+    # back to the playground, then /story → the modal → restart: a snapshot, then the title card
+    pg.click("#genDay [data-end=free]"); wait_for(pg, "() => !!document.querySelector('#genConfirm')", 5, P=P); pg.click("#genConfirm [data-c=go]"); wait_for(pg, "() => window.__genesis.mode() === 'free'", 5, P=P)
+    s1 = snaps(); pg.evaluate("() => window.__opwin.open()"); pg.wait_for_timeout(400); pg.fill("#lab-text", "/story"); pg.press("#lab-text", "Enter"); wait_for(pg, "() => !!document.querySelector('#genResume')", 5, P=P)
+    n1 = pg.evaluate("() => window.__genesis.state().n")
+    pg.click("#genResume [data-r=restart]"); wait_for(pg, "() => window.__genesis.mode() === 'story' && window.__genesis.state().n > " + str(n1), 30, P=P)   # (a keyframe page skips the intro itself; 'story row' sees the title card)
+    need(snaps() > s1 and "st_restart" in pg.evaluate("() => window.__funnel.reached()"), f"restart: the world kept as a snapshot, then a new story: {s1} → {snaps()}")
+    pg.close()
     # the real localStorage, untouched
     pg = P.open("/privacy.html"); real = pg.evaluate("() => Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]))"); pg.close()
     need(real == {"arena.genomes": "REAL", "idle.genesis": "REAL"}, f"keyframes wrote to the real localStorage: {sorted(real)[:8]}")
@@ -2716,7 +2736,7 @@ def t_prod_gates(P, root):
     need(r["f3"] and "F3" in r["ui"] and r["sci"], f"fonts or 🧪 missing on production: {r}")
     pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300); txt = pg.evaluate("() => document.body.innerText")
     pg.evaluate("() => window.__settings.close()")
-    need("Tell the scientists" in txt and "Storyline mode" not in txt and "Replay the intro" not in txt and "Founder gift" not in txt, "⚙ rows on production: " + ", ".join(k for k in ("Tell the scientists", "Storyline mode", "Replay the intro", "Founder gift") if k in txt))
+    need("Tell the scientists" in txt and "📖 Storyline" not in txt and "Replay the intro" not in txt and "Founder gift" not in txt, "⚙ rows on production: " + ", ".join(k for k in ("Tell the scientists", "📖 Storyline", "Replay the intro", "Founder gift") if k in txt))
     # 🧪: sends (to the stub), the roadmap lists and votes once
     pg.evaluate("() => { window.__idle.cfg.helper = location.origin; document.getElementById('oracleBtn').click(); }"); pg.wait_for_timeout(300)
     pg.evaluate("() => document.querySelector('#oracle [data-kind=idea]').click()"); pg.fill("#oracle textarea", "prod gate check")
@@ -3010,6 +3030,67 @@ def t_story_input_visible(P):
     return "the input on screen at every Genesis step: " + ", ".join(out)
 
 
+
+def t_story_row(P):
+    """v16: ⚙ → 📖 Storyline with no story yet starts it (the title card), no resume question; the playground has no 'back to the story' then."""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    ch = pg.evaluate("() => { window.__opwin.toggleTray(); return new Promise(r => setTimeout(() => r(window.__opwin.tray().chips), 400)); }")
+    need("📖 back to the story" not in ch, f"no story yet: no way back to offer: {ch}")
+    pg.evaluate("() => window.__settings.open()"); pg.wait_for_timeout(300)
+    need("📖 Storyline" in pg.evaluate("() => document.querySelector('#settings').innerText"), "⚙ should have 📖 Storyline")
+    # (Nico, v16: "move these sections to the bottom of the settings (in that order, with Anonymous stats at the bottom of all): Tell the scientists, Oracle, Public helper, Anonymous stats")
+    rows = pg.evaluate("() => [...document.querySelectorAll('#settings .row .t > b')].map(b => b.textContent.trim())")
+    need(rows[-4:] == ["🧪 Tell the scientists", "🔮 Oracle", "Public helper", "Anonymous stats"] and rows.index("📖 Storyline") < len(rows) - 4, f"⚙'s last four rows, in order: {rows}")
+    pg.click('#settings [data-k="storyline"]'); wait_for(pg, "() => !!document.querySelector('#idleIntro') && window.__genesis.mode() === 'story'", 30, P=P)
+    need(not pg.evaluate("() => !!document.querySelector('#genResume')"), "no resume question without a story")
+    pg.close()
+    # v16: / is the one public address: the game page names it canonical, and ?arm=, ?at= and ?review= work on / too
+    ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)
+    try:
+        q = Q.open("/?arm=story&test")
+        try: wait_for(q, "() => !!document.querySelector('#idleIntro') && window.__genesis.variant() === 'story'", 60)
+        except AssertionError: need(False, "/?arm=story: " + str(q.evaluate("() => ({ href: location.href, v: window.__genesis && window.__genesis.variant(), intro: !!document.querySelector('#idleIntro'), mode: window.__genesis && window.__genesis.mode(), gv: localStorage.getItem('idle.gv'), boot: document.documentElement.className })")))
+        need(q.evaluate("() => (document.querySelector('link[rel=canonical]') || {}).href") == "https://id-le.com/", "the game page's canonical address is https://id-le.com/")
+        q.close(); q = Q.open("/?at=dark"); wait_for(q, "() => !!document.querySelector('#keyGate')", 30); q.close()
+    finally:
+        ctx.close()
+    ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)   # a browser with no story: the review link
+    try:
+        q = Q.open("/?review=logos"); wait_for(q, "() => !!document.querySelector('#review.on') || /message from Nico/.test((document.querySelector('#ai-thread') || {}).textContent || '')", 60); q.close()
+    finally:
+        ctx.close()
+    pg = P.open("/pedia.html"); wait_for(pg, "() => document.querySelectorAll('a[href]').length > 20", 30, P=P)
+    lk = pg.evaluate("() => [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href')).filter(h => /arena\\.html/.test(h))")
+    need(not lk, f"the pedia links the game at / (no arena.html links): {lk[:5]}")
+    P.clean()
+    return "no story: ⚙ → 📖 Storyline starts it; no 'back to the story' chip; ⚙'s last four rows in order; / canonical, ?arm= ?at= ?review= on /, the pedia links /"
+
+
+
+def t_story_modal(P):
+    """v16 (Nico: "a notification might show up about a new reel, if I tap that, it seems like it might open the reel, but behind the lightbox
+    of the epoch1... it shouldn't"): the end card is modal: a toast that arrives is held, a tap outside does nothing, × shrinks the card into
+    the 📟 and the held toast shows after; 🗺 the roadmap closes the card before opening."""
+    pg = P.open("/arena.html?at=end"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.keyboard.press("k")
+    wait_for(pg, "() => !!document.querySelector('#genDay.end') && window.__modal.up()", 80, P=P); pg.wait_for_timeout(600)
+    h = pg.evaluate("""() => { const n0 = window.__modal.held(); const r = window.__notify({ kind: 'reel', icon: '🎞', html: 'a new memory reel: TEST-REEL', ttl: 8000 });
+      const b = document.createElement('button'); b.id = 'outsideProbe'; b.textContent = 'probe'; b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483600'; b.onclick = () => { window.__probe = 1; }; document.body.appendChild(b);
+      return { r, held: window.__modal.held() - n0, shown: [...document.querySelectorAll('#ntf .np')].some(e => e.textContent.includes('TEST-REEL') && getComputedStyle(e).visibility !== 'hidden'), bd: !!document.querySelector('#genModalBd') }; }""")
+    need(h["held"] == 1 and not h["shown"] and h["bd"], f"while the end card is up a toast is held and the backdrop is there: {h}")
+    pg.mouse.click(30, pg.viewport_size["height"] - 20); pg.wait_for_timeout(300)
+    need(not pg.evaluate("() => window.__probe") and pg.evaluate("() => !!document.querySelector('#genDay.end')"), "a tap outside the end card does nothing (and the card stays)")
+    pg.click("#genDay.end .x"); wait_for(pg, "() => !document.querySelector('#genDay.end')", 5, P=P)
+    sh = pg.evaluate("() => window.__genesis.landing().shrink"); need(sh and sh["to"] in ("toHandle", "lab-head"), f"the card shrinks into the 📟: {sh}")
+    wait_for(pg, "() => window.__modal.held() === 0 && [...document.querySelectorAll('#ntf .np, #ntf *')].some(e => e.textContent.includes('TEST-REEL'))", 6, P=P)
+    pg.click("#outsideProbe"); need(pg.evaluate("() => window.__probe") == 1, "after the card closes, taps reach the page again")
+    pg.click("#genDay [data-end=open]"); wait_for(pg, "() => !!document.querySelector('#genDay.end')", 5, P=P)
+    pg.evaluate("() => { window.__idle.cfg.helper = location.origin; }"); pg.click("#genDay [data-end=roadmap]")
+    wait_for(pg, "() => !!document.querySelector('#oracle.on')", 8, P=P)
+    need(not pg.evaluate("() => !!document.querySelector('#genDay.end')") and not pg.evaluate("() => window.__modal.up()"), "the roadmap closes the end card before it opens")
+    P.clean()
+    return "end card modal: toast held then shown, tap outside blocked, × shrinks into the 📟, roadmap closes it first"
+
+
 def t_halloween(P):
     pg = P.open("/arena.html?fresh=1&test&halloween"); booted(pg)
     wait_for(pg, "() => !!(window.__halloween && window.__halloween.on() && document.querySelector('#arena.hw'))", 30, P=P)
@@ -3160,7 +3241,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3220,6 +3301,8 @@ def main():
                 run("story keys", t_story_keys)
                 run("story phone steps", t_story_phone_steps, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story input visible", t_story_input_visible)
+                run("story row", t_story_row)
+                run("story modal", t_story_modal)
                 run("operator float", t_operator_float)
                 run("operator float phone", t_operator_float_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("story end phone", t_story_end_phone, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)

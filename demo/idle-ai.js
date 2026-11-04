@@ -150,7 +150,7 @@
   $('#ai-gear').addEventListener('click', () => { set.classList.toggle('on'); renderSet(); });
   brainSel.value = cfg.brain;
   const applyBrain = () => { lab.classList.toggle('ai', cfg.brain !== 'relay');
-    text.placeholder = cfg.brain === 'relay' ? 'tell your coding agent what to change: the creatures, the world, the game itself… (⌘+Enter sends)' : cfg.brain === 'tiny' ? 'ask TO: make it rain, add a Mathematician, start a rave, rename Crawly to … (⌘+Enter sends)' : 'talk to your AI about the world, ask it to do things… (⌘+Enter sends)';
+    text.placeholder = cfg.brain === 'relay' ? 'tell your coding agent what to change: the creatures, the world, the game itself… (⌘+Enter sends)' : cfg.brain === 'tiny' ? 'ask TO: make it rain, add a Mathematician, start a rave, rename Crawly to … (⌘+Enter sends)' : 'talk to your AI about this consciousness, ask it to do things… (⌘+Enter sends)';
     const cap = $('#lab-form small'); if (cap) cap.textContent = cfg.brain === 'relay' ? 'replies from your coding agent appear here' : cfg.brain === 'tiny' ? 'the Tiny Operator runs in this page: weather, new creatures, raves, names, evolving, a look around; creature commands go to IRC' : 'talks to the AI you bring; it can look at the world and use the game\'s own actions';
     renderSet(); };
   brainSel.addEventListener('change', () => { cfg.brain = brainSel.value; cfg.chosen = true; saveCfg(); convo = []; applyBrain(); if (cfg.brain !== 'relay' && !ready()) set.classList.add('on'); });
@@ -158,7 +158,7 @@
   // on a public site (no local server) there is no lab relay: the chat is the player's own AI, and says how to connect one
   (window.__idle ? window.__idle.mode() : Promise.resolve('server')).then(m => { if (m !== 'static') return;
     const o = brainSel.querySelector('option[value=relay]'); if (o) o.remove(); if (cfg.brain === 'relay' || (!ready() && !cfg.chosen)) { cfg.brain = 'tiny'; brainSel.value = 'tiny'; }
-    { const N = window.IDLE_NAMES; const hb = $('#lab-head b'); const P_ = N && N.op; hb.textContent = P_ ? `${P_.icon} ${P_.short}` : '📟 Operator'; hb.title = P_ ? P_.sub : 'the Tiny Operator: the chat that runs the world'; } applyBrain(); if (!thread.childElementCount) add('page', cfg.brain === 'tiny' ? 'The Tiny Operator (TO) is the Oracle sitting in the Operator\'s chair: ask it to change the weather, add a creature, start a rave, rename someone, or just chat. It runs in your browser and knows very little. 🔮 Oracle (🛠 above the box, or /oracle) seats a bigger AI.' : 'The Operator talks to an AI you bring. 🔮 Oracle (🛠 above the box, or /oracle) shows your options.'); });
+    { const N = window.IDLE_NAMES; const hb = $('#lab-head b'); const P_ = N && N.op; hb.textContent = P_ ? `${P_.icon} ${P_.short}` : '📟 Operator'; hb.title = P_ ? P_.sub : 'the Tiny Operator: the chat that runs the consciousness'; } applyBrain(); if (!thread.childElementCount) add('page', cfg.brain === 'tiny' ? 'The Tiny Operator (TO) is the Oracle sitting in the Operator\'s chair: ask it to change the weather, add a creature, start a rave, rename someone, or just chat. It runs in your browser and knows very little. 🔮 Oracle (🛠 above the box, or /oracle) seats a bigger AI.' : 'The Operator talks to an AI you bring. 🔮 Oracle (🛠 above the box, or /oracle) shows your options.'); });
 
   function add(who, msg, cls) { const d = document.createElement('div'); d.className = 'ai-row ' + (cls || who); d.innerHTML = '<b>' + esc(who) + '</b> ' + esc(msg); thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   function chip(t, err) { const d = document.createElement('div'); d.className = 'ai-chip' + (err ? ' err' : ''); d.textContent = t; thread.appendChild(d); thread.scrollTop = 1e9; return d; }
@@ -305,7 +305,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
           rave_on: 'The music is up and they are dancing', rave_off: 'Party over, the floor is quiet again',
           // genesis: the Oracle narrates creation in its own voice (the seed is the first clause, the model goes on)
           words: `In the beginning there were words${res && res.topic && res.topic !== 'Language' ? ' about ' + res.topic.toLowerCase() : ''}`, first_creatures: 'And then something with legs crawled out of the words',
-          light: 'And there was light. The words look different now', music: 'And the world started to hum' }[name] || 'Done');
+          light: 'And there was light. The words look different now', music: 'And the consciousness started to hum' }[name] || 'Done');
       }
     } else if (r.option === 'creature') { const el = chip('💬 to the creatures (IRC): ' + t); el.title = tip; try { await O.chat(t); acted = 'creature'; seed = 'I passed that on to the creatures'; } catch (e) {} }
     let said = await O.reply(t, seed); if (!said || said.length < 3) said = await O.reply(t, seed);   // one retry: the tiny model sometimes stops at once
