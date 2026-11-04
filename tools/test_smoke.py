@@ -139,11 +139,15 @@ await post('/lab/stats', { v: 1, path: 'card>studio>reels>music' });
 await post('/lab/stats', { v: 1, x: { op: { 'out:acted': 3, 'out:unsure': 1, 'opt:light': 2, 'cf:hi': 3, 'fr:rephrase': 1, 'mood:negative': 1, 'mm:negative': 1, 'gd:light': 1, 'gt:light': 2, 'gn:light': 1, 'text:make it rain': 1, 'opt:rm -rf': 1, 'out:acted ': 1, 'fr:caps': -2, 'cf:lo': 1.5 }, did: ['op_miss', 'op_rephrase', 'op_secret'] } });
 // many distinct favorites from many page loads: capped, the rest counted as 'other'
 for (let i = 0; i < 70; i++) await post('/lab/stats', { v: 1, x: { fav: { ['name:Zz' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26))]: 1 } } });
+// our own checks (an internal campaign tag): the page's reports go to 'int', never into the totals (its visit, time and features stay out)
+await post('/lab/stats', { v: 1, visit: 1, dev: 'desktop', ref: 'direct', utm: 'prod-check', dw: '<1', feat: ['music'] });
+await post('/lab/stats', { v: 1, u: 'prod-check', dw: '1-5', dw0: '<1', feat: ['music'] });
 out.bad_format = (await post('/lab/stats', { v: 2 })).status;
 out.too_big = (await go('/lab/stats', { method: 'POST', body: 'x'.repeat(9000) })).status;
 const days = [...env.STATS.m.values()].map(v => JSON.parse(v));
 out.stats = days.reduce((a, d) => { for (const k of ['visits', 'dev', 'ref', 'utm', 'dw', 'fl', 'feat']) a[k] = typeof d[k] === 'number' ? (a[k] || 0) + d[k] : { ...(a[k] || {}), ...d[k] }; return a; }, {});
 out.stat_keys = [...new Set(days.flatMap(d => Object.keys(d)))].sort();
+out.int = days.reduce((a, d) => { const q = d.int || {}; a.r += q.r || 0; a.v += q.v || 0; for (const [k, n] of Object.entries(q.t || {})) a.t[k] = (a.t[k] || 0) + n; return a; }, { r: 0, v: 0, t: {} });
 out.bi = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.bi || {})) a[k] = (a[k] || 0) + n; return a; }, {});
 out.eg = days.reduce((a, d) => { for (const [k, n] of Object.entries(d.eg || {})) a[k] = (a[k] || 0) + n; return a; }, {}); out.secs = days.reduce((a, d) => a + (d.secs || 0), 0);
 out.pd = days.map(d => d.pd).filter(Boolean).reduce((a, q) => ({ visits: a.visits + q.visits, clips: a.clips + q.clips, dw: { ...a.dw, ...q.dw }, sec: { ...a.sec, ...q.sec }, ref: { ...a.ref, ...q.ref } }), { visits: 0, clips: 0, dw: {}, sec: {}, ref: {} }); out.err_all = days.reduce((a, d) => ({ ...a, ...(d.err || {}) }), {});
@@ -338,6 +342,7 @@ def worker_unit():
         shutil.rmtree(tmp, ignore_errors=True)
     s = o["stats"]
     need(s["visits"] == 2, f"visits {s['visits']} != 2")
+    need(o["int"] == {"r": 2, "v": 1, "t": {"prod-check": 2}} and "music" not in s["feat"] and "prod-check" not in s["utm"], f"our own checks must stay apart: int {o['int']}, feat {s['feat']}, utm {s['utm']}")
     need(s["dev"] == {"phone": 1}, f"dev {s['dev']} (a made-up device must not be counted)")
     need(s["ref"] == {"reddit.com": 1, "other": 1}, f"ref {s['ref']} (a full URL must count as 'other')")
     need(s["utm"] == {"r-webgames": 1}, f"utm {s['utm']}")
@@ -996,7 +1001,7 @@ def t_tiny_genesis(P):
     return "; ".join(got) + f"; topic {calls[0][1]!r}; fallback light -> clear"
 
 
-ALLOWED_STATS = {"bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
+ALLOWED_STATS = {"u", "bi", "gv", "v", "v2", "visit", "back", "dev", "ios", "safe", "fps", "feat", "m", "f5", "err", "ref", "utm", "dw", "dw0", "fl", "fl0", "eg", "eg0", "sec", "x", "path", "path0", "sd", "rb"}   # sd: time per step, rb: coming back (Nov 3)
 ALLOWED_X = {"did", "ws", "pt", "ct", "opa", "fav", "rage", "op"}   # engagement v2 (idle-stats.js, helper/worker.js)
 ALLOWED_PEDIA = {"v", "page", "visit", "back", "dev", "ref", "utm", "dw", "dw0", "ps", "clips", "err", "why"}
 
@@ -2596,6 +2601,26 @@ def t_reviews_timing(P):
     return "storyline: not in Genesis, not before or during the end card, not with the roadmap open, after the card ✓; 🛝 after 20 s ✓; playground: 3 min + an interaction ✓, not while typing or with 🧪 open; the message then comes"
 
 
+def t_reviews_fresh(P):
+    """A returning browser (Nov 4: 13 invites on day one): with an old funnel and old activity in localStorage, a fresh visit doesn't get
+    the invitation before its own 3 minutes on screen and a click (nothing about time on screen carries over between visits); and the
+    invitation's source is logged (rv_inv_auto here, rv_inv_link for a ?review= link)."""
+    pg = _rv_page(P)
+    pg.evaluate("() => { localStorage.setItem('idle.activeMs', '9000000'); localStorage.removeItem('idle.invite'); localStorage.removeItem('idle.team'); }")
+    pg.reload(); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); window.__reviews.test.auto(true); }")
+    pg.mouse.click(400, 400); pg.wait_for_timeout(11000)
+    r = pg.evaluate("() => ({ letters: document.querySelectorAll('.rvletter').length, on: window.__reviews.test.onScreen(), ready: window.__reviews.test.ready() })")
+    need(r["letters"] == 0 and r["on"] < 60 and not r["ready"], f"a fresh visit with old stored state: {r}")
+    pg.evaluate("() => window.__reviews.test.onScreen(185)"); wait_for(pg, "() => !!document.querySelector('.rvletter')", 15, P=P)
+    f = pg.evaluate("() => window.__funnel.reached()")
+    need("rv_inv_auto" in f and "rv_inv_link" not in f, f"the source: {f}")
+    pg.close()
+    pg = P.open("/arena.html?review=logos&test"); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); }")
+    wait_for(pg, "() => window.__funnel.reached().includes('rv_inv_link')", 30, P=P)
+    pg.close(); P.clean()
+    return f"old stored activity → nothing after 11 s ({r['on']} s counted this visit); 3 min + a click → the invitation, logged rv_inv_auto; a ?review= link → rv_inv_link"
+
+
 def t_reviews_phone(P):
     """⭐ reviews at 375 px: the card is ≥ 70% of the lightbox and fills the width, no sideways scroll, ✕ ✓ ★ on screen."""
     pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()"); pg.wait_for_timeout(200)
@@ -3704,7 +3729,7 @@ def main():
     if want("worker"): check("worker: stats, jeffy allowlist, world links, rate limit", worker_unit)
     if want("pages"): check("pages: server-side page views, visitors, bots", pages_unit)
     if want("local server"): check("local server: server.py, the Operator line", local_server_unit)
-    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "genesis gate", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
+    browser_names = ["op actions", "crash guard", "clicks", "genesis", "genesis phone", "story", "story migrate", "story keys", "story keys logo", "story end phone", "story phone steps", "story input visible", "story row", "story modal", "operator float", "operator float phone", "story v6", "title card", "hint phone", "story arms", "story offer", "never stuck", "founder", "founder link", "founder personal", "founder phone", "story landing", "story intro", "story fans", "story clock", "logo solo", "logo ab", "story ring", "logo thunder", "boot intro", "chooser", "fresh load", "fresh slow", "camera desktop", "panels", "sound", "haunted music", "operator", "tiny genesis", "genesis gate", "stats", "stats v2", "op stats", "pedia stats", "data lab", "data lab stuck", "data lab home", "mood migrate", "lab card", "irc inbox", "oracle", "quick commands", "right-click", "halloween light", "intro", "intro reduced", "intro epoch0", "replay", "halloween", "trick or treat", "wikipedia world", "pedia desktop", "pedia halloween", "camera phone", "zoom shapes phone", "lab card phone", "pedia phone", "pedia halloween phone", "fonts", "fonts phone", "presence", "prod gates", "reviews", "reviews phone", "stats seen", "stats return", "ios sound", "ios sound desktop", "reviews invite", "reviews cliff", "reviews tab", "reviews cutscene", "reviews cutscene phone", "reviews link", "reviews webkit", "founder off", "slash", "slash phone", "reviews timing", "reviews fresh", "stats once", "v15 story", "v15 creatures", "v15 operator top", "v15 operator top phone", "v15 new build", "fps"]
     if not any(want(n) for n in browser_names): return report(t0)
     try:
         from playwright.sync_api import sync_playwright
@@ -3791,6 +3816,7 @@ def main():
                 run("reviews cliff", t_reviews_cliff)
                 run("reviews tab", t_reviews_tab)
                 run("reviews timing", t_reviews_timing)
+                run("reviews fresh", t_reviews_fresh)
                 run("reviews cutscene", t_reviews_cutscene)
                 run("reviews cutscene phone", t_reviews_cutscene, True, viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
                 run("reviews link", t_reviews_link)

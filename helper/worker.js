@@ -166,6 +166,8 @@ const SFSTEP = ['title', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 
   'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested',
   // v3: the 🌱 HITL tab opened
   'rv_tab',
+  // the invitation's source: a ?review= link, the timing rule (auto), or the 🌱 tab / a review opened in the game
+  'rv_inv_link', 'rv_inv_auto', 'rv_inv_other',
   // slash commands (idle-slash.js): each command used at least once by this browser, and lines that named no command
   'sc_help', 'sc_operator', 'sc_card', 'sc_rename', 'sc_pedia', 'sc_settings', 'sc_story', 'sc_scientists', 'sc_roadmap', 'sc_hitl', 'sc_oracle', 'sc_music', 'sc_deck', 'sc_stats', 'sc_ocean', 'sc_find', 'sc_weather', 'sc_evolve', 'sc_rave', 'sc_spawn', 'sc_name', 'sc_unknown'];
 const ARM = g => g === 'story' || g === 'choose' || g === 'play' ? g : g === 'current' ? 'play' : 'none';   // v15: the storyline's three arms
@@ -177,8 +179,15 @@ const SDB = ['<10s', '10-30s', '30-60s', '1-3m', '3-10m', '10m+'], sdBucket = v 
 const RBB = ['d0', 'd1', 'd2-3', 'd4-7', 'd8-14', 'd15+'], RBDAY = /^20\d\d-[01]\d-[0-3]\d$/;
 let statBuf = {}, statTimer = null; const STAT_EVERY = 20000;   // ms; must stay well under the ~30 s waitUntil allowance
 const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
+// our own checks: links we open ourselves carry these campaign tags (utm_source). Their in-page reports go to their own bucket ('int':
+// reports, visits, per tag) and never into any in-page number (Nov 4: 40 of the day's 87 reporting visits were launch checks). The one list;
+// tools/stats.py reads it from here. The page sends its tag with every report (p.u), so a page's later reports are caught too.
+const INTERNAL_TAGS = ['prod-check', 'launch-check', 'split-prod', 'split-staging', 'internal-check', 'internal-refcheck', 'hn-test', 'smoketest', 'statstest'];
+const internalTag = t => typeof t === 'string' && (INTERNAL_TAGS.includes(t) || /^(internal|smoke)|-(check|test)$/.test(t));
 function addStats(p) {
   const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
+  { const tag = typeof p.u === 'string' ? p.u : typeof p.utm === 'string' ? p.utm : null;
+    if (internalTag(tag)) { const q = d.int = d.int || { r: 0, v: 0, t: {} }; q.r++; if (p.visit === 1) q.v++; if (UTM.test(tag) && (q.t[tag] != null || Object.keys(q.t).length < 20)) bump(q.t, tag); return; } }
   d.batches++;
   // which report of its page load this is (1 = the first, 'v' = the one carrying the visit): batch 1s that go missing show up here (Nov 4)
   if (Number.isInteger(p.bi) && p.bi >= 1 && p.bi <= 500 && p.page !== 'pedia') { d.bi = d.bi || {}; bump(d.bi, p.bi >= 4 ? '4+' : String(p.bi)); if (p.visit === 1) bump(d.bi, 'v' + (p.bi >= 4 ? '4+' : p.bi)); }
@@ -247,6 +256,7 @@ async function flushStats(env) {
     cur.sd = cur.sd || {}; for (const [k, x] of Object.entries(add.sd || {})) { const c = cur.sd[k] = cur.sd[k] || { n: 0, sum: 0, b: {} }; c.n += x.n; c.sum += x.sum; for (const [b, n] of Object.entries(x.b)) bump(c.b, b, n); }
     cur.rb = cur.rb || {}; for (const [a, n] of Object.entries(add.rb || {})) if (n && (cur.rb[a] != null || Object.keys(cur.rb).length < 600)) bump(cur.rb, a, n);   // arm|cohort day|bucket (bounded: 5 arms x 400 days x 6)
     for (const [e, n] of Object.entries(add.err)) if (cur.err[e] || Object.keys(cur.err).length < 60) bump(cur.err, e, n);
+    if (add.int) { const q = cur.int = cur.int || { r: 0, v: 0, t: {} }; q.r += add.int.r; q.v += add.int.v; for (const [a, n] of Object.entries(add.int.t || {})) if (q.t[a] != null || Object.keys(q.t).length < 20) bump(q.t, a, n); }
     await env.STATS.put(key, JSON.stringify(cur), { expirationTtl: 60 * 60 * 24 * 400 });
   }
 }
