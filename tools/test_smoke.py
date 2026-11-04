@@ -345,6 +345,68 @@ def pages_unit():
     return f"views {s['views']}, bots {o['bots']}, 1k/10k/100k uniques → {o['est']['1000']:.0f}/{o['est']['10000']:.0f}/{o['est']['100000']:.0f}, 401 through the worker → {e2e['uniques']}"
 
 
+KV_WRITES_TEST = r"""
+const realST = globalThis.setTimeout; const tick = () => new Promise(r => realST(r, 0));
+globalThis.setTimeout = (f) => { Promise.resolve().then(f); return 0; }; globalThis.__statFlushNow = true;
+let NOW = Date.UTC(2026, 10, 5, 0, 0, 30); const realNow = Date.now; Date.now = () => NOW;
+const RealDate = Date; globalThis.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } };
+const M = await import(process.argv[2]), W = M.default;
+let failPut = 0;   // >0: the next KV puts throw like the free-tier cap does
+const kv = () => { const m = new Map(), puts = []; return { m, puts, get: async k => m.get(k) ?? null, put: async (k, v) => { if (failPut > 0) { failPut--; throw new Error('KV PUT failed: 429 Too Many Requests'); } puts.push(k); m.set(k, v); }, delete: async k => { m.delete(k); } }; };
+const store = () => { const m = new Map(); return { m, get: async k => m.has(k) ? structuredClone(m.get(k)) : undefined, put: async (k, v) => { m.set(k, structuredClone(v)); }, delete: async k => { m.delete(k); } }; };
+const inst = {}, NS = { idFromName: n => n, get: id => ({ fetch: (url, init) => (inst[id] = inst[id] || new M.Presence({ storage: store() }, {})).fetch(new Request(url, init)) }) };
+const run = async (env, n, every) => { const go = (path, body) => W.fetch(new Request('https://id-le.com' + path, { method: 'POST', body: JSON.stringify(body), headers: { 'CF-Connecting-IP': '9.9.9.' + (n % 200), 'Content-Type': 'application/json' } }), env, { waitUntil(p) { return p; } });
+  for (let i = 0; i < n; i++) { NOW += every; await go('/lab/stats', { v: 1, visit: 1, dev: 'desktop', feat: ['music'] }); await tick(); await tick(); } };
+const out = {};
+// the old path (no accumulator): one KV write per batch; with every report in its own 20-s window that is one write per report
+{ const env = { STATS: kv(), ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' }; await run(env, 300, 108e3); await new Promise(r => setTimeout(r)); out.oldPuts = env.STATS.puts.filter(k => k.startsWith('stats:')).length; }
+// the accumulator: 800 reports over a day (one every 108 s, like Nov 4's 781 batches) → KV written at most once an hour
+NOW = Date.UTC(2026, 10, 6, 0, 0, 30);
+const env = { STATS: kv(), PRESENCE: NS, ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' };
+await run(env, 790, 108e3);
+await tick(); await tick();
+const day = '2026-11-06', puts = env.STATS.puts.filter(k => k.startsWith('stats:'));
+out.newPuts = puts.length; out.shards = [...new Set(puts)];
+const kvVisits = [...env.STATS.m.entries()].filter(([k]) => k.startsWith('stats:' + day)).reduce((a, [, v]) => a + JSON.parse(v).visits, 0);
+const peek = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json();
+const pendVisits = Object.values(peek.acc || {}).reduce((a, r) => a + r.visits, 0) + Object.values(peek.lent || {}).reduce((a, r) => a + r.visits, 0);
+out.visitsTotal = kvVisits + pendVisits;
+// a KV write that fails after a take: nothing is lost (the lent copy goes back into the pile after 5 minutes and is written later)
+{ NOW += 61 * 60e3; failPut = 1; await run(env, 1, 1000); await tick(); await tick();
+  NOW += 6 * 60e3; await run(env, 1, 1000); NOW += 61 * 60e3; await run(env, 1, 1000); await tick(); await tick();
+  const kv2 = [...env.STATS.m.entries()].filter(([k]) => k.startsWith('stats:')).reduce((a, [, v]) => a + JSON.parse(v).visits, 0);
+  const pk = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json();
+  out.afterFailTotal = kv2 + Object.values(pk.acc || {}).reduce((a, r) => a + r.visits, 0) + Object.values(pk.lent || {}).reduce((a, r) => a + r.visits, 0); }
+// a player's 🧪 message while KV refuses writes: "saved, will sync", then written with the accumulator's next take
+{ failPut = 99; const r = await W.fetch(new Request('https://id-le.com/lab/oracle', { method: 'POST', body: JSON.stringify({ kind: 'idea', text: 'more crawlies please' }), headers: { 'CF-Connecting-IP': '7.7.7.7', 'Content-Type': 'application/json' } }), env, { waitUntil(p) { return p; } });
+  out.fbStatus = r.status; out.fbBody = await r.json(); failPut = 0;
+  NOW += 61 * 60e3; await run(env, 1, 1000); await tick(); await tick();
+  out.fbWritten = [...env.STATS.m.keys()].some(k => k.startsWith('fb:')); }
+console.log(JSON.stringify(out));
+"""
+
+
+def kv_writes_unit():
+    """Nov 4 (KV free tier: 1,000 writes a day for the account): stats go through the accumulator (a Durable Object), KV is written at most
+    once an hour per day key, every visit is kept (KV + pending), a failed KV write loses nothing, a player's write refused by KV is queued
+    ("saved, will sync") and written later"""
+    tmp = tempfile.mkdtemp(prefix="idle-kvw-")
+    try:
+        shutil.copy(os.path.join(ROOT, "helper", "worker.js"), os.path.join(tmp, "worker.mjs"))
+        t = os.path.join(tmp, "t.mjs"); open(t, "w").write(KV_WRITES_TEST)
+        r = subprocess.run(["node", t, "file://" + os.path.join(tmp, "worker.mjs")], capture_output=True, text=True, timeout=120)
+        need(r.returncode == 0, (r.stderr or r.stdout)[-600:])
+        o = json.loads(r.stdout.strip().splitlines()[-1])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    need(o["oldPuts"] >= 250, f"the old path should write per batch: {o['oldPuts']} writes for 300 reports")
+    need(o["newPuts"] <= 25, f"the accumulator wrote KV {o['newPuts']} times in a day (≤ 25 expected)")
+    need(o["visitsTotal"] == 790, f"visits kept {o['visitsTotal']} != 790 (KV + pending)")
+    need(o["afterFailTotal"] == 793, f"after a failed KV write {o['afterFailTotal']} != 793")
+    need(o["fbStatus"] == 200 and o["fbBody"].get("queued") and o["fbWritten"], f"a refused 🧪 write: {o['fbStatus']} {o['fbBody']}, written later {o['fbWritten']}")
+    return f"a day of 790 reports: {o['newPuts']} KV writes (old path: {o['oldPuts']} for 300); every visit kept; a failed write recovered; a refused 🧪 queued and written"
+
+
 def worker_unit():
     tmp = tempfile.mkdtemp(prefix="idle-worker-")
     try:
@@ -4073,7 +4135,7 @@ def browser_tests(a, out):
 LAUNCH = {"title auto", "arm reload", "arm stats", "js syntax", "conflict markers", "worker", "static build", "prod gates", "story first paint", "story first paint phone", "fresh load", "story arms", "chooser", "reviews timing", "presence"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
-          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()),
+          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
           ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
 # checks that pass the same assertions with the page's clock sped up (?timescale). Measured Nov 4 on 15 of the slowest at 5×: none got
 # meaningfully faster (they wait on the test's own fixed pauses and on the audio clock, which can't run faster) and 4 broke (story keys
