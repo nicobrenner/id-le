@@ -212,19 +212,22 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // is 'play'. ?arm=story|choose|play forces one on staging and local copies only. A browser that
   // already has a world keeps it, whatever its arm.
   const ARMS = ['story', 'choose', 'play'], OLD_ARM = { current: 'play' }, armOf = v => OLD_ARM[v] || v;
-  function variant(fresh0) { if (offerPreview()) return null;   // ?offer=a|b|c on staging/local: a returning player's world, no arm (Nico: '?offer=a… even opened the whole story')
-    const f = armOf(Q.get('arm')); if (ARMS.includes(f) && testHostG()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
+  // a link with an explicit destination (Nov 4): ?lab/#lab, ?start=ready|free, ?wiki=, ?review=, ?gift=, ?halloween, ?world=, ?intro=, #c=Name,
+  // #recover. The list lives in ONE place, arena.html's <head> (INTENT_PARAMS / INTENT_HASH, which also keeps these from painting black);
+  // here it is only read. Such a visit draws no arm, gets no title card or storyline offer, and goes where the link says; entry_<kind> in the funnel
+  const ENTRY = window.__intentEntry || null;
+  function variant(fresh0) { const f = armOf(Q.get('arm')); if (ARMS.includes(f) && testHostG()) { try { localStorage.setItem(GV, f); } catch (e) {} return f; }
     let v = null; try { v = localStorage.getItem(GV); } catch (e) {} if (OLD_ARM[v]) { v = armOf(v); try { localStorage.setItem(GV, v); } catch (e) {} }
-    if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0 || Q.has('test')) return null;   // tests (?test) get no random arm: ?arm= forces one
+    if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0 || Q.has('test') || ENTRY) return null;   // a direct entry (?lab, ?start=ready) never draws an arm   // tests (?test) get no random arm: ?arm= forces one
     // the draw may already have been made in arena.html's <head> (idle.gvPre), so the first paint knew whether this is a story start (Nov 4)
     let pre = null; try { pre = localStorage.getItem('idle.gvPre'); localStorage.removeItem('idle.gvPre'); } catch (e) {}
     v = ARMS.includes(pre) ? pre : ARMS[Math.floor(Math.random() * ARMS.length)]; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
   // called by the arena for a browser with no world of its own (fresh0), before the guided start would load the starter world:
   // the story and choose arms begin here; the play arm gets the ready world (the guided start), then the Operator's welcome (playWelcome)
-  function wants(fresh0) { if (Q.has('genesis') || Q.has('story')) return true; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
+  function wants(fresh0) { if (Q.has('genesis') || Q.has('story') || ['free', 'guided'].includes(Q.get('start'))) return true; if (ENTRY) return false; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
   // ?arm= forces an arm only on the test site and local copies (never on id-le.com, where the A/B decides)
-  const offerPreview = () => testHostG() && /^(a|b|c|old)$/.test(Q.get('offer') || '');
+  const offerPreview = () => ENTRY === 'offer';   // ?offer=a|b|c|old on staging/local (arena.html's INTENT list): a returning world to preview the offer
   const testHostG = () => /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const storyLive = () => AB === 'on' || /^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // the Operator window's status line (Nico, v7: no second title; "consciousness 24 · epoch 0 · genesis", the epoch advancing with the story)
@@ -235,6 +238,7 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   { const c3 = document.createElement('style'); c3.textContent = `#genTag{position:fixed;left:14px;top:12px;z-index:41;padding:3px 9px;border-radius:9px;background:#0a0b16cc;border:1px solid #6b7cff55;color:#cfd6ff;font:600 11px/1.4 var(--term-font,ui-monospace,Menlo,monospace);letter-spacing:.04em;pointer-events:none}
 html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(.gen-calm) #genTag{top:52px}html.gen-story:not(.gen-calm) #genDay{top:84px!important}@media (max-width:600px){#genTag{top:8px;left:8px}}`; document.head.appendChild(c3); }
   const mark = k => { try { window.__funnel && window.__funnel.mark(k); } catch (e) {} };
+  if (ENTRY) { let k = 0; const iv = setInterval(() => { if (window.__funnel || ++k > 40) { clearInterval(iv); mark('entry_' + ENTRY); } }, 250); }
   // silence (Nico, story v5): from the landing until the storyline's music step, sound "doesn't exist yet": everything is held at zero
   // (the player's own mute and volume aren't touched); the Operator's arrival and its sonar are visual only
   const PG = () => (window.IDLE_NAMES && window.IDLE_NAMES.play) || { icon: '🛝', short: 'the playground' };   // the playground's name (idle-runtime.js)
@@ -572,7 +576,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   async function boot(force) { if (!H()) return false;
     // which start: ?story → the storyline; ?start=free|story|ready; otherwise the chooser (script section E)
     // ('guided': the earlier guided genesis, light → words → life → weather or music, kept for links and tests)
-    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !storyBegun() ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
+    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ENTRY === 'lab' ? 'ready' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !storyBegun() ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
     if (mode !== 'story') { try { window.__storyBootLift && window.__storyBootLift(); } catch (e) {} }   // not a story after all: lift the first-paint black (arena.html <head>)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { if (S) { S.on = false; save(); } applyUnlocks(); dropFlag(); return readyWorld(); }
@@ -1081,7 +1085,7 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     const shown = el => { const st = getComputedStyle(el), r = el.getBoundingClientRect(); return st.display !== 'none' && st.visibility !== 'hidden' && +st.opacity > 0 && r.width > 0 && r.height > 0; };
     return ![...document.querySelectorAll('#genDay.end, #oracle.on, #hitl.on, #review.on, #genConfirm, #genChoose, #genFront, #genStoryModal, #oracleBox:not([hidden]), #almanac.on, #drawerView, #founderLetter, #founderLab, #settingsPanel.on, #settings.on, #storyOffer, #ntf .np')].some(shown); }
   const offerWait = () => { const ms = +Q.get('offerms'); return Number.isFinite(ms) && ms >= 0 && testHostG() ? ms / 1000 : Q.has('offer') ? 10 : OFFERV.activeS; };
-  function offerEligible() { if (!storyLive() && !Q.has('offer')) return false; if (variant() === 'play' && !Q.has('offer')) return false;   // the play arm gets the Operator's welcome instead
+  function offerEligible() { if (ENTRY && !Q.has('offer')) return false; if (!storyLive() && !Q.has('offer')) return false; if (variant() === 'play' && !Q.has('offer')) return false;   // the play arm gets the Operator's welcome instead
     if (Q.has('test') && !Q.has('offer')) return false;
     if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || window.__storyKey || window.__traveling) return false;
     return offerDue(); }

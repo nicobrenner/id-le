@@ -108,7 +108,7 @@
 
   // ---------- boot: called by the arena once it knows there is no saved world anywhere (fresh0) or when ?fresh asks
   const LABEL = { card: 'opened a card', name: 'named a creature', feed: 'fed someone', dream: 'watched a dream', gazette: 'followed a Gazette pill', weather: 'opened the weather', reel: 'played a reel', keep: 'kept something', first_reel_made: 'first reel made', first_gazette: 'first Gazette pill', world_named: 'named the world', backup_saved: 'saved a backup' };
-  async function boot(fresh0) { if ((Q.has('nofirst5') || ((/^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1') && /^(a|b|c|old)$/.test(Q.get('offer') || '')))) return false; const want = Q.has('fresh');
+  async function boot(fresh0) { if (Q.has('nofirst5') || window.__intentEntry === 'lab' || window.__intentEntry === 'offer') return false; const want = Q.has('fresh');   // ?lab: the data lab's own walkthrough instead; ?offer (staging): a returning world
     if (!fresh0) return false;
     if (S && !want) return false;   // the trail ran here before (done or skipped): a fresh browser that has played keeps its own world
     // one retry: a first download can fail on a flaky network (a page being left doesn't retry: the next load starts over)
@@ -120,9 +120,9 @@
     setTimeout(() => { try { const cs = live().filter(c => !c.visitor || c.g); if (cs.length && window.__dis) window.__dis.flyTo(cs.reduce((s, c) => s + c.x, 0) / cs.length, cs.reduce((s, c) => s + c.y, 0) / cs.length, innerWidth < 700 ? 0.7 : 0.95); } catch (e) {} }, 400);   // arrive in the middle of them
     run(1500); nextAt = now() + 5000; return true; }
   // after a genesis (idle-genesis.js) the trail starts on the world the player just built, minus the steps the genesis covered
-  function startTrail(doneKeys) { if ((Q.has('nofirst5') || ((/^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1') && /^(a|b|c|old)$/.test(Q.get('offer') || ''))) || (S && S.active)) return false; S = fresh(); S.meta = {}; for (const k of doneKeys || []) if (STEPS.some(s => s.k === k)) S.done[k] = now(); save(); run(1500); nextAt = now() + 6000; return true; }
+  function startTrail(doneKeys) { if ((Q.has('nofirst5') || window.__intentEntry === 'offer') || (S && S.active)) return false; S = fresh(); S.meta = {}; for (const k of doneKeys || []) if (STEPS.some(s => s.k === k)) S.done[k] = now(); save(); run(1500); nextAt = now() + 6000; return true; }
   // a browser where the trail is under way keeps it going after a reload
-  function resume() { if (!S || (!active() && S.backupAsked) || (Q.has('nofirst5') || ((/^staging\./.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1') && /^(a|b|c|old)$/.test(Q.get('offer') || '')))) return; run(2500); nextAt = now() + 8000; }
+  function resume() { if (!S || (!active() && S.backupAsked) || (Q.has('nofirst5') || window.__intentEntry === 'offer')) return; run(2500); nextAt = now() + 8000; }
   function stats() { if (!S) return null; return { started: new Date(S.t0).toISOString(), finished: S.finished ? new Date(S.finished).toISOString() : null, skipped: S.skipped ? new Date(S.skipped).toISOString() : null, play_s: S.play, aha_s: Object.fromEntries(Object.entries(S.aha).map(([k, v]) => [k, Math.round(v / 1000)])) }; }
   function statsLine() { if (!S) return ''; const e = Object.entries(S.aha).sort((a, b) => a[1] - b[1]); if (!e.length) return ''; const f = ms => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
     return 'your first visit: ' + e.map(([k, v]) => `${LABEL[k] || k} at ${f(v)}`).join(' · '); }

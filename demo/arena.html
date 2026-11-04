@@ -11,8 +11,17 @@ html.story-boot body>*:not(#idleIntro):not(#genBlack):not(#genChoose):not(script
   const AB_ON = true, ARMS = ['story', 'choose', 'play'], q = new URLSearchParams(location.search), h = location.hostname, ls = localStorage;
   const testHost = /^staging\./.test(h) || h === 'localhost' || h === '127.0.0.1';
   let story = q.has('story');
-  const offerPreview = testHost && /^(a|b|c|old)$/.test(q.get('offer') || '');   // ?offer=a|b|c on staging: a returning-world preview, no arm
-  if (!story && !q.has('genesis') && !q.has('start') && !offerPreview) {
+  // links with an explicit destination (Nov 4, Nico: "How do I skip the story/abc split and go directly to the lab?", then ?wiki=Octopus loading
+  // the story): THE one list. A link that names where it goes skips the A/B/C draw, the storyline and its black first paint, and goes there.
+  // Only a plain address (no params, or only utm/ref tags) gets an arm. idle-genesis.js reads window.__intentEntry (never its own list).
+  const INTENT_PARAMS = [['lab', /[?&](data)?lab(=[^&]*)?(&|$)/], ['start', /[?&]start=(?!story)[^&]+/], ['wiki', /[?&](from_)?wiki=/], ['review', /[?&]review=/],
+    ['gift', /[?&]gift=/], ['halloween', /[?&]halloween\b/], ['world', /[?&](world|w)=/], ['intro', /[?&]intro=/]];
+  const INTENT_HASH = [['lab', /^#(.*&)?lab(&|$)/], ['creature', /^#(.*&)?c=[^&]/], ['recover', /^#recover$/]];
+  let intent = (INTENT_PARAMS.find(([, re]) => re.test(location.search)) || INTENT_HASH.find(([, re]) => re.test(location.hash)) || [null])[0];
+  // ?offer=a|b|c|old (staging/local only): preview the storyline offer in a returning player's world (no arm, no story, no guided start)
+  if (!intent && testHost && /^(a|b|c|old)$/.test(q.get('offer') || '')) intent = 'offer';
+  window.__intentEntry = q.has('story') || q.has('genesis') ? null : intent; window.__intentLists = { params: INTENT_PARAMS.map(x => x[0]), hash: INTENT_HASH.map(x => x[0]) };
+  if (!story && !q.has('genesis') && !q.has('start') && !intent) {
     let snaps = 0; try { snaps = (JSON.parse(ls.getItem('arena.snaps') || '[]') || []).length; } catch (e) {}
     const fresh = !ls.getItem('arena.autosave') && !ls.getItem('arena.genomes') && !snaps;   // the same test as fresh0 in the arena below
     if (fresh) {
