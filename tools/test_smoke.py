@@ -3392,6 +3392,34 @@ def t_offer_preview(P):
     return "fresh browsers, ?offer=" + "/".join(out) + ": no arm, no story, the hint, then the offer (3 minutes)"
 
 
+def t_offer_sandbox(P):
+    """?offer=a|b|c on staging/local runs in a sandbox (Nov 4, Nico: his browser had a storyline paused before "let there be life": the
+    Operator opened with the step pre-typed and the offer never came; the hint said ~0 s): with a saved mid-Genesis story in the real
+    localStorage, the preview still shows the chosen offer after a click, no story or Operator step starts, the hint counts down honestly,
+    and the real localStorage is unchanged afterwards."""
+    ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); Q = Page(ctx, P.base)
+    k = Q.open("/arena.html?at=life"); k.wait_for_timeout(2500); k.keyboard.press("Space")
+    wait_for(k, "() => window.__genesis && window.__genesis.ready && window.__genesis.ready()", 120, P=Q)
+    dump = k.evaluate("() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const x = localStorage.key(i); o[x] = localStorage.getItem(x); } return o; }")
+    need(json.loads(dump.get("idle.genesis") or "{}").get("mode") == "story", f"no mid-Genesis state to plant: {list(dump)[:10]}"); ctx.close()
+    out = []
+    for v in "abc":
+        ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); Q = Page(ctx, P.base)
+        r0 = Q.open("/privacy.html"); r0.evaluate("d => { localStorage.clear(); for (const [x, y] of Object.entries(d)) localStorage.setItem(x, y); }", dump); r0.close()
+        pg = Q.open(f"/arena.html?offer={v}&offerms=2500"); wait_for(pg, "() => window.__restoredOrFresh", 60, P=Q); pg.wait_for_timeout(2500)
+        st = pg.evaluate("() => ({ box: !!window.__offerSandbox, story: !!(window.__genesis.state() && window.__genesis.state().on && window.__genesis.state().mode === 'story'), intro: !!document.querySelector('#idleIntro'), typed: (document.querySelector('#lab-text') || {}).value || '', hint: (document.querySelector('#offerHint') || {}).textContent || '' })")
+        need(st["box"] and not st["story"] and not st["intro"] and "let there be" not in st["typed"], f"{v}: the saved story leaked into the preview: {st}")
+        need("click anywhere" in st["hint"] and "~0 s" not in st["hint"], f"{v}: the hint before a click: {st['hint']!r}")
+        pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        if v == "c": wait_for(pg, "() => [...document.querySelectorAll('#opTray .opc')].some(b => /start the story/.test(b.textContent))", 25, P=Q)
+        else: wait_for(pg, "() => !!document.querySelector('#storyOffer.v" + v + "')", 25, P=Q)
+        pg.close()
+        r1 = Q.open("/privacy.html"); after = r1.evaluate("() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const x = localStorage.key(i); o[x] = localStorage.getItem(x); } return o; }")
+        changed = [x for x in set(dump) | set(after) if dump.get(x) != after.get(x) and not x.startswith(("idle.stats", "idle.st", "idle.pedia", "idle.presence", "idle.since", "idle.activeMs", "idle.bkey"))]
+        need(not changed, f"{v}: the real localStorage changed: {changed[:8]}"); ctx.close(); out.append(v)
+    return "a saved mid-Genesis story: ?offer=" + "/".join(out) + " still shows the offer in a sandbox, the hint counts from the click, the real storage untouched"
+
+
 def t_story_v6(P):
     """Story v6: ?intro=epoch0 is retired (it goes to the storyline); the logo keeps its pipe, cycling colours, then cuts to black; the
     'conscious' label is never under the dialog (desktop and phone); between the intro and the dark nothing of the world or the UI shows,
@@ -4338,7 +4366,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", t_title_auto, (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("never stuck", t_never_stuck, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
