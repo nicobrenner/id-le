@@ -6,6 +6,17 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+## 2026-11-04
+
+**KV writes: the stats accumulator (Nov 4, 8:22 PT Cloudflare alert: 90% of the free tier's 1,000 KV writes/day).** Cloudflare's own KV analytics for Nov 4 (UTC, to ~16:50): id-le-stats 830 writes, 2,520 reads, 156 lists; id-le-stats-staging 132 writes; worlds 0 writes. Almost all writes were the in-page stats flushes: every isolate wrote its own shard about 20 s after its first report, so roughly one write per visit.
+- Isolates now hand their batch to a stats accumulator: the existing Presence Durable Object class, instance `stats-live` / `stats-staging`, same PRESENCE binding, so no new binding. It merges each batch into its own SQLite-backed storage (durable: an evicted isolate loses nothing) with the same `mergeStat` the KV write uses.
+- One request takes the pile and writes it to KV (shard `stats:<day>:do`) at most once an hour: ≤ 24 writes a day per day key, whatever the traffic. The KV record keeps the tokens it applied, so a batch offered twice (taken, but the KV write or the confirmation failed: re-offered after 5 min) counts once.
+- `/lab/stats-pending` (live key) returns what is pending; `tools/stats.py` adds it, so the numbers stay current (`--no-pending` to leave it out).
+- Without the binding (local, tests) or if the accumulator can't be reached, an isolate writes its own shard as before.
+- Player writes (🧪, votes, reviews, the team, gift claims): if KV refuses (429), the request is queued in the accumulator and replayed with its next KV write; the player sees "saved, will sync" (🧪 says so).
+- Test "kv writes" (launch tier): a day of 790 reports → 23 KV writes (old path: one per batch); every visit kept (KV + pending); a failed KV write after a take loses and doubles nothing; a refused 🧪 is queued and written later.
+- Free-plan Durable Object limits (Cloudflare pricing page, read Nov 4): 100,000 requests/day (HTTP, RPC, WebSocket messages, alarms), 13,000 GB-s duration/day, SQLite rows read 5M/day, rows written 100,000/day, 5 GB stored.
+
 ## 2026-11-04 (offer v2, staging)
 
 **The storyline offer v2: three variants for Nico to pick from (staging only; id-le.com keeps v1).** On id-le.com the v1 card (shown 20 s after load to returning players) was shown 22 times and accepted 0: they come back for their world. v2 (`idle-genesis.js`):

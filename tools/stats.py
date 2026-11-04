@@ -425,11 +425,29 @@ def feedback_html(fb):
             f"<code>python3 tools/feedback.py</code>; promote to the roadmap with <code>feedback.py promote ID --title …</code>.</p><ul>{rows}</ul><h3>Latest 20</h3><ul>{latest}</ul></section>")
 
 
+def pending_stats(a):
+    """[(day, record)] the stats accumulator hasn't written to KV yet (Nov 4: KV is written at most every 10 minutes), read with the live key
+    from ~/.idle-ts/live.key (never printed). Empty if the key or the endpoint isn't there."""
+    if getattr(a, "no_pending", False):
+        return []
+    try:
+        key = open(os.path.expanduser("~/.idle-ts/live.key")).read().strip()
+        rq = urllib.request.Request(SITE_PENDING, headers={"Authorization": "Bearer " + key, "User-Agent": "curl/8"})
+        d = json.loads(urllib.request.urlopen(rq, timeout=15).read())
+    except Exception:
+        return []
+    return [(day, rec) for part in (d.get("acc") or {}, d.get("lent") or {}) for day, rec in part.items() if isinstance(rec, dict)]
+
+
+SITE_PENDING = "https://id-le.com/lab/stats-pending"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=14)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--html", metavar="FILE", help="write a dashboard page")
+    ap.add_argument("--no-pending", action="store_true", help="leave out what the stats accumulator hasn't written to KV yet")
     a = ap.parse_args()
     tok = token()
     acct = call("/accounts", tok)["result"][0]["id"]
@@ -453,6 +471,13 @@ def main():
             continue
         v = json.loads(call(f"/accounts/{acct}/storage/kv/namespaces/{nsid}/values/{urllib.parse.quote(k, safe='')}", tok, raw=True))
         for kk, sv in ((v.get("pv") or {}).get("hll") or {}).items():   # sketches merge by max, never add
+            sketches.setdefault(day, {}).setdefault(kk, []).append(sv)
+        add(days.setdefault(day, {}), v)
+    pend = pending_stats(a)
+    for day, v in pend:   # what the stats accumulator (a Durable Object) holds and hasn't written to KV yet (at most ~10 minutes' worth)
+        if day < since:
+            continue
+        for kk, sv in ((v.get("pv") or {}).get("hll") or {}).items():
             sketches.setdefault(day, {}).setdefault(kk, []).append(sv)
         add(days.setdefault(day, {}), v)
     for day, by in sketches.items():
