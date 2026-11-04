@@ -59,6 +59,18 @@
       const last = Object.entries(st.done || {}).sort((a, b) => a[1] - b[1]).pop(); return last ? last[0] : 'none'; } catch (e) { return null; } };
   setTimeout(f5Stop, 8000);   // learn early whether this load began with the trail running (before it can finish)
   let returning = false; try { returning = localStorage.getItem(SEEN) === '1'; localStorage.setItem(SEEN, '1'); } catch (e) {}
+  // coming back (Nov 3): the first-visit day this browser keeps for itself (idle.since: the UTC day, and whether it's known for sure), and
+  // a single "here on day N since my first visit" (a bucket) with that first-visit day as the cohort: no identifier is sent,
+  // the server only adds 1 to cohort|bucket, so a cohort's later days divide by its day 0. A browser that was already here before this
+  // measure (returning, no date) has an unknown first day and never reports. Each bucket is sent at most once per browser
+  const utcDay = t => new Date(t).toISOString().slice(0, 10), TODAY = utcDay(Date.now());
+  let since = null; try { since = JSON.parse(localStorage.getItem('idle.since') || 'null'); } catch (e) {}
+  if (!since || !/^\d{4}-\d{2}-\d{2}$/.test(since.d || '')) { let fs = null; try { fs = +JSON.parse(localStorage.getItem('idle.firstSeen') || 'null'); } catch (e) {}
+    since = fs > 1.5e12 && fs <= Date.now() ? { d: utcDay(fs), k: 1 } : { d: TODAY, k: returning ? 0 : 1 }; try { localStorage.setItem('idle.since', JSON.stringify(since)); } catch (e) {} }
+  const backBucket = () => { const n = Math.round((Date.parse(TODAY) - Date.parse(since.d)) / 86400000); return n <= 0 ? 'd0' : n === 1 ? 'd1' : n <= 3 ? 'd2-3' : n <= 7 ? 'd4-7' : n <= 14 ? 'd8-14' : 'd15+'; };
+  // once per bucket, not once per day: "came back at least once on day 1", "…on days 2–3", so a cohort's rate reads as browsers
+  const backSent = () => { try { return JSON.parse(localStorage.getItem('idle.backSent') || '[]') || []; } catch (e) { return []; } };
+  const backDue = () => since.k && !backSent().includes(backBucket());
   const feats = new Set(), errs = new Map(), fpsS = [];
   // engagement (counted once per page load, in the last bucket it reached, like time on screen)
   const ENG = { charts: 0, fed: 0 }, CR = n => n <= 12 ? '0-12' : n <= 30 ? '13-30' : n <= 60 ? '31-60' : n <= 150 ? '61-150' : '151+', NB = n => n <= 0 ? '0' : n <= 5 ? '1-5' : n <= 20 ? '6-20' : '21+';
@@ -183,6 +195,11 @@
     try { const f = window.__funnel ? window.__funnel.reached().filter(k => !ahaSent['sf:' + k]).slice(0, 30) : []; if (f.length) { p.sf = f; any = true; } } catch (e) {}
     // the story's logo A/B (idle-epoch0.js): the arm rides along once this browser has seen its logo, so the moments after it count per arm too
     try { const R = window.__funnel ? window.__funnel.reached() : []; for (const a of ['c3', 'crt']) if (R.includes('lg_shown:' + a)) p.lg = a; } catch (e) {}
+    // time per step: the on-screen seconds since the moment before, once per moment per browser (idle-runtime.js __funnel.durations)
+    try { const D = window.__funnel && window.__funnel.durations ? window.__funnel.durations() : {}, sd = {};
+      for (const [k, v] of Object.entries(D)) if (!ahaSent['sd:' + k] && Number.isFinite(v)) sd[k] = Math.min(86400, Math.max(0, Math.round(v)));
+      if (Object.keys(sd).length) { p.sd = Object.fromEntries(Object.entries(sd).slice(0, 30)); any = true; } } catch (e) {}
+    if (backDue()) { p.rb = { c: since.d, b: backBucket() }; any = true; }
     if (!sent.visit) { p.visit = 1; p.v2 = 1; p.back = returning ? 1 : 0; p.dev = phone() ? 'phone' : 'desktop'; p.ios = window.__isIOS ? 1 : 0; p.safe = [0, 1, 2].includes(window.__safeLevel) ? window.__safeLevel : 0; p.ref = refHost(); const u = utm(); if (u) p.utm = u; any = true; }
     const fb = fpsBucket(); if (fb && !sent.fps) { p.fps = fb; any = true; }
     try { const w = window.__dlwalk && window.__dlwalk.state && window.__dlwalk.state(); if (w) { const ks = Object.keys(w.done || {}).concat(w.finished ? ['finished'] : w.skipped ? ['ended'] : []).filter(k => !ahaSent['dl:' + k]); if (ks.length) { p.dl = ks; any = true; } } } catch (e) {}
@@ -213,7 +230,7 @@
     if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = body.length < 60000; } catch (e) {}
     if (!ok) return;
     if (p.visit) sent.visit = true; if (p.fps) sent.fps = true; if (p.feat) sent.feats.push(...p.feat); if (p.err) sent.errs.push(...p.err);
-    if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dl) p.dl.forEach(k => { ahaSent['dl:' + k] = 1; }); if (p.gs) Object.keys(p.gs).forEach(k => { ahaSent['gs:' + k] = 1; }); if (p.sf) p.sf.forEach(k => { ahaSent['sf:' + k] = 1; }); if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; if (p.eg) Object.assign(sent.eng, p.eg); if (p.sec) secSent += p.sec;
+    if (p.m) Object.keys(p.m).forEach(k => { ahaSent[k] = 1; }); if (p.f5) ahaSent['_' + p.f5] = 1; if (p.dl) p.dl.forEach(k => { ahaSent['dl:' + k] = 1; }); if (p.gs) Object.keys(p.gs).forEach(k => { ahaSent['gs:' + k] = 1; }); if (p.sf) p.sf.forEach(k => { ahaSent['sf:' + k] = 1; }); if (p.sd) Object.keys(p.sd).forEach(k => { ahaSent['sd:' + k] = 1; }); if (p.rb) try { localStorage.setItem('idle.backSent', JSON.stringify([...new Set(backSent().concat(p.rb.b))])); } catch (e) {} if (p.dw) sent.dw = p.dw; if (p.fl) sent.fl = p.fl; if (p.eg) Object.assign(sent.eng, p.eg); if (p.sec) secSent += p.sec;
     if (p.path) E2sent.path = p.path; if (p.x) { for (const k of ['ws', 'pt', 'ct', 'opa', 'fav', 'rage', 'op']) for (const [a, n] of Object.entries(p.x[k] || {})) { E2[k][a] -= n; if (E2[k][a] <= 0) delete E2[k][a]; } (p.x.did || []).forEach(f => E2sent.did.add(f)); }
     try { localStorage.setItem(SENT, JSON.stringify(ahaSent)); } catch (e) {}
   }
@@ -228,5 +245,5 @@
   addEventListener('visibilitychange', () => { if (document.hidden) send('hide'); });
   addEventListener('pagehide', () => send('leave'));
   setTimeout(() => send('3m'), 180000); setTimeout(() => send('15m'), 900000);
-  window.__stats = { live, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _e2: () => ({ ...e2part(), path: E2.path.join('>') }), _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop(), eg: engage() }) };
+  window.__stats = { live, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _e2: () => ({ ...e2part(), path: E2.path.join('>') }), _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop(), eg: engage(), since, back: backBucket() }) };
 })();
