@@ -17,7 +17,7 @@
 #lab-form small,#ai-oracle-link{display:none!important}
 @media (min-width:501px){#lab-head{cursor:grab;user-select:none}#lab-head.drag{cursor:grabbing}html:is(.gen-box,.gen-float) #lab-head{cursor:default}}
 #op-tools{margin-left:auto;margin-right:6px;font-size:14px;line-height:1;padding:3px 8px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer}
-#op-tools.on{background:#6b7cff33;border-color:#9fb0ff}
+#op-tools.on{background:#6b7cff33;border-color:#9fb0ff}html:is(.gen-box,.gen-float) #op-tools{display:none!important}
 #opTray{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 2px;border-top:1px solid #8884}#opTray[hidden]{display:none}
 #opTray .opc{font:12.5px var(--ui-font,system-ui);padding:6px 11px;border-radius:14px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:32px}
 #opTray .opc:hover{background:#6b7cff40}#opTray .opc[disabled]{opacity:.45;cursor:default}

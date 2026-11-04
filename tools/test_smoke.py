@@ -1661,8 +1661,9 @@ def t_story(P):
     lk = pg.evaluate("() => window.__genesis.landing().look")
     need(lk and lk["end"] - strikes[2]["at"] >= 5000, f"v14: the Epoch moment comes at least 5 s after the last creature: {lk}, {strikes[2]}")
     wait_for(pg, "() => !!document.querySelector('#genConsole [data-gm=start]')", 20, P=P)
-    mo = pg.evaluate("() => ({ text: document.querySelector('#genConsole').innerText, box: document.documentElement.classList.contains('gen-box'), c: window.__arena.raw().filter(c => !c.lab).length, hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display, bed: window.__snd.bedOn() })")
+    mo = pg.evaluate("() => ({ chrome: ['#lab-close', '#op-tools'].map(x => getComputedStyle(document.querySelector(x)).display), text: document.querySelector('#genConsole').innerText, box: document.documentElement.classList.contains('gen-box'), c: window.__arena.raw().filter(c => !c.lab).length, hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display, bed: window.__snd.bedOn() })")
     need("EPOCH 0 COMPLETE" in mo["text"] and "great job" in mo["text"] and "next up: Epoch 1" in mo["text"] and "ready?" in mo["text"] and "start Epoch 1" in mo["text"] and "playground" in mo["text"] and mo["box"] and mo["c"] >= 3, f"v14: the Operator's Epoch 0 moment: {mo}")
+    need(mo["chrome"] == ["none", "none"], f"v14: no close and no 🛠 during the Epoch 0 moment: {mo['chrome']}")
     need(not mo["hushed"] and mo["bg"] and mo["bed"] and mo["dj"] == "none", f"the music and the world's ambience on, the music panel still locked: {mo}")
     need(not pg.evaluate("() => !!document.querySelector('#genFront')"), "v14: no Gazette at the end of Genesis")
     # the playground asks first; stay goes back

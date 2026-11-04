@@ -281,7 +281,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
       (storyMode() ? '' : `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`);
     let said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
     if (moment) { said = `<div class="gstamp">${esc(MOMENT.stamp)}</div>` + said; body = moment.ready ? `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : ''; }
-    c.innerHTML = said + body; tag(); cls('gen-noclose', storyMode() && !(S && S.days && S.days[0]));
+    c.innerHTML = said + body; tag(); cls('gen-noclose', storyMode() && (!(S && S.days && S.days[0]) || !!moment));
     prefill(); try { window.__opwin && window.__opwin.refresh(); } catch (e) {} }
   // the 🛠 tray's chip in the storyline's Genesis (idle-opwin.js): the step's command, or nothing while the Operator talks or a step runs
   const chip = () => { if (!storyMode() || !guiding() || moment || !$('#genConsole')) return null; const g = nextGuide(); if (!g) return null; return { step: g, say: wakeBusy ? '' : sayOf(g), busy: !!busy }; };
