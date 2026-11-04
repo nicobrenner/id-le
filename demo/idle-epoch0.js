@@ -480,10 +480,11 @@
 
   // ---------- playing it ----------
   let cur = null;
+  const AUTO_MS = 2000;   // the title card waits this long for a key or a tap, then the intro starts by itself (muted until one)
   const css = () => { if (document.getElementById('idleE0css')) return; const s = document.createElement('style'); s.id = 'idleE0css';
     s.textContent = `#idleIntro{position:fixed;inset:0;z-index:2147483000;background:#000;cursor:default;transition:opacity .6s;touch-action:none;user-select:none;-webkit-user-select:none}#idleIntro canvas{width:100%;height:100%;display:block}
 #idleIntro .hint{position:absolute;bottom:20px;right:88px;font:12px var(--ui-font,system-ui);color:#7f8a95;pointer-events:none;user-select:none}#idleIntro.paused .hint{color:#7ee3f5}@media (max-width:420px){#idleIntro .hint{right:14px;bottom:50px}}
-#idleIntro .ib{position:absolute;bottom:14px;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
+#idleIntro .ib{position:absolute;bottom:14px;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75}#idleIntro .ib:hover{opacity:1}#idleIntro .skip{right:14px}#idleIntro .snd{left:14px}#idleIntro .snd.tap{left:50%;right:auto;transform:translateX(-50%);bottom:22px;font-size:16px;padding:9px 18px;opacity:1;color:#ffe2b8;border-color:#ffcf8a;background:#0b0f18e6;box-shadow:0 0 14px #ffcf8a55;animation:idleSndPulse 1.6s ease-in-out infinite}@keyframes idleSndPulse{50%{box-shadow:0 0 22px #ffcf8aaa}}@media (prefers-reduced-motion:reduce){#idleIntro .snd.tap{animation:none}}@media (max-width:420px){#idleIntro .snd.tap{bottom:92px}}#idleIntro.out{opacity:0}`; (document.head || document.documentElement).appendChild(s); };
   function play(opts = {}) {
     if (cur) return cur.promise; css(); if (opts.at && window.__audioPastShim) window.__audioPastShim(); /* a mid-film start schedules sounds in the past (idle-keys.js) */ const P = phone(), RM = reduce(), safe = (window.__safeLevel | 0) > 0, liveOK = !P && !safe && !Q.has('intro_bank'), boot = wantBoot(opts);
     const el = document.createElement('div'); el.id = 'idleIntro'; el.dataset.tone = 'epoch0'; el.dataset.boot = boot ? '1' : '0'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Id|le intro (press Esc to skip)');
@@ -505,25 +506,32 @@
     size(); addEventListener('resize', size);
     const audioReady = () => { const A = window.__audio; try { return A && !A.muted() && A.ctx().state === 'running'; } catch (e) { return false; } };
     const startSound = () => { if (S || !ct || RM) return; const A = window.__audio; let ctx; try { ctx = A.ctx(); } catch (e) { return; } if (!ctx || ctx.state !== 'running' || A.muted()) return; S = synth(ctx, ct.story && A.storyOut ? A.storyOut() : A.out(), ctx.currentTime - (elapsed() - B())); S.ctx = ctx; S.hum(extraOf(ct), !!ct.story); soundT = elapsed(); if (ct.story) try { S.fans(ct, soundT); } catch (e) {} try { preBeds(ctx, S.out, ct, soundT, ctx.currentTime); } catch (e) {} syncSnd(); };
-    const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) ? 'none' : ''; };
-    sndB.addEventListener('click', e => { e.stopPropagation(); const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
+    const syncSnd = () => { const A = window.__audio; sndB.style.display = (!A || A.muted() || S || RM) && !autoSnd ? 'none' : ''; };
+    sndB.addEventListener('click', e => { e.stopPropagation(); if (soundOn()) return; const A = window.__audio; if (!A) return; try { A.resume(); } catch (er) {} setTimeout(startSound, 250); });
     const mark = k => { if (ct && ct.story && window.__funnel) window.__funnel.mark(k); };
     // which scene of the story intro this moment is in (for the funnel): title, messages, chat, boot, run, crash
     const sceneOf = A => { if (waiting) return 'title'; const TB = window.__termBoot, R = arrOf(ct), b = B(); if (R && A < TB.arrive.scenes.chat[0]) return 'messages'; if (R && A < R) return 'chat'; if (A < b) return 'boot'; return A - b < CS.flash ? 'run' : 'crash'; };
     // the title card (story with the arrival): a key or a tap starts the desktop, and lets the sound start (a gesture unlocks audio)
-    const begin = () => { if (!waiting || done) return; waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now(); pausedMs = 0; pausedAt = 0; el.classList.remove('paused');
+    // auto-start (Nov 4, HN: 19 of 26 story starts never pressed a key on the title card): after AUTO_MS the intro starts by itself, muted
+    // (no gesture yet, so the browser keeps the audio suspended); a "🔊 tap for sound" chip shows, and the first tap or key anywhere turns it on.
+    // The film runs on performance.now() (elapsed()), never on the audio clock, so it keeps moving silently; the sound joins in sync when allowed.
+    let autoSnd = false;
+    const soundOn = () => { if (!autoSnd || done) return false; autoSnd = false; sndB.classList.remove('tap'); sndB.textContent = '🔊 sound'; const A = window.__audio;
+      try { if (A && !A.muted()) A.resume(); } catch (e) {} mark('sound_on'); setTimeout(() => { if (audioReady()) startSound(); syncSnd(); }, 250); return true; };
+    const begin = auto => { if (!waiting || done) return; waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now(); pausedMs = 0; pausedAt = 0; el.classList.remove('paused');
+      if (auto === true && !audioReady()) { mark('title_auto'); if (S) { try { S.stop(0); } catch (e) {} S = null; } const A = window.__audio; let muted = true; try { muted = !A || A.muted(); } catch (e) {} if (!muted && !RM) { autoSnd = true; el.dataset.auto = '1'; sndB.classList.add('tap'); sndB.textContent = '🔊 tap for sound'; sndB.style.display = ''; } return; }
       const A = window.__audio; try { if (A && !A.muted()) A.resume(); } catch (e) {} setTimeout(() => { if (audioReady()) startSound(); syncSnd(); }, 250); };
     const finish = skipped => { if (done) return; if (skipped && ct) mark('skip:' + sceneOf(elapsed())); done = true; if (hushOwn) setTimeout(() => { try { window.__audio.hush(false); } catch (e) {} }, skipped ? 300 : 800); cancelAnimationFrame(raf); removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKeyUp, true); removeEventListener('resize', size); if (S) S.stop(skipped ? .3 : .8);
       const out = { tone: 'epoch0', story: !!(ct && ct.story), boot, arrive: !!(ct && ct.arrive), skipped, live: ct ? ct.lines.filter(l => l.src === 'live').length : 0, cont: ct ? ct.contSrc : null };
       try { document.dispatchEvent(new CustomEvent('idle:intro', { detail: { phase: 'end', ...out } })); } catch (e) {}
       if (opts.keep && !skipped) { cur = { promise, el, close: () => { el.classList.add('out'); setTimeout(() => el.remove(), 650); cur = null; } }; res(out); return; }
       el.classList.add('out'); setTimeout(() => { el.remove(); cur = null; res(out); }, skipped ? 350 : 650); };
-    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(true); } else if (waiting) { e.preventDefault(); e.stopPropagation(); if (!e.repeat) begin(); } else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) pause(); } };
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(true); } else if (waiting) { e.preventDefault(); e.stopPropagation(); if (!e.repeat) begin(); } else if (autoSnd && !e.repeat) { e.preventDefault(); e.stopPropagation(); soundOn(); } else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) pause(); } };
     const onKeyUp = e => { if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); resume(); } };
-    el.addEventListener('pointerdown', e => { if (e.target === sndB || e.target === skipB) return; e.preventDefault(); if (waiting) { begin(); return; } pause(); });
+    el.addEventListener('pointerdown', e => { if (e.target === sndB || e.target === skipB) return; e.preventDefault(); if (waiting) { begin(); return; } if (autoSnd) { soundOn(); return; } pause(); });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => resume());
     skipB.addEventListener('click', e => { e.stopPropagation(); finish(true); }); addEventListener('keydown', onKey, true); addEventListener('keyup', onKeyUp, true);
-    cur = { promise, el, close: () => finish(true), time: () => elapsed(), sounding: () => !!S, paused: () => !!pausedAt, waiting: () => waiting, start: () => begin(), scene: () => ct ? sceneOf(elapsed()) : null };
+    cur = { promise, el, close: () => finish(true), time: () => elapsed(), sounding: () => !!S, paused: () => !!pausedAt, waiting: () => waiting, start: () => begin(), autoMuted: () => autoSnd, soundOn: () => soundOn(), scene: () => ct ? sceneOf(elapsed()) : null };
     const wantStory = !!(opts.story || Q.has('story')), arm = wantStory ? logoArm() : null;
     Promise.all([loadBank(), loadLoss(), arm ? prepLogo(arm) : null]).then(([, , L]) => { ct = makeContent({ story: wantStory }); ct.boot = boot; if (arm) ct.logo = { arm, id: LOGO_ARMS[arm], L }; ct.arrive = boot && wantArrive(opts, ct.story); start = performance.now(); window.__epoch0.last = ct;
       if (ct.story && ct.arrive && window.__termBoot && window.__termBoot.title && opts.title !== false && !Q.has('notitle')) { waiting = true; titleT0 = performance.now(); el.dataset.title = '1'; hint.style.display = 'none'; }
@@ -531,7 +539,7 @@
       { const off = keyOffset(opts.at, ct); if (off != null) { waiting = false; el.dataset.title = '0'; hint.style.display = ''; start = performance.now() - off * 1000; } }
       if (liveOK) fillLive(ct, () => elapsed() - B()).catch(() => {}); if (audioReady()) startSound(); syncSnd();
       const loop = () => { if (done) return;
-        if (waiting) { start = performance.now(); mark('title'); try { window.__termBoot.title(g, innerWidth, innerHeight, (performance.now() - titleT0) / 1000, P, RM); } catch (e) {} raf = requestAnimationFrame(loop); return; }
+        if (waiting) { start = performance.now(); mark('title'); if (performance.now() - titleT0 >= AUTO_MS && !Q.has('noauto')) { begin(true); raf = requestAnimationFrame(loop); return; } try { window.__termBoot.title(g, innerWidth, innerHeight, (performance.now() - titleT0) / 1000, P, RM); } catch (e) {} raf = requestAnimationFrame(loop); return; }
         const T = elapsed(); { const sc = sceneOf(T); if (sc !== scene) { scene = sc; mark(sc); } }
         if (ct.logo && !ct.logo.shown && filmT(T) - B() >= CS.split) { ct.logo.shown = true; if (logoOf(ct)) mark('lg_shown:' + ct.logo.arm); }
         if (T >= total()) { frameAll(g, innerWidth, innerHeight, filmT(total() - 0.01), ct, st, P, RM); return finish(false); }
@@ -563,7 +571,7 @@
   // sizes for tests: the model's text, the subtitles, the pane titles (Nico: subtitles must not be smaller than the text on screen)
   function metrics(W, H, P, boot) { const was = term; term = !!boot && !!window.__termBoot; try { const L = layout(W, H, !!P); return { paneFz: L.ln.fz, subFz: subFz(L, !!P), titles: L.term ? L.panes.list.map(r => r.title) : [], sciY: H / 2,
     arriveFz: window.__termBoot ? window.__termBoot.arrive.sayFz(W, !!P) : 0 }; } finally { term = was; } }
-  window.__epoch0 = { timing: T => ({ dive: diveU(T), rot: T < CS.spin ? 0 : spinOf((T - CS.spin) / (CS.flash - CS.spin)) }), play, sounding: () => !!(cur && cur.sounding && cur.sounding()), logoArm, logoArms: LOGO_ARMS, prepLogo, logoOf, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
+  window.__epoch0 = { timing: T => ({ dive: diveU(T), rot: T < CS.spin ? 0 : spinOf((T - CS.spin) / (CS.flash - CS.spin)) }), play, sounding: () => !!(cur && cur.sounding && cur.sounding()), logoArm, logoArms: LOGO_ARMS, prepLogo, logoOf, thunderBuf, fanK, fanBed, fanArc: FAN, storyClock: CS, close: () => { if (cur) cur.close(); }, playing: () => !!cur && !!cur.el && cur.el.isConnected, autoMuted: () => !!(cur && cur.autoMuted && cur.autoMuted()), time: () => cur && cur.time ? cur.time() : null, paused: () => !!(cur && cur.paused && cur.paused()), makeContent, makeLiveContent, frame, renderAudio,
     loadBank, loadLoss, block: BLOCK, fit, schedule: SCHED, clock: C, last: null, total: ct => bootOf(ct) + totalOf(ct), metrics, wantBoot, wantArrive, pre: ct => bootOf(ct), arrival: ct => arrOf(ct),
     sampleLine: (i, seed) => liveLine(SCHED[i], rng(seed | 0)), sampleCont: () => liveCont(), protos: (T, st) => protosAt(T, !!st).map(p => p.pane), storyChart: T => storyPt(T), storyRefs: () => REFS.map(r => ({ y: r[0], label: r[1] })), logoAt, runBpm, keyOffset, layoutCheck: () => ({ ref: lastRef, band: lastBand }), curveShape: st => { const was = story; story = !!st; try { const ci = curveInfo(); return ci.all.map((v, k) => [ci.s ? 0.5 * Math.sqrt(k / ci.N) : Math.sqrt(k / ci.N), v]); } finally { story = was; } }, waiting: () => !!(cur && cur.waiting && cur.waiting()), start: () => cur && cur.start && cur.start(), scene: () => cur && cur.scene ? cur.scene() : null };   // the bank tool samples through the same path
 })();

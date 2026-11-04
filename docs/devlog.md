@@ -7,6 +7,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-04
 
+**The title card starts itself (HN, Nov 4).** On id-le.com, 19 of 26 story starts never pressed a key on the title card. Now the card waits 2 s (AUTO_MS), then the intro starts by itself, muted (no gesture yet, so the browser keeps the audio suspended), with a "🔊 tap for sound" chip bottom-centre; the first tap or key anywhere turns the sound on (it joins in sync: the film runs on performance.now(), never on the audio clock). A key or tap during the 2 s starts it with sound as before; Esc and "skip ›" still skip. Funnel: `title_auto` and `sound_on` (worker allowlist; stats.py prints them under the funnel). `?noauto` holds the card (tests). Labchat pace checked: no beat waits more than ~4 s without something happening (the longest hold is reading time on Doc's 108-character line, ~3.7 s), so unchanged. Test "title auto" (launch tier).
+
+## 2026-11-04
+
 **First reports, checked (stats).** Production's report-order counter read #1 27 vs #2 59 at 05:58 PT, which looked like half the first reports were lost. By 06:50 it read #1 55, #2 81: since 05:58, #1 +28 and #2 +22, every visit riding in #1. So the deficit is confined to 03:53–05:55, when our own check browsers (45 tagged visits, not yet kept apart) made up most in-page reports; real page loads send their #1. In a real browser the client path is sound: the visit goes out 3 s after the page is on screen (sendBeacon), and a quick close after 3.5 s still delivers it. Found and fixed on the way: the page the service worker's one-time isolation reload replaces sent its own visit on pagehide, and the reloaded page sent another, so one first visit counted twice. Now `coiReload` sets `__coiReloading` and stats send nothing from the replaced page. Test 'stats first' (fails on the old code). The remaining in-page vs server gap (46%) is page loads never on screen, ones leaving within the first seconds, and stats off, not lost reports.
 
 ## 2026-11-04
