@@ -996,12 +996,22 @@ def t_genesis_gate(P):
     need(pg.evaluate("() => window.__genesis.gate().how") == "command", "the command did not advance as a command")
     # paraphrases and nonsense through the gate (no step run: the gate's own verdict against its threshold)
     probe = pg.evaluate("""async ts => { const H = await window.__idleAI.heads(), G = await window.__genesis.loadGate(), out = {};
-        for (const t of ts) { const r = await window.__oracle.classify(t, H, true), v = window.__genesis.gateOf(G, r.x); out[t] = { top: v.top, p: +v.p.toFixed(3), adv: v.top !== 'other' && v.p >= G.thr[v.top] }; } return out; }""",
-        ["asdf", "hello", "who are you?", "evolve the world", "life is hard", "light years"])
+        for (const t of ts) { const r = await window.__oracle.classify(t, H, true), v = window.__genesis.gateOf(G, r.x, t); out[t] = { top: v.top, p: +v.p.toFixed(3), adv: v.adv }; } return out; }""",
+        ["asdf", "hello", "who are you?", "evolve the world", "life is hard", "light years", "get a life", "what is life", "end life", "lights off"])
     false_adv = {t: v for t, v in probe.items() if v["adv"]}
     need(not false_adv, f"the gate would advance on chit-chat or nonsense: {false_adv}")
+    # round 2 (Nov 4): paraphrases of "let there be life" now get through the creatures step's head (n-grams + the Oracle's features)
+    life = pg.evaluate("""async ts => { const H = await window.__idleAI.heads(), G = await window.__genesis.loadGate(), out = {};
+        for (const t of ts) { const r = await window.__oracle.classify(t, H, true), v = window.__genesis.gateOf(G, r.x, t, 'creatures'); out[t] = { top: v.top, p: +v.p.toFixed(3), adv: v.adv.includes('creatures') }; } return out; }""",
+        ["bring them to life", "create life", "let there be creatures", "life is hard", "get a life"])
+    need(life["bring them to life"]["adv"] and not life["life is hard"]["adv"] and not life["get a life"]["adv"], f"the creatures step's gate: {life}")
+    # the page's n-grams must match tools/genesis_gate.py's exactly (UTF-16 units, FNV-1a)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import genesis_gate as GG
+    for t in ["Let there be LIFE!", "  bring   them to life ", "lumière 🌱 vida", "😀😀"]:
+        js = pg.evaluate("t => Array.from(window.__genesis.gateNgrams(t, 2048, [1, 2, 3, 4]))", t)
+        need(max(abs(a - b) for a, b in zip(js, GG.ngrams(t))) < 1e-9, f"n-gram features differ between the page and genesis_gate.py for {t!r}")
     P.clean()
-    return f"'wachito' ×2: no advance, no world tool, nudged, command typed back (gate {wach.get('top')} {wach.get('p')}, v4 {wach.get('v4')}); 'LIGHTS ON.' advanced; no false advance on {len(probe)} off-script probes"
+    return f"'wachito' ×2: no advance, no world tool, nudged, command typed back (gate {wach.get('top')} {wach.get('p')}, v4 {wach.get('v4')}); 'LIGHTS ON.' advanced; no false advance on {len(probe)} off-script probes; creatures step: " + ", ".join(f"{t} {'✓' if v['adv'] else '·'} {v['p']}" for t, v in life.items()) + "; page n-grams = genesis_gate.py"
 
 
 def t_tiny_genesis(P):
