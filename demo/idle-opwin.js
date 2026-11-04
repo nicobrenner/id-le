@@ -48,10 +48,7 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   const TEMPLATES = [{ text: 'make it rain' }, { text: 'a sunny day' }, { text: 'add a new creature' }, { text: 'start a rave' }, { text: 'evolve a creature' },
     { text: "what's happening?" }, { text: '🔮 bring your own AI', act: 'oracle' }];
   const genChip = () => { try { return window.__genesis && window.__genesis.chip ? window.__genesis.chip() : null; } catch (e) { return null; } };
-  // Genesis pending (the storyline, Epoch 0 not done): no world chips and no ⚡, even when its console isn't up yet (Nov 4: after a reload
-  // mid-Genesis the console was missing, genChip() was null, and the tray offered "make it rain" while the step gate refused it)
-  const genOn = () => { if (genChip()) return true; try { return !!(window.__genesis && window.__genesis.genPending && window.__genesis.genPending()); } catch (e) { return false; } };
-  const ctx = () => { const g = genChip(); return { genesis: genOn(), step: g && g.step, phone: phone() }; };
+  const ctx = () => { const g = genChip(); return { genesis: !!g, step: g && g.step, phone: phone() }; };
   let override = null;   // __opwin.setChips(): chips another feature puts in the tray for a while (reviews, the playground's welcome…)
   // Genesis has no chips (v14, Nico: "let's drop the predefined button"): its command is pre-typed in the input; the tray stays closed there
   // the playground's way back to the story (v16): '📖 back to the story' first whenever there is story progress (idle-genesis.js __storyBack)
@@ -60,10 +57,10 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   const inStory = () => document.documentElement.classList.contains('gen-story');
   // plus a few slash commands that take nothing (idle-slash.js: IdleSlash.list('operator'), already filtered by the storyline's unlocks): /music, /stats…
   const slashChips = () => { try { const L = window.IdleSlash && window.IdleSlash.list ? window.IdleSlash.list('operator') : []; return L.filter(x => !x.args && !['help', 'operator', 'oracle'].includes(x.name)).slice(0, 4).map(x => ({ text: '/' + x.name, slash: 1 })); } catch (e) { return []; } };
-  function templateChips(c) { if (genOn()) return []; if (override) return override.slice(); const b = backChip(), T = TEMPLATES.filter(x => !(x.act === 'oracle' && inStory())).concat(slashChips()); return b ? [b, ...T] : T; }
+  function templateChips(c) { if (genChip()) return []; if (override) return override.slice(); const b = backChip(), T = TEMPLATES.filter(x => !(x.act === 'oracle' && inStory())).concat(slashChips()); return b ? [b, ...T] : T; }
   // the tray is open by default in Genesis (its chip is the step's glowing button), closed elsewhere unless the player opened it
   let userOpen = null; try { userOpen = localStorage.getItem('idle.opTray'); } catch (e) {}
-  const trayOpen = () => genOn() ? false : override ? true : userOpen === '1';
+  const trayOpen = () => genChip() ? false : override ? true : userOpen === '1';
   let sig = '';
   async function render(force) { const c = ctx(); let chips = null;
     if (!c.genesis && !override && typeof window.__opSuggest === 'function') { try { chips = await window.__opSuggest(c); } catch (e) { chips = null; } }
@@ -79,9 +76,6 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_chip', extra: { chip: x.act || x.text.slice(0, 24) } } })); } catch (er) {}
     if (typeof x.act === 'function') { try { x.act(x); } catch (er) { console.warn('opwin: chip', er); } return; }
     if (x.act === 'oracle') { try { window.__oracleBox && window.__oracleBox.open('tray'); } catch (er) {} return; }
-    // a quick action (idle-ai.js QUICK) runs at once, deterministically (Nov 4: "make it rain" had gone through the model and got "Yes, it is")
-    const AI = window.__idleAI; if (AI && AI.quickOf && AI.quickOf(x.text)) { AI.quick(x.text, 'chip'); return; }
-    if (x.slash && window.IdleSlash && window.IdleSlash.run) { try { window.IdleSlash.run(x.text, 'operator'); } catch (er) { console.warn('opwin: slash chip', er); } return; }   // a /command chip runs too
     text.value = x.text; if (coarse()) { const s = $('#lab-send'); if (s) s.click(); } else { text.focus(); try { text.setSelectionRange(text.value.length, text.value.length); } catch (er) {} } });
 
   // ---------- the window: dragged by its header (desktop), its place remembered; never a sidebar

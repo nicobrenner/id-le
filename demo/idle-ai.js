@@ -318,36 +318,8 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     return { option: r.option, p, arg: r.arg, target: r.target, acted, said };
   }
 
-  // ---------- quick actions (the ⚡ tray; Nov 4, Nico: "some of the basic auto-actions/predefined on the operator chat, don't even work! those
-  // should all work always"): a chip, or its exact words typed (command syntax, like /slash: case, spaces and end punctuation only), runs its
-  // action directly through the same tools, with a short line from the Operator; never through the model's reading of free text (which had
-  // answered "make it rain" with "Yes, it is")
-  const QK = s => String(s || '').toLowerCase().replace(/[.!?…\s]+$/u, '').replace(/\s+/g, ' ').trim();
-  const someone = () => { const cs = ((window.__arena && window.__arena.raw()) || []).filter(c => c.name && !c.lab); return cs.length ? cs[Math.floor(Math.random() * cs.length)].name : null; };
-  const NEWKINDS = ['crawly', 'tok', 'counter', 'designer', 'math'];
-  const QUICK = {
-    'make it rain': { tag: '☔ rain', run: () => runTool('weather', { kind: 'bitrain' }), say: () => 'rain it is ☔' },
-    'a sunny day': { tag: '☀ a sunny day', run: () => runTool('weather', { kind: 'clear' }), say: () => 'clear skies it is ☀' },
-    'add a new creature': { tag: '🐣 a new creature', run: () => runTool('spawn', { kind: NEWKINDS[Math.floor(Math.random() * NEWKINDS.length)] }), say: r => `${r.name} just walked in 🐣` },
-    'start a rave': { tag: '🕺 rave on', run: async () => { const M = window.__music; if (!M) return { error: 'no music deck here' }; M.setSource('deck'); M.setRave(true); return { ok: true }; }, say: () => 'the music is up and they are dancing 🕺' },
-    'stop the rave': { tag: '🔇 rave off', run: async () => { const M = window.__music; if (!M) return { error: 'no music deck here' }; M.setRave(false); return { ok: true }; }, say: () => 'party over, the floor is quiet again' },
-    'evolve a creature': { tag: '🧬 evolve', run: () => { const n = someone(); return n ? runTool('evolve', { name: n }) : { error: 'nobody here to evolve yet' }; }, say: r => `${r.evolved} just mutated 🧬` },
-    "what's happening?": { tag: '👀 a look around', run: () => runTool('look', {}), say: r => { const c = r.counts || {}, w = (r.weather && r.weather.name) || 'quiet weather';
-      return `${c.creatures ?? 'some'} creatures, ${c.words ?? 'lots of'} words, ${w}` + (r.mood ? `. the mood: ${r.mood}` : ''); } },
-  };
-  QUICK["what's happening"] = QUICK["what's happening?"]; QUICK['whats happening'] = QUICK["what's happening?"];
-  const quickOf = t => QUICK[QK(t)] || QUICK[QK(t) + '?'] || null;
-  let quickBusy = false;
-  async function quick(t, from) { const q = quickOf(t); if (!q || quickBusy) return null; quickBusy = true;
-    try { add('you', t); const el = chip(q.tag); let res; try { res = await q.run(); } catch (e) { res = { error: String(e.message || e) }; }
-      if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; add('TO', 'that did not work: ' + res.error, 'ai'); }
-      else add('TO', q.say(res || {}), 'ai');
-      try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_quick', extra: { q: QK(t).slice(0, 24), from: from || 'typed', ok: !(res && res.error) } } })); } catch (e) {}
-      return res || { ok: true }; } finally { quickBusy = false; } }
-
   async function sendAI() {
     const t = text.value.trim(); if (!t || busy) return;
-    if (quickOf(t)) { text.value = ''; await quick(t, 'typed'); return; }   // a quick action's exact words: the action itself, whatever the brain
     if (!ready()) { set.classList.add('on'); renderSet(); add('page', 'connect your AI first (⚙): ' + { anthropic: 'an API key and a model', openai: 'a base URL, a key and a model', local: 'a server URL and a model' }[cfg.brain], 'err'); return; }
     if (cfg.brain === 'tiny') { text.value = ''; add('you', t); busy = true; try { await tinyTurn(t); } catch (e) { add('page', String(e.message || e), 'err'); } finally { busy = false; } return; }
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_msg', extra: { brain: cfg.brain } } })); } catch (e) {}
@@ -362,5 +334,5 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   // take over the lab's send button and Cmd+Enter while an AI brain is chosen; the relay keeps the arena's own path
   sendBtn.addEventListener('click', e => { if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
   text.addEventListener('keydown', e => { if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
-  window.__idleAI = { quick, quickOf, quickList: () => Object.keys(QUICK), cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: (t, opts) => tinyTurn(t, opts), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
+  window.__idleAI = { cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: (t, opts) => tinyTurn(t, opts), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
 })();
