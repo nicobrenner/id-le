@@ -104,6 +104,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--helper", default="", help="base URL of the deployed helper worker (page fetch + world links); empty = without")
     ap.add_argument("--out", default=os.path.join(ROOT, "dist"))
+    ap.add_argument("--agent", action="store_true", help="include /agent/SKILL.md (bring your own agent) in a non-staging build, for local copies")
     ap.add_argument("--staging", action="store_true", help="staging build: a STAGING ribbon on every page and noindex (staging.id-le.com)")
     ap.add_argument("--pages-helper", action="store_true", help="also write _worker.js so Cloudflare Pages serves the helper on the same origin (/lab/*, /worlds/*); use with --helper https://<your domain>")
     a = ap.parse_args()
@@ -136,10 +137,13 @@ def main():
     shutil.copytree(os.path.join(DEMO, "fonts"), os.path.join(out, "fonts"))
     # the Director's view (staging only: never on id-le.com; idle-director.js also refuses to run off staging/local)
     if a.staging: shutil.copy2(os.path.join(DEMO, "director.html"), os.path.join(out, "director.html"))
+    # bring your own agent: the skill for agents (staging and local only until Nico's go; idle-agent.js and /lab/agent/* are gated the same way)
+    if a.staging or a.agent: os.makedirs(os.path.join(out, "agent"), exist_ok=True); shutil.copy2(os.path.join(DEMO, "agent", "SKILL.md"), os.path.join(out, "agent", "SKILL.md"))
     sums = vendor_ort(out)
     if a.staging: mark_staging(out)
     stamp_versions(out)
     open(os.path.join(out, "_headers"), "w").write(HEADERS.replace("/*\n", "/*\n  X-Robots-Tag: noindex, nofollow\n", 1) if a.staging else HEADERS)
+    if a.staging or a.agent: open(os.path.join(out, "_headers"), "a").write("/agent/SKILL.md\n  Content-Type: text/markdown; charset=utf-8\n  Cache-Control: no-cache\n")
     if a.pages_helper:   # Pages advanced mode: static files as usual, the helper (helper/worker.js) on the same origin
         w = open(os.path.join(ROOT, "helper", "worker.js"), encoding="utf-8").read()
         assert w.count("export default {") == 1

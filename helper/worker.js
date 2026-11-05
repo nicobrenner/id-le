@@ -641,11 +641,86 @@ export class PresenceTable {
     this.minute(); return { now: t, online: this.m.size, players, tot, hist: this.hist.map(h => ({ ...h })) };
   }
 }
+
+// ---------- Bring your own agent (Nov 4; Nico: "do we need an MCP? … a lot of times a skill might be simpler"): a skill file and a
+// plain HTTP API, no MCP. An open game tab is the one that acts: the player opens 🔮 Oracle → "connect an agent" and clicks "allow";
+// the tab gets a session (sid, secret, kept in the tab) and a 6-letter pairing code (10 minutes). An agent pairs with the code and gets a
+// token; from then on it reads the tab's world summary and asks for actions, which the TAB runs through the same tools as the Operator and
+// the ⚡ chips, and answers. The relay is one Durable Object instance per site (the Presence class, 'agent-live' / 'agent-staging'),
+// in memory only: nothing is written to storage, and a session ends when the tab says disconnect, stops polling for 30 s, or after 4 h.
+// Staging and local copies only until Nico's go (AGENT_ON_PROD in idle-agent.js; here: AGENT_ON=1 or a staging/local host).
+const AG_CODE_MS = 10 * 60e3, AG_IDLE_MS = 30e3, AG_TOKEN_MS = 4 * 3600e3, AG_PER_MIN = 30, AG_MAX = 2000, AG_WAIT_MS = 10e3;
+const AG_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const agRand = (n, abc) => { const b = new Uint8Array(n); crypto.getRandomValues(b); return [...b].map(x => abc[x % abc.length]).join(''); };
+const agHex = n => [...crypto.getRandomValues(new Uint8Array(n))].map(x => x.toString(16).padStart(2, '0')).join('');
+export class AgentRelay {
+  constructor(now = () => Date.now()) { this.now = now; this.s = new Map(); this.codes = new Map(); this.tokens = new Map(); }
+  sweep() { const t = this.now(); for (const [sid, x] of this.s) if (t - x.seen > AG_IDLE_MS || (x.tokenAt && t - x.tokenAt > AG_TOKEN_MS)) this.drop(sid);
+    for (const [c, sid] of this.codes) { const x = this.s.get(sid); if (!x || t > x.codeExp) this.codes.delete(c); } }
+  drop(sid) { const x = this.s.get(sid); if (!x) return; if (x.code) this.codes.delete(x.code); if (x.token) this.tokens.delete(x.token);
+    for (const w of x.waits.values()) w({ error: 'the tab disconnected' }); for (const w of x.stateWaits || []) w(); this.s.delete(sid); }
+  // the tab, after the player clicked "allow"
+  open() { this.sweep(); if (this.s.size >= AG_MAX) return { error: 'busy, try again later' }; const t = this.now(), sid = agHex(16);
+    let code; do code = agRand(6, AG_ABC); while (this.codes.has(code));
+    this.s.set(sid, { seen: t, code, codeExp: t + AG_CODE_MS, token: null, tokenAt: 0, state: null, cmds: [], waits: new Map(), events: [], n: 0, hits: [] });
+    this.codes.set(code, sid); return { ok: true, sid, code, expires: AG_CODE_MS / 1000 }; }
+  // the tab's poll: its world summary and the results of what it ran; answers whether an agent is paired and what to run next
+  tab(b) { this.sweep(); const x = b && this.s.get(b.sid); if (!x) return { error: 'no such session', gone: true }; x.seen = this.now();
+    if (b.state && typeof b.state === 'object') { x.state = b.state; for (const w of (x.stateWaits || []).splice(0)) w(); }
+    for (const r of Array.isArray(b.results) ? b.results.slice(0, 20) : []) { const w = x.waits.get(r.id); this.event(x, { kind: 'result', id: r.id, action: r.action, result: r.result });
+      if (w) { x.waits.delete(r.id); w(r.result); } }
+    for (const e of Array.isArray(b.events) ? b.events.slice(0, 20) : []) if (e && typeof e.text === 'string') this.event(x, { kind: e.kind === 'chat' ? 'chat' : 'world', who: String(e.who || '').slice(0, 30), text: e.text.slice(0, 300) });
+    const cmds = x.cmds; x.cmds = []; const live = x.code && this.now() <= x.codeExp;
+    return { ok: true, paired: !!x.token, code: live ? x.code : null, expired: !x.token && !live, cmds }; }
+  close(b) { const x = b && this.s.get(b.sid); if (x) this.drop(b.sid); return { ok: true }; }
+  event(x, e) { x.events.push({ n: ++x.n, t: this.now(), ...e }); if (x.events.length > 100) x.events.shift(); }
+  // the agent
+  pair(b) { this.sweep(); const code = String((b && b.code) || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); const sid = this.codes.get(code), x = sid && this.s.get(sid);
+    if (!x || this.now() > x.codeExp) return { error: 'unknown or expired code: ask the player for a fresh one (🔮 Oracle → connect an agent)', status: 403 };
+    this.codes.delete(code); x.code = null; x.token = agHex(24); x.tokenAt = this.now(); this.tokens.set(x.token, sid); this.event(x, { kind: 'paired' });
+    return { ok: true, token: x.token, expires: AG_TOKEN_MS / 1000 }; }
+  who(token) { this.sweep(); const sid = this.tokens.get(String(token || '')); return sid ? this.s.get(sid) : null; }
+  async state(token) { const x = this.who(token); if (!x) return { error: 'not paired (or the tab disconnected)', status: 401 };
+    if (!x.state) await new Promise(res => { const tm = setTimeout(res, 4000); (x.stateWaits = x.stateWaits || []).push(() => { clearTimeout(tm); res(); }); });   // just paired: the tab's first summary is on its way
+    return x.state ? { ok: true, state: x.state } : { ok: true, state: null, note: 'the tab has not sent its world yet; try again in a moment' }; }
+  events(token, after) { const x = this.who(token); if (!x) return { error: 'not paired (or the tab disconnected)', status: 401 }; const a = +after || 0; return { ok: true, events: x.events.filter(e => e.n > a) }; }
+  async act(token, b) { const x = this.who(token); if (!x) return { error: 'not paired (or the tab disconnected)', status: 401 };
+    const t = this.now(); x.hits = x.hits.filter(h => t - h < 60e3); if (x.hits.length >= AG_PER_MIN) return { error: `slow down: at most ${AG_PER_MIN} actions a minute`, status: 429 }; x.hits.push(t);
+    const action = String((b && b.action) || '').slice(0, 24), args = b && typeof b.args === 'object' && b.args ? b.args : {};
+    if (!/^[a-z_]+$/.test(action)) return { error: 'bad action', status: 400 };
+    const id = agHex(6); x.cmds.push({ id, action, args }); this.event(x, { kind: 'asked', id, action });
+    const r = await new Promise(res => { const tm = setTimeout(() => { if (x.waits.delete(id)) res({ pending: true, note: 'the tab has not answered yet; see /lab/agent/events' }); }, AG_WAIT_MS); x.waits.set(id, v => { clearTimeout(tm); res(v); }); });
+    return { ok: !r || !r.error, id, result: r }; }
+}
+const agMem = {};
+const agentOn = (env, req) => env.AGENT_ON === '1' || env.IDLE_ENV === 'staging' || /^(staging\.|localhost$|127\.0\.0\.1$)/.test(new URL(req.url).hostname);
+async function agentCall(env, req, op, body, token) {
+  const name = 'agent-' + prTable(env, req);
+  if (env.PRESENCE) { const stub = env.PRESENCE.get(env.PRESENCE.idFromName(name)); const r = await stub.fetch('https://presence/agent/' + op, { method: 'POST', body: JSON.stringify({ body, token }) }); if (r.status === 404) return { error: 'the agent relay is not deployed here yet', status: 503 }; return r.json(); }   // an older Presence class
+  return agentOp(agMem[name] || (agMem[name] = new AgentRelay()), op, body, token);
+}
+async function agentOp(R, op, body, token) {
+  if (op === 'open') return R.open(); if (op === 'tab') return R.tab(body); if (op === 'close') return R.close(body);
+  if (op === 'pair') return R.pair(body); if (op === 'state') return R.state(token); if (op === 'events') return R.events(token, body && body.after);
+  if (op === 'do') return R.act(token, body); return { error: 'unknown', status: 404 };
+}
+async function agent(req, env, path) {
+  if (!agentOn(env, req)) return json({ error: 'unknown path' }, 404);
+  const op = path.slice('/lab/agent/'.length), token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  if (!['open', 'tab', 'close', 'pair', 'state', 'events', 'do'].includes(op)) return json({ error: 'unknown path' }, 404);
+  let body = {}; if (req.method === 'POST') { const txt = await req.text(); if (txt.length > 16000) return json({ error: 'too big' }, 413); try { body = JSON.parse(txt || '{}'); } catch (e) { return json({ error: 'bad json' }, 400); } }
+  else if (op === 'events') body = { after: new URL(req.url).searchParams.get('after') };
+  else if (op !== 'state') return json({ error: 'POST only' }, 405);
+  const r = await agentCall(env, req, op, body, token); const st = r.status || (r.error ? 400 : 200); delete r.status;
+  return new Response(JSON.stringify(r), { status: st, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+}
+
 // the Durable Object: one instance (idFromName('live')) holds the table in memory; it is never written to storage
 export class Presence {
-  constructor(state, env) { this.table = new PresenceTable(); this.state = state; }
+  constructor(state, env) { this.table = new PresenceTable(); this.state = state; this.agent = new AgentRelay(); }
   async fetch(req) {
     const u = new URL(req.url);
+    if (u.pathname.startsWith('/agent/')) { const b = await req.json().catch(() => ({})); return json(await agentOp(this.agent, u.pathname.slice(7), b.body || {}, b.token || '')); }
     if (u.pathname.startsWith('/stats/') && this.state && this.state.storage) { const b = req.method === 'POST' ? await req.json().catch(() => ({})) : {}; return json(await statsAcc(this.state.storage, u.pathname, b)); }
     if (u.pathname === '/beat') { const q = await req.json().catch(() => null); return json(this.table.beat(q, req.headers.get('X-Country') || '')); }
     if (u.pathname === '/view') return json(this.table.view());
@@ -818,12 +893,13 @@ export default {
     const url = new URL(req.url), path = url.pathname, ip = req.headers.get('CF-Connecting-IP') || 'local', min = Math.floor(Date.now() / 60000);
     // background calls a page makes by itself (stats batches, world-link polls, notices) count in their own, larger budget, so they
     // never use up what the player's own actions (reading a page, its pictures) may do in a minute
-    const bg = path === '/lab/stats' || path === '/lab/p' || path === '/worlds/state' || path === '/lab/notices';
+    const bg = path === '/lab/stats' || path === '/lab/p' || path === '/worlds/state' || path === '/lab/notices' || path === '/lab/agent/tab';   // the agent tab polls about once a second while connected
     // presence beats: one tab beats 3 times a minute; 30 a minute per address leaves room for a household or a classroom behind one address
     if (path === '/lab/here') { const pk = ip + '|' + min + '|here', pn = (mem.hits.get(pk) || 0) + 1; mem.hits.set(pk, pn); if (mem.hits.size > 5000) mem.hits.clear(); if (pn > 30) return cors(env, req, json({ error: 'slow down' }, 429)); return cors(env, req, await presence(req, env, path)); }
     const k = ip + '|' + min + (bg ? '|bg' : ''), n = (mem.hits.get(k) || 0) + 1; mem.hits.set(k, n); if (mem.hits.size > 5000) mem.hits.clear();
     if (n > (bg ? 240 : (+env.RATE_PER_MIN || 60))) return cors(env, req, json({ error: 'slow down: too many requests this minute' }, 429));
     if (path === '/lab/live') return cors(env, req, await presence(req, env, path));
+    if (path.startsWith('/lab/agent/')) return cors(env, req, await agent(req, env, path));   // bring your own agent (staging/local until Nico's go)
     // what the stats accumulator holds but hasn't written to KV yet (tools/stats.py adds it, so the numbers are current): the live key, else 404
     if (path === '/lab/stats-pending') { if (req.method !== 'GET' || !(await liveKeyOk(req, env)) || !env.PRESENCE) return cors(env, req, json({ error: 'unknown path' }, 404));
       statSite = prTable(env, req); const st = env.PRESENCE.get(env.PRESENCE.idFromName('stats-' + statSite)); const r = await st.fetch('https://presence/stats/peek', { method: 'POST', body: '{}' });
