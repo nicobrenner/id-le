@@ -10,6 +10,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-04
 
+**Play arm undercount checked (stats).** Production at 14:52 PT read "arms assigned: story 9 · choose 6 · play 1". New test 'arm draw' (and 'arm draw sw', with the service worker live): 30 fresh browsers each on the production hostname, Math.random untouched: drawn {choose 13, play 8, story 9} → beacons {13, 8, 9}; with the service worker {9, 11, 10} → {9, 11, 10}. Every drawn arm sent exactly one confirmed beacon within 20 s; the draw (arena.html's head, one Math.random over three arms) is unbiased. No loss in the current code (confirmed beacons, live since 14:3x PT); the morning's play count came from the earlier fire-and-forget beacon plus small numbers (P(play ≤ 1 of 16) ≈ 1.3%). Watch the counts from the confirmed path.
+
+## 2026-11-04
+
 **⚡ toggles and no babble.** Nico: "with a ⚡ I can easily start the rave, but then I can't turn it off" ("stop a rave" got "Yes, it is. I'm sorry to hear that you're upset about your job").
 - The ⚡ rave chip follows the state: "start a rave" ↔ "stop the rave" (idle-opwin.js `stateful`, state from `__idleAI.quickState()`, read at most once a second). The weather already has both directions as chips ("make it rain" / "a sunny day").
 - Opposites as exact words (command syntax, like the chips): "stop the rave", "stop a rave", "stop rave", "rave off", "end the rave", "end rave"; "clear the sky", "stop the rain", "stop rain", "sunny". `/rave on|off` (no word: toggle); `/weather clear` already existed.
