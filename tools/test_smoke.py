@@ -2248,6 +2248,57 @@ def t_chips_genesis(P):
     P.clean()
     return f"Genesis: no ⚡ or chips at light/words; after a reload at life: console back, words typed in, no chips; 'make it rain' refused; life ran"
 
+
+def t_intent_story(P):
+    """An explicit destination beats a saved story (Nov 4, Nico on staging: ?start=ready resumed a Genesis paused at the words step: dark world,
+    a 📟 badge, no ⚡, 'start rave' refused). With words pending, /?start=ready lands in the playground: no console, no badge, ⚡ there, the rave
+    chip works, ⚙ can resume the story; the same for ?lab after resuming; the Operator opens without jumping; in Genesis a world request gets
+    'not yet', never a model sample"""
+    pg = P.open("/arena.html?story&noauto")
+    wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.waiting())", 60, P=P); pg.keyboard.press("k"); pg.wait_for_timeout(1500); pg.keyboard.press("Escape")
+    for _ in range(60):
+        pg.wait_for_timeout(1000)
+        if pg.evaluate("() => window.__genesis.ready()"): break
+        pg.mouse.click(400, 300)
+    wait_for(pg, "() => window.__genesis.next() === 'light' && window.__genesis.ready()", 90, P=P)
+    pg.fill("#lab-text", "lights on"); pg.press("#lab-text", "Enter")
+    wait_for(pg, "() => window.__genesis.next() === 'words' && window.__genesis.ready()", 90, P=P)
+    # Genesis: a world request hears 'not yet' plus the nudge, no model sample
+    n0 = pg.evaluate("() => document.querySelectorAll('#lab-thread > *').length")
+    pg.wait_for_timeout(1500); wait_for(pg, "() => window.__genesis.ready()", 60, P=P)
+    pg.fill("#lab-text", "start a rave"); pg.click("#lab-send"); pg.wait_for_timeout(6000)
+    said = pg.evaluate("() => { const m = [...document.querySelectorAll('.ai-row.ai')].pop(); return (m ? m.textContent : '') + ' || console: ' + ((document.getElementById('genConsole') || {}).textContent || ''); }")
+    need("not yet" in said.lower() and "yes, it is" not in said.lower(), f"Genesis reply to 'start a rave': {said!r}")
+    need(not pg.evaluate("() => !!(window.__music && window.__music.rave())"), "a rave started during Genesis")
+    res = {}
+    for url, entry in (("/arena.html?start=ready", "start"), ("/arena.html?lab", "lab")):
+        if entry == "lab":
+            pg.evaluate("() => window.__genesis.resumeStory()"); pg.wait_for_timeout(800)
+            need(pg.evaluate("() => window.__genesis.state().mode") == "story", "resume before ?lab")
+        pg.goto(P.base + url, wait_until="commit", timeout=60000)
+        wait_for(pg, "() => window.__restoredOrFresh && window.__genesis && window.__genesis.state() && window.__genesis.state().mode === 'free'", 60, P=P)
+        pg.wait_for_timeout(2500)
+        r = pg.evaluate("""() => ({ console: !!document.querySelector('#genConsole'), story: document.documentElement.classList.contains('gen-story'),
+          badge: window.__toHandle ? window.__toHandle.badge() : -1, resume: window.__genesis.canResume(), void: !!window.__genesisVoid,
+          tools: !!(document.getElementById('op-tools') && getComputedStyle(document.getElementById('op-tools')).display !== 'none') })""")
+        need(not r["console"] and not r["story"] and r["badge"] == 0 and r["resume"] and not r["void"], f"{url} with words pending: {r}")
+        pg.evaluate("() => { window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")
+        need(pg.evaluate("() => !!(document.getElementById('op-tools') && document.getElementById('op-tools').offsetParent)"), f"{url}: no ⚡")
+        wait_for(pg, "() => window.__opwin.tray().chips.includes('start a rave')", 10, P=P)
+        pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === 'start a rave').click()")
+        wait_for(pg, "() => !!(window.__music && window.__music.rave())", 8, P=P)
+        pg.evaluate("() => { const b = [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === 'stop the rave'); if (b) b.click(); }"); pg.wait_for_timeout(800)
+        res[entry] = r
+    # the Operator opens in place: sample its rect for 2 s after a fresh open
+    pg.evaluate("() => window.__opwin.close()"); pg.wait_for_timeout(400)
+    pg.evaluate("() => { window.__rects = []; window.__opwin.open(); const t0 = performance.now(); const tick = () => { const l = document.getElementById('lab'); const r = l.getBoundingClientRect(); window.__rects.push([Math.round(r.left), Math.round(r.top), getComputedStyle(l).transform, l.style.left, getComputedStyle(document.documentElement).getPropertyValue('--op-left')]); if (performance.now() - t0 < 2000) requestAnimationFrame(tick); }; requestAnimationFrame(tick); }")
+    pg.wait_for_timeout(2300)
+    rects = pg.evaluate("() => window.__rects")
+    xs = {r[0] for r in rects}
+    need(len(rects) > 5 and max(r[0] for r in rects) - min(r[0] for r in rects) <= 24, f"the Operator jumped while opening (its open animation slides a few px; a jump is more): {[r[0] for r in rects][:6]} … {sorted({r[0] for r in rects})}")
+    P.clean()
+    return f"Genesis 'start a rave' → not yet; ?start=ready and ?lab with words pending → playground, no badge, ⚡, rave works, resumable; open steady ({len(rects)} frames)"
+
 def t_prelife(P):
     """No creature before life, also after a reload mid-Genesis (Nov 4, found by the greybox fork: a world restored at the life step showed a
     creature). Reload at each pending step (light, words, life): 0 creatures for a few seconds after the resume; then life brings 3"""
@@ -4971,7 +5022,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("intent story", t_intent_story, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -4998,7 +5049,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),

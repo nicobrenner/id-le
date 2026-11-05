@@ -404,6 +404,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     light: 'hmm, not quite. to turn the lights on, say "{cmd}"', words: 'hmm, not quite. to give it words, say "{cmd}"',
     creatures: 'hmm, not quite. to bring life, say "{cmd}"', sky: 'hmm, not quite. to give it a sky, say "{cmd}"',
     asleep: 'the Tiny Oracle is still waking up. say "{cmd}" and I can do it' };
+  const NOT_YET = 'not yet: that comes once this consciousness is up and running';   // draft (Operator voice)
   let lastGate = null;
   async function submit(text) { const g = nextGuide(); if (!g || busy) return; const t = input(); const said = String(text || '').trim() || sayOf(g);
     if (t) { t.value = ''; delete t.dataset.genPre; }
@@ -411,7 +412,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     const ev = (type, extra) => { try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type, extra } })); } catch (e) {} };
     if (isCommand(g, said)) { try { window.dispatchEvent(new CustomEvent('idle:optext', { detail: { text: said, brain: 'guide' } })); } catch (e) {} add('you', said, 'you'); lastGate = { said, how: 'command' }; await STEPS[g].run(); return; }
     const O = window.__oracle, cmd = sayOf(g), refill = () => { const t2 = input(); if (t2) { t2.value = cmd; t2.dataset.genPre = '1'; } };
-    const nudge = k => { S.nudge = S.nudge || {}; S.nudge[g] = (S.nudge[g] || 0) + 1; save(); ev('genesis_nudge', { step: g }); say((NUDGE[k] || NUDGE[g] || 'say "{cmd}"').replace('{cmd}', cmd)); refill(); };
+    const nudge = (k, pre) => { S.nudge = S.nudge || {}; S.nudge[g] = (S.nudge[g] || 0) + 1; save(); ev('genesis_nudge', { step: g }); say((pre ? pre + '. ' : '') + (NUDGE[k] || NUDGE[g] || 'say "{cmd}"').replace('{cmd}', cmd).replace(/^hmm, not quite\. /, pre ? '' : 'hmm, not quite. ')); refill(); };
     if (!(O && O.ready && window.__idleAI)) { add('you', said, 'you'); lastGate = { said, how: 'asleep' }; nudge('asleep'); return; }
     // one read of the message: the Tiny Operator's heads (for its reply) and the gate's features
     let r = null, G = null; try { const H = await window.__idleAI.heads(); r = await O.classify(said, H, true); G = await loadGate(); } catch (e) { console.warn('genesis: gate', e); }
@@ -419,9 +420,11 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     lastGate = { said, how: 'gate', top: gv && gv.top, p: gv && +gv.p.toFixed(3), thr, v4: r && { option: r.option, p: r.probs[r.option] } };
     ev('genesis_gate', { step: g, top: gv ? gv.top : null, p: gv ? +gv.p.toFixed(2) : null });
     if (gv && gv.adv && gv.adv.includes(g)) { add('you', said, 'you'); await STEPS[g].run(); return; }
-    // not this step: a short real reply (no world tools during Genesis), then the nudge
-    add('you', said, 'you'); quiet = true; try { if (r) { const r2 = { ...r }; delete r2.x; await window.__idleAI.tiny(said, { noAct: true, r: r2 }); } } catch (e) { console.warn('genesis: operator', e); } finally { quiet = false; }
-    nudge(g); }
+    // not this step: no model sample any more (Nov 4, Nico: "start rave" got "Yes, it is. I'm sorry to hear that you're upset…" before the
+    // nudge). A world request ("start a rave", "make it rain") hears that it comes later; anything else just gets the nudge
+    add('you', said, 'you');
+    const ACTS = ['weather', 'spawn', 'rave_on', 'rave_off', 'disaster', 'rename', 'evolve', 'music'];
+    nudge(g, r && ACTS.includes(r.option) ? NOT_YET : null); }
   function onKey(e) { if (e.key !== 'Enter' || e.shiftKey || e.isComposing || !e.target || e.target.id !== 'lab-text' || !guiding() || !nextGuide()) return; if (/^\//.test(e.target.value.trim())) return;   // chat commands (/oracle) aren't steps
     e.preventDefault(); e.stopImmediatePropagation(); submit(e.target.value); }
   function onSend(e) { const b = e.target.closest && e.target.closest('#lab-send'); if (!b || !guiding() || !nextGuide()) return; e.preventDefault(); e.stopImmediatePropagation(); const t = input(); submit(t ? t.value : ''); }
@@ -980,6 +983,23 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   // controls) still waits for its epoch in UNLOCK. A player who muted Id|le stays muted (the master keeps the mute).
   function reward() { silence(false); try { const m = window.__music; if (m && m.setBg) m.setBg(true); } catch (e) {} }
   const genesisDone = () => !!(S && S.days && S.days[0]);
+  // an explicit destination beats a saved story (Nov 4, Nico on staging with ?start=ready: his browser had a storyline paused at the words step,
+  // and the link resumed Genesis instead: a dark world, a 📟 badge, no ⚡, "start rave" refused). Any intent entry (arena.html's INTENT list:
+  // ?start=ready|free, ?lab, ?wiki, #c=, ?review, ?halloween…) leaves the storyline for the playground, exactly like the end card's 🛝: the
+  // story stays resumable from ⚙ → 📖 Storyline (S.fp, canResume), a world still in Genesis is kept as a snapshot and the ready world loads.
+  // ?story keeps resuming the story; ?offer (the staging preview) runs in its own sandbox and is left alone
+  const intentLeave = !!(ENTRY && ENTRY !== 'offer' && !Q.has('story') && S && S.on && S.mode === 'story');
+  if (intentLeave) { const wasGen = !genesisDone(); S.mode = 'free'; S.fp = now(); S.endOpen = false; S.free = S.free || now(); S.left = ENTRY; save();
+    let k = 0; const iv = setInterval(() => { if (!(window.__restoredOrFresh && H())) { if (++k > 300) clearInterval(iv); return; } clearInterval(iv);
+      setTimeout(async () => { try {
+        night(false); silence(false); worldHold(false); blackCover(false); window.__genesisVoid = false;
+        for (const c of ['gen-void', 'gen-calm', 'gen-hush', 'gen-lit', 'gen-float', 'gen-box', 'gen-dark']) cls(c, 0);
+        const g = $('#genDay'); if (g) g.remove();
+        if (wasGen) { try { H().snapshot('the storyline (Genesis), before ' + ENTRY + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); } catch (e) {}
+          if (ENTRY === 'start' || ENTRY === 'lab') await readyWorld(); }
+        applyUnlocks(); tag();
+        try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_intent_leave', extra: { entry: ENTRY, genesis: wasGen } } })); } catch (e) {}
+      } catch (e) { console.warn('genesis: leaving the story for', ENTRY, e); } }, 300); }, 200); }
   function dayDone(n) { const d = dayOf(n); if (!d || (S.days && S.days[n])) return; S.days = S.days || {}; S.days[n] = now(); S.day = n + 1; S.ev = 2; save(); if (n === 0) { mark('e1done'); reward(); }   // funnel key kept: 'e1done' = Genesis (Epoch 0) done
     try { H() && H().log('genesis', { step: 'day', day: n }); } catch (e) {} try { window.__almanac && window.__almanac.ev('genesis', 'epoch ' + n + ' done', {}); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_day', extra: { day: n } } })); } catch (e) {}
