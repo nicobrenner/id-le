@@ -817,7 +817,7 @@ class Page:
         self.beacon_posts, self.beacon_seen, self.beacon_mode = [], set(), "ok"
         self.fb = []
         self.gifts = {}
-        self.team_keys, self.rv_order = set(), {}   # ⭐ reviews: who joined the team (by browser key), the per-item counts the server would return
+        self.team_keys, self.rv_order, self.rv_fail = set(), {}, False   # ⭐ reviews: who joined the team (by browser key), the per-item counts the server would return
         self.root = None   # set: the build is served from this folder at self.base (a production hostname, t_prod_gates)
         self.here = []      # presence beats (/lab/here) this page sent
         self.helper = None  # set: /lab/here and /lab/live go to this local helper (node helper/dev_server.mjs), t_presence
@@ -873,6 +873,7 @@ class Page:
                 rid = path[len("/lab/review/"):]; cfg = REVIEW_STUB.get(rid)
                 if not cfg: return route.fulfill(status=404, content_type="application/json", body='{"error":"no such review"}')
                 if route.request.method == "POST":
+                    if self.rv_fail: return route.fulfill(status=503, content_type="application/json", body='{"error":"down"}')
                     body = json.loads(route.request.post_data or "{}")
                     if cfg.get("stage") == "team" and body.get("bkey") not in self.team_keys and not (body.get("via") == "pick" and rid == "logos"): return route.fulfill(status=403, content_type="application/json", body=json.dumps({"error": "join first", "team": "loop"}))
                     self.fb.append(("review:" + rid, route.request.post_data or ""))
@@ -3416,6 +3417,109 @@ def t_pick(P, phone=False):
             f"counted as 'pick'; " + "; ".join(out))
 
 
+def _pick_sent(P):
+    return [json.loads(b) for k, b in P.fb if k == "review:logos"]
+
+
+def t_pick_more(P, phone=False):
+    """The pick link, round 2 (Nov 6, Nico: "we should add a Skip button/action, and there should be a submit/send/save … for the
+    comments/notes"; "a gallery view … so that users can see/compare all the animations"): ↓ skips (counted, sent as skips, the skipped
+    ones offered again at the end); a note is sent on its own (send note, ⌘/Ctrl+Enter: ✓ sent, read-only), with a swipe if left in the
+    box, and a failed send says so and keeps the text; the gallery (?view=gallery): every animation in a grid (2 columns, 1 on a phone),
+    cards mounted only near view, one plays at a time, ▶ play all, the same ✕ ★ ✓ skip (a rating there counts once with the deck's)."""
+    P.ctx.add_init_script(PICK_CFG)
+    pg = P.open("/review/intro-logo-animation?statstest")
+    card = "() => window.__reviews.state() && window.__reviews.state().view === 'card'"
+    cur = lambda: pg.evaluate("() => window.__reviews.state().current")
+    wait_for(pg, card, 60, P=P); id0 = cur()
+    pg.keyboard.press("ArrowDown"); wait_for(pg, f"() => window.__reviews.state().view === 'card' && window.__reviews.state().current !== {json.dumps(id0)}", 20, P=P)
+    need(id0 not in pg.evaluate("() => window.__reviews.state().rated") and "pk_skip" in pg.evaluate("() => window.__funnel.reached()"), "↓ skips without a score")
+    # a note on its own
+    id1 = cur(); pg.click("#review .notebar [data-a=note]"); pg.fill("#review .notebar textarea", "the dust is lovely"); pg.click("#review .notebar [data-a=sendnote]")
+    wait_for(pg, "() => (document.querySelector('#review .notebar .nst.ok') || {}).textContent === '✓ sent, thanks'", 20, P=P)
+    ph = pg.evaluate("() => ({ ro: document.querySelector('#review .notebar textarea').readOnly, txt: document.querySelector('#review .notebar textarea').value })")
+    alone = [x for x in _pick_sent(P) if x.get("notes") == {id1: "the dust is lovely"}]
+    need(alone and not alone[0].get("scores") and alone[0].get("via") == "pick" and ph == {"ro": True, "txt": "the dust is lovely"}, f"a note alone: {alone} {ph}")
+    pg.click("#review .acts [data-act=like]"); wait_for(pg, f"() => window.__reviews.state().view === 'card' && window.__reviews.state().current !== {json.dumps(id1)}", 20, P=P)
+    # a note left in the box goes with the swipe
+    id2 = cur(); pg.click("#review .notebar [data-a=note]"); pg.fill("#review .notebar textarea", "too loud at the end"); pg.click("#review .acts [data-act=love]")
+    t0 = time.time()
+    while time.time() - t0 < 15 and not [x for x in _pick_sent(P) if (x.get("notes") or {}).get(id2)]: pg.wait_for_timeout(300)
+    withs = [x for x in _pick_sent(P) if (x.get("notes") or {}).get(id2)]
+    need(withs and withs[0]["notes"][id2] == "too loud at the end" and withs[0]["scores"].get(id2) == 5 and sum(1 for x in _pick_sent(P) if (x.get("notes") or {}).get(id1)) == 1,
+         f"a note with a swipe (and the sent one not again): {withs}")
+    # a failed send says so and keeps the text; ⌘/Ctrl+Enter sends
+    wait_for(pg, f"() => window.__reviews.state().view === 'card' && window.__reviews.state().current !== {json.dumps(id2)}", 20, P=P)
+    id3 = cur(); P.rv_fail = True; pg.click("#review .notebar [data-a=note]"); pg.fill("#review .notebar textarea", "font is too thin"); pg.click("#review .notebar [data-a=sendnote]")
+    wait_for(pg, "() => !!document.querySelector('#review .notebar .nst.err')", 20, P=P)
+    f = pg.evaluate("() => ({ t: document.querySelector('#review .notebar .nst.err').textContent, v: document.querySelector('#review .notebar textarea').value })")
+    need("couldn’t send" in f["t"] and f["v"] == "font is too thin", f"a failed send: {f}")
+    P.rv_fail = False; pg.focus("#review .notebar textarea"); pg.keyboard.press("Control+Enter")
+    wait_for(pg, "() => !!document.querySelector('#review .notebar .nst.ok')", 20, P=P)
+    need([x for x in _pick_sent(P) if (x.get("notes") or {}).get(id3) == "font is too thin"], "⌘/Ctrl+Enter sends the note")
+    pg.click("#review .acts [data-act=skip]")   # the skip button skips too
+    # through the rest: then the skipped ones come back once
+    t0 = time.time()
+    while time.time() - t0 < 120:
+        v = pg.evaluate("() => window.__reviews.state().view")
+        if v == "skipped": break
+        if v == "check": pg.click("#review [data-a=more]")
+        elif v == "card": pg.keyboard.press("ArrowRight")
+        elif v == "h2h": pg.click("#review [data-a=skiph2h]")
+        pg.wait_for_timeout(700)
+    q = pg.evaluate("() => ({ v: window.__reviews.state().view, t: document.querySelector('#review .panel h3') && document.querySelector('#review .panel h3').textContent })")
+    need(q["v"] == "skipped" and q["t"] == "you skipped 2: see them again?", f"the skipped ones at the end: {q}")
+    pg.click("#review [data-a=again]"); wait_for(pg, card, 20, P=P)
+    need(cur() in (id0, id3) and "rv_skipagain" in pg.evaluate("() => window.__funnel.reached()"), "see them again: a skipped one")
+    sk = [k for x in _pick_sent(P) for k in (x.get("skips") or [])]
+    need(id0 in sk and id3 in sk, f"skips sent: {sk}")
+    pg.close()
+    # the gallery
+    g = P.open("/review/intro-logo-animation?view=gallery&statstest")
+    wait_for(g, "() => window.__reviews.state() && window.__reviews.state().view === 'gallery' && document.querySelectorAll('#review .gal .card').length === 12", 60, P=P)
+    lay = g.evaluate("""() => { const cs = [...document.querySelectorAll('#review .gal .card')], L = new Set(cs.map(c => Math.round(c.getBoundingClientRect().left)));
+      return { cols: L.size, mounted: document.querySelectorAll('#review .gal canvas.cv').length, sw: document.documentElement.scrollWidth, w: innerWidth,
+        chosen: document.querySelectorAll('#review .gal .gacts button.chosen').length }; }""")
+    need(lay["cols"] == (1 if phone else 2) and lay["sw"] <= lay["w"] and lay["chosen"] >= 10, f"the gallery's grid: {lay}")
+    if phone: need(lay["mounted"] < 12, f"on a phone only the cards near view are mounted: {lay}")
+    shots = os.environ.get("IDLE_PICK_SHOTS")
+    if shots: g.wait_for_timeout(1500); g.screenshot(path=os.path.join(shots, f"gallery-{'phone' if phone else 'desktop'}.png"))
+    wait_for(g, "() => document.querySelectorAll('#review .gal .card .big').length >= 2", 20, P=P)
+    g.evaluate("() => document.querySelectorAll('#review .gal .card .big')[0].click()"); wait_for(g, "() => document.querySelectorAll('#review .gal .card.on').length === 1", 20, P=P)
+    first = g.evaluate("() => document.querySelector('#review .gal .card.on').dataset.item")
+    g.evaluate("() => document.querySelectorAll('#review .gal .card .big')[1].click()")
+    wait_for(g, f"() => document.querySelectorAll('#review .gal .card.on').length === 1 && document.querySelector('#review .gal .card.on').dataset.item !== {json.dumps(first)}", 20, P=P)
+    g.click("#review [data-a=stopall]"); wait_for(g, "() => document.querySelectorAll('#review .gal .card.on').length === 0", 20, P=P)
+    g.click("#review [data-a=playall]"); wait_for(g, "() => document.querySelectorAll('#review .gal .card.on').length === 1", 20, P=P)
+    g.click("#review [data-a=stopall]")
+    # a skipped one rated in the gallery: sent once, then not in the deck's queue
+    free = g.evaluate("() => [...document.querySelectorAll('#review .gal .card')].map(c => c.dataset.item).find(id => !(id in window.__reviews.state().rated))")
+    need(free is not None, "an unrated card in the gallery")
+    g.evaluate(f"() => document.querySelector('#review .gal .card[data-item={json.dumps(free)}] [data-g=like]').scrollIntoView()")
+    g.click(f"#review .gal .card[data-item={json.dumps(free)}] [data-g=like]")
+    g.click("#review [data-a=deck]"); wait_for(g, "() => window.__reviews.state().view !== 'gallery'", 20, P=P)
+    t0 = time.time()
+    while time.time() - t0 < 15 and not [x for x in _pick_sent(P) if (x.get("scores") or {}).get(free)]: g.wait_for_timeout(300)
+    st = g.evaluate("() => window.__reviews.state()")
+    need([x for x in _pick_sent(P) if (x.get("scores") or {}).get(free) == 3] and free not in (st.get("queue") or []), f"rated in the gallery: sent, and out of the deck: {st.get('view')} {st.get('queue')}")
+    g.close(); P.clean()
+    return (f"{'phone: ' if phone else ''}↓ and skip › skip (sent as skips, 'you skipped 2: see them again?'); a note alone (✓ sent, read-only), with a swipe, "
+            f"⌘/Ctrl+Enter, a failed send keeps the text; the gallery: 12 cards, {lay['cols']} column(s), {lay['mounted']} mounted at first, one plays at a time, ▶ play all, ■ stop, "
+            "a rating there is sent and leaves the deck")
+
+
+def review_results_unit():
+    """tools/review.py results: skips and notes per item, and the notes' words"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("review_py", os.path.join(ROOT, "tools", "review.py")); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    cfg = {"kind": "logos", "title": "the logo", "items": ["a", "b"], "stage": "team"}
+    agg = {"sends": 3, "pick": 2, "items": {"a": {"n": 2, "sum": 8, "s": [0, 0, 0, 1, 0, 1], "skip": 1, "notes": 2}, "b": {"n": 0, "sum": 0, "s": [0] * 6, "skip": 2}}, "pw": {}}
+    L = m.result_lines("logos", cfg, agg, [{"id": "n1", "notes": {"a": "lovely"}, "scores": {"a": 5}}])
+    txt = "\n".join(L)
+    need("3 skips" in L[0] and "2 from the pick link" in L[0] and "skipped 1  notes 2" in txt and "skipped 2" in txt and "a 5/5: lovely" in txt, txt)
+    return "totals with skips, per item skipped/notes, the notes' words"
+
+
 def pick_routes_unit():
     """the generated Pages worker for the pick's paths: /review/intro-logo-animation and /pick/logo are served (their HTML, counted as game
     page views); a /review/… or /pick/… that doesn't exist goes to / (302), never a bare 404; _routes.json sends them through the worker;
@@ -3437,14 +3541,14 @@ def pick_routes_unit():
             need('<base href="/">' in h and 'rel="canonical" href="https://id-le.com/review/intro-logo-animation"' in h and "noindex" not in h and "?v=" in h, f"{rel}: base, canonical, indexable, stamped scripts")
         js = r"""
 const W = (await import(process.argv[2])).default, html = '<!doctype html><title>x</title>';
-const ASSETS = { fetch: async (r) => { const p = new URL(r.url).pathname; return ['/review/intro-logo-animation', '/pick/logo', '/'].includes(p) ? new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } }) : new Response('nf', { status: 404 }); } };
+const ASSETS = { fetch: async (r) => { const p = new URL(r.url).pathname; return ['/review/intro-logo-animation', '/review/intro-logo-animation-gallery', '/pick/logo', '/'].includes(p) ? new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } }) : new Response('nf', { status: 404 }); } };
 const env = { ASSETS }, out = {};
-for (const p of ['/review/intro-logo-animation', '/pick/logo', '/review/nope', '/pick/whatever']) { const r = await W.fetch(new Request('https://id-le.com' + p), env, {}); out[p] = [r.status, r.headers.get('Location')]; }
+for (const p of ['/review/intro-logo-animation', '/review/intro-logo-animation/gallery', '/pick/logo', '/review/nope', '/pick/whatever']) { const r = await W.fetch(new Request('https://id-le.com' + p), env, {}); out[p] = [r.status, r.headers.get('Location')]; }
 console.log(JSON.stringify(out));"""
         open(os.path.join(tmp, "t.mjs"), "w").write(js); shutil.copy(os.path.join(prod, "_worker.js"), os.path.join(tmp, "w.mjs"))
         r = subprocess.run(["node", os.path.join(tmp, "t.mjs"), "file://" + os.path.join(tmp, "w.mjs")], capture_output=True, text=True, timeout=60)
         need(r.returncode == 0, (r.stderr or r.stdout)[-400:]); o = json.loads(r.stdout.strip().splitlines()[-1])
-        need(o["/review/intro-logo-animation"][0] == 200 and o["/pick/logo"][0] == 200 and o["/review/nope"] == [302, "https://id-le.com/"] and o["/pick/whatever"][0] == 302, f"routes: {o}")
+        need(o["/review/intro-logo-animation"][0] == 200 and o["/review/intro-logo-animation/gallery"][0] == 200 and o["/pick/logo"][0] == 200 and o["/review/nope"] == [302, "https://id-le.com/"] and o["/pick/whatever"][0] == 302, f"routes: {o}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return f"served 200: /review/intro-logo-animation, /pick/logo; unknown → 302 /; _routes, sitemap + robots (prod only), base + canonical + stamped scripts"
@@ -5528,7 +5632,7 @@ def browser_tests(a, out):
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
-        ("reviews link", t_reviews_link, (), {}), ("pick", t_pick, (), {}), ("pick phone", lambda P: t_pick(P, True), (), PHONE), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
+        ("reviews link", t_reviews_link, (), {}), ("pick", t_pick, (), {}), ("pick phone", lambda P: t_pick(P, True), (), PHONE), ("pick more", t_pick_more, (), {}), ("pick more phone", lambda P: t_pick_more(P, True), (), PHONE), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
         ("founder personal", t_founder_personal, (), {}), ("founder phone", t_founder_phone, (), {"is_mobile": True, "has_touch": True}),
         ("story landing", t_story_landing, (), {}), ("story intro", t_story_intro, (), {}), ("logo thunder", t_logo_thunder, (), {}),
         ("story fans", t_story_fans, (), {}), ("story clock", t_story_clock, (), {}), ("logo solo", t_logo_solo, (), {}), ("logo ab", t_logo_ab, (), {}),
@@ -5552,11 +5656,11 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"pick", "pick phone", "agent relay", "genpan", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "rave2", "rave2 phone", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"pick", "pick phone", "pick more", "pick more phone", "agent relay", "genpan", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "rave2", "rave2 phone", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("agent relay", "agent relay: bring your own agent (pairing, tokens, limits, gate)", lambda: agent_unit()), ("agent relay server", "agent relay server: server.py's relay for local copies", lambda: agent_server_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
-          ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("pick routes", "pick routes: the logo pick's paths on Pages", lambda: pick_routes_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
+          ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("pick routes", "pick routes: the logo pick's paths on Pages", lambda: pick_routes_unit()), ("review results", "review results: tools/review.py's lines", lambda: review_results_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
 # checks that pass the same assertions with the page's clock sped up (?timescale). Measured Nov 4 on 15 of the slowest at 5×: none got
 # meaningfully faster (they wait on the test's own fixed pauses and on the audio clock, which can't run faster) and 4 broke (story keys
 # logo, story landing, founder, reviews cutscene), so none is listed yet; the mechanism stays for checks written to use it

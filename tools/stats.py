@@ -299,7 +299,7 @@ def sf_split(sf):
 # ⭐ reviews and the Humans in the Loop (idle-reviews.js), per arm: the invitation, the answers, the decks, the swipes
 RV_STEPS = [("invite", "invited"), ("inv_link", "· by a link"), ("inv_auto", "· by the timing rule"), ("inv_other", "· from 🌱 / the game"), ("in", "I'm in"), ("notnow", "not now"), ("pledge", "pledge"), ("open_link", "opened by a link"), ("open_lab", "opened in the game"),
             ("open_end", "opened from the end card"), ("play", "played an item"), ("nah", "✕"), ("like", "✓"), ("love", "★"), ("more", "kept going"), ("done", "done"),
-            ("h2h", "which one?"), ("sent", "finished a review"), ("tab", "opened 🌱"), ("vested", "vested")]
+            ("h2h", "which one?"), ("skip", "skipped"), ("skipagain", "saw the skipped again"), ("note", "sent a note"), ("gallery", "opened the gallery"), ("playall", "▶ play all"), ("sent", "finished a review"), ("tab", "opened 🌱"), ("vested", "vested")]
 
 
 # the logo pick link (Nov 6: /review/intro-logo-animation, /pick/logo, ?pick=logo; idle-reviews.js PICK), from its once-per-browser moments
@@ -307,6 +307,7 @@ def pk_line(pk):
     n = pk.get("open") or pk.get("entry") or 0
     pct = lambda k: f" ({100 * pk.get(k, 0) / n:.0f}%)" if n else ""
     return (f"🎬 logo pick link: arrived {pk.get('entry', 0)} → review opened {pk.get('open', 0)} → judged 1+ {pk.get('first', 0)}{pct('first')} → finished {pk.get('done', 0)}{pct('done')}"
+            f" · skipped {pk.get('skip', 0)}, sent a note {pk.get('note', 0)}, gallery {pk.get('gallery', 0)}"
             f" · then: 📖 story {pk.get('go_story', 0)}, 🌱 free play {pk.get('go_free', 0)}, 🧪 data lab {pk.get('go_lab', 0)}, closed (→ free play) {pk.get('close', 0)}")
 
 

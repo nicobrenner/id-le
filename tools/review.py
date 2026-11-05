@@ -52,6 +52,24 @@ def bradley_terry(items, pw, iters=60):
     return s
 
 
+def result_lines(rid, cfg, agg, notes):
+    """the results as printed: totals, one line per item (like-rate, n, average, Bradley-Terry, the 0-5 spread, skips and notes), the notes"""
+    out = [f"review {rid} ({cfg['kind']}, {cfg.get('stage', 'public')} stage, {'open' if cfg.get('open', True) else 'closed'}): {agg.get('sends', 0)} browsers"
+           + (f" ({agg['pick']} from the pick link, id-le.com/review/intro-logo-animation)" if agg.get('pick') else "") + f", {sum((agg.get('pw') or {}).values())} 'which one?' picks"
+           + f", {sum((x or {}).get('skip', 0) for x in (agg.get('items') or {}).values())} skips"]
+    for score, it, lr, n, avg, bt, spread in ranking(cfg, agg):
+        sp = " ".join(f"{k}:{v}" for k, v in enumerate(spread) if v); x = (agg.get("items") or {}).get(it) or {}
+        extra = (f"  skipped {x['skip']}" if x.get("skip") else "") + (f"  notes {x['notes']}" if x.get("notes") else "")
+        out.append(f"  {it:<22} {'like %3.0f%%' % (lr * 100) if lr is not None else 'no scores':<10} n={n:<4} avg={'%.2f' % avg if avg is not None else '-':<5} bt={bt:.2f}  {sp}{extra}")
+    if notes:
+        out.append(f"\nnotes ({len(notes)}, private; mark them read with tools/feedback.py done <id>):")
+        for v in notes:
+            for it, t in (v.get("notes") or {}).items():
+                sc = (v.get("scores") or {}).get(it)
+                out.append(f"  {v['id']}  {it}{'' if sc is None else f' {sc}/5'}: {t}")
+    return out
+
+
 def ranking(cfg, agg):
     """rows (score, id, like-rate, n, avg, bt): ranked by the like-rate with a Bayesian prior ((likes + 1) / (n + 2)), Bradley-Terry breaking near-ties"""
     bt = bradley_terry(cfg["items"], agg.get("pw"))
@@ -135,18 +153,8 @@ def main():
     if not cfg:
         sys.exit("no such review")
     agg = json.loads(kv.get(f"review:{a.rid}:agg") or "null") or {"sends": 0, "items": {}}
-    print(f"review {a.rid} ({cfg['kind']}, {cfg.get('stage', 'public')} stage, {'open' if cfg.get('open', True) else 'closed'}): {agg.get('sends', 0)} browsers"
-          + (f" ({agg['pick']} from the pick link, id-le.com/review/intro-logo-animation)" if agg.get('pick') else "") + f", {sum((agg.get('pw') or {}).values())} 'which one?' picks")
-    for score, it, lr, n, avg, bt, spread in ranking(cfg, agg):
-        sp = " ".join(f"{k}:{v}" for k, v in enumerate(spread) if v)
-        print(f"  {it:<22} {'like %3.0f%%' % (lr * 100) if lr is not None else 'no scores':<10} n={n:<4} avg={'%.2f' % avg if avg is not None else '-':<5} bt={bt:.2f}  {sp}")
     notes = [v for v in queue(kv, include_reviewed=True) if v.get("kind") == "review" and v.get("rid") == a.rid]
-    if notes:
-        print(f"\nnotes ({len(notes)}, private; mark them read with tools/feedback.py done <id>):")
-        for v in notes:
-            for it, t in (v.get("notes") or {}).items():
-                sc = (v.get("scores") or {}).get(it)
-                print(f"  {v['id']}  {it}{'' if sc is None else f' {sc}/5'}: {t}")
+    print("\n".join(result_lines(a.rid, cfg, agg, notes)))
 
 
 if __name__ == "__main__":
