@@ -2429,7 +2429,10 @@ def t_story_keys(P, keys=None):
     pg = P.open("/privacy.html"); real = pg.evaluate("() => Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]))"); pg.close()
     need(real == {"arena.genomes": "REAL", "idle.genesis": "REAL"}, f"keyframes wrote to the real localStorage: {sorted(real)[:8]}")
     # the strip: #keys lists every keyframe; ` toggles it
-    pg = P.open("/arena.html?fresh#keys"); wait_for(pg, "() => !!document.querySelector('#keyStrip')", 20, P=P)
+    # #keys now opens the Director's view (Nov 4); on a keyframe page ` still toggles the strip
+    pg = P.open("/arena.html?fresh#keys"); wait_for(pg, "() => /director/.test(location.pathname)", 20); pg.close()
+    pg = P.open("/arena.html?story&at=lights"); wait_for(pg, "() => !!window.__storyKey", 20, P=P)
+    pg.keyboard.press("`"); wait_for(pg, "() => !!document.querySelector('#keyStrip')", 10, P=P)
     ks = pg.evaluate("() => [...document.querySelectorAll('#keyStrip a')].map(a => a.dataset.k)")
     need(len(ks) == 15 and ks[0] == "title" and ks[-1] == "end", f"the strip: {ks}")
     pg.keyboard.press("`"); pg.wait_for_timeout(200); need(not pg.evaluate("() => !!document.querySelector('#keyStrip')"), "` should hide the strip")
@@ -4195,6 +4198,43 @@ def t_director(P, root):
     return f"{len(r['scenes'])} scenes, {len(r['keys'])} keyframes + {len(r['aliases'])} aliases (all with ▶), {len(r['dark']) + len(r['dm']) + len(r['moment']) + len(r['subs'])} lines from the code; ▶ dark-hole, logo-crt, moment open their moments; a changed line shows up"
 
 
+
+def t_director_play(P, root, engine="chromium"):
+    """The Director's view, Nov 4 (Nico: blank in Safari, COEP blocked the /arena.html → /arena redirect in the frame; "when pressing play,
+    please skip the 'press key'… maybe it can end with that screen, so that it's easy to loop"; "#keys doesn't work"): the frames load the
+    canonical /arena (no redirect); ▶ starts the scene at once (no #keyGate); a scene ends on "▶ replay · next scene ›", which replays it or
+    plays the next one; /#keys opens the Director's view."""
+    shutil.copy2(os.path.join(DEMO, "director.html"), os.path.join(root, "director.html"))
+    pg = P.open("/director.html")
+    wait_for(pg, "() => document.querySelectorAll('#tree li.scene').length >= 13", 120, P=P)
+    src = pg.evaluate("() => document.querySelector('#dumpFrame').getAttribute('src')")
+    need(src.startswith("arena?"), f"the data frame must load the canonical /arena (no redirect): {src}")
+    frame = "document.querySelector('#frame').contentWindow"
+    def play(key):
+        pg.evaluate(f"() => document.querySelector('#tree button.play[data-play=\"{key}\"]').click()"); t0 = time.time()
+        wait_for(pg, f"() => {{ const w = {frame}; return !!(w && w.__storyKey && w.__storyKey.key && w.__storyKey.started); }}", 30)
+        return time.time() - t0
+    # a film scene: starts at once, no gate, ends with the full end screen (any key replays)
+    dt = play("crash")
+    g = pg.evaluate(f"() => {{ const w = {frame}; return {{ gate: !!w.document.querySelector('#keyGate'), path: w.location.pathname, dir: w.__storyKey.director }}; }}")
+    need(not g["gate"] and g["dir"] and g["path"] in ("/arena", "/arena.html"), f"▶ must start without the gate: {g}")
+    need(dt < 8, f"▶ took {dt:.1f} s to start")
+    wait_for(pg, f"() => {{ const w = {frame}; return !!w.document.querySelector('#dirEnd'); }}", 60)
+    r1 = pg.evaluate(f"() => {frame}.location.search")
+    pg.evaluate(f"() => {frame}.document.querySelector('#dirEnd button[data-a=replay]').click()")
+    wait_for(pg, f"() => {{ const w = {frame}; return w.location.search !== {json.dumps(r1)} && w.__storyKey && w.__storyKey.key === 'crash'; }}", 30)
+    # an interactive scene: when the story waits for the player, the small bar; "next scene ›" plays the next keyframe
+    play("lights")
+    wait_for(pg, f"() => {{ const w = {frame}; const e = w.document.querySelector('#dirEnd'); return !!e && e.dataset.why === 'waits'; }}", 90)
+    pg.evaluate(f"() => {frame}.document.querySelector('#dirEnd button[data-a=next]').click()")
+    wait_for(pg, f"() => {{ const w = {frame}; return w.__storyKey && w.__storyKey.key === 'words'; }}", 30)
+    pg.close()
+    # #keys → the Director's view
+    pg = P.open("/arena.html#keys"); wait_for(pg, "() => /director/.test(location.pathname)", 30); pg.close()
+    P.warns[:] = [w for w in P.warns if "cached Oracle unavailable" not in w]   # the preview frame isn't cross-origin isolated locally: the Oracle's fallback is expected
+    P.clean()
+    return f"{engine}: data frame at {src}; ▶ crash started in {dt:.1f} s with no gate; end screen → replay → crash again; lights → 'waits' bar → next → words; #keys → /director"
+
 def t_prod_gates(P, root, parts=("site", "links", "arms")):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
     storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
@@ -5016,7 +5056,7 @@ def browser_tests(a, out):
         ("halloween light", t_halloween_light, (), {"color_scheme": "light"}), ("intro", t_intro, (), {}),
         ("intro reduced", t_intro_reduced, (), {"reduced_motion": "reduce"}), ("intro epoch0", t_intro_epoch0, (), {}), ("trick or treat", t_treat, (), {}),
         ("wikipedia world", t_wiki, (), {}), ("genesis", t_genesis, (), {}), ("genesis gate", t_genesis_gate, (), {}), ("story", t_story, (), {}), ("story migrate", t_story_migrate, (), {}),
-        ("story keys", t_story_keys, (), {}), ("director", t_director, (out,), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
+        ("story keys", t_story_keys, (), {}), ("director", t_director, (out,), {}), ("director play", t_director_play, (out,), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
         ("story row", t_story_row, (), {}), ("story modal", t_story_modal, (), {}), ("operator float", t_operator_float, (), {}),
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
@@ -5040,6 +5080,7 @@ def browser_tests(a, out):
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
     if a.full: T.append(("fps", t_fps, (), {}, C))
     # Safari's engine: desktop size for the review link (its service worker would answer /lab/* past the test's stubs), the iPhone profile for the rest
+    T.append(("director play webkit", lambda P: t_director_play(P, out, "webkit"), (), {"viewport": {"width": 1280, "height": 800}}, W))
     T.append(("reviews webkit", lambda P: t_reviews_link(P, "webkit"), (), {"viewport": {"width": 1280, "height": 800}, "service_workers": "block"}, W))
     T.append(("ios sound", t_ios_sound, (), {"service_workers": "block"}, IPHONE))
     for name, fn, kw in (("camera phone", t_camera, {"phone": True}), ("zoom shapes phone", t_zoom_shapes, {}), ("lab card phone", t_lab_card, {"phone": True}),
