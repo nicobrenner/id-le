@@ -152,7 +152,7 @@ html.gen-void #floor{background-image:linear-gradient(#ffffff08 1px,transparent 
 html.gen-void.gen-lit #arena,html.gen-void.gen-lit #floor{background-color:#121733!important}
 html.gen-void.gen-lit #floor{background-image:radial-gradient(120% 60% at 50% 105%,#ffcf8a2e,transparent 60%),linear-gradient(#ffffff16 1px,transparent 1px),linear-gradient(90deg,#ffffff16 1px,transparent 1px)!important;background-size:100% 100%,64px 64px,64px 64px!important}
 html.gen-void #daylight,html.gen-void #weather,html.gen-void #buildCv,html.gen-void #lakeCv{opacity:0!important}
-html.gen-void.gen-lit #daylight{opacity:.6!important}
+html.gen-void.gen-lit #daylight{opacity:.6!important}html.gen-cosmos.gen-cosmos.gen-cosmos #daylight{opacity:0!important}
 html.gen-void :is(#ntf,#notice,#distoast,#whisper,#cline,#studio,#herd,#team,#conn,#advpanel,#dj,#reelpanel,#drawer,#trees,#almanac,#ntfpanel,#roomchat,#capPill,#hwChip,#soundHint){display:none!important}
 html.gen-hush :is(#ntf,#notice,#distoast){display:none!important}
 html.gen-calm :is(#topbar,#placesBar,#rc-open,#minimap,#zoomer,#lab-toggle,#mbar){opacity:0!important;pointer-events:none!important}
@@ -512,14 +512,22 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   const firstWords = (c, i) => { try { const R = window.__raveHooks; if (!c || !R || !R.say) return; R.say(c, FIRST_LINES[i] || FIRST_LINES[0]); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub && c.bub.classList.remove('on'), 3800); (snd.first = snd.first || []).push({ i, who: c.name, at: now() }); } catch (e) {} };
   let tapped = false; try { tapped = localStorage.getItem('idle.e0tap') === '1'; } catch (e) {}
   let finaleNow = false;
-  async function finale(family) { const h = H(); finaleNow = true; aside(1); const Q0 = QUICK(), RM = Q0 || matchMedia('(prefers-reduced-motion: reduce)').matches; snd.strikes = [];
+  async function finale(family) { const h = H(); finaleNow = true; aside(1); const Q0 = QUICK(), RM = Q0 || matchMedia('(prefers-reduced-motion: reduce)').matches; snd.strikes = []; snd.spots = [];
     try { await sleep(RM ? 150 : 600);
       if (!h.words().length) await _letThereBeWords('');
       const cam = h.cam(), z = cam.z || 1, ws = h.words().filter(w => !w.carriedBy && w.text.length > 2 && w.el), cs = h.creatures(), names = [], used = new Set();
-      const spot = k => { const tx = cam.x + k * Math.min(innerWidth, 900) * 0.24 / z, ty = cam.y + (k ? 30 : -30) / z; return ws.filter(w => !used.has(w)).sort((a, b) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(b.x - tx, b.y - ty))[0] || { x: tx, y: ty }; };
+      // genpan (Nov 4, Nico: "the thunders hit kind of where I was looking, but the creatures appeared elsewhere, in fact not on screen"): the
+      // spots are on screen, wherever the player dragged the floor to. Each one is a word that is in view and near its target (left, right,
+      // middle of the view); with no such word (the words fell where the view was before the drag) the strike lands on the floor itself
+      const A = $('#arena'), ar = A ? A.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight }, TW = (window.__lakeHooks || {}).toWorld;
+      const scr = w => { const r = w.el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+      const inView = p => p.x > ar.left + 60 && p.x < ar.left + ar.width - 60 && p.y > ar.top + 70 && p.y < ar.top + ar.height - 60;
+      const spot = k => { const sx = ar.left + ar.width / 2 + k * Math.min(ar.width, 900) * 0.24, sy = ar.top + ar.height / 2 + (k ? 30 : -30);
+        const near = ws.filter(w => !used.has(w)).map(w => ({ w, p: scr(w) })).filter(o => inView(o.p) && Math.hypot(o.p.x - sx, o.p.y - sy) < 220).sort((a, b) => Math.hypot(a.p.x - sx, a.p.y - sy) - Math.hypot(b.p.x - sx, b.p.y - sy))[0];
+        if (near) return near.w; const p = TW ? TW(sx, sy) : { x: cam.x + (sx - ar.left - ar.width / 2) / z, y: cam.y + (sy - ar.top - ar.height / 2) / z }; return { x: p.x, y: p.y, sx, sy }; };
       let first = null;
       for (const [i, k] of [[0, -1], [1, 1], [2, 0]]) { const w = spot(k); used.add(w); first = first || w;
-        const r = w.el ? w.el.getBoundingClientRect() : null; if (!Q0) strike(r ? r.left + r.width / 2 : innerWidth / 2, r ? r.top + r.height / 2 : innerHeight / 2, i);
+        const r = w.el ? w.el.getBoundingClientRect() : null; if (!Q0) strike(r ? r.left + r.width / 2 : w.sx, r ? r.top + r.height / 2 : w.sy, i); (snd.spots = snd.spots || []).push(r ? { x: r.left + r.width / 2, y: r.top + r.height / 2, word: 1 } : { x: w.sx, y: w.sy, word: 0 });
         await sleep(RM ? 60 : 140); ring(w.x, w.y);
         const c0 = hold.shift(); let name = null;
         if (c0) { c0.x = c0.tx = w.x; c0.y = c0.ty = w.y + 8; if (c0.el) c0.el.style.visibility = ''; if (!cs.includes(c0)) cs.push(c0); name = c0.name; }
