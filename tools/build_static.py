@@ -134,6 +134,8 @@ def main():
     shutil.copytree(os.path.join(DEMO, "jeffy-heads"), os.path.join(out, "jeffy-heads"))
     # Id|le's own typefaces (tools/fontgen/export.py); their URLs carry a content hash, so they can be cached for good
     shutil.copytree(os.path.join(DEMO, "fonts"), os.path.join(out, "fonts"))
+    # the Director's view (staging only: never on id-le.com; idle-director.js also refuses to run off staging/local)
+    if a.staging: shutil.copy2(os.path.join(DEMO, "director.html"), os.path.join(out, "director.html"))
     sums = vendor_ort(out)
     if a.staging: mark_staging(out)
     stamp_versions(out)

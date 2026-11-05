@@ -3950,6 +3950,49 @@ def t_intent_links(P, root):
     return "; ".join(out)
 
 
+def t_director(P, root):
+    """The Director's view (Nov 4, Nico: "a 'Director's view'… the whole storyboard/outline/index of the story mode… a sort of tree… for reviewing
+    and playback"): /director (staging/local only) builds its tree from the game's own constants (window.__storyDump, read from a sandboxed
+    arena.html?storydump), lists every scene and keyframe, plays any node from its keyframe, and changes when a line in the code changes."""
+    shutil.copy2(os.path.join(DEMO, "director.html"), os.path.join(root, "director.html"))
+    gen = os.path.join(root, "idle-genesis.js"); orig = open(gen, encoding="utf-8").read()
+    def open_dir():
+        pg = P.open("/director.html")
+        wait_for(pg, "() => document.querySelectorAll('#tree li.scene').length >= 13", 120, P=P)
+        return pg
+    pg = open_dir()
+    r = pg.evaluate("""() => { const D = window.__director.data(), plays = new Set([...document.querySelectorAll('#tree button.play')].map(b => b.dataset.play));
+      return { scenes: [...document.querySelectorAll('#tree li.scene')].map(l => l.dataset.play), keys: D.keys.keys.map(k => k.key), aliases: D.keys.aliases.map(a => a.key),
+        missing: D.keys.keys.map(k => k.key).concat(D.keys.aliases.map(a => a.key)).filter(k => !plays.has(k)), text: document.querySelector('#tree').textContent,
+        dark: D.genesis.dark.map(x => x.text), dm: D.boot.dm.map(x => x.text), moment: D.genesis.moment.lines, subs: D.epoch0.subs.map(s => s.text) }; }""")
+    need(not r["missing"], f"keyframes without a ▶ in the tree: {r['missing']}")
+    for k in ["title", "computer", "labchat", "boot", "run", "crash", "logo", "dark", "operator", "lights", "words", "life", "epoch0done", "epoch1start"]:
+        need(k in r["scenes"], f"scene {k} missing from the tree: {r['scenes']}")
+    for k in ["epoch1start", "moment", "naming", "dark-hole", "logo-c3", "logo-crt"]:
+        need(k in r["aliases"], f"keyframe {k} missing: {r['aliases']}")
+    for t in r["dark"] + r["dm"] + r["moment"] + r["subs"]:
+        need(t in r["text"], f"a line from the code isn't in the tree: {t!r}")
+    # ▶ on three nodes: each opens its moment (the frame's keyframe, alias and variant)
+    played = {}
+    for key, check in [("dark-hole", "() => { const w = document.querySelector('#frame').contentWindow; return w.__storyKey && w.__storyKey.key === 'dark' && w.__storyKey.sub === 'hole'; }"),
+                       ("logo-crt", "() => { const w = document.querySelector('#frame').contentWindow; return w.__storyKey && w.__storyKey.key === 'logo' && /logo=crt/.test(w.location.search); }"),
+                       ("moment", "() => { const w = document.querySelector('#frame').contentWindow; return w.__storyKey && w.__storyKey.key === 'epoch0done' && w.__storyKey.alias === 'moment'; }")]:
+        pg.evaluate(f"() => document.querySelector('#tree button.play[data-play=\"{key}\"]').click()")
+        P.warns[:] = [w for w in P.warns if "cached Oracle unavailable" not in w]   # the preview frame isn't cross-origin isolated: the Oracle's two-model fallback is expected there
+        wait_for(pg, check, 60); played[key] = True
+    pg.close(); P.warns[:] = [w for w in P.warns if "cached Oracle unavailable" not in w]
+    # the tree follows the code: change one of Doc's lines in the dark, reload, it shows up (then restore the file)
+    try:
+        changed = orig.replace("'whaa…'", "'whaa… (director check)'", 1); need(changed != orig, "the first dark line wasn't found to change")
+        open(gen, "w", encoding="utf-8").write(changed)
+        pg = open_dir(); txt = pg.evaluate("() => document.querySelector('#tree').textContent"); pg.close()
+        need("whaa… (director check)" in txt, "a changed line in idle-genesis.js didn't show up in the director's tree")
+    finally:
+        open(gen, "w", encoding="utf-8").write(orig)
+    P.clean()
+    return f"{len(r['scenes'])} scenes, {len(r['keys'])} keyframes + {len(r['aliases'])} aliases (all with ▶), {len(r['dark']) + len(r['dm']) + len(r['moment']) + len(r['subs'])} lines from the code; ▶ dark-hole, logo-crt, moment open their moments; a changed line shows up"
+
+
 def t_prod_gates(P, root, parts=("site", "links", "arms")):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
     storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
@@ -3970,6 +4013,8 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
         need(r["offer"] and not r["void"] and not r["intro"] and r["v"] is None and r["c"] > 0, f"a returning world keeps its world and gets the offer: {r}")
         pg.evaluate("() => document.querySelector('#offerModal .lt').click()"); pg.wait_for_timeout(4000)   # not now: the modal goes into ⚙
         need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
+        # the Director's view is staging/local only: not in a production build at all
+        need(pg.evaluate("async () => (await fetch('/director.html')).status") == 404, "the director's view must not be on id-le.com")
         # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
         P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
         pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
@@ -4763,7 +4808,7 @@ def browser_tests(a, out):
         ("halloween light", t_halloween_light, (), {"color_scheme": "light"}), ("intro", t_intro, (), {}),
         ("intro reduced", t_intro_reduced, (), {"reduced_motion": "reduce"}), ("intro epoch0", t_intro_epoch0, (), {}), ("trick or treat", t_treat, (), {}),
         ("wikipedia world", t_wiki, (), {}), ("genesis", t_genesis, (), {}), ("genesis gate", t_genesis_gate, (), {}), ("story", t_story, (), {}), ("story migrate", t_story_migrate, (), {}),
-        ("story keys", t_story_keys, (), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
+        ("story keys", t_story_keys, (), {}), ("director", t_director, (out,), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
         ("story row", t_story_row, (), {}), ("story modal", t_story_modal, (), {}), ("operator float", t_operator_float, (), {}),
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),

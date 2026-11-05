@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Id|le director</title>
+<script src="idle-fonts.js"></script>
+<style>
+:root{--bg:#0b0c12;--surface:#14151c;--ink:#e9e7f2;--ink2:#b7b4c6;--muted:#7d7a8f;--line:#2a2b36;--accent:#e0367a;--doc:#ffcf8a;--heart:#ff8fb3;--lester:#6fd6a8;--op:#9fb4ff;--crit:#c9a2ff;--sound:#7ee3f5;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1.45 var(--ui-font,system-ui),system-ui,sans-serif}
+#app{display:grid;grid-template-columns:minmax(360px,1fr) minmax(420px,1.1fr);height:100vh}
+#left{overflow:auto;padding:14px 16px 40px;border-right:1px solid var(--line)}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+header h1{margin:0;font:400 15px/1.2 var(--term-font,ui-monospace),ui-monospace,monospace;letter-spacing:.06em;color:var(--ink2)}
+header h1 b{color:var(--ink);font-weight:400}header h1 i{font-style:normal;color:var(--accent)}
+header .sp{flex:1}
+button,label.btn{font:inherit;font-size:12px;color:var(--ink);background:#1d1e28;border:1px solid var(--line);border-radius:8px;padding:4px 10px;cursor:pointer}
+button[aria-pressed=true]{border-color:var(--ink2);background:#2a2b38}
+#note{color:var(--muted);font-size:12px;margin:0 0 10px}
+ul.tree,ul.tree ul{list-style:none;margin:0;padding:0}ul.tree ul{padding-left:16px;border-left:1px dashed var(--line);margin-left:7px}
+.row{display:flex;align-items:baseline;gap:6px;padding:2px 4px;border-radius:6px;min-height:22px}
+.row:hover{background:#181924}.row.sel{background:#222439}
+.tw{width:14px;flex:none;color:var(--muted);cursor:pointer;user-select:none;text-align:center}
+.k{flex:none;font:11px var(--term-font,ui-monospace),monospace;color:var(--muted);min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
+.t{flex:1;min-width:0}.scene>.row .t{font-weight:600}.epoch>.row .t{font:600 13px var(--display-font,var(--ui-font,system-ui));letter-spacing:.05em;text-transform:uppercase;color:#ffcf7a}
+.who{font:11px var(--term-font,ui-monospace),monospace;margin-right:4px}
+.who.doc{color:var(--doc)}.who.heart{color:var(--heart)}.who.lester{color:var(--lester)}.who.op{color:var(--op)}.who.crit{color:var(--crit)}.who.bot{color:var(--muted)}
+.cue .t{color:var(--sound)}.say .t{color:#cfd6ff}.ui .t{color:#e7d9b0}.ph .t{color:var(--muted);font-style:italic}
+.play{flex:none;font-size:11px;padding:1px 7px;border-radius:7px;background:#232650;border:1px solid #4b56c7}
+.play:hover{background:#3a46c8}
+.pf{flex:none;font:11px var(--term-font,ui-monospace),monospace;color:#9be8b8;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pf .d{color:#ffb38a}.hidden-pf .pf{display:none}
+li.closed>ul{display:none}
+#right{display:flex;flex-direction:column;min-width:0}
+#bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+#bar b{font:400 13px var(--term-font,ui-monospace),monospace;color:var(--ink2)}#bar .sp{flex:1}#bar a{color:#9fd8ff;font-size:12px}
+#frame{flex:1;border:0;width:100%;background:#000}
+#empty{flex:1;display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:30px}
+#err{color:#ff8a8a;font-size:12px}[hidden]{display:none!important}
+@media (max-width:820px){#app{grid-template-columns:1fr;grid-template-rows:auto 60vh;height:auto}#left{border-right:0;border-bottom:1px solid var(--line)}}
+</style></head>
+<body>
+<div id="app">
+  <section id="left">
+    <header><h1><b>Id<i>|</i>le</b> · director</h1><span class="sp"></span>
+      <button id="openAll">expand all</button><button id="closeAll">collapse</button>
+      <button id="pfBtn" aria-pressed="false" title="producer's overlay: the storyline's funnel next to each scene">📊 producer</button>
+      <label class="btn" title="load director_stats.json (python3 tools/director_stats.py)">📂 stats<input id="pfFile" type="file" accept="application/json" hidden></label></header>
+    <p id="note">loading the storyline from the game's own code…</p>
+    <ul class="tree" id="tree"></ul>
+  </section>
+  <section id="right">
+    <div id="bar"><b id="cur">nothing playing</b><span class="sp"></span><a id="tab" href="#" target="_blank" rel="noopener" hidden>open in a tab ↗</a></div>
+    <div id="empty">press ▶ next to any scene or beat to play it here<br><small>(a sandboxed keyframe: your real world is never touched)</small></div>
+    <iframe id="frame" title="keyframe preview" hidden allow="autoplay"></iframe>
+  </section>
+</div>
+<iframe id="dumpFrame" title="storyline data" hidden style="display:none"></iframe>
+<script src="idle-director.js"></script>
+</body></html>

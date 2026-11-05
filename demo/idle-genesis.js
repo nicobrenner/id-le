@@ -21,6 +21,21 @@
 // A chooser (Storyline · From scratch (free) · A ready world) opens any ?genesis start and ⚙ → "new consciousness" (snapshot first, always).
 (() => {
   const Q = new URLSearchParams(location.search), $ = s => document.querySelector(s), now = () => Date.now();
+  // the Director's view (staging/local, /director): the storyline's script as data, from the very constants the story plays (a getter, read
+  // after the module has run; it changes nothing about how the story plays)
+  (window.__storyDump = window.__storyDump || {}).genesis = () => ({
+    dark: DARK.map((text, i) => ({ who: 'doc', text, i, hold: +darkHold(text).toFixed(2), type: +(text.length / DCPS).toFixed(2) })), approach: APPROACH, silentAt: SILENT, ringEnd: RING_END,
+    ring: { ...RING }, wake: WAKE.slice(), lightsOn: LIGHTS_ON, steps: JSON.parse(JSON.stringify(STORY_STEP)), lines: JSON.parse(JSON.stringify(LINES)),
+    firstWords: FIRST_WORDS.split(' '), firstLines: FIRST_LINES.slice(), tapHint: TAP_HINT, life: { ...LIFE }, wordsMs: WORDS_MS, dawnMs: DAWN_MS,
+    moment: { stamp: MOMENT.stamp, lines: MOMENT.lines.slice(), start: MOMENT.start, play: MOMENT.play(), confirm: { q: MOMENT.confirm.q, stay: MOMENT.confirm.stay, go: MOMENT.confirm.go() } },
+    ask: { mode: ASK.mode, name: { q: ASK.name.q, pool: ASK.name.pool.slice(), thanks: ASK.name.thanks('Nova') }, logo: { q: ASK.logo.q, a: ASK.logo.a, b: ASK.logo.b }, skip: ASK.skip },
+    end: { head: END.head, line: END.line, help: END.help, free: END.free(), back: END.back },
+    nudge: JSON.parse(JSON.stringify(NUDGE, (k, v) => typeof v === 'function' ? v('…') : v)),
+    welcome: { lines: WELCOME.lines.slice(), chip: WELCOME.chip, after: WELCOME.after },
+    offer: { prod: OFFER_PROD, v3: { ...OFFERV.v3 } }, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: (d.goals || []).map(g => g[1]), teaches: d.teaches, front: d.front && d.front.head, line: d.line })), unlock: UNLOCK.map(r => r.slice(0, 3)),
+    sounds: [{ cue: 'the ringing (ears)', scene: 'dark', note: 'peaks in ' + RING.attack + ' s, gone by line ' + RING_END }, { cue: 'black-hole rumble and shake', scene: 'dark', note: 'from the second-to-last line' },
+      { cue: 'the hum (electric)', scene: 'lights' }, { cue: 'word chimes + the wind bed (ocean)', scene: 'words' },
+      { cue: 'three strikes with far thunder, one creature each', scene: 'life', note: LIFE.gap + ' ms apart' }, { cue: 'the music comes in', scene: 'life', note: LIFE.quiet + ' ms after the last creature' }] });
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // ON since Nov 4 (Nico's go, 11-03 before bed: "deploy the A/B/C testing when it lands, all the options looked good to me, at least for first launch")
   const AB = 'on';   // the A/B switch: 'on' gives NEW browsers the storyline or the current start 50/50 (stored in this browser only, as idle.gv: story | current)
@@ -44,11 +59,14 @@
   const ALIVE_AFTER = 3;
   let topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
   // the guided steps: the Tiny Operator's introduction, the one glowing suggestion (also pre-filled in the input), a quiet alternative
+  // the storyline's words for the guided steps (the free console's are inline below); the Director's view reads these too
+  const STORY_STEP = { light: { say: 'lights on' }, words: { intro: 'it has no words yet. say "let there be words"', say: 'let there be words' },
+    creatures: { intro: 'a floor of words, and nobody to walk on it. say "let there be life"', say: 'let there be life' } };
   const STEPS = {
-    light: { intro: 'it is very dark in here. first, some light', say: () => storyMode() ? 'lights on' : 'let there be light', run: () => actions.light() },
-    words: { intro: () => storyMode() ? 'it has no words yet. say "let there be words"' : 'a stage, and nothing on it. it needs words', say: () => storyMode() ? 'let there be words' : 'let there be words about ' + topic.toLowerCase(),
+    light: { intro: 'it is very dark in here. first, some light', say: () => storyMode() ? STORY_STEP.light.say : 'let there be light', run: () => actions.light() },
+    words: { intro: () => storyMode() ? STORY_STEP.words.intro : 'a stage, and nothing on it. it needs words', say: () => storyMode() ? STORY_STEP.words.say : 'let there be words about ' + topic.toLowerCase(),
       run: () => actions.letThereBeWords(storyMode() ? '' : topic), alt: ['about anything', () => actions.letThereBeWords('')] },
-    creatures: { intro: () => storyMode() ? 'a floor of words, and nobody to walk on it. say "let there be life"' : 'a floor of words. nobody to walk on it yet', say: () => storyMode() ? 'let there be life' : 'bring life', run: () => actions.firstCreatures() },
+    creatures: { intro: () => storyMode() ? STORY_STEP.creatures.intro : 'a floor of words. nobody to walk on it yet', say: () => storyMode() ? STORY_STEP.creatures.say : 'bring life', run: () => actions.firstCreatures() },
     sky: { intro: 'they will want a sky, or a song', say: 'give it weather', run: () => actions.weather(),
       alt: ['let there be music', () => actions.music()] } };
   // the Tiny Operator's lines after each step (short, warm, no trailing period: the chat style rule)
@@ -753,7 +771,7 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; blackCover(true); nightStart(RM); mark('landing'); ringing(untilLine(-1, 3.0)); setTimeout(() => silence(true), 2800); setTimeout(() => blackCover(false), 1500);
     const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
     document.body.appendChild(skipB);
-    await new Promise(res => { let i = -1, timer = 0, downAt = 0, done = false;
+    await new Promise(res => { let i = SK && SK.sub === 'hole' ? APPROACH - 1 : -1, timer = 0, downAt = 0, done = false;   // the dark-hole keyframe starts at the hole's approach
       const st = nightState, next = () => { clearTimeout(timer); if (done) return; i++; if (i >= DARK.length) return finish('lines'); const text = DARK[i];
         land.line = { text, t0: st.t }; land.shown = i + 1; if (i === DARK.length - 2 && !land.shakeT) { land.shakeT = st.t; rumble(true); } land.shake = !!land.shakeT; st.k = (i + 1) / DARK.length; const d = darkHold(text) + text.length / DCPS; if (i < RING_END) ringAim(untilLine(i, d)); else if (i === RING_END) { land.ringEndSt = st.t; ringAim(0); } if (i === APPROACH) land.approachSt = st.t; wait(d); };
       // the line's clock follows the night's (paused while held)

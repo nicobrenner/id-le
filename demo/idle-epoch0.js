@@ -17,6 +17,13 @@
 // API (used by idle-intro.js for tone 'epoch0'): window.__epoch0.play(opts) → Promise<{ tone:'epoch0', skipped }>, close(), playing();
 // recordings and tests: makeContent({ live }), frame(content, T, canvas) (call in increasing T), renderAudio(content) → base64 WAV.
 (() => {
+  // the Director's view (staging/local, /director): the run's script as data, from the constants the film plays (a getter, read after load)
+  (window.__storyDump = window.__storyDump || {}).epoch0 = () => ({
+    cues: { ...CS }, subs: SUBS.map(([at, text]) => ({ who: 'doc', text, at })), refs: REFS.map(([y, text]) => ({ text, y })),
+    protos: PROTOS.map(p => ({ at: p.t0, pane: p.pane })), logoArms: { ...LOGO_ARMS }, logoHold: LOGO_HOLD, logoTail: LOGO_TAIL, purrGap: PURR_GAP, autoMs: AUTO_MS,
+    fans: { ...FAN, down: FAN_DOWN },
+    sounds: [{ cue: 'fans spin up as the loss dives', at: CS.over }, { cue: 'fans spin down (' + FAN_DOWN + ' s)', at: CS.flash }, { cue: 'logo: the strike / thunder', at: CS.split },
+      { cue: 'logo: the purr into noise', at: CS.split + PURR_GAP }] });
   // Id|le's own fonts when loaded (idle-fonts.js): Doc's lines in f3, the panes in the terminal face f1
   const SUBF = (window.IDLE_FONTS && window.IDLE_FONTS.sub) || '"Helvetica Neue", Helvetica, Arial, system-ui, sans-serif', TERMF = (window.IDLE_FONTS && window.IDLE_FONTS.term) || 'ui-monospace, Menlo, monospace';
   // anything matching is resampled (live) or dropped (bank): unkind words, bodies, violence, and names that must never appear
