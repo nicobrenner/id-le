@@ -60,7 +60,10 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   const inStory = () => document.documentElement.classList.contains('gen-story');
   // plus a few slash commands that take nothing (idle-slash.js: IdleSlash.list('operator'), already filtered by the storyline's unlocks): /music, /stats…
   const slashChips = () => { try { const L = window.IdleSlash && window.IdleSlash.list ? window.IdleSlash.list('operator') : []; return L.filter(x => !x.args && !['help', 'operator', 'oracle'].includes(x.name)).slice(0, 4).map(x => ({ text: '/' + x.name, slash: 1 })); } catch (e) { return []; } };
-  function templateChips(c) { if (genOn()) return []; if (override) return override.slice(); const b = backChip(), T = TEMPLATES.filter(x => !(x.act === 'oracle' && inStory())).concat(slashChips()); return b ? [b, ...T] : T; }
+  // state-aware toggles (Nov 4): "start a rave" ↔ "stop the rave". The weather already has both directions as chips ("make it rain" / "a sunny day")
+  const stateful = list => { let st = {}; try { st = (window.__idleAI && window.__idleAI.quickState && window.__idleAI.quickState()) || {}; } catch (e) {}
+    return list.map(x => x.text === 'start a rave' && st.rave ? { text: 'stop the rave' } : x); };
+  function templateChips(c) { if (genOn()) return []; if (override) return override.slice(); const b = backChip(), T = stateful(TEMPLATES.filter(x => !(x.act === 'oracle' && inStory()))).concat(slashChips()); return b ? [b, ...T] : T; }
   // the tray is open by default in Genesis (its chip is the step's glowing button), closed elsewhere unless the player opened it
   let userOpen = null; try { userOpen = localStorage.getItem('idle.opTray'); } catch (e) {}
   const trayOpen = () => genOn() ? false : override ? true : userOpen === '1';

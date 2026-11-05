@@ -273,6 +273,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     return (s0 && cs.find(c => c.name.toLowerCase() === s0)) || (s0 && cs.find(c => c.name.toLowerCase().startsWith(s0) || s0.startsWith(c.name.toLowerCase()))) || cs.find(c => String(text).toLowerCase().includes(c.name.toLowerCase())) || null; };
   // opts.noAct (the Genesis guide, Nov 4): read the message and reply, but run no world tool and pass nothing to IRC (Nico typed "wachito"
   // during the lights step and the v4 heads evolved the world); opts.r: the classify() result already computed by the caller
+  const UNSURE_LINE = "I'm not sure what to do with that. try ⚡ for quick actions";
   async function tinyTurn(t, opts = {}) {
     optext(t, 'tiny');
     const O = window.__oracle; if (!O || !O.ready) { add('page', 'the Tiny Oracle is still waking up; try again in a moment', 'err'); return; }
@@ -311,7 +312,10 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
           light: 'And there was light. The words look different now', music: 'And the consciousness started to hum' }[name] || 'Done');
       }
     } else if (r.option === 'creature') { const el = chip('💬 to the creatures (IRC): ' + t); el.title = tip; try { await O.chat(t); acted = 'creature'; seed = 'I passed that on to the creatures'; } catch (e) {} }
-    let said = await O.reply(t, seed); if (!said || said.length < 3) said = await O.reply(t, seed);   // one retry: the tiny model sometimes stops at once
+    // an action-like message the heads aren't sure about (Nov 4: "stop a rave" → "Yes, it is. I'm sorry to hear that you're upset about your
+    // job"): no model babble, a short pointer to ⚡ instead
+    const unsure = !opts.noAct && !acted && WORLD_OPTS.has(r.option) && r.option !== 'look';
+    let said = unsure ? UNSURE_LINE : await O.reply(t, seed); if (!unsure && (!said || said.length < 3)) said = await O.reply(t, seed);   // one retry: the tiny model sometimes stops at once
     if (said) add('TO', said, 'ai');
     const out = acted ? (lastRes && lastRes.error ? 'error' : 'acted') : WORLD_OPTS.has(r.option) ? 'unsure' : 'chat';
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'tiny_operator', extra: { option: r.option, p: +p.toFixed(2), acted, out } } })); } catch (e) {}
@@ -336,6 +340,16 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
       return `${c.creatures ?? 'some'} creatures, ${c.words ?? 'lots of'} words, ${w}` + (r.mood ? `. the mood: ${r.mood}` : ''); } },
   };
   QUICK["what's happening"] = QUICK["what's happening?"]; QUICK['whats happening'] = QUICK["what's happening?"];
+  // the opposites (Nov 4, Nico: "with a ⚡ I can easily start the rave, but then I can't turn it off"): explicit words, command syntax only
+  QUICK['clear the sky'] = { tag: '☀ clear skies', run: () => runTool('weather', { kind: 'clear' }), say: () => 'the rain stops ☀' };
+  for (const k of ['stop a rave', 'stop rave', 'rave off', 'end the rave', 'end rave']) QUICK[k] = QUICK['stop the rave'];
+  for (const k of ['stop the rain', 'stop rain', 'sunny']) QUICK[k] = QUICK['clear the sky'];
+  // the world's state for the ⚡ chips (idle-opwin.js shows "stop the rave" while it's on, "clear the sky" while it rains)
+  const WET = new Set(['bitrain', 'storm', 'static']);
+  let qsAt = 0, qsVal = null;   // the ⚡ tray re-renders every 300 ms: the state is read at most once a second
+  const quickState = () => { const now = Date.now(); if (qsVal && now - qsAt < 1000) return qsVal; qsAt = now; let rave = false, weather = null; try { rave = !!(window.__music && window.__music.rave && window.__music.rave()); } catch (e) {}
+    try { const s = W() && W().summary && W().summary({}); weather = s && s.weather && s.weather.kind || null; } catch (e) {}
+    return (qsVal = { rave, weather, wet: WET.has(weather) }); };
   // not while Genesis is pending (the storyline's guide owns the input there: only the step advances, nothing changes the world)
   const genPend = () => { try { return !!(window.__genesis && window.__genesis.genPending && window.__genesis.genPending()); } catch (e) { return false; } };
   const quickOf = t => genPend() ? null : (QUICK[QK(t)] || QUICK[QK(t) + '?'] || null);
@@ -344,6 +358,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     try { add('you', t); const el = chip(q.tag); let res; try { res = await q.run(); } catch (e) { res = { error: String(e.message || e) }; }
       if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; add('TO', 'that did not work: ' + res.error, 'ai'); }
       else add('TO', q.say(res || {}), 'ai');
+      qsVal = null; try { window.__opwin && window.__opwin.refresh && window.__opwin.refresh(); } catch (e) {}
       try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_quick', extra: { q: QK(t).slice(0, 24), from: from || 'typed', ok: !(res && res.error) } } })); } catch (e) {}
       return res || { ok: true }; } finally { quickBusy = false; } }
 
@@ -366,5 +381,5 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   const quickFirst = e => { const t = text.value.trim(); if (!quickOf(t)) return false; e.stopImmediatePropagation(); e.preventDefault(); text.value = ''; quick(t, 'typed'); return true; };
   sendBtn.addEventListener('click', e => { if (quickFirst(e)) return; if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing && quickFirst(e)) return; if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
-  window.__idleAI = { quick, quickOf, quickList: () => Object.keys(QUICK), cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: (t, opts) => tinyTurn(t, opts), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
+  window.__idleAI = { quick, quickOf, quickState, unsureLine: UNSURE_LINE, bar: o => WORLD_OPTS.has(o) ? (SURE[o] ?? SURE0) : null, quickList: () => Object.keys(QUICK), cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: (t, opts) => tinyTurn(t, opts), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
 })();

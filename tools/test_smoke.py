@@ -2165,6 +2165,56 @@ def t_chips_playground(P):
     return "chips: " + ", ".join(k for k in res) + " → all worked; the heads on the same words as free text: " + json.dumps(heads)
 
 
+def t_toggles(P):
+    """⚡ toggles (Nov 4, Nico: "with a ⚡ I can easily start the rave, but then I can't turn it off"): the rave chip flips to "stop the rave"
+    while it's on and back after; the opposites typed ("Stop a rave.", "stop the rain", "rave off") run directly; /rave off; an action-like
+    message the Tiny Operator's heads aren't sure about gets a pointer to ⚡ instead of model babble"""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => { window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")
+    wait_for(pg, "() => window.__opwin.tray().open && window.__opwin.tray().chips.includes('start a rave')", 10, P=P)
+    rave = "() => !!(window.__music && window.__music.rave())"
+    tap = "t => { const b = [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === t); if (!b) throw new Error('no chip ' + t); b.click(); }"
+    typed = "async t => { await window.__idleAI.quick(t, 'typed'); }"
+    res = {}
+    pg.evaluate(tap, "start a rave"); wait_for(pg, rave, 5, P=P)
+    wait_for(pg, "() => window.__opwin.tray().chips.includes('stop the rave') && !window.__opwin.tray().chips.includes('start a rave')", 5, P=P); res["chip flips to stop"] = True
+    pg.evaluate(tap, "stop the rave"); wait_for(pg, "() => !window.__music.rave()", 5, P=P)
+    wait_for(pg, "() => window.__opwin.tray().chips.includes('start a rave')", 5, P=P); res["stop chip stops, flips back"] = True
+    for start, stop in (("start a rave", "Stop a rave."), ("start a rave", "rave off"), ("start a rave", "end the rave")):
+        pg.evaluate(typed, start); wait_for(pg, rave, 5, P=P); pg.evaluate(typed, stop); pg.wait_for_timeout(300)
+        res[f"typed {stop!r}"] = not pg.evaluate(rave)
+    W = "() => window.__idleWorld.summary().weather.kind"
+    pg.evaluate(typed, "make it rain"); pg.wait_for_timeout(300); pg.evaluate(typed, "stop the rain"); pg.wait_for_timeout(300); res["typed 'stop the rain'"] = pg.evaluate(W) == "clear"
+    pg.evaluate(typed, "make it rain"); pg.wait_for_timeout(300); pg.evaluate(typed, "Clear the sky!"); pg.wait_for_timeout(300); res["typed 'Clear the sky!'"] = pg.evaluate(W) == "clear"
+    pg.evaluate("() => window.IdleSlash.run('/rave on', 'operator')") if pg.evaluate("() => !!(window.IdleSlash && window.IdleSlash.run)") else pg.evaluate(typed, "start a rave")
+    pg.wait_for_timeout(300)
+    if pg.evaluate("() => !!(window.IdleSlash && window.IdleSlash.run)"):
+        pg.evaluate("() => window.IdleSlash.run('/rave off', 'operator')"); pg.wait_for_timeout(300); res["/rave off"] = not pg.evaluate(rave)
+    # an unsure action-like message: a stand-in classification below the bar → the pointer to ⚡, no model reply
+    if pg.evaluate("() => !!(window.__oracle && window.__oracle.ready)"):
+        out = pg.evaluate("""async () => { const r = await window.__idleAI.tiny('turn down the party', { r: { option: 'rave_off', probs: { rave_off: 0.31 }, arg: '', target: '' } }); return r && r.said; }""")
+        res["unsure → pointer to ⚡"] = out == pg.evaluate("() => window.__idleAI.unsureLine")
+    bad = [k for k, v in res.items() if not v]
+    need(not bad, f"toggles: {res}")
+    P.clean()
+    return "; ".join(f"{k} ✓" for k in res)
+
+
+def t_unsure_probe(P):
+    """Report only (not a gate): how the Tiny Operator's heads read a probe set of action-like and chat messages; 'unsure' = a world option
+    below its bar (those now get the pointer to ⚡ instead of the model's free text)"""
+    PROBES = ["stop a rave", "stop the music", "turn off the party", "end the rave", "make it stop raining", "no more rain", "I want sun", "rain please",
+              "can you make it rain", "spawn a crawler", "add a math creature", "rename Crawly to Bob", "evolve Pixa", "what's going on", "start a party",
+              "hi", "who are you?", "I'm bored", "tell me a joke", "what is this game", "I love the creatures", "help", "wachito", "stop", "turn it down"]
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    wait_for(pg, "() => !!(window.__oracle && window.__oracle.ready)", 120, P=P)
+    rows = pg.evaluate("""async ps => { const H = await window.__idleAI.heads(), out = [];
+      for (const t of ps) { const r = await window.__oracle.classify(t, H); const p = r.probs[r.option] || 0, bar = window.__idleAI.bar(r.option);
+        out.push([t, r.option, +p.toFixed(2), bar == null ? 'chat' : p >= bar ? 'acts' : 'unsure']); } return out; }""", PROBES)
+    P.clean()
+    return " | ".join(f"{t}→{o} {p} {k}" for t, o, p, k in rows)
+
+
 def t_chips_genesis(P):
     """In Genesis the ⚡ tray offers no world action, also after a reload mid-Genesis (Nov 4, from Nico's screenshot: the console was gone after a
     reload, the tray showed "make it rain" and the step gate refused it); the reload resumes Genesis on its pending step, words typed in"""
@@ -4769,7 +4819,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("chips playground", t_chips_playground, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -4796,7 +4846,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"beacon ack", "arm reload", "arm stats", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "worker", "world hold"}
+LAUNCH = {"beacon ack", "arm reload", "arm stats", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "worker", "world hold", "toggles"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
