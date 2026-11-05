@@ -29,6 +29,7 @@
   // A small badge counts the epoch's pending tasks in the storyline (window.__genesis.pending()), like a messaging app.
   const genWin = () => /\bgen-(box|float)\b/.test(document.documentElement.className);
   let last = null;   // where the 📟 last sat in the bar (viewport rect), for the fixed fallback
+  let lastAnchor = '';
   function place() { add(); const intro = !!document.getElementById('idleIntro'); b.hidden = intro; if (intro) return;   // (v14: not over the intro and its skip ›)
     const bar = $('#topbar'), set = $('#settingsBtn'), more = $('#mMore'), slot = $('#toSlot'); if (slot) slot.remove();
     const barOn = visible(bar), after = visible(set) ? set : null, before = !after && visible(more) ? more : null;
@@ -44,7 +45,7 @@
     const r = b.getBoundingClientRect(), lab = $('#lab'), w = (lab && lab.offsetWidth) || 380;
     const R = document.documentElement.style; R.setProperty('--op-top', Math.round(r.bottom + 8) + 'px');
     R.setProperty('--op-left', Math.round(Math.max(8, Math.min(r.right - w, innerWidth - w - 8))) + 'px');
-    b.classList.toggle('on', labOpen());
+    b.classList.toggle('on', labOpen()); { const k = R.getPropertyValue('--op-top') + R.getPropertyValue('--op-left'); if (k !== lastAnchor) { lastAnchor = k; if (!labOpen()) { try { window.__opwinPlace && window.__opwinPlace(); } catch (e) {} } } }
     let n = 0; try { n = window.__genesis && window.__genesis.pending ? +window.__genesis.pending() || 0 : 0; } catch (e) {}
     let d = b.querySelector('.bd'); if (n > 0) { if (!d) { d = document.createElement('span'); d.className = 'bd'; b.appendChild(d); } if (d.textContent !== String(n)) d.textContent = n; b.setAttribute('aria-label', `the Operator: ${n} task${n > 1 ? 's' : ''} left in this epoch`); }
     else if (d) { d.remove(); b.setAttribute('aria-label', 'open the Operator (the Tiny Operator)'); } }

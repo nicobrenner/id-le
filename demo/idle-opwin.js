@@ -107,6 +107,12 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   const end = () => { if (!drag) return; drag = null; head.classList.remove('drag'); try { localStorage.setItem(POS, JSON.stringify(pos)); } catch (e) {} };
   head.addEventListener('pointerup', end); head.addEventListener('pointercancel', end);
   addEventListener('resize', applyPos); applyPos();
+  // no jump on open (Nov 4, Nico: "it first loads on the right, then jumps/flickers to the left"): the 📟's anchor (--op-top/--op-left) is set
+  // after the top bar exists, but the window only got placed on load and on resize, so it first showed at the CSS default (bottom-right) and moved
+  // later. Now it is placed in the same frame it opens (a MutationObserver runs before the next paint), and follows the anchor only while closed
+  // (an open window that slides because the top bar re-laid out is its own small jump)
+  new MutationObserver(() => { if (lab.classList.contains('open')) applyPos(); }).observe(lab, { attributes: true, attributeFilter: ['class'] });
+  window.__opwinPlace = applyPos;
   // the on-screen keyboard (phones): the sheet rides above it, so the input is never under it (--kb: the keyboard's height)
   { const vv = window.visualViewport; if (vv) { const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h + 'px'); }; vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); kb(); } }
 
