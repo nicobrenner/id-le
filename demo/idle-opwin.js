@@ -94,8 +94,11 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   const POS = 'idle.opPos2'; let pos = null; try { pos = JSON.parse(localStorage.getItem(POS) || 'null'); } catch (e) {}
   const story = () => document.documentElement.classList.contains('gen-box') || document.documentElement.classList.contains('gen-float');
   const cssPx = v => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v)) || 0;
+  let openAt = null;
   function applyPos() { if (phone() || story()) { lab.style.left = lab.style.top = lab.style.height = lab.style.right = lab.style.bottom = ''; return; }
-    const w = lab.offsetWidth || 380, top0 = pos ? pos.t : (cssPx('--op-top') || 56), left0 = pos ? pos.l : (cssPx('--op-left') || 10);
+    // while open, an anchored window stays where it opened (the 📟's anchor shifts when the top bar re-lays out; following it is a visible jump)
+    if (!pos && !openAt && lab.classList.contains('open') && cssPx('--op-left') > 0) openAt = { l: cssPx('--op-left'), t: cssPx('--op-top') || 56 };
+    const at = pos || openAt, w = lab.offsetWidth || 380, top0 = at ? at.t : (cssPx('--op-top') || 56), left0 = at ? at.l : (cssPx('--op-left') || 10);
     let left = Math.max(8, Math.min(innerWidth - w - 8, left0)), top = Math.max(8, Math.min(innerHeight - 220, top0)), h = Math.min(560, innerHeight - top - 16);
     const mm = $('#minimap'); if (mm && mm.offsetParent) { const m = mm.getBoundingClientRect();
       if (m.width && left < m.right + 8 && left + w > m.left - 8 && top + h > m.top - 8) { const fit = m.top - 8 - top; if (fit >= 260) h = fit; else left = Math.max(8, m.left - 8 - w); } }
@@ -111,7 +114,7 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   // after the top bar exists, but the window only got placed on load and on resize, so it first showed at the CSS default (bottom-right) and moved
   // later. Now it is placed in the same frame it opens (a MutationObserver runs before the next paint), and follows the anchor only while closed
   // (an open window that slides because the top bar re-laid out is its own small jump)
-  new MutationObserver(() => { if (lab.classList.contains('open')) applyPos(); }).observe(lab, { attributes: true, attributeFilter: ['class'] });
+  { let wasOpen = lab.classList.contains('open'); new MutationObserver(() => { const o = lab.classList.contains('open'); if (o && !wasOpen) { openAt = null; applyPos(); } if (!o) openAt = null; wasOpen = o; }).observe(lab, { attributes: true, attributeFilter: ['class'] }); }
   window.__opwinPlace = applyPos;
   // the on-screen keyboard (phones): the sheet rides above it, so the input is never under it (--kb: the keyboard's height)
   { const vv = window.visualViewport; if (vv) { const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h + 'px'); }; vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); kb(); } }

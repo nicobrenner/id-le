@@ -2287,11 +2287,11 @@ def t_intent_story(P):
         res[entry] = r
     # the Operator opens in place: sample its rect for 2 s after a fresh open
     pg.evaluate("() => window.__opwin.close()"); pg.wait_for_timeout(400)
-    pg.evaluate("() => { window.__rects = []; window.__opwin.open(); const t0 = performance.now(); const tick = () => { const l = document.getElementById('lab'); const r = l.getBoundingClientRect(); window.__rects.push([Math.round(r.left), Math.round(r.top), getComputedStyle(l).transform, l.style.left, getComputedStyle(document.documentElement).getPropertyValue('--op-left')]); if (performance.now() - t0 < 2000) requestAnimationFrame(tick); }; tick(); }")
+    pg.evaluate("() => { window.__rects = []; window.__opwin.open(); const t0 = performance.now(); const tick = () => { const l = document.getElementById('lab'); const r = l.getBoundingClientRect(); window.__rects.push([Math.round(r.left), Math.round(r.top), getComputedStyle(l).transform, l.style.left, getComputedStyle(document.documentElement).getPropertyValue('--op-left')]); if (performance.now() - t0 < 2000) requestAnimationFrame(tick); }; requestAnimationFrame(tick); }")
     pg.wait_for_timeout(2300)
     rects = pg.evaluate("() => window.__rects")
     xs = {r[0] for r in rects}
-    need(len(rects) > 5 and max(r[0] for r in rects) - min(r[0] for r in rects) <= 24, f"the Operator jumped while opening (its open animation slides a few px; a jump is more): {[r[0] for r in rects][:14]}")
+    need(len(rects) > 5 and max(r[0] for r in rects) - min(r[0] for r in rects) <= 24, f"the Operator jumped while opening (its open animation slides a few px; a jump is more): {[r[0] for r in rects][:6]} … {sorted({r[0] for r in rects})}")
     P.clean()
     return f"Genesis 'start a rave' → not yet; ?start=ready and ?lab with words pending → playground, no badge, ⚡, rave works, resumable; open steady ({len(rects)} frames)"
 
