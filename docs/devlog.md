@@ -941,3 +941,11 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - **🎧 from the Operator:** after a rave starts there, the Operator says "the rave is on 🕺 · [🎧 open the deck to DJ]". On a phone the chip closes the Operator, then opens the deck; on a computer both stay open, and the deck moves beside the Operator if it would sit under it (not remembered).
 - **@mentions:** the Operator's (and a connected AI's) lines go through the arena's `__linkNames`, the same as IRC and the notices (hover card, click flies to the creature and opens it); a fresh name list is built for each line, so a creature born a moment ago links too.
 - Tests: new 'rave2' and 'rave2 phone' (in the launch tier), 'rave2 reduced'; 'chips playground' now expects the "rave is on" line. toggles, chips, slash, operator float, agent and haunted music pass.
+
+**Bring your own agent, local (Nov 4, agentlocal).** Nico: "if someone is running id-le locally, does it work the same way? (and does it work?)". It didn't: the section showed on localhost, but `python3 server.py` (the README's way to run Id|le) had no /lab/agent/*, so "allow" failed. Now:
+- `server.py` has the relay (`AgentRelay`, the Worker's rules in Python: codes once/10 min, tokens 4 h, silence 30 s, 30 actions a minute, in this process's memory only); `/agent/SKILL.md` is served from demo/.
+- `python3 tools/agent_local.py` (one command, Ctrl-C stops all): the static build with the skill + helper/worker.js's own relay in node (dev_server.mjs) on one localhost port, as staging serves it; `--server` runs server.py instead. It prints the URL (`?start=ready`: a fresh browser on localhost otherwise gets the storyline, where an agent can only look and talk until Genesis ends) and the pairing steps.
+- Without a relay (a plain `python3 -m http.server` of the build) "allow" now says how to get one.
+- v1.1 actions that reuse the Operator's tools: `say_as` (a creature speaks), `show` (fly the view to a creature, open its card), `note` (pin in IRC).
+- Differences from staging: the relay is the local process (no Durable Object, no redeploy needed), a restart forgets sessions, and nothing goes to id-le.com.
+- Tests: 'agent local server' (the browser + server.py + the CLI, the same flow as 'agent' plus say_as/note/show), 'agent relay server' (server.py's relay rules on a clock).

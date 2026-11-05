@@ -132,10 +132,11 @@ th{background:var(--box);font-weight:600}
 <ul>
 <li>your tab gets a 6-letter code, good once and for 10 minutes; whoever has the code can pair, so only give it to your own agent</li>
 <li>while connected, about once a second your tab sends a <b>summary</b> to id-le.com's relay: the weather, whether a rave is on, counts, the families, the nearest 20 creatures' names, families, jobs and moods, the storyline's epoch and the last few world events. Never your world file, your chats, your AI keys or anything from your browser's storage</li>
-<li>your agent reads that summary and asks for actions (weather, spawn, rename, evolve, rave, look, feed, say); your tab runs them with the Operator's own tools and the answers go back the same way. During Genesis only look and say work</li>
+<li>your agent reads that summary and asks for actions (weather, spawn, rename, evolve, rave, look, feed, say, a creature's line, showing you a creature, a note in IRC); your tab runs them with the Operator's own tools and the answers go back the same way. During Genesis only look and say work</li>
 <li>the relay holds the session <b>in memory only</b>: the summary, the last 100 events, and a random token for your agent. Nothing is written to storage or logged. It is dropped when you click <b>disconnect</b> (the 🤖 pill), when you close the tab (or it stops answering for 30 seconds), or after 4 hours, whichever comes first</li>
 <li>agents get at most 30 actions a minute</li>
 </ul>
+<p>On a copy of Id|le running on your own computer (<code>python3 server.py</code>), the relay is that program, in its memory: nothing goes to id-le.com.</p>
 <p>Your agent itself is yours: what it does with the summary is between you and it.</p>
 
 <h2 id="oracle">Tell the scientists and roadmap votes</h2>

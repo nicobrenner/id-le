@@ -22,6 +22,9 @@
     rename: { help: 'rename {name, new_name}', run: a => AI().runTool('rename', { name: a.name, new_name: a.new_name }) },
     evolve: { help: 'evolve {name|"world", how?: mutate|big}', run: a => AI().runTool('evolve', { name: a.name, how: a.how }) },
     rave: { help: 'rave {on: true|false}', run: a => { const m = M(); if (!m) return { error: 'no music deck here' }; if (a.on === false || a.on === 'off') m.setRave(false); else m.setRave(true); return { ok: true, rave: m.rave() }; } },
+    say_as: { help: 'say_as {name, text}: a creature says a short line (a speech bubble and a line in its mind; under 140 characters, in character)', run: a => AI().runTool('say_as', { name: a.name, text: a.text }) },
+    show: { help: "show {name}: fly the player's view to a creature and open its card", run: a => AI().runTool('open_card', { name: a.name }) },
+    note: { help: 'note {text}: pin a short note in 💬 IRC (the world chat) for the player', run: a => AI().runTool('note', { text: String(a.text || '').slice(0, 300) }) },
     feed: { help: 'feed {words: [..up to 12], near?}: drop words on the floor for the creatures', run: a => AI().runTool('place_words', { words: [].concat(a.words || []).slice(0, 12).map(String), near: a.near }) },
   };
   // a line in the Operator chat the player is looking at: your own AI's thread, or the lab's (the coding-agent relay, the default)
@@ -69,8 +72,8 @@
   }
   const schedule = (ms) => { clearTimeout(timer); timer = setTimeout(tick, ms || (S && S.paired ? 1000 : 2000)); };
   async function allow() {
-    if (S) return; let r; try { r = await post('open'); } catch (e) { r = { error: 'the relay is not reachable' }; }
-    if (!r || !r.sid) { render(r && r.error); return; }
+    if (S) return; let r; try { r = await post('open'); } catch (e) { r = { error: 'no relay here: run python3 server.py, or python3 tools/agent_local.py' }; }
+    if (!r || !r.sid) { render((r && r.error) || 'no relay here: run python3 server.py, or python3 tools/agent_local.py'); return; }
     S = { sid: r.sid, code: r.code, paired: false, t0: Date.now(), exp: Date.now() + (r.expires || 600) * 1000 }; render(); tick();
   }
   function end(why) { const s = S; S = null; clearTimeout(timer); results = []; lastEv = null;
@@ -86,7 +89,7 @@
     pill.hidden = false;
   }
   function render(err) {
-    if (!ui) return; let html = `<b>4 · Connect an agent</b> (Claude Code, a script, anything that speaks HTTP). It sees a <i>summary</i> of this world (creatures' names, families, moods and jobs, the weather, counts, recent events) and can act through the Operator's own tools: weather, spawn, rename, evolve, rave, look, feed and say (as 🤖 agent). It never sees your world file, your chats or your keys. `;
+    if (!ui) return; let html = `<b>4 · Connect an agent</b> (Claude Code, a script, anything that speaks HTTP). It sees a <i>summary</i> of this world (creatures' names, families, moods and jobs, the weather, counts, recent events) and can act through the Operator's own tools: weather, spawn, rename, evolve, rave, look, feed, say (as 🤖 agent), make a creature speak, show you a creature and pin a note in IRC. It never sees your world file, your chats or your keys. `;
     if (!S) html += `<button data-ag="allow">allow</button>` + (err ? ` <span class="ag-err">${esc(err)}</span>` : '');
     else if (S.paired) html += `<br>🤖 connected · <button data-ag="end">disconnect</button>`;
     else if (S.code && Date.now() < S.exp) html += `<br>Give your agent this code (good for 10 minutes, once): <code id="agentCode" style="font-size:1.3em;letter-spacing:.15em">${esc(S.code)}</code> · <button data-ag="end">cancel</button><br><small>with the skill: <code>python3 tools/idle-agent.py pair ${esc(S.code)} --site ${esc(location.origin)}</code> · instructions for agents: <a href="/agent/SKILL.md" target="_blank">/agent/SKILL.md</a></small>`;
