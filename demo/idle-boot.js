@@ -10,6 +10,18 @@
 //   arrive: { dur, draw, fire, fireAll, beds, lines }, beds(ctx, dest, T, at) (continuous sounds already under way at T),
 //   fire(ctx, dest, T0, T1, at) (live sound for boot seconds T0..T1), fireAll(ctx, dest, t0) (recordings) }.
 (() => {
+  // the Director's view (staging/local, /director): this module's script as data, read from the same constants the scenes play (no copy).
+  // A getter, so it is evaluated after the whole module has run; nothing here changes how the scenes play.
+  (window.__storyDump = window.__storyDump || {}).boot = () => ({
+    clock: { day: DAY, start: clockAt(0) }, arrival: ADUR, bootLen: DUR, cmd: CMD,
+    thread: TH.map(m => ({ who: m.me ? 'doc' : 'heart', text: m.text, at: +m.at.toFixed(2) })),
+    note: { who: 'lester', text: DMLINES[0].text, at: +NOTE.toFixed(2) },
+    labchat: { at: +CHAT.toFixed(2), channels: CHANNELS.slice(), backlog: BL.map(b => ({ who: b.who, text: b.text, at: +b.at.toFixed(2), clock: b.tm })) },
+    dm: DM.map(l => ({ who: l.who === 'scientist' ? 'doc' : l.who, text: l.text, at: +l.at.toFixed(2) })),
+    terminal: { at: +TERM.toFixed(2), log: LOG.map((l, i) => ({ text: l[0], status: l[1], at: +(ADUR + LOGT[i]).toFixed(2) })),
+      login: +(ADUR + K.login).toFixed(2), cmdAt: +(ADUR + K.cmd).toFixed(2), enter: +(ADUR + K.enter).toFixed(2), split: +(ADUR + K.split).toFixed(2) },
+    sounds: [{ cue: 'room / desk fans (datacenter bed, light)', at: 0 }, { cue: 'idle-engine music (' + IDLE_BPM + ' bpm)', at: 0.4 },
+      { cue: 'modem handshake (' + MODEM + ')', at: +(ADUR + K.globe).toFixed(2) }, { cue: 'fans ramp up with the boot', at: +ADUR.toFixed(2) }] });
   const BG = '#06090b', TXT = '#b9c6cc', DIM = '#5d6b74', OK = '#7fd38a', AMB = '#f0b45a', RED = '#ff5d5d', CY = '#7ee3f5', MAG = '#e0367a', BORDER = '#22323c', ACT = '#4fae63';
   const IDLE_BPM = 84;   // the idle engine's tempo (story v6 music): the computer scenes and the logo's throb
   const MODEM = 'boot';   // where the modem handshake plays: 'boot' (under the spinning globe and the progress bar; Nico's option B) or 'logo' (not yet)

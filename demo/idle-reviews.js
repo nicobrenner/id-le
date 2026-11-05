@@ -404,15 +404,18 @@
   //  - the playground, and a returning player's plain world: after 3 minutes on screen and at least one interaction (a click in the world
   //    or on a top-bar button), at a quiet moment
   //  - a link (?review=…): at once, as above
-  let onScreen = 0, touched = false, freeSeen = 0;
+  let onScreen = 0, touched = false, freeSeen = 0, endSeen = 0, touchedAfter = false; const STORY_AFTER = (/[?&]rvstory=(\d+)/.exec(location.search) || [])[1] * 1 || 60e3;
   setInterval(() => { if (document.visibilityState === 'visible' && window.__restoredOrFresh) onScreen += 5; }, 5000);
-  addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#arena,#topbar,#creatures,.card,#whisper')) touched = true; }, true);
+  addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#arena,#topbar,#creatures,.card,#whisper')) { touched = true; if (endSeen) touchedAfter = true; } }, true);
   function quiet() { const ae = document.activeElement; if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.offsetParent !== null) return false;
     try { if (window.__opwin && (window.__opwin.yielding() || (window.__opwin.cutting && window.__opwin.cutting()))) return false; } catch (e) {}
     const shown = el => { const st = getComputedStyle(el), r = el.getBoundingClientRect(); return st.display !== 'none' && st.visibility !== 'hidden' && +st.opacity > 0 && r.width > 0 && r.height > 0; };
     return ![...document.querySelectorAll('#genDay.end, #oracle.on, #hitl.on, #review.on, #genConfirm, #genChoose, #genFront, #oracleBox:not([hidden]), #almanac.on, #drawerView, #founderLetter, #founderLab')].some(shown); }
   function moment() { const g = window.__genesis; let st = null, e = null; try { st = g && g.state && g.state(); e = g && g.end && g.end(); } catch (er) {}
-    if (st && st.on && st.mode === 'story') return { mode: 'story', ok: !!(e && e.at && !e.open) };   // after the end card, not before
+    // after the end card, not before; and not the moment it closes (Nov 4, Nico: "when I close the roadmap/scientists, it pops up the operator
+    // immediately"): the player has been back in the world for STORY_AFTER and has touched it since
+    if (st && st.on && st.mode === 'story') { const ok0 = !!(e && e.at && !e.open); if (!ok0) { endSeen = 0; return { mode: 'story', ok: false }; }
+      if (!endSeen) { endSeen = now(); touchedAfter = false; } return { mode: 'story', ok: now() - endSeen >= STORY_AFTER && touchedAfter }; }
     if (st && st.on && st.fp) { if (!freeSeen) freeSeen = now(); return { mode: 'story-play', ok: now() - freeSeen >= FREE_AFTER }; }   // the end card's 🛝
     return { mode: 'play', ok: onScreen >= PLAY_AFTER && touched }; }
   const ready = () => !busy() && quiet() && moment().ok;
@@ -436,5 +439,5 @@
       rated: { ...((cur.mine && cur.mine.rated) || {}) }, pairs: ((cur.mine && cur.mine.pairs) || []).slice(), pair: cur.pair || null, playing: !!(cur.live && cur.live.playing && cur.live.playing()) },
     sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), tab: { open: () => toggleTab(true), close: () => toggleTab(false), isOpen: () => tabOpen }, viewHtml, viewAct, highlight, arrive, nudge, hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },
     badge: () => { const s = teamStatus(), rids = Object.keys(sentAll()).filter(k => sentAll()[k].done); return s || rids.length ? { rids, status: s } : null; }, plugins: () => Object.keys(PLUGINS),
-    moment, quiet, text: TEXT, test: { ready, busy: () => busy(), touch: () => { touched = true; }, onScreen: v => { if (v != null) onScreen = v; return onScreen; }, fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) { onScreen = Math.max(onScreen, since / 1000); touched = true; } }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl, knows } };
+    moment, quiet, text: TEXT, test: { ready, busy: () => busy(), touch: () => { touched = true; if (endSeen) touchedAfter = true; }, touchAfter: () => { touchedAfter = true; }, onScreen: v => { if (v != null) onScreen = v; return onScreen; }, fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) { onScreen = Math.max(onScreen, since / 1000); touched = true; } }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl, knows } };
 })();

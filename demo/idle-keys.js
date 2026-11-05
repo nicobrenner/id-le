@@ -14,11 +14,18 @@
     ['dark', 'the dark landing'], ['operator', 'the Operator arrives'], ['lights', '"lights on"'],
     ['words', '"let there be words"'], ['life', '"let there be life"'], ['epoch0done', 'EPOCH 0 COMPLETE'], ['epoch1', 'the Epoch 1 card'],
     ['end', "the end of what's built"]];
+  // more ways in (Nov 4, the Director's view): aliases that land on a keyframe, some with a variant (the logo arm, the hole's approach)
+  const ALIASES = [
+    ['logo-c3', 'logo', 'the logo: typed + dust (arm c3)', { logo: 'c3' }], ['logo-crt', 'logo', 'the logo: typed + old TV (arm crt)', { logo: 'crt' }],
+    ['dark-hole', 'dark', 'the dark: the hole starts moving', { sub: 'hole' }], ['moment', 'epoch0done', 'the EPOCH 0 COMPLETE modal'],
+    ['naming', 'epoch0done', 'the naming ask (in the EPOCH 0 modal)'], ['epoch1start', 'epoch1', 'right after [start Epoch 1]']];
   const names = KEYS.map(k => k[0]), h = location.hostname;
   const devHost = /^staging\./.test(h) || h === 'localhost' || h === '127.0.0.1';
   if (!devHost) return;
+  (window.__storyDump = window.__storyDump || {}).keys = () => ({ keys: KEYS.map(k => ({ key: k[0], label: k[1] })), aliases: ALIASES.map(a => ({ key: a[0], to: a[1], label: a[2], opt: a[3] || null })) });
   const Q = new URLSearchParams(location.search), hash = decodeURIComponent((location.hash || '').slice(1)).toLowerCase();
-  const key = names.includes((Q.get('at') || '').toLowerCase()) ? Q.get('at').toLowerCase() : names.includes(hash) ? hash : null;
+  const asked = (Q.get('at') || '').toLowerCase() || hash, alias = ALIASES.find(a => a[0] === asked) || null;
+  const key = alias ? alias[1] : names.includes((Q.get('at') || '').toLowerCase()) ? Q.get('at').toLowerCase() : names.includes(hash) ? hash : null;
   const idx = k => names.indexOf(k);
   let strip = hash === 'keys';
 
@@ -49,16 +56,16 @@
   if (key) {
     sandbox();
     // the storyline and the test mode in the address (read by the game's modules as they load); the key stays in the hash
-    try { const u = new URL(location.href); u.searchParams.set('story', ''); u.searchParams.set('fresh', ''); u.searchParams.delete('at');
+    try { const u = new URL(location.href); u.searchParams.set('story', ''); u.searchParams.set('fresh', ''); u.searchParams.delete('at'); if (alias && alias[3] && alias[3].logo) u.searchParams.set('logo', alias[3].logo);
       history.replaceState(null, '', u.pathname + u.search.replace(/=(?=&|$)/g, '') + '#' + key); } catch (e) {}
     window.__audioPastShim();
     let go; const ready = new Promise(r => go = r);
-    window.__storyKey = { key, keys: names.slice(), idx: idx(key), is: k => k === key, after: k => idx(key) > idx(k), atOrAfter: k => idx(key) >= idx(k), ready, started: false };
+    window.__storyKey = { key, alias: alias ? alias[0] : null, sub: alias && alias[3] && alias[3].sub || null, keys: names.slice(), idx: idx(key), is: k => k === key, after: k => idx(key) > idx(k), atOrAfter: k => idx(key) >= idx(k), ready, started: false };
     // the gate: one key press or tap, so the browser lets the sound play (the title card is its own gate)
     if (key === 'title') { window.__storyKey.started = true; go(); }
     else {
       const gate = () => { const el = document.createElement('div'); el.id = 'keyGate';
-        el.innerHTML = `<div><small>keyframe</small><b>${KEYS[idx(key)][1]}</b><span>press any key to start</span></div>`;
+        el.innerHTML = `<div><small>keyframe</small><b>${alias ? alias[2] : KEYS[idx(key)][1]}</b><span>press any key to start</span></div>`;
         el.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:#000;display:flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;color:#cfd6ff;font:14px var(--term-font,ui-monospace,Menlo,monospace)';
         document.body.appendChild(el);
         const s = document.createElement('style'); s.textContent = '#keyGate div{display:flex;flex-direction:column;gap:10px}#keyGate small{opacity:.55;letter-spacing:.2em;text-transform:uppercase}#keyGate b{font:600 22px var(--display-font,ui-monospace,Menlo,monospace);color:#fff}#keyGate span{opacity:.75;animation:kgBlink 1.4s steps(2) infinite}@keyframes kgBlink{50%{opacity:.25}}'; document.head.appendChild(s);
@@ -72,6 +79,10 @@
   // ?offer=a|b|c|old (Nov 4, Nico on staging: his browser's saved storyline, mid-Genesis, opened the Operator with "let there be life" and the
   // offer never came): the storyline offer is previewed in the same sandbox, on a fresh ready world (?fresh: nothing to disk, no stats), so
   // the browser's own state (a story in progress, a pending step, an arm) never gets in the way, and its real world is never touched
+  else if (Q.has('storydump')) {
+    sandbox(); window.__storyDumpPage = true;
+    try { const u = new URL(location.href); u.searchParams.set('fresh', ''); history.replaceState(null, '', u.pathname + u.search.replace(/=(?=&|$)/g, '')); } catch (e) {}
+  }
   else if (/^(a|b|c|old|v3)$/.test(Q.get('offer') || '')) {
     sandbox(); window.__offerSandbox = true;
     try { const u = new URL(location.href); u.searchParams.set('fresh', ''); history.replaceState(null, '', u.pathname + u.search.replace(/=(?=&|$)/g, '') + u.hash); } catch (e) {}
@@ -90,5 +101,5 @@
   addEventListener('keydown', e => { if (e.key !== '`' || e.metaKey || e.ctrlKey || e.altKey) return; const t = e.target; if (t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName))) return; strip = !strip; render(); });
   addEventListener('hashchange', () => { if (location.hash === '#keys') { strip = true; render(); } });
   if (strip) { if (document.body) render(); else document.addEventListener('DOMContentLoaded', render, { once: true }); }
-  window.__keys = { list: () => KEYS.map(k => ({ key: k[0], label: k[1], url: 'arena.html?story&at=' + k[0] })), key, show: on => { strip = on !== false; render(); } };
+  window.__keys = { list: () => KEYS.map(k => ({ key: k[0], label: k[1], url: 'arena.html?story&at=' + k[0] })).concat(ALIASES.map(a => ({ key: a[0], label: a[2], url: 'arena.html?story&at=' + a[0], alias: a[1] }))), key, show: on => { strip = on !== false; render(); } };
 })();

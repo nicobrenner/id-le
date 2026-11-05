@@ -13,6 +13,7 @@
   css.textContent += `#toHandle{width:38px;height:36px;line-height:34px;font-size:19px;border-radius:10px}#toHandle.on{background:#2a3180;border-color:#cfd6ff}
 #toHandle .tip{right:auto!important;left:0!important;bottom:auto!important;top:42px!important}
 #toHandle.inbar{position:relative!important;left:auto!important;top:auto!important;z-index:auto;vertical-align:middle;margin-left:4px;width:34px;height:28px;line-height:26px;font-size:16px;border-radius:8px;box-shadow:none}
+#toHandle.inbar{display:inline-flex!important;align-items:center;justify-content:center;line-height:1;padding:0}#toHandle.inbar[hidden]{display:inline-flex!important}
 @media (max-width:500px){#topbar>#toHandle{display:inline-flex!important;align-items:center;justify-content:center;min-height:44px;min-width:44px;font-size:18px;border-radius:12px;margin-left:auto}#topbar>#toHandle+#mMore{margin-left:0!important}}
 #toHandle .bd{position:absolute;right:-6px;top:-6px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#e0367a;color:#fff;font:700 11px/18px var(--ui-font,system-ui);text-align:center;box-shadow:0 0 0 2px #0a0b16;pointer-events:none}`;
   document.head.appendChild(css);
@@ -51,7 +52,17 @@
     else if (d) { d.remove(); b.setAttribute('aria-label', 'open the Operator (the Tiny Operator)'); } }
   // tapping it: the Operator's window (or closing it again: it is the window's toggle), and every menu the guided start had hidden.
   // During the storyline's Genesis window it only opens (the guided part can't be closed)
-  function out() { document.documentElement.classList.remove('gen-calm'); const t = $('#lab-toggle'); if (!labOpen()) { if (t) t.click(); } else if (!genWin()) { const c = $('#lab-close'); if (c) c.click(); else if (t) t.click(); }
+  // Nov 4 (Nico: "if I try to click the operator immediately, it doesn't work, the controls are locked until I close the scientists window"):
+  // the rule: a tap on the 📟 while a side panel (🧪, the roadmap, 🌱, notices, the menu…) has the Operator stepping aside closes that panel and
+  // opens the Operator; the centred cards (the Epoch moment, the end card, the story-mode offer, a confirm) keep priority
+  const MODALS = ['#genDay.end', '#genConfirm', '#genResume', '#genChoose', '#e0Modal', '#offerModal', '#founderLetter', '#founderLab', '#genFront'];
+  function freePanel() { let y = null; try { y = window.__opwin && window.__opwin.yielding && window.__opwin.yielding(); } catch (e) {} if (!y || MODALS.includes(y)) return !y;
+    try { if (y === '#oracle.on' && window.__feedback) window.__feedback.close(); else if (y === '#hitl.on' && window.__reviews) window.__reviews.tab.close();
+      else { const el = $(y.replace(/\.on$|:not\(\[hidden\]\)$/, '')); if (el) { el.classList.remove('on'); if (y.includes('hidden')) el.hidden = true; if (y === '#drawerView') el.remove(); } } } catch (e) {}
+    try { window.__opwin && window.__opwin.refresh && window.__opwin.refresh(); } catch (e) {} document.documentElement.classList.remove('op-yield'); return true; }
+  function out() { document.documentElement.classList.remove('gen-calm'); const yielded = (() => { try { return window.__opwin && window.__opwin.yielding && window.__opwin.yielding(); } catch (e) { return null; } })();
+    if (yielded && !MODALS.includes(yielded)) { freePanel(); const t0 = $('#lab-toggle'); if (!labOpen() && t0) t0.click(); place(); return; }
+    const t = $('#lab-toggle'); if (!labOpen()) { if (t) t.click(); } else if (!genWin()) { const c = $('#lab-close'); if (c) c.click(); else if (t) t.click(); }
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'to_handle' } })); } catch (e) {} place(); }
   b.addEventListener('click', e => { e.stopPropagation(); out(); });
   // after the player closes the Operator, the first few times (Nico: "after closing it, at least the first couple of times, make it glow

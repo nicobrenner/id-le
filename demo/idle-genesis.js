@@ -21,6 +21,21 @@
 // A chooser (Storyline · From scratch (free) · A ready world) opens any ?genesis start and ⚙ → "new consciousness" (snapshot first, always).
 (() => {
   const Q = new URLSearchParams(location.search), $ = s => document.querySelector(s), now = () => Date.now();
+  // the Director's view (staging/local, /director): the storyline's script as data, from the very constants the story plays (a getter, read
+  // after the module has run; it changes nothing about how the story plays)
+  (window.__storyDump = window.__storyDump || {}).genesis = () => ({
+    dark: DARK.map((text, i) => ({ who: 'doc', text, i, hold: +darkHold(text).toFixed(2), type: +(text.length / DCPS).toFixed(2) })), approach: APPROACH, silentAt: SILENT, ringEnd: RING_END,
+    ring: { ...RING }, wake: WAKE.slice(), lightsOn: LIGHTS_ON, steps: JSON.parse(JSON.stringify(STORY_STEP)), lines: JSON.parse(JSON.stringify(LINES)),
+    firstWords: FIRST_WORDS.split(' '), firstLines: FIRST_LINES.slice(), tapHint: TAP_HINT, life: { ...LIFE }, wordsMs: WORDS_MS, dawnMs: DAWN_MS,
+    moment: { stamp: MOMENT.stamp, lines: MOMENT.lines.slice(), start: MOMENT.start, play: MOMENT.play(), confirm: { q: MOMENT.confirm.q, stay: MOMENT.confirm.stay, go: MOMENT.confirm.go() } },
+    ask: { mode: ASK.mode, name: { q: ASK.name.q, pool: ASK.name.pool.slice(), thanks: ASK.name.thanks('Nova') }, logo: { q: ASK.logo.q, a: ASK.logo.a, b: ASK.logo.b }, skip: ASK.skip },
+    end: { head: END.head, line: END.line, help: END.help, free: END.free(), back: END.back },
+    nudge: JSON.parse(JSON.stringify(NUDGE, (k, v) => typeof v === 'function' ? v('…') : v)),
+    welcome: { lines: WELCOME.lines.slice(), chip: WELCOME.chip, after: WELCOME.after },
+    offer: { prod: OFFER_PROD, v3: { ...OFFERV.v3 } }, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: (d.goals || []).map(g => g[1]), teaches: d.teaches, front: d.front && d.front.head, line: d.line })), unlock: UNLOCK.map(r => r.slice(0, 3)),
+    sounds: [{ cue: 'the ringing (ears)', scene: 'dark', note: 'peaks in ' + RING.attack + ' s, gone by line ' + RING_END }, { cue: 'black-hole rumble and shake', scene: 'dark', note: 'from the second-to-last line' },
+      { cue: 'the hum (electric)', scene: 'lights' }, { cue: 'word chimes + the wind bed (ocean)', scene: 'words' },
+      { cue: 'three strikes with far thunder, one creature each', scene: 'life', note: LIFE.gap + ' ms apart' }, { cue: 'the music comes in', scene: 'life', note: LIFE.quiet + ' ms after the last creature' }] });
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // ON since Nov 4 (Nico's go, 11-03 before bed: "deploy the A/B/C testing when it lands, all the options looked good to me, at least for first launch")
   const AB = 'on';   // the A/B switch: 'on' gives NEW browsers the storyline or the current start 50/50 (stored in this browser only, as idle.gv: story | current)
@@ -28,6 +43,9 @@
   const H = () => window.__genHooks, W = () => window.__idleWorld;
   // a keyframe (idle-keys.js, staging/local only): which moment of the storyline to start at; null on id-le.com and in normal play
   const SK = window.__storyKey || null, skAfter = k => !!(SK && SK.after(k));
+  // keyframes at or past EPOCH 0 COMPLETE land on it directly (Nov 4, Nico: "?at=epoch0done … it still took me through the initial setup … I still
+  // had to go through it though... instead of just directly landing on the card"): the steps are built silently, with no animations or lines
+  const QUICK = () => !!(SK && SK.atOrAfter && SK.atOrAfter('epoch0done'));
   const coarse = () => matchMedia('(pointer: coarse)').matches;
   // good first articles for "grow it from Wikipedia" (one is offered at random)
   const TOPICS = ['Octopus', 'Volcano', 'Moon', 'Coffee', 'Bioluminescence', 'Aurora', 'Coral reef', 'Tardigrade', 'Lighthouse', 'Origami'];
@@ -44,11 +62,14 @@
   const ALIVE_AFTER = 3;
   let topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
   // the guided steps: the Tiny Operator's introduction, the one glowing suggestion (also pre-filled in the input), a quiet alternative
+  // the storyline's words for the guided steps (the free console's are inline below); the Director's view reads these too
+  const STORY_STEP = { light: { say: 'lights on' }, words: { intro: 'it has no words yet. say "let there be words"', say: 'let there be words' },
+    creatures: { intro: 'a floor of words, and nobody to walk on it. say "let there be life"', say: 'let there be life' } };
   const STEPS = {
-    light: { intro: 'it is very dark in here. first, some light', say: () => storyMode() ? 'lights on' : 'let there be light', run: () => actions.light() },
-    words: { intro: () => storyMode() ? 'it has no words yet. say "let there be words"' : 'a stage, and nothing on it. it needs words', say: () => storyMode() ? 'let there be words' : 'let there be words about ' + topic.toLowerCase(),
+    light: { intro: 'it is very dark in here. first, some light', say: () => storyMode() ? STORY_STEP.light.say : 'let there be light', run: () => actions.light() },
+    words: { intro: () => storyMode() ? STORY_STEP.words.intro : 'a stage, and nothing on it. it needs words', say: () => storyMode() ? STORY_STEP.words.say : 'let there be words about ' + topic.toLowerCase(),
       run: () => actions.letThereBeWords(storyMode() ? '' : topic), alt: ['about anything', () => actions.letThereBeWords('')] },
-    creatures: { intro: () => storyMode() ? 'a floor of words, and nobody to walk on it. say "let there be life"' : 'a floor of words. nobody to walk on it yet', say: () => storyMode() ? 'let there be life' : 'bring life', run: () => actions.firstCreatures() },
+    creatures: { intro: () => storyMode() ? STORY_STEP.creatures.intro : 'a floor of words. nobody to walk on it yet', say: () => storyMode() ? STORY_STEP.creatures.say : 'bring life', run: () => actions.firstCreatures() },
     sky: { intro: 'they will want a sky, or a song', say: 'give it weather', run: () => actions.weather(),
       alt: ['let there be music', () => actions.music()] } };
   // the Tiny Operator's lines after each step (short, warm, no trailing period: the chat style rule)
@@ -315,7 +336,10 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   const chip = () => { if (!storyMode() || !guiding() || moment || !$('#genConsole')) return null; const g = nextGuide(); if (!g) return null; return { step: g, say: wakeBusy ? '' : sayOf(g), busy: !!busy }; };
   // the console line, and the same line in the Operator's thread (unless the Tiny Operator is mid-reply: it answers in its own voice)
   let quiet = false;
-  function say(line) { renderConsole(line); if (quiet) return; try { const r = window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', line, 'ai'); if (r && r.classList && storyMode() && guiding()) r.classList.add('gmir'); } catch (e) {} }
+  // Nov 4: in the storyline, a line said while the Operator's window is closed or stepping aside isn't added to the chat (nobody saw it said;
+  // Nico: "chat messages that the user hadn't seen until this point")
+  const opSeen = () => { const l = $('#lab'); return !!(l && l.classList.contains('open')) && !document.documentElement.classList.contains('op-yield'); };
+  function say(line, force) { renderConsole(line); if (quiet || (!force && storyMode() && !opSeen())) return; try { const r = window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', line, 'ai'); if (r && r.classList && storyMode() && guiding()) r.classList.add('gmir'); } catch (e) {} }
   // v15 (Nico: "while still on guided tour (all of Epoch 0, until the end), don't show the history of the chat messages yet, only at the end...
   // just keep it to at the most 2-3 messages for the current brief interaction/task.. do allow the user to send random messages if they want...
   // but we only display a limited number of recent ones"): while the storyline's Genesis window is up (gen-box / gen-float), the console shows the
@@ -488,26 +512,26 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   const firstWords = (c, i) => { try { const R = window.__raveHooks; if (!c || !R || !R.say) return; R.say(c, FIRST_LINES[i] || FIRST_LINES[0]); clearTimeout(c._bt); c._bt = setTimeout(() => c.bub && c.bub.classList.remove('on'), 3800); (snd.first = snd.first || []).push({ i, who: c.name, at: now() }); } catch (e) {} };
   let tapped = false; try { tapped = localStorage.getItem('idle.e0tap') === '1'; } catch (e) {}
   let finaleNow = false;
-  async function finale(family) { const h = H(); finaleNow = true; aside(1); const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; snd.strikes = [];
+  async function finale(family) { const h = H(); finaleNow = true; aside(1); const Q0 = QUICK(), RM = Q0 || matchMedia('(prefers-reduced-motion: reduce)').matches; snd.strikes = [];
     try { await sleep(RM ? 150 : 600);
       if (!h.words().length) await _letThereBeWords('');
       const cam = h.cam(), z = cam.z || 1, ws = h.words().filter(w => !w.carriedBy && w.text.length > 2 && w.el), cs = h.creatures(), names = [], used = new Set();
       const spot = k => { const tx = cam.x + k * Math.min(innerWidth, 900) * 0.24 / z, ty = cam.y + (k ? 30 : -30) / z; return ws.filter(w => !used.has(w)).sort((a, b) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(b.x - tx, b.y - ty))[0] || { x: tx, y: ty }; };
       let first = null;
       for (const [i, k] of [[0, -1], [1, 1], [2, 0]]) { const w = spot(k); used.add(w); first = first || w;
-        const r = w.el ? w.el.getBoundingClientRect() : null; strike(r ? r.left + r.width / 2 : innerWidth / 2, r ? r.top + r.height / 2 : innerHeight / 2, i);
+        const r = w.el ? w.el.getBoundingClientRect() : null; if (!Q0) strike(r ? r.left + r.width / 2 : innerWidth / 2, r ? r.top + r.height / 2 : innerHeight / 2, i);
         await sleep(RM ? 60 : 140); ring(w.x, w.y);
         const c0 = hold.shift(); let name = null;
         if (c0) { c0.x = c0.tx = w.x; c0.y = c0.ty = w.y + 8; if (c0.el) c0.el.style.visibility = ''; if (!cs.includes(c0)) cs.push(c0); name = c0.name; }
         else { name = W() && W().spawn(family || 'crawly'); const c = name && h.creatures().find(x => x.name === name); if (c) { c.x = c.tx = w.x; c.y = c.ty = w.y + 8; } }
         if (name) names.push(name); snd.strikes.push({ at: now(), who: name });
-        { const cc = name && h.creatures().find(x => x.name === name); if (cc) setTimeout(() => firstWords(cc, i), RM ? 100 : 450); }
+        { const cc = name && h.creatures().find(x => x.name === name); if (cc && !Q0) setTimeout(() => firstWords(cc, i), RM ? 100 : 450); }
         if (i < 2) await sleep(RM ? 300 : LIFE.gap); }
       if (!names.length) return null;
       land.firstBorn = names[0];   // the one-tap ask at the moment names this one
       cosmos.calm(0.25); done('creatures', null, { x: first.x, y: first.y }, { who: names.join(', ') });
       await sleep(RM ? 400 : LIFE.quiet); music();
-      cls('gen-look', 1); land.look = { t0: now(), rings: 0, hint: null }; const until0 = now() + LIFE.look, born = names.map(n => h.creatures().find(x => x.name === n)).filter(Boolean);
+      cls('gen-look', 1); land.look = { t0: now(), rings: 0, hint: null }; const until0 = now() + (Q0 ? 0 : LIFE.look), born = names.map(n => h.creatures().find(x => x.name === n)).filter(Boolean);
       let hintEl = null, lastRing = 0;
       for (let cardAt = 0; now() < until0 && !(cardAt && now() > cardAt + LIFE.lookAfterCard);) { await sleep(150);
         if (!cardAt && !RM && now() - lastRing > 1200) { lastRing = now(); born.forEach(c => ring(c.x, c.y)); land.look.rings++; }
@@ -536,7 +560,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   // disappear, there should be an animation of 'dawn til noon' of brightness, and then the operator window (not the sidebar), should appear
   // again"): the window fades out, the sky goes from night through dawn to noon (cosmos, DAWN_MS), the window comes back in the middle with
   // "Nice!!", and a moment later it docks as before
-  const DAWN_MS = 3600, dawnMs = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 600 : DAWN_MS;
+  const DAWN_MS = 3600, dawnMs = () => QUICK() ? 60 : matchMedia('(prefers-reduced-motion: reduce)').matches ? 600 : DAWN_MS;
   // v14 (Nico, on a phone: "when I was about to tap let there be words, the window/bar changed under me"; the cause: 3.2 s after the dawn the
   // centred window docked into the phone's 78% sheet, flying the button away under his finger): no dock any more. While the window is hidden
   // for the dawn it leaves the lightbox for its Genesis place (html.gen-float: low and centred; a bottom sheet of at most 45% on phones), the
@@ -564,11 +588,13 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   // ---------- keyframes (idle-keys.js): after the opening, build what the chosen moment needs, the way a player would, then stop there
   const sleep = ms => new Promise(r => setTimeout(r, ms)), until = async (f, ms) => { for (let t = 0; t < ms && !f(); t += 100) await sleep(100); return f(); };
   async function keyAdvance() { if (!skAfter('lights')) return;
-    await actions.light(); await until(() => !document.documentElement.classList.contains('gen-box'), 9000); await sleep(400);
-    if (!skAfter('words')) return; await actions.letThereBeWords(''); await sleep(1900);
+    const q = QUICK(); if (q) { closeOp(); aside(1); }
+    await actions.light(); if (!q) { await until(() => !document.documentElement.classList.contains('gen-box'), 9000); await sleep(400); }
+    if (!skAfter('words')) return; await actions.letThereBeWords(''); if (!q) await sleep(1900);
     if (!skAfter('life')) return; await actions.firstCreatures();
-    if (!skAfter('epoch0done')) return; const b = await until(() => $('#e0Modal [data-gm=start]'), 20000); if (b) $('#e0Modal [data-gm=start]').click(); }
-
+    if (q) { aside(0); closeOp(); }
+    if (!skAfter('epoch0done')) return; const sk = await until(() => $('#e0Modal [data-ask=skip]'), 20000); if (sk) sk.click();
+    const b = await until(() => $('#e0Modal [data-gm=start]'), 20000); if (b) b.click(); }
   // ---------- stats (idle-stats.js): the steps reached and the seconds each took since the one before (or since the console opened)
   function stats() { if (!S || !S.on || !S.steps) return null; const t0 = S.tc || S.t0, ks = Object.keys(S.steps).sort((a, b) => S.steps[a] - S.steps[b]), out = {}; let prev = t0;
     for (const k of ks) { out[k] = Math.max(0, Math.round((S.steps[k] - prev) / 1000)); prev = S.steps[k]; }
@@ -756,7 +782,7 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; land = { phase: 'dark', clicks: 0, t0: now(), shown: 0, pings: 0 }; blackCover(true); nightStart(RM); mark('landing'); ringing(untilLine(-1, 3.0)); setTimeout(() => silence(true), 2800); setTimeout(() => blackCover(false), 1500);
     const skipB = document.createElement('button'); skipB.id = 'genNightSkip'; skipB.textContent = 'skip ›'; skipB.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147481997;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.75';
     document.body.appendChild(skipB);
-    await new Promise(res => { let i = -1, timer = 0, downAt = 0, done = false;
+    await new Promise(res => { let i = SK && SK.sub === 'hole' ? APPROACH - 1 : -1, timer = 0, downAt = 0, done = false;   // the dark-hole keyframe starts at the hole's approach
       const st = nightState, next = () => { clearTimeout(timer); if (done) return; i++; if (i >= DARK.length) return finish('lines'); const text = DARK[i];
         land.line = { text, t0: st.t }; land.shown = i + 1; if (i === DARK.length - 2 && !land.shakeT) { land.shakeT = st.t; rumble(true); } land.shake = !!land.shakeT; st.k = (i + 1) / DARK.length; const d = darkHold(text) + text.length / DCPS; if (i < RING_END) ringAim(untilLine(i, d)); else if (i === RING_END) { land.ringEndSt = st.t; ringAim(0); } if (i === APPROACH) land.approachSt = st.t; wait(d); };
       // the line's clock follows the night's (paused while held)
@@ -796,7 +822,7 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
     frame(); }); }
 
   // ---------- the storyline's waking up: the Operator as a window in the middle (a lightbox), the Tiny Operator's lines typed one by one
-  async function wake() { const lab = $('#lab'); let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
+  async function wake() { if (QUICK()) aside(1); const lab = $('#lab'); let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
     cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); opTitle(true); mark('operator'); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; let skip = false; const onTap = () => { skip = true; }; if (lab) lab.addEventListener('pointerdown', onTap);
     const fast = skAfter('operator');   // a later keyframe: the opening is already said
@@ -813,7 +839,7 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
   // the end of what's built (v12, Nico: "at the end of the current progres of the game to be very clear: WIP/check out the Roadmap ^^ join
   // us on Github: ... / Free-play"): the first epoch that isn't built yet opens as a card in the middle (S.endOpen) with the three ways on;
   // closed (×, the roadmap, GitHub) it is the small corner card, whose "what's next ›" opens it again. Free-play leaves the storyline.
-  const END = { head: 'work in progress', line: "that's as far as the story goes, for now. the scientists are building the next epochs, one at a time",
+  const END = { head: 'work in progress', line: "that's all for now: Epoch 1 is being built. your consciousness keeps running; play in it as long as you like",   // DRAFT (Nov 4)
     help: 'you can help: vote on what comes next, or build it with us', free: () => `welcome to ${PG().short}. everything is open now, and it is your consciousness, Doc`,
     back: 'whenever you want the story back: 📖 back to the story in 🛠, or ⚙ → 📖 Storyline' };   // v16: the way back, said
   { const c4 = document.createElement('style'); c4.textContent = `html:root #genDay.end.end{left:50%!important;top:50%!important;bottom:auto!important;right:auto!important;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));min-width:0;max-width:none;max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box;padding:20px 22px 16px;z-index:2147482400;background:#0a0b16f7;box-shadow:0 24px 90px #000c,0 0 0 1px #6b7cff55}
@@ -875,7 +901,7 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
     if (k === 'free') confirmPlay(go => { if (go) { mark('end_free'); freePlay(); } }); }
   // free-play: every feature now, the same world; the storyline can be picked up again from ⚙ (resumeStory)
   function freePlay() { if (!S) return; S.mode = 'free'; S.fp = now(); S.endOpen = false; S.free = S.free || now(); save(); silence(false); cls('gen-calm', 0); cls('gen-hush', 0);
-    const g = $('#genDay'); if (g) g.remove(); applyUnlocks(); tag(); say(END.free()); setTimeout(() => say(END.back), 1200); { const l = $('#lab'); if (l && !l.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); } }   // v14: the Operator's window says it
+    const g = $('#genDay'); if (g) g.remove(); applyUnlocks(); tag(); say(END.free(), true); setTimeout(() => say(END.back, true), 1200); { modalSync(); const l = $('#lab'), t = $('#lab-toggle'); if (l && t && !l.classList.contains('open')) t.click(); }   // v14: the Operator's window says it
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_free', extra: { epoch: S.day || 0 } } })); } catch (e) {} }
   const canResume = () => !!(S && S.on && S.fp && S.mode === 'free' && storyLive());
   function resumeStory() { if (!canResume()) return false; S.mode = 'story'; delete S.fp; save(); applyUnlocks(); renderDay(); renderConsole(); return true; }
@@ -891,18 +917,20 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
     if (!up && !window.__worldHold && MODAL.held.length && origNotify) { const h = MODAL.held.splice(0); h.forEach((a, i) => setTimeout(() => { try { origNotify(...a); MODAL.shown++; } catch (e) {} }, 500 + i * 700)); } }
   function wrapNotify() { const n = window.__notify; if (!n || n.__held) return; const w = (...a) => { if (modalUp() || window.__worldHold) { MODAL.held.push(a); return null; } return n(...a); }; Object.assign(w, n); w.__held = true; origNotify = n; window.__notify = w; }
   ['pointerdown', 'click', 'touchstart'].forEach(t => document.addEventListener(t, e => { if (!document.documentElement.classList.contains('gen-modal')) return;
-    if (e.target.closest && e.target.closest('#genDay.end, #lab, #genConfirm, #genResume, #oracle, #stagingRibbon, #offerModal, #e0Modal')) return;
+    if (e.target.closest && e.target.closest('#genDay.end, #lab, #genConfirm, #genResume, #oracle, #stagingRibbon, #offerModal, #e0Modal, #lab-toggle')) return;
     e.stopPropagation(); if (t !== 'touchstart') e.preventDefault(); }, true));
   setInterval(() => { wrapNotify(); modalSync(); }, 400);
   addEventListener('idle:worldgo', () => { try { wrapNotify(); modalSync(); } catch (e) {} });   // notices held during the intro come after the landing
   window.__modal = { up: modalUp, held: () => MODAL.held.length, shown: () => MODAL.shown };
   // where a closed card goes (v15's ✅ checklist in the Operator may point it elsewhere: window.__epochTarget); the 📟 by default
+  // Nov 4 (Nico: "click Roadmap, it closes the notice, but makes an animation as if minimizing to the operator, and makes the operator glow"): the
+  // card shrinks into ✅ (where the epoch's tasks live) when it is on screen, and otherwise just closes; the 📟 never glows for it
   function shrinkEnd() { const el = $('#genDay.end'); if (!el) return; const a = el.getBoundingClientRect(); let t = null; try { t = window.__epochTarget && window.__epochTarget(); } catch (e) {}
-    t = t || ($('#toHandle') && !$('#toHandle').hidden ? $('#toHandle') : $('#lab-head')); const b = t ? t.getBoundingClientRect() : { left: innerWidth - 40, top: innerHeight - 40, width: 24, height: 24 };
+    const vis = t && t.getBoundingClientRect && t.getBoundingClientRect().width > 0 && t.id !== 'toHandle' && t.id !== 'lab-head';
+    land.shrink = { to: vis ? t.id : null, at: now() }; if (!vis) return; const b = t.getBoundingClientRect();
     const g = document.createElement('div'); g.id = 'genShrink'; Object.assign(g.style, { left: a.left + 'px', top: a.top + 'px', width: a.width + 'px', height: a.height + 'px' }); document.body.appendChild(g);
     const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2), k = Math.max(0.05, b.width / a.width);
-    try { g.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(${k})`, opacity: 0.2 }], { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 10 : 520, easing: 'cubic-bezier(.4,0,.2,1)' }).onfinish = () => g.remove(); } catch (e) { g.remove(); }
-    land.shrink = { to: t && t.id, at: now() }; const h = $('#toHandle'); if (h) { h.classList.add('glow'); setTimeout(() => h.classList.remove('glow'), 2600); } }
+    try { g.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(${k})`, opacity: 0.2 }], { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 10 : 520, easing: 'cubic-bezier(.4,0,.2,1)' }).onfinish = () => g.remove(); } catch (e) { g.remove(); } }
   { const c6 = document.createElement('style'); c6.textContent = `#genModalBd{position:fixed;inset:0;z-index:2147482390;background:#02030a8c;backdrop-filter:blur(2px)}
 html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:hidden!important}
 #genShrink{position:fixed;z-index:2147482450;border-radius:12px;background:#0a0b16f0;box-shadow:0 0 0 1px #6b7cff88,0 10px 40px #000a;pointer-events:none;transform-origin:center}`; document.head.appendChild(c6); }
@@ -1032,10 +1060,10 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     if (!el) { el = document.createElement('div'); el.id = 'e0Modal'; el.className = 'gModal'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); document.body.appendChild(el); }
     const keep = $('#genAskName'), typed = keep ? keep.value : '', had = document.activeElement === keep;
     el.innerHTML = `<div class="gstamp">${esc(MOMENT.stamp)}</div><div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` +
-      (moment.ready ? askHtml() + `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : '');
+      (moment.ready ? askHtml() + (moment.ask === 'done' ? `<div class="gm gin"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : '') : '');
     const ni = $('#genAskName'); if (ni && typed) ni.value = typed; if (ni && had) try { ni.focus(); } catch (e) {}
     if (moment.ready) setTimeout(askStills, 0); }
-  async function epochMoment(d) { const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; moment = { ready: false, at: now() };
+  async function epochMoment(d) { const RM = QUICK() || matchMedia('(prefers-reduced-motion: reduce)').matches; moment = { ready: false, at: now() };
     closeOp(); cls('gen-float', 0); cls('gen-box', 0); { const bd = $('#genBackdrop'); if (bd) bd.remove(); } modalSync();
     let bd = $('#genModalBd'); if (!bd) { bd = document.createElement('div'); bd.id = 'genModalBd'; document.body.appendChild(bd); }
     wakeShown = []; wakeTyping = ''; wakeBusy = true; curLine = ''; renderMoment();
@@ -1045,7 +1073,13 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     wakeBusy = false; moment.ready = true; renderMoment(); }
   function leaveMoment() { const msg = moment && moment.ask === 'done' && moment.askMsg; moment = null; const el = $('#e0Modal'); if (el) el.remove(); const mb = $('#genModalBd'); if (mb) mb.remove();
     setTimeout(modalSync, 0); wakeShown = []; cls('gen-box', 0); const bd = $('#genBackdrop'); if (bd) bd.remove();
-    if (msg) try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', msg + ' ✓', 'ai'); } catch (e) {} }
+    epochChat(); }
+  // a fresh chat for each epoch (Nov 4, Nico: "it pops up the operator … and now it has some chat history about the creature (chat messages that the
+  // user hadn't seen until this point …) So maybe after each epoch we clear the operator's chat history (or at least what we display)"): the rows so
+  // far are hidden (kept, never removed) behind a "show earlier" line; nothing said while the window was closed is added
+  function epochChat() { const th = $('#ai-thread'); if (!th) return; const rows = [...th.children].filter(r => !r.classList.contains('ep-more'));
+    if (!rows.length) return; rows.forEach(r => r.classList.add('ep-old')); let m = th.querySelector('.ep-more');
+    if (!m) { m = document.createElement('button'); m.className = 'ep-more'; m.type = 'button'; m.textContent = 'show earlier'; m.onclick = () => { th.querySelectorAll('.ep-old').forEach(r => r.classList.remove('ep-old')); m.remove(); }; th.insertBefore(m, th.firstChild); } }
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#e0Modal [data-gm]'); if (!b || !moment || !moment.ready) return;
     if (b.dataset.gm === 'start') { mark('e0_start1'); aside(1); setTimeout(() => { leaveMoment(); closeOp(); aside(0); endGuide(false); renderDay(); if (!builtNext(1)) showEnd(); else renderConsole(); }, 450); return; }
     if (b.dataset.gm === 'play') confirmPlay(go => { if (!go) return; mark('e0_play'); aside(1); setTimeout(() => { leaveMoment(); aside(0); endGuide(false); freePlay(); }, 450); }); });
@@ -1262,6 +1296,7 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
 .gModal .gm{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}.gModal button{font:600 15px var(--op-font,var(--ui-font,system-ui));padding:9px 18px;border-radius:18px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:40px}
 .gModal .go{background:#3a46c8;border-color:#cfd6ff;color:#fff}.gModal .lt{opacity:.85}
 #e0Modal .gw p{margin:8px 4px;text-align:left;font-size:17px}#e0Modal .gask{margin:12px 0 4px;padding:12px;border:1px solid #6b7cff55;border-radius:12px;text-align:left}#e0Modal .gq{margin-bottom:8px}#e0Modal .gaskr{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}#e0Modal .gaskr input{flex:1 1 140px;min-width:0;font:15px var(--op-font,var(--ui-font,system-ui));padding:8px 12px;border-radius:12px;border:1px solid #8ea0ff88;background:#0003;color:inherit}#e0Modal .gask-done{margin:12px 0 4px;color:#9be7a0}#e0Modal .gaskr canvas{display:block;border-radius:6px;background:#000}#e0Modal .gcur{display:inline-block;width:.5em;height:1em;background:#dfe4ff;vertical-align:-2px;margin-left:2px;animation:e0cur 1s steps(1) infinite}@keyframes e0cur{50%{opacity:0}}@media (max-width:420px){.gModal{padding:14px 14px 12px;font-size:14px}#e0Modal .gw p{font-size:15px;margin:6px 2px}.gModal button{padding:8px 14px}}
+#e0Modal .gskip{border:0!important;background:transparent!important;opacity:.7;text-decoration:underline;text-underline-offset:3px;padding:6px 8px!important;min-height:0}#e0Modal .gskip:hover{opacity:1;background:#ffffff0d!important}#e0Modal .gin{animation:e0in .45s ease-out}@keyframes e0in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}#ai-thread>.ep-old{display:none!important}#ai-thread>.ep-more{display:block;margin:4px auto 8px;font:12px var(--ui-font,system-ui);color:#9aa6d8;background:none;border:0;text-decoration:underline;cursor:pointer}
 @keyframes offerIn{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
 #settings .row.offerHi{outline:2px solid #ffcf7a;outline-offset:2px;border-radius:8px;animation:offerRow 1s ease-in-out 3}@keyframes offerRow{50%{background:#ffcf7a33}}
 @media (prefers-reduced-motion: reduce){.gModal{animation:none}#settings .row.offerHi{animation:none}}`; document.head.appendChild(css2); }

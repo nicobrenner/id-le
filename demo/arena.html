@@ -20,6 +20,8 @@ html.story-boot body>*:not(#idleIntro):not(#genBlack):not(#genChoose):not(script
   let intent = (INTENT_PARAMS.find(([, re]) => re.test(location.search)) || INTENT_HASH.find(([, re]) => re.test(location.hash)) || [null])[0];
   // ?offer=a|b|c|old (staging/local only): preview the storyline offer in a returning player's world (no arm, no story, no guided start)
   if (!intent && testHost && /^(a|b|c|old|v3)$/.test(q.get('offer') || '')) intent = 'offer';
+  // ?storydump (staging/local only): the Director's view reads the storyline's data from a sandboxed page that plays nothing
+  if (!intent && testHost && q.has('storydump')) intent = 'dump';
   window.__intentEntry = q.has('story') || q.has('genesis') ? null : intent; window.__intentLists = { params: INTENT_PARAMS.map(x => x[0]), hash: INTENT_HASH.map(x => x[0]) };
   if (!story && !q.has('genesis') && !q.has('start') && !intent) {
     let snaps = 0; try { snaps = (JSON.parse(ls.getItem('arena.snaps') || '[]') || []).length; } catch (e) {}
@@ -3927,6 +3929,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   renderEvo();
   // ---------- boot ----------
   (async () => {
+    if (window.__storyDumpPage) { statusEl.textContent = 'the director reads this page: no model'; return; }   // ?storydump (staging/local): the Director's view only needs the modules' constants
     try {
       statusEl.textContent = 'loading tokenizer…'; tokenizer = new BPETokenizer(await (await fetch('tokenizer_chat_v2.json')).json());
       statusEl.textContent = 'loading the instruction model…'; instr = await (await fetch('arena_instr_v2.json')).json(); ort.env.wasm.numThreads = (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && !window.__isIOS && !window.__safeLevel) ? Math.min(4, navigator.hardwareConcurrency || 4) : 1;   // iOS: one thread (threaded wasm reserves shared memory iOS Safari kills tabs over)

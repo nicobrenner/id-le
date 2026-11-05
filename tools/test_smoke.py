@@ -1936,7 +1936,11 @@ def t_story(P):
     need(all(x["op"] < 0.2 for x in lv[3:-1]) and any(x["look"] for x in lv), f"v14: no window during the strikes and the look around: {[round(x['op'], 2) for x in lv]}")   # (the first 0.75 s: the window fading out)
     lk = pg.evaluate("() => window.__genesis.landing().look")
     need(lk and lk["end"] - strikes[2]["at"] >= 5000, f"v14: the Epoch moment comes at least 5 s after the last creature: {lk}, {strikes[2]}")
-    wait_for(pg, "() => !!document.querySelector('#e0Modal [data-gm=start]')", 20, P=P)
+    wait_for(pg, "() => !!document.querySelector('#e0Modal [data-ask=skip]')", 20, P=P)
+    need(not pg.evaluate("() => !!document.querySelector('#e0Modal [data-gm]')"), "Nov 4: [start Epoch 1] / [🛝] stay hidden until the creature is named or skipped")
+    sk = pg.evaluate("() => { const b = document.querySelector('#e0Modal [data-ask=skip]'), s = getComputedStyle(b); return { border: s.borderTopWidth, bg: s.backgroundColor, text: b.textContent.trim() } }")
+    need(sk["border"] in ("0px", "") and sk["bg"] in ("rgba(0, 0, 0, 0)", "transparent") and sk["text"] == "skip", f"Nov 4: skip looks like plain text: {sk}")
+    pg.click("#e0Modal [data-ask=skip]"); wait_for(pg, "() => !!document.querySelector('#e0Modal [data-gm=start]')", 5, P=P)
     mo = pg.evaluate("() => ({ chrome: ['none', 'none'], yielded: window.__opwin.yielding(), inLab: !!document.querySelector('#lab #e0Modal'), chat: [...document.querySelectorAll('#ai-thread > *')].filter(r => /great job|next up: Epoch 1|^\\s*ready\\?\\s*$/i.test(r.textContent)).length, text: document.querySelector('#e0Modal').innerText, box: true, c: window.__arena.raw().filter(c => !c.lab).length, hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display, bed: window.__snd.bedOn() })")
     need("EPOCH 0 COMPLETE" in mo["text"] and "great job" in mo["text"] and "next up: Epoch 1" in mo["text"] and "ready?" in mo["text"] and "start Epoch 1" in mo["text"] and "playground" in mo["text"] and mo["box"] and mo["c"] >= 3, f"v14: the Operator's Epoch 0 moment: {mo}")
     need(mo["yielded"] == "#e0Modal" and not mo["inLab"] and mo["chat"] == 0, f"Nov 4: the moment is its own modal, the Operator steps aside, no copies in the chat: {mo}")
@@ -2367,7 +2371,10 @@ def t_story_keys(P, keys=None):
             wait_for(pg, "() => window.__genesis.next() === 'creatures' && window.__genesis.ready()", 45, P=P)
             need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0 and pg.evaluate("() => window.__genHooks.words().length") > 10, "life: words laid, nobody yet")
         elif k == "epoch0done":
-            wait_for(pg, "() => !!document.querySelector('#e0Modal [data-gm=start]')", 60, P=P)
+            t0k = time.time(); wait_for(pg, "() => !!document.querySelector('#e0Modal [data-ask=skip]')", 60, P=P)
+            qk = pg.evaluate("() => ({ lab: !!document.querySelector('#lab.open') && getComputedStyle(document.querySelector('#lab')).visibility !== 'hidden' && +getComputedStyle(document.querySelector('#lab')).opacity > 0.1, tip: !!document.querySelector('.gen-tap'), dt: 0 })")
+            need(not qk["lab"] and not qk["tip"], f"Nov 4: ?at=epoch0done lands on the modal with no instructions or Operator window on screen: {qk}")
+            pg.click("#e0Modal [data-ask=skip]"); wait_for(pg, "() => !!document.querySelector('#e0Modal [data-gm=start]')", 5, P=P)
             need("EPOCH 0 COMPLETE" in pg.inner_text("#e0Modal").upper() and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") >= 3, "epoch0done: the Operator's Epoch 0 moment, with life (v14)")
         elif k == "epoch1":
             wait_for(pg, "() => { const d = document.querySelector('#genDay'); return !!d && d.innerText.includes('EPOCH 1'); }", 70, every=0.2, P=P)
@@ -3119,7 +3126,9 @@ def t_reviews_timing(P):
     pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": None}, {"story": True, "epoch": 0}]); g0 = ev(R)
     pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": None}, {"story": True, "epoch": 1}]); s0 = ev(R)
     pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": True, "at": 1}, {"story": True, "epoch": 1}]); s1 = ev(R)
-    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": 1}, {"story": True, "epoch": 1}]); s2 = ev(R)
+    pg.evaluate(stub, [{"on": True, "mode": "story"}, {"open": False, "at": 1}, {"story": True, "epoch": 1}]); s2a = ev(R)   # Nov 4: not the moment the card closes
+    need(not s2a["ready"], f"no invitation the moment the end card closes: {s2a}")
+    pg.evaluate("() => { window.__reviews.test.shift(61000); window.__reviews.test.touchAfter(); }"); s2 = ev(R)
     pg.evaluate("() => window.__feedback.open('road')"); pg.wait_for_timeout(500); s3 = ev(R); pg.evaluate("() => window.__feedback.close()"); pg.wait_for_timeout(500)
     pg.evaluate(stub, [{"on": True, "mode": "free", "fp": 1}, {"open": False, "at": 1}, {"story": False, "epoch": 1}]); f0 = ev(R)
     pg.evaluate("() => window.__reviews.test.shift(21000)"); f1 = ev(R)
@@ -3602,6 +3611,32 @@ def t_arm_stats(P):
     return "visit reports carry their arm: " + ", ".join(f"{a} {len(r)} reports" for a, r in got.items())
 
 
+
+def t_arm_draw(P, root, n=30):
+    """Nov 4: production counted arms assigned story 9 · choose 6 · play 1. On the production hostname (served from the build), n fresh
+    browsers with Math.random left alone: every drawn arm (idle.gv) must send exactly one confirmed arm beacon (aa) within 20 s"""
+    P.base, P.root = "https://id-le.com", root
+    drawn, sent, late = {}, {}, []
+    for i in range(n):
+        P.stats.clear(); P.beacon_seen = set() if hasattr(P, "beacon_seen") else set()
+        ctx = P.ctx.browser.new_context(viewport={"width": 1280, "height": 800}); Q = Page(ctx, P.base, P.stats); Q.root = root
+        try:
+            q = Q.open("/"); t0 = time.time(); gv = None; got = []
+            while time.time() - t0 < 20:
+                q.wait_for_timeout(500)
+                gv = q.evaluate("() => { try { return localStorage.getItem('idle.gv') } catch (e) { return null } }")
+                got = [json.loads(b) for b in P.stats if '"aa"' in b]
+                if gv and got: break
+            drawn[gv] = drawn.get(gv, 0) + 1
+            for x in got: sent[x["aa"]] = sent.get(x["aa"], 0) + 1
+            if gv and not got: late.append((i, gv, q.evaluate("() => ({ pend: window.__stats && window.__stats.pending(), live: window.__stats && window.__stats.live(), hidden: document.hidden, sent: localStorage.getItem('idle.armSent') })")))
+        finally:
+            ctx.close()
+    need(not late, f"arms drawn without a confirmed beacon within 20 s: {late[:5]} (drawn {drawn}, beacons {sent})")
+    need(sum(sent.values()) == sum(v for k, v in drawn.items() if k), f"one beacon per drawn arm: drawn {drawn}, beacons {sent}")
+    P.clean()
+    return f"{n} fresh browsers on id-le.com: drawn {drawn}, beacons {sent}"
+
 def t_beacon_ack(P):
     """Confirmed beacons (Nov 4, after a stale accumulator dropped the daily beacons while pages had already set their flags): a beacon's
     flag is set only when the server answers { stored: true }. A failed answer → still pending → sent again on the next load, counted once;
@@ -3674,6 +3709,36 @@ def t_engaged(P):
     return "day once; first act once (cr_card), not on passive viewing or a reload; next day: here + came back (d1) + finished Genesis"
 
 
+
+def t_e0_polish(P):
+    """Nov 4, Nico's notes on the Epoch 0 moment and the end card: ?at=epoch0done lands on the modal directly (no instructions, no Operator
+    window); the chat starts fresh after the moment; roadmap from the end card: no 📟 glow, the 📟 works while 🧪 is open (closes it, opens the
+    Operator), and closing 🧪 doesn't open the Operator by itself; the 📟's icon is centred in its button."""
+    pg = P.open("/arena.html?story&at=epoch0done"); wait_for(pg, "() => !!document.querySelector('#keyGate')", 30, P=P); pg.wait_for_timeout(300)
+    t0 = time.time(); pg.keyboard.press("k")
+    wait_for(pg, "() => !!document.querySelector('#e0Modal [data-ask=skip]')", 60, P=P); dt = time.time() - t0
+    q = pg.evaluate("() => ({ lab: !!document.querySelector('#lab.open') && !document.documentElement.classList.contains('op-yield'), steps: ['light', 'words', 'creatures'].every(k => (window.__genesis.state() || {}).steps && window.__genesis.state().steps[k]) })")
+    need(not q["lab"] and q["steps"], f"epoch0done: the modal with the steps done and no Operator window: {q}")
+    need(dt < 8, f"epoch0done reached in {dt:.1f} s (target ≤ 3 s on a quiet machine)")
+    pg.click("#e0Modal [data-ask=skip]"); wait_for(pg, "() => !!document.querySelector('#e0Modal [data-gm=start]')", 5, P=P)
+    pg.click("#e0Modal [data-gm=start]"); wait_for(pg, "() => !!document.querySelector('#genDay.end')", 15, P=P); pg.wait_for_timeout(400)
+    ch = pg.evaluate("() => { const rows = [...document.querySelectorAll('#ai-thread > *')]; return { visible: rows.filter(r => getComputedStyle(r).display !== 'none' && !r.classList.contains('ep-more')).length, old: rows.filter(r => r.classList.contains('ep-old')).length, more: !!document.querySelector('#ai-thread .ep-more') } }")
+    need(ch["visible"] == 0 and (ch["old"] == 0 or ch["more"]), f"a fresh chat after the epoch (earlier rows behind 'show earlier'): {ch}")
+    endtxt = pg.inner_text("#genDay.end"); need("that's all for now" in endtxt, f"the end card says it plainly: {endtxt!r}")
+    pg.click("#genDay.end [data-end=roadmap]")
+    wait_for(pg, "() => !!document.querySelector('#oracle.on')", 8, P=P); pg.wait_for_timeout(300)
+    g = pg.evaluate("() => ({ glow: document.querySelector('#toHandle').classList.contains('glow'), shrink: window.__genesis.landing().shrink })")
+    need(not g["glow"], f"roadmap from the end card: the 📟 doesn't glow: {g}")
+    pg.click("#toHandle"); wait_for(pg, "() => !document.querySelector('#oracle.on') && !!document.querySelector('#lab.open') && !document.documentElement.classList.contains('op-yield')", 6, P=P)
+    # now open 🧪 again and close it: the Operator stays as it was (closed here)
+    pg.evaluate("() => { const t = document.querySelector('#lab-close'); if (t) t.click(); }"); pg.wait_for_timeout(400)
+    pg.evaluate("() => window.__feedback.open('road')"); pg.wait_for_timeout(500); pg.evaluate("() => window.__feedback.close()"); pg.wait_for_timeout(3000)
+    need(not pg.evaluate("() => !!document.querySelector('#lab.open') && !document.documentElement.classList.contains('op-yield')"), "closing 🧪 doesn't open the Operator by itself")
+    c = pg.evaluate("() => { const b = document.querySelector('#toHandle'), r = b.getBoundingClientRect(); const sp = b.querySelector('span[aria-hidden]'); if (!sp) return null; const t = sp.getBoundingClientRect(); return { dx: Math.round((t.left + t.width / 2) - (r.left + r.width / 2)), dy: Math.round((t.top + t.height / 2) - (r.top + r.height / 2)), b: [Math.round(r.width), Math.round(r.height)] } }")
+    need(c and abs(c["dx"]) <= 2 and abs(c["dy"]) <= 3, f"the 📟 icon is centred in its button: {c}")
+    P.clean()
+    return f"epoch0done in {dt:.1f} s, no instructions; fresh chat; end card plain; roadmap: no glow, 📟 frees 🧪; 🧪 close keeps the Operator closed; icon centred {c}"
+
 def t_engage_ask(P):
     """The one-tap ask at EPOCH 0 COMPLETE (Nov 4): before [start Epoch 1] / [🛝], the Operator asks to name the first creature (three
     chips, an input, skip); a chip renames it, skip closes it, the buttons stay usable throughout; the 'logo' mode offers the two openings
@@ -3688,7 +3753,7 @@ def t_engage_ask(P):
     try:
         wait_for(pg, "() => window.__genesis.ask().state === 'open' && !!document.querySelector('#e0Modal .gask')", 150, P=P)
         r = pg.evaluate("() => ({ chips: [...document.querySelectorAll('#e0Modal [data-ask=chip]')].map(b => b.textContent), input: !!document.querySelector('#genAskName'), skip: !!document.querySelector('#e0Modal [data-ask=skip]'), start: !!document.querySelector('#e0Modal [data-gm=start]'), play: !!document.querySelector('#e0Modal [data-gm=play]'), first: window.__genesis.ask().first })")
-        need(len(r["chips"]) == 3 and r["input"] and r["skip"] and r["start"] and r["play"] and r["first"], f"the ask, with the two ways on still there: {r}")
+        need(len(r["chips"]) == 3 and r["input"] and r["skip"] and not r["start"] and not r["play"] and r["first"], f"Nov 4: the ask, with the two ways on hidden until it's answered: {r}")
         pg.click("#e0Modal [data-ask=chip]"); pg.wait_for_timeout(500)
         a = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), start: !!document.querySelector('#e0Modal [data-gm=start]') })")
         need(a["ask"]["state"] == "done" and r["chips"][0] in a["names"] and a["ask"]["first"] == r["chips"][0] and a["funnel"].get("e0_ask_name") and a["start"], f"a chip names the first creature: {a}")
@@ -4087,6 +4152,49 @@ def t_intent_links(P, root):
     return "; ".join(out)
 
 
+def t_director(P, root):
+    """The Director's view (Nov 4, Nico: "a 'Director's view'… the whole storyboard/outline/index of the story mode… a sort of tree… for reviewing
+    and playback"): /director (staging/local only) builds its tree from the game's own constants (window.__storyDump, read from a sandboxed
+    arena.html?storydump), lists every scene and keyframe, plays any node from its keyframe, and changes when a line in the code changes."""
+    shutil.copy2(os.path.join(DEMO, "director.html"), os.path.join(root, "director.html"))
+    gen = os.path.join(root, "idle-genesis.js"); orig = open(gen, encoding="utf-8").read()
+    def open_dir():
+        pg = P.open("/director.html")
+        wait_for(pg, "() => document.querySelectorAll('#tree li.scene').length >= 13", 120, P=P)
+        return pg
+    pg = open_dir()
+    r = pg.evaluate("""() => { const D = window.__director.data(), plays = new Set([...document.querySelectorAll('#tree button.play')].map(b => b.dataset.play));
+      return { scenes: [...document.querySelectorAll('#tree li.scene')].map(l => l.dataset.play), keys: D.keys.keys.map(k => k.key), aliases: D.keys.aliases.map(a => a.key),
+        missing: D.keys.keys.map(k => k.key).concat(D.keys.aliases.map(a => a.key)).filter(k => !plays.has(k)), text: document.querySelector('#tree').textContent,
+        dark: D.genesis.dark.map(x => x.text), dm: D.boot.dm.map(x => x.text), moment: D.genesis.moment.lines, subs: D.epoch0.subs.map(s => s.text) }; }""")
+    need(not r["missing"], f"keyframes without a ▶ in the tree: {r['missing']}")
+    for k in ["title", "computer", "labchat", "boot", "run", "crash", "logo", "dark", "operator", "lights", "words", "life", "epoch0done", "epoch1start"]:
+        need(k in r["scenes"], f"scene {k} missing from the tree: {r['scenes']}")
+    for k in ["epoch1start", "moment", "naming", "dark-hole", "logo-c3", "logo-crt"]:
+        need(k in r["aliases"], f"keyframe {k} missing: {r['aliases']}")
+    for t in r["dark"] + r["dm"] + r["moment"] + r["subs"]:
+        need(t in r["text"], f"a line from the code isn't in the tree: {t!r}")
+    # ▶ on three nodes: each opens its moment (the frame's keyframe, alias and variant)
+    played = {}
+    for key, check in [("dark-hole", "() => { const w = document.querySelector('#frame').contentWindow; return w.__storyKey && w.__storyKey.key === 'dark' && w.__storyKey.sub === 'hole'; }"),
+                       ("logo-crt", "() => { const w = document.querySelector('#frame').contentWindow; return w.__storyKey && w.__storyKey.key === 'logo' && /logo=crt/.test(w.location.search); }"),
+                       ("moment", "() => { const w = document.querySelector('#frame').contentWindow; return w.__storyKey && w.__storyKey.key === 'epoch0done' && w.__storyKey.alias === 'moment'; }")]:
+        pg.evaluate(f"() => document.querySelector('#tree button.play[data-play=\"{key}\"]').click()")
+        P.warns[:] = [w for w in P.warns if "cached Oracle unavailable" not in w]   # the preview frame isn't cross-origin isolated: the Oracle's two-model fallback is expected there
+        wait_for(pg, check, 60); played[key] = True
+    pg.close(); P.warns[:] = [w for w in P.warns if "cached Oracle unavailable" not in w]
+    # the tree follows the code: change one of Doc's lines in the dark, reload, it shows up (then restore the file)
+    try:
+        changed = orig.replace("'whaa…'", "'whaa… (director check)'", 1); need(changed != orig, "the first dark line wasn't found to change")
+        open(gen, "w", encoding="utf-8").write(changed)
+        pg = open_dir(); txt = pg.evaluate("() => document.querySelector('#tree').textContent"); pg.close()
+        need("whaa… (director check)" in txt, "a changed line in idle-genesis.js didn't show up in the director's tree")
+    finally:
+        open(gen, "w", encoding="utf-8").write(orig)
+    P.clean()
+    return f"{len(r['scenes'])} scenes, {len(r['keys'])} keyframes + {len(r['aliases'])} aliases (all with ▶), {len(r['dark']) + len(r['dm']) + len(r['moment']) + len(r['subs'])} lines from the code; ▶ dark-hole, logo-crt, moment open their moments; a changed line shows up"
+
+
 def t_prod_gates(P, root, parts=("site", "links", "arms")):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
     storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
@@ -4107,6 +4215,8 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
         need(r["offer"] and not r["void"] and not r["intro"] and r["v"] is None and r["c"] > 0, f"a returning world keeps its world and gets the offer: {r}")
         pg.evaluate("() => document.querySelector('#offerModal .lt').click()"); pg.wait_for_timeout(4000)   # not now: the modal goes into ⚙
         need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
+        # the Director's view is staging/local only: not in a production build at all
+        need(pg.evaluate("async () => (await fetch('/director.html')).status") == 404, "the director's view must not be on id-le.com")
         # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
         P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
         pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
@@ -4380,10 +4490,16 @@ def t_story_v15(P):
     need(badges == [3, 2, 1], f"the 📟 badge counts the tasks left: {badges}")
     wait_for(pg, "() => !!window.__genesis.moment() && window.__genesis.moment().ready", 90, P=P)
     need(pg.evaluate("() => window.__toHandle.badge()") == 0, "no badge once Genesis is done")
+    wait_for(pg, "() => !!document.querySelector('#e0Modal [data-ask=skip]') || !!document.querySelector('#e0Modal [data-gm=start]')", 30, P=P)
+    if pg.evaluate("() => !!document.querySelector('#e0Modal [data-ask=skip]')"): pg.click("#e0Modal [data-ask=skip]")
+    wait_for(pg, "() => !!document.querySelector('#e0Modal [data-gm=start]')", 10, P=P)
     pg.click("#e0Modal [data-gm=start]"); wait_for(pg, "() => !window.__genesis.moment()", 10, P=P); pg.wait_for_timeout(800)
     pg.evaluate("() => window.__opwin.open()"); pg.wait_for_timeout(500)
     allrows = pg.evaluate("() => [...document.querySelectorAll('#ai-thread > *')].filter(r => getComputedStyle(r).display !== 'none').length")
-    need(allrows >= 8, f"after Genesis the whole chat history is visible: {allrows} rows")
+    need(allrows <= 2 and pg.evaluate("() => !!document.querySelector('#ai-thread .ep-more')"), f"Nov 4: after the epoch the chat starts fresh, earlier rows behind 'show earlier': {allrows} rows")
+    pg.evaluate("() => document.querySelector('#ai-thread .ep-more').click()"); pg.wait_for_timeout(300)
+    allrows = pg.evaluate("() => [...document.querySelectorAll('#ai-thread > *')].filter(r => getComputedStyle(r).display !== 'none').length")
+    need(allrows >= 8, f"'show earlier' brings back the whole Genesis history: {allrows} rows")
     P.clean()
     return f"dive {first[1]:.2f} at the first turn ({first[0]} s); no command buttons, ✅ in the window, badges {badges} → 0, Genesis chat ≤ 2 rows, {allrows} rows after"
 
@@ -4734,7 +4850,7 @@ def t_story_modal(P):
     pg.mouse.click(30, pg.viewport_size["height"] - 20); pg.wait_for_timeout(300)
     need(not pg.evaluate("() => window.__probe") and pg.evaluate("() => !!document.querySelector('#genDay.end')"), "a tap outside the end card does nothing (and the card stays)")
     pg.click("#genDay.end .x"); wait_for(pg, "() => !document.querySelector('#genDay.end')", 5, P=P)
-    sh = pg.evaluate("() => window.__genesis.landing().shrink"); need(sh and sh["to"] in ("toHandle", "lab-head"), f"the card shrinks into the 📟: {sh}")
+    sh = pg.evaluate("() => window.__genesis.landing().shrink"); need(sh and sh["to"] in ("op-check", None) and not pg.evaluate("() => document.querySelector('#toHandle').classList.contains('glow')"), f"Nov 4: the card shrinks into ✅ or just closes, the 📟 doesn't glow: {sh}")
     wait_for(pg, "() => window.__modal.held() === 0 && [...document.querySelectorAll('#ntf .np, #ntf *')].some(e => e.textContent.includes('TEST-REEL'))", 6, P=P)
     pg.click("#outsideProbe"); need(pg.evaluate("() => window.__probe") == 1, "after the card closes, taps reach the page again")
     pg.click("#genDay [data-end=open]"); wait_for(pg, "() => !!document.querySelector('#genDay.end')", 5, P=P)
@@ -4900,13 +5016,13 @@ def browser_tests(a, out):
         ("halloween light", t_halloween_light, (), {"color_scheme": "light"}), ("intro", t_intro, (), {}),
         ("intro reduced", t_intro_reduced, (), {"reduced_motion": "reduce"}), ("intro epoch0", t_intro_epoch0, (), {}), ("trick or treat", t_treat, (), {}),
         ("wikipedia world", t_wiki, (), {}), ("genesis", t_genesis, (), {}), ("genesis gate", t_genesis_gate, (), {}), ("story", t_story, (), {}), ("story migrate", t_story_migrate, (), {}),
-        ("story keys", t_story_keys, (), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
+        ("story keys", t_story_keys, (), {}), ("director", t_director, (out,), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
         ("story row", t_story_row, (), {}), ("story modal", t_story_modal, (), {}), ("operator float", t_operator_float, (), {}),
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("intent story", t_intent_story, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("intent story", t_intent_story, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -4918,7 +5034,7 @@ def browser_tests(a, out):
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
         ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
-        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
+        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("arm draw", t_arm_draw, (out,), {"service_workers": "block"}), ("arm draw sw", t_arm_draw, (out,), {}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
@@ -4933,7 +5049,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"intent story", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
