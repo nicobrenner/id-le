@@ -2474,10 +2474,12 @@ def t_genpan(P):
     r = pg.evaluate("""() => { const S = window.__genesis.gsound.state(), A = document.getElementById('arena').getBoundingClientRect(), L = window.__lakeHooks, cam = L.cam(), sp = L.space(), z = cam.z || 1;
       const scr = c => ({ x: A.left + A.width / 2 + L.wd(cam.x, c.x, sp.W) * z, y: A.top + A.height / 2 + L.wd(cam.y, c.y, sp.H) * z });
       const ins = p => p.x >= A.left && p.x <= A.right && p.y >= A.top && p.y <= A.bottom;
-      const born = S.strikes.map(s => window.__genHooks.creatures().find(c => c.name === s.who)).filter(Boolean);
-      return { spots: S.spots, spotsIn: (S.spots || []).every(ins), born: born.map(c => [c.name, Math.round(scr(c).x), Math.round(scr(c).y), ins(scr(c))]), near: born.every((c, i) => S.spots[i] && Math.hypot(scr(c).x - S.spots[i].x, scr(c).y - S.spots[i].y) < 80) }; }""")
+      // each creature's birthplace (recorded at the strike: they walk off right after) against its strike; where they are now, on screen
+      const born = S.strikes.map(s => window.__genHooks.creatures().find(c => c.name === s.who)).filter(Boolean), at = S.strikes.map(s => s.born);
+      return { spots: S.spots, spotsIn: (S.spots || []).every(ins), born: born.map(c => [c.name, Math.round(scr(c).x), Math.round(scr(c).y), ins(scr(c))]),
+        birth: at.map(b => b && [Math.round(scr(b).x), Math.round(scr(b).y)]), near: at.length === 3 && at.every((b, i) => b && S.spots[i] && Math.hypot(scr(b).x - S.spots[i].x, scr(b).y - S.spots[i].y) < 40) }; }""")
     need(len(r["born"]) == 3 and all(b[3] for b in r["born"]), f"life after a drag: every creature on screen: {r}")
-    need(r["spotsIn"] and r["near"], f"life after a drag: strikes on screen, each creature where its strike hit: {r}")
+    need(r["spotsIn"] and r["near"], f"life after a drag: strikes on screen, each creature born where its strike hit: {r}")
     P.clean()
     return f"dragged to 4 corners at the words and at life with the night veil: hole never covered; life after a drag: strikes {[(round(s['x']), round(s['y']), s['word']) for s in r['spots']]}, creatures {[(b[0], b[1], b[2]) for b in r['born']]} on screen"
 
