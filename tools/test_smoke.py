@@ -4143,6 +4143,21 @@ def t_director_play(P, root, engine="chromium"):
         pg.evaluate(f"() => document.querySelector('#tree button.play[data-play=\"{key}\"]').click()"); t0 = time.time()
         wait_for(pg, f"() => {{ const w = {frame}; return !!(w && w.__storyKey && w.__storyKey.key && w.__storyKey.started); }}", 30)
         return time.time() - t0
+    # the hidden data page is unloaded once read; one preview frame at a time
+    wait_for(pg, "() => !document.querySelector('#dumpFrame')", 15)
+    # a film scene ends on the film's clock (Nov 4, Nico saw "the training run" end at ~9 s): no end screen before its span, then the end screen
+    spans = {}
+    for k, nx in (("computer", "labchat"), ("labchat", "boot"), ("boot", "run"), ("run", "crash"), ("crash", "logo")):
+        play(k)
+        wait_for(pg, f"() => {{ const c = {frame}.__epoch0 && {frame}.__epoch0.cur(); return !!(c && c.keyAt && c.keyAt('{nx}') != null); }}", 30)
+        span = pg.evaluate(f"() => {{ const c = {frame}.__epoch0.cur(); return c.keyAt('{nx}') - (c.keyAt('{k}') || 0); }}"); spans[k] = round(span, 1)
+        early = None; t0 = time.time()
+        while time.time() - t0 < span * 0.8:
+            if pg.evaluate(f"() => !!{frame}.document.querySelector('#dirEnd')"): early = time.time() - t0; break
+            pg.wait_for_timeout(400)
+        if early is not None: need(False, f"{k}: the end screen came at {early:.1f} s, before its {span:.1f} s span")
+        wait_for(pg, f"() => !!{frame}.document.querySelector('#dirEnd')", span + 30)
+    need(pg.evaluate("() => document.querySelectorAll('iframe').length") == 1, "only one preview frame may be alive")
     # a film scene: starts at once, no gate, ends with the full end screen (any key replays)
     dt = play("crash")
     g = pg.evaluate(f"() => {{ const w = {frame}; return {{ gate: !!w.document.querySelector('#keyGate'), path: w.location.pathname, dir: w.__storyKey.director }}; }}")
@@ -4157,12 +4172,15 @@ def t_director_play(P, root, engine="chromium"):
     wait_for(pg, f"() => {{ const w = {frame}; const e = w.document.querySelector('#dirEnd'); return !!e && e.dataset.why === 'waits'; }}", 90)
     pg.evaluate(f"() => {frame}.document.querySelector('#dirEnd button[data-a=next]').click()")
     wait_for(pg, f"() => {{ const w = {frame}; return w.__storyKey && w.__storyKey.key === 'words'; }}", 30)
+    # a hidden tab unloads the preview
+    pg.evaluate("() => { Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }")
+    need(pg.evaluate("() => { const f = document.querySelector('#frame'); return !!f && f.hidden && /paused/.test(document.querySelector('#empty').textContent); }"), "a hidden tab must unload the preview")
     pg.close()
     # #keys → the Director's view
     pg = P.open("/arena.html#keys"); wait_for(pg, "() => /director/.test(location.pathname)", 30); pg.close()
     P.warns[:] = [w for w in P.warns if "cached Oracle unavailable" not in w]   # the preview frame isn't cross-origin isolated locally: the Oracle's fallback is expected
     P.clean()
-    return f"{engine}: data frame at {src}; ▶ crash started in {dt:.1f} s with no gate; end screen → replay → crash again; lights → 'waits' bar → next → words; #keys → /director"
+    return f"{engine}: data frame at {src} (unloaded once read); film scenes ended only after their spans {spans}; one frame; ▶ crash started in {dt:.1f} s with no gate; end screen → replay → crash again; lights → 'waits' bar → next → words; #keys → /director"
 
 def t_prod_gates(P, root, parts=("site", "links", "arms")):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
