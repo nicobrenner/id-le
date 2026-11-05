@@ -2990,7 +2990,7 @@ def _rv_page(P, q="/arena.html?test"):
 
 
 def t_reviews_split(P, phone=False):
-    """Nico 11-04: the roadmap tab shows only the roadmap (no review rows above it); reviews have their own view (🧪 ⭐ reviews and the 🌱
+    """Nico 11-04: the roadmap tab shows only the roadmap (no review rows above it); reviews have their own view (🧪 ⭐ reviews and the 🧑‍🤝‍🧑
     tab, the same view): a non-member sees the pitch + join, then 'to do' (unfinished, with progress) and 'done' (finished, with the date
     and your ★). Before a deck: both reviews in 'to do'; half-way: still 'to do' with '3 of 12'; finished: moved to 'done'."""
     pg = _rv_page(P)
@@ -3022,14 +3022,14 @@ def t_reviews_split(P, phone=False):
         need(ov["sw"] <= ov["w"] + 1 and ov["r"] <= ov["w"] + 1, f"375 px: {ov}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, f"reviews-split-{'phone' if phone else 'desktop'}.png"))
     pg.close(); P.clean()
-    return f"roadmap tab: no review rows; ⭐ and 🌱: to do / done (non-member pitch+join; before 2 to do; half-way '3 of 12'; finished → done with ★ and date){' at 375 px' if phone else ''}"
+    return f"roadmap tab: no review rows; ⭐ and 🧑‍🤝‍🧑: to do / done (non-member pitch+join; before 2 to do; half-way '3 of 12'; finished → done with ★ and date){' at 375 px' if phone else ''}"
 
 
 def t_reviews_invite(P):
     """v3: the 📟 Operator relays Nico's message: it types (its own dots), says 'I have a message from Nico:', then the letter appears
-    as one '📨 from Nico' card, first line in view (no 'Nico is typing'); [I'm in ✌️] / [not now]. not now → the Operator's line and the 🌱
+    as one '📨 from Nico' card, first line in view (no 'Nico is typing'); [I'm in ✌️] / [not now]. not now → the Operator's line and the 🧑‍🤝‍🧑
     lights up; asked again once a day later, never a third time. I'm in → joined (the key), the review's own lines (logos: Nico's),
-    the pledge, then 'check them out ›' opens the deck; closing it with nothing judged → 'I'll give you some more time' + the 🌱 lit."""
+    the pledge, then 'check them out ›' opens the deck; closing it with nothing judged → 'I'll give you some more time' + the 🧑‍🤝‍🧑 lit."""
     pg = _rv_page(P); T = pg.evaluate("() => window.__reviews.text")
     pg.evaluate("() => { window.__reviews.invite('logos'); }"); wait_for(pg, "() => document.querySelectorAll('.rvbtns button').length === 2", 30, P=P)
     seq = pg.evaluate("""() => { const h = document.querySelector('.rvletter').parentElement, L = document.querySelector('.rvletter'), hr = h.getBoundingClientRect(), lr = L.getBoundingClientRect();
@@ -3037,7 +3037,7 @@ def t_reviews_invite(P):
         typing: document.body.innerText.includes('Nico is typing'), firstInView: lr.top >= hr.top - 1 && lr.top < hr.bottom, btns: [...document.querySelectorAll('.rvbtns button')].map(b => b.textContent), nico: document.querySelectorAll('.rvnico').length }; }""")
     need(seq["op"][-1] == "I have a message from Nico:" and seq["who"] == "📨 from Nico" and seq["lines"] == T["hello"][0] and not seq["typing"] and seq["nico"] == 0 and seq["firstInView"] and seq["btns"] == [T["yes"], T["no"]], f"the relayed letter: {seq}")
     pg.click(".rvbtns button.alt"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.includes('come join us'))", 10, P=P)
-    wait_for(pg, "() => !!document.querySelector('.opHi')", 5, P=P)   # the cut-scene's ring on the 🌱
+    wait_for(pg, "() => !!document.querySelector('.opHi')", 5, P=P)   # the cut-scene's ring on the 🧑‍🤝‍🧑
     nn = pg.evaluate("() => ({ want: window.__reviews.text.notNow(false), knows: window.__reviews.test.knows(), line: [...document.querySelectorAll('.rvop')].pop().textContent, hl: window.__reviews.test.lastHighlight(), ring: true, inv: JSON.parse(localStorage.getItem('idle.invite')) })")
     need(not nn["knows"] and nn["line"].startswith(nn["want"]) and "players who help decide what ships" in nn["line"] and nn["hl"] == "hitlBtn" and nn["ring"] and nn["inv"]["answer"] == "no", f"not now: {nn}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "invite-not-now.png"))
@@ -3057,15 +3057,15 @@ def t_reviews_invite(P):
     need(len(joins) == 1 and joins[0]["bkey"] == bk, f"the join: {joins}")
     pg.click(".rvbtns button:not([disabled])"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 30, P=P)
     pg.evaluate("() => window.__reviews.close()"); wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedNone(true)))", 10, P=P)
-    need(pg.evaluate("() => window.__reviews.test.lastHighlight()") == "hitlBtn", "the 🌱 didn't light up after closing")
+    need(pg.evaluate("() => window.__reviews.test.lastHighlight()") == "hitlBtn", "the 🧑‍🤝‍🧑 didn't light up after closing")
     pg.close(); P.clean()
-    return f"relayed: Operator dots → 'I have a message from Nico:' → one 📨 card ({len(T['hello'][0])} lines, first in view, no 'typing'); not now → its line + 🌱 lit, once more a day later, never a third; I'm in → key, Nico's logo lines, pledge → deck; closed with none judged → 'more time' + 🌱"
+    return f"relayed: Operator dots → 'I have a message from Nico:' → one 📨 card ({len(T['hello'][0])} lines, first in view, no 'typing'); not now → its line + 🧑‍🤝‍🧑 lit, once more a day later, never a third; I'm in → key, Nico's logo lines, pledge → deck; closed with none judged → 'more time' + 🧑‍🤝‍🧑"
 
 
 def t_reviews_tab(P):
-    """The 🌱 HITL tab: for a non-member, the pitch and join (→ the invitation); for a member, the status, the open reviews with their
+    """The 🧑‍🤝‍🧑 HITL tab: for a non-member, the pitch and join (→ the invitation); for a member, the status, the open reviews with their
     progress, resume of a half-done deck (same place, nothing judged twice), closing it after judging → 'I see you already liked some'
-    + the 🌱 lit; a finished review moves to 'sent' with your ★. A member's ?review= link → one Operator line + [open ›], never the deck."""
+    + the 🧑‍🤝‍🧑 lit; a finished review moves to 'sent' with your ★. A member's ?review= link → one Operator line + [open ›], never the deck."""
     pg = _rv_page(P)
     def click(sel):
         try: pg.click(sel, timeout=8000)
@@ -3073,7 +3073,7 @@ def t_reviews_tab(P):
             info = pg.evaluate("s => { const b = document.querySelector(s); if (!b) return 'missing'; const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { r: [r.left, r.top, r.width, r.height], top: e ? (e.id || e.className || e.tagName) : null }; }", sel.split(" >> ")[0])
             need(False, f"click {sel}: {info}")
     hb = pg.evaluate("() => { const b = document.getElementById('hitlBtn'); if (!b) return 'missing'; const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { con: b.isConnected, disp: getComputedStyle(b).display, r: [r.left, r.top, r.width, r.height], top: e ? (e.id || e.className || e.tagName) : null }; }")
-    need(isinstance(hb, dict) and hb["disp"] != "none" and hb["r"][2] > 0 and hb["top"] == "hitlBtn", f"the 🌱 button: {hb}")
+    need(isinstance(hb, dict) and hb["disp"] != "none" and hb["r"][2] > 0 and hb["top"] == "hitlBtn", f"the 🧑‍🤝‍🧑 button: {hb}")
     k0 = pg.evaluate("() => window.__reviews.test.knows()")
     click("#hitlBtn"); wait_for(pg, "() => document.querySelector('#hitl.on [data-a=join]')", 10, P=P)
     k1 = pg.evaluate("() => window.__reviews.test.knows()"); need(not k0 and k1, f"knows HITL: before the tab {k0}, after {k1}")
@@ -3090,8 +3090,9 @@ def t_reviews_tab(P):
     wait_for(pg, "() => [...document.querySelectorAll('.rvop')].some(r => r.textContent.startsWith(window.__reviews.text.closedSome(true)))", 10, P=P)
     wait_for(pg, "() => !window.__opwin.cutting()", 8, P=P); click("#hitlBtn"); wait_for(pg, "() => document.querySelectorAll('#hitl .rv').length >= 2", 10, P=P)
     with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__opwin.yielding() === '#hitl.on'", 3, P=P)
-    yl = pg.evaluate("() => window.__opwin.yielding()"); need(yl == "#hitl.on", f"the 🌱 tab must make the Operator step aside: {yl}")
+    yl = pg.evaluate("() => window.__opwin.yielding()"); need(yl == "#hitl.on", f"the 🧑‍🤝‍🧑 tab must make the Operator step aside: {yl}")
     t1 = pg.evaluate("() => ({ txt: document.getElementById('hitl').innerText, resume: [...document.querySelectorAll('#hitl [data-open=logos]')].map(b => b.textContent) })")
+    need("🌱" not in t1["txt"] and "🧑‍🤝‍🧑 🧑‍🤝‍🧑" not in t1["txt"] and pg.evaluate("() => document.querySelector('#hitlBtn').textContent") == "🧑‍🤝‍🧑", f"tray8 (Nico: no sprout): the tab and its button without 🌱, no doubled 🧑‍🤝‍🧑: {t1['txt'][:200]!r}")
     need("🧑‍🤝‍🧑 HITL vesting 🗓️" in t1["txt"] and "3 of 12 judged" in t1["txt"] and "0 of 8 judged" in t1["txt"] and t1["resume"] == ["resume ›"], f"the tab: {t1}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "hitl-tab.png"))
     click("#hitl [data-open=logos]"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 20, P=P)
@@ -3110,7 +3111,7 @@ def t_reviews_tab(P):
     nd = pg.evaluate("() => ({ line: [...document.querySelectorAll('.rvop')].pop().textContent, deck: !!window.__reviews.state(), btns: [...document.querySelectorAll('.rvbtns button:not([disabled])')].map(b => b.textContent), letters: document.querySelectorAll('.rvletter').length })")
     need(not nd["deck"] and nd["line"] == "Nico has a new review for the Humans in the Loop: our fonts" and nd["btns"] == ["open ›", "later"] and nd["letters"] == 0, f"a member's link: {nd}")
     pg.close(); P.clean()
-    return f"non-member: 🌱 → join → invite; member: status + '3 of 12 judged' + resume (at {nxt}, nothing twice) → done → 'sent' with ★ {first[1]}; closed after judging → 'already liked some'; a member's ?review=fonts → one line + [open ›], no deck"
+    return f"non-member: 🧑‍🤝‍🧑 → join → invite; member: status + '3 of 12 judged' + resume (at {nxt}, nothing twice) → done → 'sent' with ★ {first[1]}; closed after judging → 'already liked some'; a member's ?review=fonts → one line + [open ›], no deck"
 
 
 def t_reviews_link(P, engine="chromium"):
@@ -3219,7 +3220,7 @@ def t_founder_off(P):
 
 
 def t_reviews_cutscene(P, phone=False):
-    """The 'here 👉' highlight is a cut-scene (idle-opwin.js): the Operator window shrinks away so it never covers the 🌱 (or ☰ on a
+    """The 'here 👉' highlight is a cut-scene (idle-opwin.js): the Operator window shrinks away so it never covers the 🧑‍🤝‍🧑 (or ☰ on a
     phone) while the ring plays, comes back open, and the icon keeps a soft glow: kept across a reload, cleared by a click, or when its
     time is up."""
     pg = _rv_page(P); pg.evaluate("() => { window.__reviews.join(); window.__opwin.open(); }"); pg.wait_for_timeout(600)
@@ -3307,7 +3308,7 @@ def t_reviews_phone(P):
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "reviews-phone.png"))
     pg.evaluate("() => window.__reviews.close()"); pg.evaluate("() => window.__reviews.tab.open()"); wait_for(pg, "() => document.querySelectorAll('#hitl .rv').length >= 1", 10, P=P)
     t = pg.evaluate("() => { const r = document.getElementById('hitl').getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth, hl: window.__reviews.highlight(100) }; }")
-    need(t["l"] >= 0 and t["r"] <= t["w"] and t["hl"] in ("hitlBtn", "mMore"), f"the 🌱 tab at 375 px: {t}")
+    need(t["l"] >= 0 and t["r"] <= t["w"] and t["hl"] in ("hitlBtn", "mMore"), f"the 🧑‍🤝‍🧑 tab at 375 px: {t}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "hitl-tab-phone.png"))
     pg.close(); P.clean()
     return f"375 px: card {r['area'] * 100:.0f}% of the lightbox, {r['cw'] * 100:.0f}% of the width, no sideways scroll, buttons {r['btn']} px"
@@ -4486,7 +4487,7 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
             pg = P.open("/arena.html?" + q); booted(pg); pg.wait_for_timeout(6000)
             g = pg.evaluate("() => ({ letter: !!document.querySelector('#founderLetter'), e: window.__founder.eligible() })")
             need(not g["letter"] and not g["e"]["link"] and not g["e"]["personal"], f"?{q} on production: {g}"); pg.close()
-        # ⭐ reviews and the Humans in the Loop are ON on id-le.com since Nov 4 (Nico's go): ?review=logos relays Nico's message at once, the 🌱
+        # ⭐ reviews and the Humans in the Loop are ON on id-le.com since Nov 4 (Nico's go): ?review=logos relays Nico's message at once, the 🧑‍🤝‍🧑
         # and 🧪's ⭐ tab are there; the Founder gift stays off (FOUNDER_ON = false)
         pg = P.open("/arena.html?review=logos"); booted(pg)
         with contextlib.suppress(AssertionError): wait_for(pg, "() => !!document.querySelector('.rvletter')", 30, P=P)
@@ -4887,6 +4888,21 @@ LAB_STEADY = """async () => { const L = document.querySelector('#lab'), r = () =
   return seen.size === 1 && inputOk; }"""
 
 
+
+# phone (tray8, Nico: "on mobile" the grid was cut in half, the chat squeezed): the sheet grows down when expanded; its top and width stay put on
+# every frame, the input stays inside, at rest no chip row is half-visible, the chat keeps 4+ lines; ‹ less gives the first height back
+LAB_STEADY_PHONE = """async () => { const L = document.querySelector('#lab'), T = document.querySelector('#opTray'), F = document.querySelector('#lab-form'), H = document.querySelector('#ai-thread');
+  const btn = t => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === t), raf = () => new Promise(res => requestAnimationFrame(res));
+  const tw = () => { const b = L.getBoundingClientRect(); return Math.round(b.top) + ',' + Math.round(b.width); }, seen = new Set([tw()]), h0 = Math.round(L.getBoundingClientRect().height), bad = [];
+  const rest = () => { const tr = T.getBoundingClientRect(), lr = L.getBoundingClientRect(), fr = F.getBoundingClientRect();
+    const half = [...T.querySelectorAll('[data-opc]:not(.cut)')].map(b => b.getBoundingClientRect()).filter(r => r.width > 0 && r.top < tr.bottom - 0.5 && r.bottom > tr.bottom + 0.5).length;
+    const lh = parseFloat(getComputedStyle(H).lineHeight) || 1.3 * parseFloat(getComputedStyle(H).fontSize);
+    return { half, input: fr.bottom <= lr.bottom + 1 && fr.height >= 20, chatLines: Math.floor(H.clientHeight / lh), h: Math.round(lr.height) }; };
+  for (let k = 0; k < 2; k++) { btn('⋯ more').click(); for (let i = 0; i < 12; i++) { await raf(); seen.add(tw()); }
+    await new Promise(r => setTimeout(r, 300)); const a = rest(); if (a.half || !a.input || a.chatLines < 4) bad.push(a);
+    btn('‹ less').click(); for (let i = 0; i < 12; i++) { await raf(); seen.add(tw()); } await new Promise(r => setTimeout(r, 300)); const b = rest(); if (b.h !== h0 || !b.input) bad.push(b); }
+  return { ok: seen.size === 1 && !bad.length, seen: [...seen], bad, h0 }; }"""
+
 TRAY_GEO = """() => { const T = document.querySelector('#opTray'), L = document.querySelector('#lab'), F = document.querySelector('#lab-form'), tr = T.getBoundingClientRect(), lr = L.getBoundingClientRect(), fr = F.getBoundingClientRect();
   const b = [...T.querySelectorAll('[data-opc]:not(.cut)')].map(x => ({ t: x.textContent.trim(), r: x.getBoundingClientRect() })).filter(o => o.r.width > 0);
   let overlaps = []; for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) { const p = b[i].r, q = b[j].r; if (p.left < q.right - 0.5 && q.left < p.right - 0.5 && p.top < q.bottom - 0.5 && q.top < p.bottom - 0.5) overlaps.push(b[i].t + ' × ' + b[j].t); }
@@ -4937,6 +4953,10 @@ def t_operator_float(P):
     more = pg.evaluate("() => window.__opwin.tray().chips"); pg.wait_for_timeout(200); grid = pg.evaluate(TRAY_GEO)
     need(not grid["overlaps"] and not grid["outside"] and grid["tops"] >= 2, f"expanded: the grid inside the window, above the input, no overlap: {grid}")
     need(pg.evaluate(LAB_STEADY), "the window keeps its size and place while ⋯ more / ‹ less toggles (desktop)")
+    pg.wait_for_timeout(300)
+    half = pg.evaluate("""() => { const T = document.querySelector('#opTray'), tr = T.getBoundingClientRect(); const h = [...T.querySelectorAll('[data-opc]:not(.cut)')].map(b => b.getBoundingClientRect()).filter(r => r.width > 0 && r.top < tr.bottom - 0.5 && r.bottom > tr.bottom + 0.5).length; return h ? JSON.stringify({ h, all: T.className, mh: T.style.maxHeight, ch: T.clientHeight, sh: T.scrollHeight, st: T.scrollTop, tr: [tr.top, tr.bottom], b: [...T.querySelectorAll('[data-opc]')].map(b => { const r = b.getBoundingClientRect(); return [b.textContent.trim().slice(0, 8), Math.round(r.top), Math.round(r.bottom)]; }) }) : 0; }""")
+    need(half == 0, f"desktop, expanded: the grid is cut at a whole row, nothing half-visible at rest (tray8): {half} half-cut")
+    if os.environ.get("IDLE_SHOTS"): pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], "tray-desktop-more.png"))
     need("a sunny day" in more and "/pedia" in more and "‹ less" in more and not any(c in more for c in ("/settings", "/scientists", "/story")), f"'⋯ more' shows the rest, without the slash duplicates: {more}")
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '‹ less').click()"); pg.wait_for_timeout(200)
     pg.evaluate("() => { document.querySelector('#lab-text').value = ''; window.__opSuggest = () => [{ text: 'generated one' }]; }"); pg.wait_for_timeout(700)
@@ -4979,7 +4999,11 @@ def t_operator_float_phone(P):
     need(row["n"] <= 6 and row["tops"] == 1 and row["h"] >= 43.5 and not row["over"] and not row["overlaps"] and not row["outside"] and row["texts"][-1] == "⋯ more", f"phone: one row of chips + more, 44 px targets, no overlap or clipping: {row}")
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '⋯ more').click()"); pg.wait_for_timeout(300)
     grid = pg.evaluate(TRAY_GEO); need(not grid["overlaps"] and not grid["outside"] and "‹ less" in grid["texts"], f"phone, expanded: the grid inside the sheet, above the input: {grid}")
-    need(pg.evaluate(LAB_STEADY), "phone: the sheet keeps its size and place while ⋯ more / ‹ less toggles")
+    pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '‹ less').click()"); pg.wait_for_timeout(300)
+    if os.environ.get("IDLE_SHOTS"): pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], "tray-phone.png"))
+    st = pg.evaluate(LAB_STEADY_PHONE)
+    need(st["ok"], f"phone: ⋯ more grows the sheet down (top and width fixed), no half-cut row, chat 4+ lines, input visible; ‹ less gives the height back: {st}")
+    pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '⋯ more').click()"); pg.wait_for_timeout(400)
     if os.environ.get("IDLE_SHOTS"): pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], "tray-phone-more.png"))
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '‹ less').click()"); pg.wait_for_timeout(300)
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === \"what's happening?\").click()"); pg.wait_for_timeout(500)
@@ -5038,11 +5062,11 @@ def t_slash(P):
     pg.fill("#lab-text", "hello there"); pg.click("#lab-send"); pg.wait_for_timeout(800)
     th2 = pg.evaluate("() => document.querySelector('#ai-thread').innerText")
     need("hello there" in th2 and pg.evaluate("() => document.querySelectorAll('#ai-thread > *').length") > n0, "a plain line still goes to the Operator")
-    # /hitl opens the 🌱 HITL tab, and again closes it
+    # /hitl opens the 🧑‍🤝‍🧑 HITL tab, and again closes it
     pg.fill("#lab-text", "/hitl"); pg.keyboard.press("Enter"); pg.wait_for_timeout(400); h1 = pg.evaluate("() => window.__reviews.tab.isOpen()")
     pg.evaluate("() => window.IdleSlash.run('/hitl', 'operator')"); pg.wait_for_timeout(600); h2 = pg.evaluate("() => window.__reviews.tab.isOpen()")
     wait_for(pg, "() => window.__opwin.isOpen() && getComputedStyle(document.querySelector('#lab-text')).visibility !== 'hidden'", 5, P=P)
-    need(h1 and not h2, f"/hitl opens the 🌱 tab, /hitl again closes it: {h1}, {h2}")
+    need(h1 and not h2, f"/hitl opens the 🧑‍🤝‍🧑 tab, /hitl again closes it: {h1}, {h2}")
     fun = pg.evaluate("() => Object.keys(JSON.parse(localStorage.getItem('idle.funnel') || '{}'))")
     need(all(k in fun for k in ("sc_music", "sc_find", "sc_weather", "sc_unknown")), f"funnel moments for the commands used: {fun}")
     # IRC

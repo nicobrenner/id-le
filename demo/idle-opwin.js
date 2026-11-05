@@ -20,7 +20,7 @@
 @media (min-width:501px){#lab-head{cursor:grab;user-select:none}#lab-head.drag{cursor:grabbing}html:is(.gen-box,.gen-float) #lab-head{cursor:default}}
 #op-tools{margin-left:auto;margin-right:6px;font-size:14px;line-height:1;padding:3px 8px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer}
 #op-tools.on{background:#6b7cff33;border-color:#9fb0ff}html:is(.gen-box,.gen-float) #op-tools{display:none!important}
-#opTray{display:flex;flex-wrap:nowrap;gap:6px;padding:8px 10px 6px;border-top:1px solid #8884;overflow:hidden}#opTray .opc{flex:0 0 auto;white-space:nowrap}#opTray .opc.cut{display:none}#opTray[hidden]{display:none}#opTray .opc.more{border-style:dashed}#opTray.all{animation:opTrayIn .18s ease-out}@keyframes opTrayIn{from{opacity:.4}to{opacity:1}}@media (prefers-reduced-motion:reduce){#opTray.all{animation:none}}#opTray.all{flex-wrap:wrap;overflow:visible}html #lab>#opTray.all{max-height:62%!important;overflow-y:auto!important;flex:0 1 auto;overscroll-behavior:contain}#lab>#ai-thread{min-height:0}
+#opTray{display:flex;flex-wrap:nowrap;gap:6px;padding:8px 10px 6px;border-top:1px solid #8884;overflow:hidden}#opTray .opc{flex:0 0 auto;white-space:nowrap}#opTray .opc.cut{display:none}#opTray[hidden]{display:none}#opTray .opc.more{border-style:dashed}#opTray.all{animation:opTrayIn .18s ease-out}@keyframes opTrayIn{from{opacity:.4}to{opacity:1}}@media (prefers-reduced-motion:reduce){#opTray.all{animation:none}}#opTray.all{flex-wrap:wrap;overflow:visible}html #lab>#opTray.all{max-height:62%!important;overflow-y:auto!important;flex:0 1 auto;overscroll-behavior:contain;scroll-snap-type:y mandatory;scroll-padding-top:8px}#opTray.all .opc{scroll-snap-align:start}#lab>#ai-thread{min-height:0}
 #opTray .opc{font:12.5px var(--ui-font,system-ui);padding:6px 9px;border-radius:14px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:32px}
 #opTray .opc:hover{background:#6b7cff40}#opTray .opc[disabled]{opacity:.45;cursor:default}
 #opTray .opc.glow{border-color:#cfd6ff;font-weight:600;background:#3a46c8;color:#fff;animation:opGlow 1.8s ease-in-out infinite}
@@ -28,6 +28,9 @@
 @keyframes opGlow{0%,100%{box-shadow:0 0 0 0 #9fb0ff00}50%{box-shadow:0 0 14px 2px #9fb0ffaa}}
 @media (prefers-reduced-motion:reduce){#opTray .opc.glow{animation:none;box-shadow:0 0 10px 1px #9fb0ff88}}
 @media (max-width:500px){#opTray .opc{min-height:44px;font-size:14px}}
+@media (max-width:500px){html:not(.gen-box):not(.gen-float) #lab.opMore{height:auto!important;min-height:min(45dvh,calc(100dvh - var(--op-top,52px) - var(--kb,0px) - 8px))!important;max-height:min(82dvh,calc(100dvh - var(--op-top,52px) - var(--kb,0px) - 8px))!important}
+html #lab>#opTray.all{max-height:none!important;scroll-snap-type:y mandatory;scroll-padding-top:8px}#opTray.all .opc{min-height:36px;font-size:13px;padding:5px 10px;scroll-snap-align:start}
+#lab.opMore>:is(#ai-thread,#lab-thread){min-height:6.5em}}
 #lab-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}#lab-form>#lab-text{flex:1 1 200px;min-width:0;order:1}#lab-form>#lab-send{flex:none;order:2;min-height:40px;padding:0 14px}#lab-form>:not(#lab-text):not(#lab-send){order:3;flex-basis:100%}
 #lab>*{flex:none}#lab>:is(#ai-thread,#lab-thread){flex:1 1 auto;min-height:0;overflow:auto}
 html:not(.gen-box):not(.gen-float) #lab>:is(#genConsole,#ai-set,#ai-smart,#ai-bar,#opTray,#genDay){max-height:34%;overflow:auto}
@@ -84,17 +87,26 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
     // collapsed (Nov 4, Nico: "more" was pinned on top of the chips): every chip is rendered, then fit() hides the ones that don't fit the
     // row's real width (and those past the first ~5); "⋯ more" shows only when something is hidden. Expanded: all of them, wrapped
     const s2 = s + showAll; if (!force && s2 === sig) return fit(); sig = s2; tray.hidden = !open; tray.classList.toggle('all', showAll);
+    // the phone sheet grows down to fit the grid when expanded (up to 82%) (Nov 4, Nico: on a phone the grid was cut in half and the chat squeezed): its top and width stay, the
+    // arena below is free; on a computer the window keeps its size (tray7)
+    lab.classList.toggle('opMore', open && showAll);
     if (chips.length) chips = chips.concat([{ text: showAll ? '‹ less' : '⋯ more', more: 1 }]);
     tray.innerHTML = chips.map((x, i) => `<button type="button" class="opc${x.glow ? ' glow' : ''}${x.more ? ' more' : ''}${x.glow && coarse() ? ' big' : ''}" data-opc="${i}"${x.gsay ? ' data-gsay="1"' : ''}${x.disabled ? ' disabled' : ''}>${x.gsay && coarse() ? '▶ ' : ''}${esc(x.text)}</button>`).join('');
     tray._chips = chips; fit(); }
   function fit() { if (tray.hidden) return; const B = [...tray.querySelectorAll('[data-opc]')], more = B.find(b => (tray._chips[+b.dataset.opc] || {}).more); if (!more) return;
-    B.forEach(b => b.classList.remove('cut')); if (showAll) { more.classList.toggle('cut', !(tray._chips || []).some(x => x.extra)); return; }
+    B.forEach(b => b.classList.remove('cut')); tray.style.removeProperty('max-height'); if (showAll) { more.classList.toggle('cut', !(tray._chips || []).some(x => x.extra)); rows(B); return; }
     const cs = getComputedStyle(tray), gap = parseFloat(cs.columnGap || cs.gap) || 6, W = tray.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const chips = B.filter(b => b !== more), mw = more.getBoundingClientRect().width, info = chips.map(b => ({ b, x: tray._chips[+b.dataset.opc] || {}, w: b.getBoundingClientRect().width }));
     const shown = info.filter(o => !o.x.extra), total = shown.reduce((a, o, i) => a + o.w + (i ? gap : 0), 0), needMore = info.some(o => o.x.extra) || total > W;
     const budget = needMore ? W - mw - gap : W; let used = 0, full = false;
     info.forEach(o => { if (o.x.extra || full || used + (used ? gap : 0) + o.w > budget) { o.b.classList.add('cut'); full = full || !o.x.extra; } else used += (used ? gap : 0) + o.w; });
     if (!needMore) more.classList.add('cut'); }
+  // expanded: if the grid doesn't fit (a computer's window: up to 62%; a phone: a short screen, the keyboard up) it scrolls by whole rows (snap),
+  // and its height is cut at the last row that fits, so no row rests half-visible (tray8). The window's own height never changes
+  function rows(B) { tray.style.removeProperty('max-height'); const room = tray.clientHeight; if (tray.scrollHeight <= room + 1) return;
+    const cs = getComputedStyle(tray), pb = parseFloat(cs.paddingBottom) || 0, box = cs.boxSizing === 'border-box' ? 0 : (parseFloat(cs.paddingTop) || 0) + pb + (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0), top = tray.getBoundingClientRect().top - tray.scrollTop;
+    const fits = B.filter(b => !b.classList.contains('cut')).map(b => b.getBoundingClientRect().bottom - top).filter(y => y <= room);
+    if (fits.length) tray.style.setProperty('max-height', Math.ceil(Math.max(...fits) + pb - box) + 'px', 'important'); }
   try { new ResizeObserver(() => fit()).observe(tray); } catch (e) {}
   tools.addEventListener('click', e => { e.stopPropagation(); userOpen = trayOpen() ? '0' : '1'; try { localStorage.setItem('idle.opTray', userOpen); } catch (er) {} render(true); });
   // a chip: on a phone it is sent (typing costs too much there); on a computer it fills the input, to send or change. Genesis's chip is

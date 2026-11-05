@@ -164,9 +164,9 @@ const SFSTEP = ['entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_
   'rv_open_link', 'rv_open_lab', 'rv_open_end', 'rv_play', 'rv_sent', 'rv_already',
   // v2: the Operator's invitation (shown, I'm in, not now), the pledge, swipes (✕ ✓ ★), keep going / done, which one?, the cliff passed
   'rv_invite', 'rv_in', 'rv_notnow', 'rv_pledge', 'rv_nah', 'rv_like', 'rv_love', 'rv_more', 'rv_done', 'rv_h2h', 'rv_vested',
-  // v3: the 🌱 HITL tab opened
+  // v3: the 🧑‍🤝‍🧑 HITL tab opened
   'rv_tab',
-  // the invitation's source: a ?review= link, the timing rule (auto), or the 🌱 tab / a review opened in the game
+  // the invitation's source: a ?review= link, the timing rule (auto), or the 🧑‍🤝‍🧑 tab / a review opened in the game
   'rv_inv_link', 'rv_inv_auto', 'rv_inv_other',
   // slash commands (idle-slash.js): each command used at least once by this browser, and lines that named no command
   'sc_help', 'sc_operator', 'sc_card', 'sc_rename', 'sc_pedia', 'sc_settings', 'sc_story', 'sc_scientists', 'sc_roadmap', 'sc_hitl', 'sc_oracle', 'sc_music', 'sc_deck', 'sc_stats', 'sc_ocean', 'sc_find', 'sc_weather', 'sc_evolve', 'sc_rave', 'sc_spawn', 'sc_name', 'sc_unknown'];

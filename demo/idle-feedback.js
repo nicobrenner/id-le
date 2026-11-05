@@ -46,7 +46,7 @@
 
   let open = false, tab = 'tell', kind = '', draft = '', ctxOn = { page: true, place: true, build: true, device: true, err: true }, msg = '', road = null, roadErr = '', sending = false, from = 'lab', revs = null;
   // ⭐ reviews (idle-reviews.js): its own tab (to do / done); the roadmap tab shows only the roadmap (Nico 11-04)
-  let revView = null;   // the ⭐ tab's HTML, from idle-reviews.js (the same view as the 🌱 tab)
+  let revView = null;   // the ⭐ tab's HTML, from idle-reviews.js (the same view as the 🧑‍🤝‍🧑 tab)
   const loadRevs = async () => { if (!window.__reviews || !window.__reviews.viewHtml) return; try { revView = await window.__reviews.viewHtml(); } catch (e) { revView = '<p><small>no open reviews right now.</small></p>'; } if (open && tab === 'rev') render(); };
   const voted = () => { try { return new Set(JSON.parse(localStorage.getItem(VOTED) || '[]')); } catch (e) { return new Set(); } };
   const remember = id => { try { const v = voted(); v.add(id); localStorage.setItem(VOTED, JSON.stringify([...v].slice(-200))); } catch (e) {} };
@@ -63,7 +63,7 @@
     el.classList.toggle('on', open); if (!open) return;
     const c = context();
     const head = `<div class="hd"><b>🧪 the scientists</b><button class="x" data-a="close" title="close">✕</button></div><div class="tabs"><button data-tab="tell" class="${tab === 'tell' ? 'on' : ''}">tell the scientists</button><button data-tab="road" class="${tab === 'road' ? 'on' : ''}">🗺 the roadmap</button>${window.__reviews ? `<button data-tab="rev" class="${tab === 'rev' ? 'on' : ''}">⭐ reviews</button>` : ''}</div>`;
-    // ⭐ reviews: the same view as the 🌱 tab (idle-reviews.js viewHtml: to do, then done); never above the roadmap (Nico 11-04)
+    // ⭐ reviews: the same view as the 🧑‍🤝‍🧑 tab (idle-reviews.js viewHtml: to do, then done); never above the roadmap (Nico 11-04)
     if (tab === 'rev') { el.innerHTML = head + `<div class="rvview">${revView == null ? '<p><small>reading the reviews…</small></p>' : revView}</div>`; return; }
     if (tab === 'tell') {
       const ctxRows = [['page', `page: ${c.page}`], ['place', `place: ${c.place}`], ['build', c.build ? `version: ${c.build}` : ''], ['device', `on a ${c.device}`], ['err', c.err ? `the last error: “${c.err}”` : '']]

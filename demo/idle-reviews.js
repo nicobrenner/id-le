@@ -53,26 +53,26 @@
     },
     go: 'check them out ›',
     // Nico (v3): "if the user says 'not now', Operator should say: 'All good. If you ever change your mind, just come join us at the HITL team here..'"
-    // every line that names the team explains it in a few words (TEAM.what) unless this player knows it (joined, or opened the 🌱 tab).
+    // every line that names the team explains it in a few words (TEAM.what) unless this player knows it (joined, or opened the 🧑‍🤝‍🧑 tab).
     // Nico: "'Nico has another one for the Humans in the Loop: the logo' if I have no idea what HITL is..."
     notNow: knows => knows ? `all good. if you ever change your mind, just come join us at the ${TEAM.short} team here 👉`
       : `all good. if you ever change your mind, just come join us at the ${TEAM.name} team (${TEAM.what}) here 👉`,
     // Nico (v3): "after closing the reviews… 'Excellent, [I see you already liked some]/[I'll give you some more time to review]. You can always go back to the HITL tab/section here'"
-    closedSome: knows => `excellent, I see you already liked some. you can always go back to the ${knows ? TEAM.short + ' tab' : TEAM.name + ' tab (🌱, where your reviews live)'} here 👉`,
-    closedNone: knows => `excellent, I'll give you some more time to review. you can always go back to the ${knows ? TEAM.short + ' tab' : TEAM.name + ' tab (🌱, where your reviews live)'} here 👉`,
+    closedSome: knows => `excellent, I see you already liked some. you can always go back to the ${knows ? TEAM.short + ' tab' : TEAM.name + ' tab (🧑‍🤝‍🧑, where your reviews live)'} here 👉`,
+    closedNone: knows => `excellent, I'll give you some more time to review. you can always go back to the ${knows ? TEAM.short + ' tab' : TEAM.name + ' tab (🧑‍🤝‍🧑, where your reviews live)'} here 👉`,
     // the pledge, after "I'm in" (DRAFT)
-    pledge: { title: `🌱 you're one of the ${TEAM.name} now`, ask: 'what we’ll ask: a few quick reviews now and then (a minute or two: swipe, pick, a word if you like)',
+    pledge: { title: `🧑‍🤝‍🧑 you're one of the ${TEAM.name} now`, ask: 'what we’ll ask: a few quick reviews now and then (a minute or two: swipe, pick, a word if you like)',
       // DRAFT
       get: `what you get: a say in what ships, a ${LBL.vested} badge, and your name on the ${TEAM.name} list when you're vested (if you want it)`,
       cliff: `the cliff: ${CLIFF_DAYS} days and ${CLIFF_REVIEWS} reviews. until then you’re ${LBL.vesting}; after it, ${LBL.vested} for good` },
     // a member (a link, or a new review): one line and a button, never the deck taking over by itself
     another: (rv, knows) => knows ? `Nico has a new review for the ${TEAM.name}: ${rv.title}` : `Nico has a new review: ${rv.title}. it's for the ${TEAM.name}, ${TEAM.what}`, open: 'open ›', later: 'later',
     publicAsk: (rv, knows) => [[knows ? `the ${TEAM.name} narrowed ${rv.title} down to ${rv.n}` : `the ${TEAM.name} (${TEAM.what}) narrowed ${rv.title} down to ${rv.n}`, 'help pick the winner?']], publicYes: 'sure ›',
-    vested: `you're vested: ${LBL.vested}. thank you for sticking around 🌱`,
+    vested: `you're vested: ${LBL.vested}. thank you for sticking around 🙌`,
     thanks: 'thank you!! Nico reads every one 🧪',
     short: TEAM.short,
-    // the 🌱 tab (DRAFT)
-    tab: { title: `🌱 ${TEAM.name} (${TEAM.short})`, open: 'to do', past: 'done', none: 'nothing to review right now. thank you!', pitch: `a few players help Nico decide what ships: quick reviews now and then, swipe and pick. want in?`, join: 'join ›',
+    // the 🧑‍🤝‍🧑 tab (DRAFT)
+    tab: { title: `🧑‍🤝‍🧑 ${TEAM.name} (${TEAM.short})`, open: 'to do', past: 'done', none: 'nothing to review right now. thank you!', pitch: `a few players help Nico decide what ships: quick reviews now and then, swipe and pick. want in?`, join: 'join ›',
       judged: (n, of) => `${n} of ${of} judged`, start: 'start ›', resume: 'resume ›', again: 'see it ›', picks: 'your ★' },
   };
 
@@ -88,7 +88,7 @@
   // ---------- the team (local; the key ties it) ----------
   const TK = 'idle.team', SENT = 'idle.reviews', INV = 'idle.invite';
   const team = () => ld(TK, null);
-  // does this player know what the HITL is? (joined, or opened the 🌱 tab once: idle.hitlSeen)
+  // does this player know what the HITL is? (joined, or opened the 🧑‍🤝‍🧑 tab once: idle.hitlSeen)
   const knows = () => !!team() || !!ld('idle.hitlSeen', null);
   const sentAll = () => ld(SENT, {}) || {};
   const until = () => { try { return Date.parse(window.__founder.dates().until); } catch (e) { return Infinity; } };
@@ -127,9 +127,9 @@
   let FAST = false;
   const wait = ms => new Promise(r => setTimeout(r, FAST ? Math.min(ms, 30) : ms));
   function opSay(text) { const h = host(), d = document.createElement('div'); d.className = 'ai-row tiny rvop'; d.textContent = text; h.appendChild(d); scroll(h); return d; }
-  // "…the HITL tab here 👉" ends with the 🌱 itself, in the chat (the top bar's 🌱 also lights up, but a panel may cover it)
-  function opPoint(text) { const d = opSay(text); if (window.__opwin) return d;   // the cut-scene uncovers the 🌱 itself (v14); the button was for the docked panel
-    const b = document.createElement('button'); b.className = 'rvtabbtn'; b.textContent = '🌱 ' + TEAM.short; b.title = TEAM.name; b.addEventListener('click', () => toggleTab(true)); d.append(' ', b); return d; }
+  // "…the HITL tab here 👉" ends with the 🧑‍🤝‍🧑 itself, in the chat (the top bar's 🧑‍🤝‍🧑 also lights up, but a panel may cover it)
+  function opPoint(text) { const d = opSay(text); if (window.__opwin) return d;   // the cut-scene uncovers the 🧑‍🤝‍🧑 itself (v14); the button was for the docked panel
+    const b = document.createElement('button'); b.className = 'rvtabbtn'; b.textContent = '🧑‍🤝‍🧑 ' + TEAM.short; b.title = TEAM.name; b.addEventListener('click', () => toggleTab(true)); d.append(' ', b); return d; }
   // the Operator relays Nico's message: it types (its own dots), then the whole letter appears as one card, the top of it in view
   async function opTyping(ms) { const h = host(), ty = document.createElement('div'); ty.className = 'rvtyping'; ty.textContent = '📟 …'; h.appendChild(ty); scroll(h); await wait(ms); ty.remove(); }
   function letter(paras) { const h = host(), b = document.createElement('div'); b.className = 'ai-row rvletter';
@@ -263,7 +263,7 @@
     if (!cur.queue.length) cur.view = 'end';
     paint(); return true; }
   function close() { if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true);
-    // opened from the Operator's message (or a link): it says where to find the reviews again, and the 🌱 lights up
+    // opened from the Operator's message (or a link): it says where to find the reviews again, and the 🧑‍🤝‍🧑 lights up
     const after = (cur.from === 'invite' || cur.from === 'link') && cur.cfg ? (Object.keys((cur.mine && cur.mine.rated) || {}).length ? TEXT.closedSome : TEXT.closedNone)(knows()) : null;
     cur = null; el.classList.remove('on'); el.innerHTML = ''; hushGame(false); paintTab();
     if (after) setTimeout(async () => { openOperator(); await opTyping(400); opPoint(after); highlight(); }, 250);
@@ -272,11 +272,11 @@
   function paint() {
     if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} cur.live = null; const c = cur.cfg, ts = teamStatus();
     const total = c ? c.items.length : 0, done = c && cur.mine ? Object.keys(cur.mine.rated || {}).length : 0;
-    const top = `<div class="top"><b>⭐ ${esc((c && c.title) || cur.rid)}</b><span class="prog">${c ? `${Math.min(done + 1, total)} / ${total}` : ''}</span>${ts ? `<span class="tm" title="${esc(ts.detail)}">🌱 ${esc(ts.label)}</span>` : '<span class="tm"></span>'}<button class="x" data-a="close" title="close (esc)">✕</button></div>`;
+    const top = `<div class="top"><b>⭐ ${esc((c && c.title) || cur.rid)}</b><span class="prog">${c ? `${Math.min(done + 1, total)} / ${total}` : ''}</span>${ts ? `<span class="tm" title="${esc(ts.detail)}">${esc(ts.label)}</span>` : '<span class="tm"></span>'}<button class="x" data-a="close" title="close (esc)">✕</button></div>`;
     if (cur.view === 'msg') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><p>${esc(cur.msg)}</p></div></div></div>`; return; }
     if (cur.view === 'check') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>${done} judged ✓</h3><p>${done} of ${total} so far. thank you!</p><div class="btns"><button data-a="more">keep going</button><button class="alt" data-a="done">done</button></div></div></div></div>`; return; }
     if (cur.view === 'end') { const st = teamStatus();
-      el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>thank you!!</h3><p>${esc(TEXT.thanks)}</p>${st ? `<p>🌱 ${esc(st.label)} · ${esc(st.detail)}</p>` : ''}<div class="btns"><button data-a="close">back to my world</button></div></div></div></div>`; return; }
+      el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>thank you!!</h3><p>${esc(TEXT.thanks)}</p>${st ? `<p>${esc(st.label)} · ${esc(st.detail)}</p>` : ''}<div class="btns"><button data-a="close">back to my world</button></div></div></div></div>`; return; }
     if (cur.view === 'h2h') { const [a, b] = cur.pair; el.innerHTML = `<div class="box">${top}<div class="h2q">which one?</div><div class="deck h2h"><section class="card" data-item="${esc(a)}"></section><section class="card" data-item="${esc(b)}"></section></div>
 <div class="notebar"><button data-a="skiph2h">can’t choose</button></div></div>`;
       cur.h2 = [...el.querySelectorAll('.h2h .card')].map(cd => { const m = cur.P.mount(cd.dataset.item, cd); const pk = document.createElement('button'); pk.className = 'pick'; pk.dataset.pick = cd.dataset.item; pk.textContent = 'this one'; cd.appendChild(pk); return m; }); return; }
@@ -336,7 +336,7 @@
     if (cur.view !== 'card') return; const k = { ArrowLeft: 'nah', ArrowRight: 'like', ArrowUp: 'love' }[e.key];
     if (k) { e.preventDefault(); e.stopPropagation(); judge(k); } else if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); cur.live && cur.live.play(); } }, true);
 
-  // ---------- 🌱 the HITL tab (v3, Nico: "do we have a Reviewer's tab? or a HITL's 🌱 tab where they can check the current/pending and past
+  // ---------- 🧑‍🤝‍🧑 the HITL tab (v3, Nico: "do we have a Reviewer's tab? or a HITL's 🌱 tab where they can check the current/pending and past
   // reviews?"): next to 🧪 in the top bar (on a phone, in its ☰ sheet like the other top-bar buttons). Open reviews with their progress
   // (a deck closed half-way resumes where it was), the sent ones with your ★, your status; for non-members, the invitation to join.
   const tcss = document.createElement('style');
@@ -351,15 +351,15 @@
 @keyframes rvhl{50%{box-shadow:0 0 0 6px #61bb46,0 0 26px 10px #61bb4655}}@keyframes rvarr{50%{margin-top:12px}}@media (prefers-reduced-motion:reduce){.rvhl,.rvhl b{animation:none}}`;
   document.head.appendChild(tcss);
   const tab = document.createElement('div'); tab.id = 'hitl'; tab.setAttribute('role', 'dialog'); tab.setAttribute('aria-label', TEAM.name); document.body.appendChild(tab);
-  const hb = document.createElement('button'); hb.id = 'hitlBtn'; hb.title = `${TEAM.name} (${TEAM.short}): your reviews`; hb.textContent = '🌱';
+  const hb = document.createElement('button'); hb.id = 'hitlBtn'; hb.title = `${TEAM.name} (${TEAM.short}): your reviews`; hb.textContent = '🧑‍🤝‍🧑';
   const mountHb = () => { if (hb.isConnected) return; const bar = $('#topbar'), o = $('#oracleBtn'); if (!bar || !o) return setTimeout(mountHb, 300); o.before(hb, ' '); };
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', mountHb); else mountHb();
-  // in the storyline the 🌱 appears with 🧪 (the epochs unlock 🧪; idle-genesis.js UNLOCK)
+  // in the storyline the 🧑‍🤝‍🧑 appears with 🧪 (the epochs unlock 🧪; idle-genesis.js UNLOCK)
   setInterval(() => { const o = $('#oracleBtn'); if (o) hb.style.display = getComputedStyle(o).display === 'none' ? 'none' : ''; }, 1500);
   let tabOpen = false; hb.addEventListener('click', () => toggleTab());
   function toggleTab(on) { tabOpen = on ?? !tabOpen; tab.classList.toggle('on', tabOpen); hb.classList.toggle('on', tabOpen); if (tabOpen) { if (!ld('idle.hitlSeen', null)) sv('idle.hitlSeen', Date.now()); try { window.__feedback && window.__feedback.close(); } catch (e) {} mark('rv_tab'); paintTab(); } }
   // the same view in two places (Nico 11-04: "the roadmap in its own section, and the reviews in their own… 2 sections: TODO… and past/completed"):
-  // the 🌱 tab and 🧪's ⭐ reviews tab both show viewHtml(); viewAct() handles their buttons
+  // the 🧑‍🤝‍🧑 tab and 🧪's ⭐ reviews tab both show viewHtml(); viewAct() handles their buttons
   async function viewHtml() { const st = teamStatus(), rvs = await list(), all = sentAll(), member = !!team();
     const row = r => { const m = all[r.rid] || {}, n = Object.keys(m.rated || {}).length, pct = Math.round(n / Math.max(1, r.n) * 100);
       return `<div class="rv"><div><b>${esc(r.title || r.rid)}</b><small>${esc(TEXT.tab.judged(n, r.n))}</small><div class="bar"><i style="width:${pct}%"></i></div></div><button class="go" data-open="${esc(r.rid)}">${esc(n ? TEXT.tab.resume : TEXT.tab.start)}</button></div>`; };
@@ -367,7 +367,7 @@
     const pastRow = r => { const m = all[r.rid] || {}, loves = Object.keys(m.rated || {}).filter(k => m.rated[k] >= 5);
       return `<div class="rv done"><div><b>${esc(r.title || r.rid)} ✓</b><small>${m.done ? esc(day(m.done)) + ' · ' : ''}${loves.length ? esc(TEXT.tab.picks) + ': ' + loves.map(esc).join(', ') : esc(TEXT.tab.judged(Object.keys(m.rated || {}).length, r.n))}</small></div><button class="go alt" data-open="${esc(r.rid)}">${esc(TEXT.tab.again)}</button></div>`; };
     const mine = rvs.filter(r => member || r.stage === 'public'), todo = mine.filter(r => !(all[r.rid] && all[r.rid].done)), past = rvs.filter(r => all[r.rid] && all[r.rid].done);
-    return (st ? `<div class="st">🌱 <b>${esc(st.label)}</b><br><small>${esc(st.detail)}</small></div>` : `<div class="st">${esc(TEXT.tab.pitch)}<br><button class="go" data-a="join" style="margin-top:6px">${esc(TEXT.tab.join)}</button></div>`)
+    return (st ? `<div class="st"><b>${esc(st.label)}</b><br><small>${esc(st.detail)}</small></div>` : `<div class="st">${esc(TEXT.tab.pitch)}<br><button class="go" data-a="join" style="margin-top:6px">${esc(TEXT.tab.join)}</button></div>`)
       + `<h4 class="todo">${esc(TEXT.tab.open)}</h4>` + (todo.length ? todo.map(row).join('') : `<small>${esc(TEXT.tab.none)}</small>`)
       + `<h4 class="past">${esc(TEXT.tab.past)}</h4>` + (past.length ? past.map(pastRow).join('') : `<small>nothing yet</small>`); }
   // a button from either view: join, or open a review (the caller closes its own panel first)
@@ -380,11 +380,11 @@
     if (b.dataset.a === 'close') return toggleTab(false);
     if (b.dataset.a === 'join' || b.dataset.open) { toggleTab(false); return viewAct(b); } });
   addEventListener('keydown', e => { if (e.key === 'Escape' && tabOpen) toggleTab(false); });
-  // the 🌱 lights up for ~4 s: a pulsing ring and an arrow (on a phone, where the top bar folds into ☰, the ☰)
+  // the 🧑‍🤝‍🧑 lights up for ~4 s: a pulsing ring and an arrow (on a phone, where the top bar folds into ☰, the ☰)
   let lastHl = null;
   function highlight(ms = 4000) { const vis = x => x && x.offsetParent !== null && x.getBoundingClientRect().width > 0;
     const t = vis(hb) ? hb : vis($('#mMore')) ? $('#mMore') : null; lastHl = t ? t.id : null; if (!t) return null;
-    // v14: a cut-scene (idle-opwin.js): the Operator steps away, the ring and arrow play on the 🌱 (or ☰), it comes back, and the icon glows until clicked or for 2 minutes
+    // v14: a cut-scene (idle-opwin.js): the Operator steps away, the ring and arrow play on the 🧑‍🤝‍🧑 (or ☰), it comes back, and the icon glows until clicked or for 2 minutes
     if (window.__opwin && window.__opwin.highlight) { window.__opwin.highlight('#' + t.id, { cutscene: true }); return t.id; }
     const r = t.getBoundingClientRect(), pad = 6, d = document.createElement('div'); d.className = 'rvhl'; d.innerHTML = '<b>⬆</b>';
     d.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + 2 * pad}px;height:${r.height + 2 * pad}px`; document.body.appendChild(d); setTimeout(() => d.remove(), ms); return t.id; }

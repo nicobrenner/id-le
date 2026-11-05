@@ -53,7 +53,7 @@
   // tapping it: the Operator's window (or closing it again: it is the window's toggle), and every menu the guided start had hidden.
   // During the storyline's Genesis window it only opens (the guided part can't be closed)
   // Nov 4 (Nico: "if I try to click the operator immediately, it doesn't work, the controls are locked until I close the scientists window"):
-  // the rule: a tap on the 📟 while a side panel (🧪, the roadmap, 🌱, notices, the menu…) has the Operator stepping aside closes that panel and
+  // the rule: a tap on the 📟 while a side panel (🧪, the roadmap, 🧑‍🤝‍🧑, notices, the menu…) has the Operator stepping aside closes that panel and
   // opens the Operator; the centred cards (the Epoch moment, the end card, the story-mode offer, a confirm) keep priority
   const MODALS = ['#genDay.end', '#genConfirm', '#genResume', '#genChoose', '#e0Modal', '#offerModal', '#founderLetter', '#founderLab', '#genFront'];
   function freePanel() { let y = null; try { y = window.__opwin && window.__opwin.yielding && window.__opwin.yielding(); } catch (e) {} if (!y || MODALS.includes(y)) return !y;
