@@ -70,6 +70,11 @@
     publicAsk: (rv, knows) => [[knows ? `the ${TEAM.name} narrowed ${rv.title} down to ${rv.n}` : `the ${TEAM.name} (${TEAM.what}) narrowed ${rv.title} down to ${rv.n}`, 'help pick the winner?']], publicYes: 'sure ›',
     vested: `you're vested: ${LBL.vested}. thank you for sticking around 🙌`,
     thanks: 'thank you!! Nico reads every one 🧪',
+    // (Nov 6, Nico: "we should add a Skip button/action, and there should be a submit/send/save … for the comments/notes"; "a gallery view … so
+    // that users can see/compare all the animations")
+    notePh: 'a note for Nico about this one (private: only Nico reads it)', noteSend: 'send note', noteSent: '✓ sent, thanks', noteFail: 'couldn’t send it (no connection?): your note is still here, try again',
+    noteNone: 'no agent here: write something first', skipAgain: n => `you skipped ${n}: see ${n === 1 ? 'it' : 'them'} again?`, skipYes: 'see them again', skipNo: 'no, I’m done',
+    gallery: '🔲 gallery', deck: '🃏 one by one', playAll: '▶ play all', stopAll: '■ stop',
     // the pick link (/review/intro-logo-animation, /pick/logo, ?pick=logo): a visitor from a post, who may never have seen Id|le
     pick: { intro: 'help me pick the best animation for my logo: swipe → if you like it, ← if not, ↑ if you love it', by: '— Nico, who makes Id|le',
       thanks: 'thank you!! Nico reads every pick. Id|le is the little world this logo opens: have a look 👇', try: 'Try out Id|le:',
@@ -246,6 +251,14 @@
 #review .panel h3{margin:0;font:600 22px 'Idle F4',system-ui;letter-spacing:.04em}#review .panel p{margin:0;color:var(--dim);max-width:520px;line-height:1.5}#review .panel .btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 #review .panel button,#review .h2h .pick{background:var(--accent);color:#000;border:0;border-radius:8px;padding:9px 16px;font:600 14px inherit;cursor:pointer}#review .panel button.alt{background:none;color:var(--ink);border:1px solid var(--line)}
 #review .h2h{flex:1;display:flex;gap:12px;min-height:0}#review .h2h .card{touch-action:auto}#review .h2h .pick{margin-top:8px}#review .h2q{text-align:center;font:600 18px 'Idle F4',system-ui;margin:2px 0 6px}
+#review .acts [data-act=skip]{font-size:15px;border-style:dashed}#review .notebar .nst{font-size:12px;color:var(--dim)}#review .notebar .nst.ok{color:#9be08a}#review .notebar .nst.err{color:#ff8a8a}
+#review .notebar textarea[readonly]{opacity:.7}#review .notebar button.send{background:var(--accent);color:#000;border-radius:8px;padding:6px 12px;text-decoration:none;font-weight:600}
+#review .vbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 6px}#review .vbar button{background:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font:600 12px inherit;cursor:pointer}
+#review .gal{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start;padding:2px}#review .gal .card{touch-action:auto;flex:none;width:100%;box-sizing:border-box;justify-self:stretch}#review .gal .stage{flex:none;width:100%}#review .gal canvas.cv{width:100%;max-height:none}#review .gal .gbody{display:contents}
+#review .gal .gacts{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px}#review .gal .gacts button{width:42px;height:42px;border-radius:50%;border:2px solid var(--line);background:var(--floor);color:var(--ink);font-size:17px;cursor:pointer}
+#review .gal .gacts [data-g=nah]{border-color:#ff6b6b;color:#ff6b6b}#review .gal .gacts [data-g=like]{border-color:#9be08a;color:#9be08a}#review .gal .gacts [data-g=love]{border-color:#fdb827;color:#fdb827}#review .gal .gacts [data-g=skip]{border-style:dashed;font-size:13px}
+#review .gal .gacts button.chosen{background:#ffffff22;box-shadow:0 0 0 2px #fff4}#review .gal .gacts button:disabled:not(.chosen){opacity:.35}#review .gal .ph{aspect-ratio:1120/460;background:#000;border-radius:8px}
+@media (max-width:640px){#review .gal{grid-template-columns:minmax(0,1fr)}}
 #review .pkhead{color:var(--dim);font-size:13px;margin:0 0 6px;line-height:1.4}#review .pkhead b{color:var(--ink);font-weight:600}
 #review .pktry{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:13px;color:var(--dim)}
 #review .pktry button{background:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font:600 13px inherit;cursor:pointer}#review .pktry button:hover{border-color:var(--accent)}
@@ -258,7 +271,7 @@
   let cur = null;   // { rid, cfg, P, mine, queue, i, judged, pending: {scores, notes, pairs}, view: 'card'|'check'|'h2h'|'end'|'msg', live, note }
   async function open(rid, from = 'lab') {
     rid = String(rid || '').toLowerCase(); if (!/^[a-z0-9-]{1,40}$/.test(rid)) return false;
-    if (cur) close(); hushGame(true); cur = { rid, from, view: 'msg', msg: 'opening…', pending: { scores: {}, notes: {}, pairs: [] }, judged: 0 }; el.classList.add('on'); paint();
+    if (cur) close(); hushGame(true); cur = { rid, from, view: 'msg', msg: 'opening…', pending: { scores: {}, notes: {}, pairs: [], skips: [] }, judged: 0 }; el.classList.add('on'); paint();
     mark('rv_open_' + (from === 'link' || from === 'pick' ? 'link' : from === 'end' ? 'end' : 'lab')); if (from === 'pick') mark('pk_open');
     const cfg = await getCfg(rid); if (!cur || cur.rid !== rid) return false;
     if (!cfg) { cur.msg = 'this review doesn’t exist (or it has closed)'; paint(); return false; }
@@ -269,8 +282,9 @@
     const mine = sentAll()[rid] || { rated: {}, pairs: [] }, items = cfg.items.filter(id => P.ok(id));
     Object.assign(cur, { cfg: { ...cfg, items }, P, mine, queue: orderOf(items.filter(id => !(id in (mine.rated || {}))), cfg.order), i: 0, view: 'card' });
     if (!cur.queue.length) cur.view = 'end';
+    if (cur.wantGallery || (from === 'pick' && GALLERY)) cur.view = 'gallery';
     paint(); return true; }
-  function close() { if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true);
+  function close() { if (!cur) return; stopGallery(); try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true);
     // the pick link: closing drops the visitor into the world behind (free play), at the site's root so a reload is the game, not the review
     if (cur.from === 'pick') { if (!cur.went) mark('pk_close'); cur = null; el.classList.remove('on'); el.innerHTML = ''; hushGame(false); paintTab();
       try { history.replaceState(history.state, '', '/' + location.hash); } catch (e) {} return; }
@@ -289,10 +303,17 @@
   function pickGo(where) { if (!cur || cur.from !== 'pick') return; cur.went = where; mark('pk_go_' + where); flush(true);
     if (where === 'free') return close();
     const q = where === 'story' ? '?story' : '?lab'; try { cur.live && cur.live.stop(); } catch (e) {} location.href = '/' + q; }
+  // the note bar (deck and gallery): ✎ opens it; send note posts it on its own (⌘/Ctrl+Enter too); a note left there goes with the next swipe or skip
+  const noteHtml = (id, open) => { const sent = cur.noteSent && cur.noteSent[id];
+    if (!open && !sent) return `<button data-a="note" data-item="${esc(id)}">✎ add a note</button>`;
+    return `<textarea maxlength="300" data-note data-item="${esc(id)}" placeholder="${esc(TEXT.notePh)}"${sent ? ' readonly' : ''}>${esc(sent || cur.pending.notes[id] || '')}</textarea>`
+      + (sent ? `<span class="nst ok">${esc(TEXT.noteSent)}</span>` : `<button class="send" data-a="sendnote" data-item="${esc(id)}" title="⌘/Ctrl+Enter">${esc(TEXT.noteSend)}</button><span class="nst" data-nst="${esc(id)}"></span>`); };
   function paint0() {
-    if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} cur.live = null; const c = cur.cfg, ts = teamStatus();
+    if (!cur) return;
+    if (cur.view === 'gallery') return paintGallery(); try { cur.live && cur.live.stop(); } catch (e) {} cur.live = null; const c = cur.cfg, ts = teamStatus();
     const total = c ? c.items.length : 0, done = c && cur.mine ? Object.keys(cur.mine.rated || {}).length : 0;
     const top = `<div class="top"><b>⭐ ${esc((c && c.title) || cur.rid)}</b><span class="prog">${c ? `${Math.min(done + 1, total)} / ${total}` : ''}</span>${ts ? `<span class="tm" title="${esc(ts.detail)}">${esc(ts.label)}</span>` : '<span class="tm"></span>'}<button class="x" data-a="close" title="close (esc)">✕</button></div>`;
+    if (cur.view === 'skipped') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>${esc(TEXT.skipAgain(cur.again.length))}</h3><div class="btns"><button data-a="again">${esc(TEXT.skipYes)}</button><button class="alt" data-a="noagain">${esc(TEXT.skipNo)}</button></div></div></div></div>`; return; }
     if (cur.view === 'msg') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><p>${esc(cur.msg)}</p></div></div></div>`; return; }
     if (cur.view === 'check') { el.innerHTML = `<div class="box">${top}<div class="deck"><div class="panel"><h3>${done} judged ✓</h3><p>${done} of ${total} so far. thank you!</p><div class="btns"><button data-a="more">keep going</button><button class="alt" data-a="done">done</button></div></div></div></div>`; return; }
     if (cur.view === 'end') { const st = teamStatus();
@@ -302,19 +323,62 @@
       cur.h2 = [...el.querySelectorAll('.h2h .card')].map(cd => { const m = cur.P.mount(cd.dataset.item, cd); const pk = document.createElement('button'); pk.className = 'pick'; pk.dataset.pick = cd.dataset.item; pk.textContent = 'this one'; cd.appendChild(pk); return m; }); return; }
     const id = cur.queue[cur.i];
     el.innerHTML = `<div class="box">${top}<div class="deck"><section class="card" data-item="${esc(id)}"><div class="body" style="display:contents"></div><div class="stamp nah">NAH</div><div class="stamp like">LIKE</div><div class="stamp love">LOVE</div></section></div>
-<div class="acts"><button data-act="nah" title="nah (←)">✕<small>nah</small></button><button data-act="replay" title="play again (space)">▶</button><button data-act="love" title="love it (↑)">★<small>love</small></button><button data-act="like" title="like (→)">✓<small>like</small></button></div>
-<div class="notebar">${cur.note ? `<textarea maxlength="300" data-note placeholder="what would you change? (optional)">${esc(cur.pending.notes[id] || '')}</textarea>` : `<button data-a="note">✎ add a note</button>`}</div></div>`;
+<div class="acts"><button data-act="nah" title="nah (←)">✕<small>nah</small></button><button data-act="replay" title="play again (space)">▶</button><button data-act="love" title="love it (↑)">★<small>love</small></button><button data-act="like" title="like (→)">✓<small>like</small></button><button data-act="skip" title="skip (↓)">»<small>skip ›</small></button></div>
+<div class="notebar">${noteHtml(id, cur.note)}</div></div>`;
+    { const tb = el.querySelector('.top .prog'); if (tb) { const g = document.createElement('button'); g.className = 'vbtn'; g.dataset.a = 'gallery'; g.textContent = TEXT.gallery; g.style.cssText = 'margin-left:8px;background:none;color:inherit;border:1px solid #fff3;border-radius:999px;padding:3px 10px;font:600 12px inherit;cursor:pointer'; tb.after(g); } }
     const card = el.querySelector('.deck .card'); cur.live = cur.P.mount(id, card.querySelector('.body')); dragOn(card);
     const { ctx } = audio(); if (ctx.state === 'running' && cur.cfg.kind === 'logos') setTimeout(() => { if (cur && cur.view === 'card' && cur.queue[cur.i] === id && cur.live) cur.live.play(); }, 350); }
   function judge(act) { if (!cur || cur.view !== 'card' || cur.flying) return; const id = cur.queue[cur.i], v = ACT[act]; if (!id || !v) return;
-    const ta = el.querySelector('textarea[data-note]'); if (ta && ta.value.trim()) cur.pending.notes[id] = ta.value.trim().slice(0, 300);
-    cur.pending.scores[id] = v; cur.mine.rated = cur.mine.rated || {}; cur.mine.rated[id] = v; saveMine(); cur.judged++; addContrib(1); mark('rv_' + act); cur.note = false; if (cur.from === 'pick') mark('pk_first');
-    const card = el.querySelector('.deck .card'), next = () => { cur.flying = false; if (!cur) return; cur.i++; if (Object.keys(cur.pending.scores).length >= 3) flush();
+    takeNote(id); rate(id, v, act); cur.note = false;
+    const card = el.querySelector('.deck .card'), next = () => { cur.flying = false; if (!cur) return; cur.i++; if (due()) flush();
       const left = cur.queue.length - cur.i; if (!left) return finish(); if (Object.keys(cur.mine.rated).length % 6 === 0) { cur.view = 'check'; flush(); } paint(); };   // every 6 judged in all (a resumed deck counts what came before)
     if (card && !RM) { cur.flying = true; const dx = act === 'nah' ? -1 : act === 'like' ? 1 : 0, dy = act === 'love' ? -1 : 0; card.style.transition = 'transform .28s ease-in, opacity .28s'; card.style.transform = `translate(${dx * 120}%, ${dy * 110}%) rotate(${dx * 18}deg)`; card.style.opacity = '0'; setTimeout(next, 280); } else next(); }
-  function saveMine() { const all = sentAll(); all[cur.rid] = { ...(all[cur.rid] || {}), rated: cur.mine.rated, pairs: cur.mine.pairs || [] }; sv(SENT, all); }
+  // one rating, from the deck or the gallery (the same data, the same sends: an item counts once)
+  function rate(id, v, act) { cur.pending.scores[id] = v; cur.mine.rated = cur.mine.rated || {}; cur.mine.rated[id] = v; saveMine(); cur.judged++; addContrib(1); mark('rv_' + act); if (cur.from === 'pick') mark('pk_first'); }
+  function takeNote(id) { const ta = el.querySelector(`textarea[data-note][data-item="${CSS.escape(id)}"]`) || (cur.view === 'card' ? el.querySelector('textarea[data-note]') : null);
+    if (ta && ta.value.trim() && !(cur.noteSent && cur.noteSent[id])) cur.pending.notes[id] = ta.value.trim().slice(0, 300); }
+  const due = () => Object.keys(cur.pending.notes).length > 0 || Object.keys(cur.pending.scores).length + cur.pending.skips.length >= 3;
+  // skip: seen and passed, no score (counted per item); the skipped ones can come back at the end
+  function skip(id) { if (!cur || !id) return; takeNote(id); if (!cur.pending.skips.includes(id)) cur.pending.skips.push(id); cur.mine.skipped = [...new Set([...(cur.mine.skipped || []), id])]; saveMine(); mark('rv_skip'); if (cur.from === 'pick') mark('pk_skip'); }
+  function skipCard() { if (!cur || cur.view !== 'card' || cur.flying) return; const id = cur.queue[cur.i]; if (!id) return; skip(id); cur.note = false;
+    const card = el.querySelector('.deck .card'), next = () => { cur.flying = false; if (!cur) return; cur.i++; if (due()) flush(); if (cur.queue.length - cur.i <= 0) return finish(); paint(); };
+    if (card && !RM) { cur.flying = true; card.style.transition = 'transform .25s ease-in, opacity .25s'; card.style.transform = 'translate(0, 60%)'; card.style.opacity = '0'; setTimeout(next, 250); } else next(); }
+  // sending a note on its own (the existing private queue): ✓ sent, or why not (the text stays)
+  async function sendNote(id) { if (!cur) return; const ta = el.querySelector(`textarea[data-note][data-item="${CSS.escape(id)}"]`), st = el.querySelector(`[data-nst="${CSS.escape(id)}"]`), t = ta && ta.value.trim().slice(0, 300);
+    if (!t) { if (st) { st.textContent = 'write something first'; st.className = 'nst err'; } return; }
+    const btn = ta.parentElement.querySelector('[data-a=sendnote]'); if (btn) btn.disabled = true; if (st) { st.textContent = 'sending…'; st.className = 'nst'; }
+    let r = null; try { r = await post(cur.rid, { bkey: bkey(), notes: { [id]: t }, ...(cur.from === 'pick' ? { via: 'pick' } : {}) }); } catch (e) { r = null; }
+    if (!cur) return;
+    if (r && r.status === 200) { cur.noteSent = cur.noteSent || {}; cur.noteSent[id] = t; delete cur.pending.notes[id]; mark('rv_note'); if (cur.from === 'pick') mark('pk_note');
+      const nb = ta.parentElement; nb.innerHTML = noteHtml(id, true); return; }
+    if (btn) btn.disabled = false; if (st) { st.textContent = TEXT.noteFail; st.className = 'nst err'; } }
+  // the gallery: every item in a grid (2 columns, 1 on a phone), the same actions; a card is mounted only when it scrolls near (phones)
+  function paintGallery() { const c = cur.cfg, r = cur.mine.rated || {}, sk = cur.mine.skipped || [];
+    stopGallery(); cur.gm = {}; const n = c.items.length, done = Object.keys(r).length;
+    el.innerHTML = `<div class="box"><div class="top"><b>⭐ ${esc(c.title || cur.rid)}</b><span class="prog">${done} / ${n} rated</span><span class="tm"></span><button class="x" data-a="close" title="close (esc)">✕</button></div>
+<div class="vbar"><button data-a="playall">${esc(TEXT.playAll)}</button><button data-a="stopall">${esc(TEXT.stopAll)}</button><button data-a="deck">${esc(TEXT.deck)}</button></div>
+<div class="gal">${c.items.map(id => `<section class="card" data-item="${esc(id)}"><div class="gbody"><div class="ph"></div></div>
+<div class="gacts">${['nah', 'love', 'like'].map(a => `<button data-g="${a}" data-item="${esc(id)}" title="${a}"${r[id] ? ' disabled' : ''} class="${r[id] === ACT[a] ? 'chosen' : ''}">${{ nah: '✕', love: '★', like: '✓' }[a]}</button>`).join('')}<button data-g="skip" data-item="${esc(id)}" title="skip"${r[id] || sk.includes(id) ? ' disabled' : ''} class="${sk.includes(id) && !r[id] ? 'chosen' : ''}">skip</button></div>
+<div class="notebar">${noteHtml(id, !!(cur.noteOpen && cur.noteOpen[id]))}</div></section>`).join('')}</div></div>`;
+    const gal = el.querySelector('.gal'), mount = cd => { const id = cd.dataset.item; if (cur.gm[id]) return cur.gm[id]; const b = cd.querySelector('.gbody'); b.innerHTML = ''; cur.gm[id] = cur.P.mount(id, b); return cur.gm[id]; };
+    cur.gmount = mount;
+    if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { mount(e.target); io.unobserve(e.target); } }), { root: gal, rootMargin: '150px' }); cur.gio = io; gal.querySelectorAll('.card').forEach(cd => io.observe(cd)); }
+    else gal.querySelectorAll('.card').forEach(mount); }
+  function stopGallery() { if (!cur) return; cur.playAll = 0; Object.values(cur.gm || {}).forEach(m => { try { m.stop(); } catch (e) {} }); if (cur.gio) { try { cur.gio.disconnect(); } catch (e) {} cur.gio = null; } }
+  function gPlay(id, then) { if (!cur || cur.view !== 'gallery') return; Object.entries(cur.gm || {}).forEach(([k, m]) => { if (k !== id) try { m.stop(); } catch (e) {} });
+    const cd = el.querySelector(`.gal .card[data-item="${CSS.escape(id)}"]`); if (!cd) return; const m = cur.gmount(cd); cd.scrollIntoView({ block: 'nearest', behavior: RM ? 'auto' : 'smooth' });
+    let h = null; try { h = m.play(); } catch (e) {} if (then && h && h.done) h.done.then(then); else if (then) setTimeout(then, 4000); }
+  function playAll() { if (!cur) return; const tok = cur.playAll = Date.now(), ids = cur.cfg.items.slice(); mark('rv_playall'); let i = 0;
+    const step = () => { if (!cur || cur.playAll !== tok || cur.view !== 'gallery' || i >= ids.length) return; gPlay(ids[i++], () => setTimeout(step, 500)); }; step(); }
+  function toGallery() { if (!cur || !cur.cfg) return; try { cur.live && cur.live.stop(); } catch (e) {} cur.live = null; cur.view = 'gallery'; mark('rv_gallery'); if (cur.from === 'pick') mark('pk_gallery'); paint(); }
+  function toDeck() { if (!cur) return; stopGallery(); flush(); const r = cur.mine.rated || {}; cur.queue = orderOf(cur.cfg.items.filter(id => !(id in r)), cur.cfg.order); cur.i = 0;
+    if (!cur.queue.length) { cur.view = 'card'; return finish(); } cur.view = 'card'; paint(); }
+  function saveMine() { const all = sentAll(); all[cur.rid] = { ...(all[cur.rid] || {}), rated: cur.mine.rated, pairs: cur.mine.pairs || [], skipped: cur.mine.skipped || [] }; sv(SENT, all); }
   // after "done" (or the last item): "which one?" between this browser's two favourites (★ first), then the thanks
-  function finish() { if (!cur) return; const r = cur.mine.rated || {}, fav = Object.keys(r).filter(k => r[k] >= 3).sort((a, b) => r[b] - r[a]);
+  function finish() { if (!cur) return; const r = cur.mine.rated || {};
+    const again = (cur.mine.skipped || []).filter(id => !(id in r) && cur.cfg.items.includes(id));
+    if (again.length && !cur.skipAsked && cur.view !== 'gallery') { cur.skipAsked = true; cur.again = again; cur.view = 'skipped'; return paint(); }
+    const fav = Object.keys(r).filter(k => r[k] >= 3).sort((a, b) => r[b] - r[a]);
     const done = (cur.mine.pairs || []).map(p => p.slice().sort().join('|'));
     let pair = null; for (let x = 0; x < fav.length && !pair; x++) for (let y = x + 1; y < fav.length && !pair; y++) if (!done.includes([fav[x], fav[y]].sort().join('|'))) pair = [fav[x], fav[y]];
     if (pair && cur.view !== 'h2h' && !cur.h2hDone) { cur.view = 'h2h'; cur.pair = pair; paint(); return; }
@@ -324,21 +388,24 @@
 
   // sending: small batches (3 swipes, a checkpoint, the pick, closing, leaving the page); a team review asks the server to join first if needed
   let flushing = null;
-  function flush(leaving) { if (!cur) return null; const p = cur.pending, rid = cur.rid; if (!Object.keys(p.scores).length && !p.pairs.length) return flushing;
-    const body = { bkey: bkey(), scores: p.scores, notes: p.notes, pairs: p.pairs, ...(cur.from === 'pick' ? { via: 'pick' } : {}) }; cur.pending = { scores: {}, notes: {}, pairs: [] };
+  function flush(leaving) { if (!cur) return null; const p = cur.pending, rid = cur.rid; if (!Object.keys(p.scores).length && !p.pairs.length && !p.skips.length && !Object.keys(p.notes).length) return flushing;
+    const body = { bkey: bkey(), scores: p.scores, notes: p.notes, pairs: p.pairs, skips: p.skips, ...(cur.from === 'pick' ? { via: 'pick' } : {}) }; cur.pending = { scores: {}, notes: {}, pairs: [], skips: [] };
+    const sentNotes = body.notes, me = cur;
     if (leaving && document.visibilityState === 'hidden' && navigator.sendBeacon) { try { const base = (window.__idle && window.__idle.cfg && window.__idle.cfg.helper || '').replace(/\/$/, ''); if (navigator.sendBeacon(base + '/lab/review/' + rid, new Blob([JSON.stringify(body)], { type: 'application/json' }))) return null; } catch (e) {} }
-    const go = async () => { let r = await api('/lab/review/' + rid, body); if (r.status === 403 && r.j && r.j.team) { await api('/lab/team/' + r.j.team + '/join', { bkey: body.bkey }); r = await api('/lab/review/' + rid, body); } return r; };
-    flushing = go().catch(() => null); return flushing; }
+    // a batch that didn't arrive (no connection, a server error) goes back into the next one: a note is never lost
+    const back = () => { if (cur !== me) return; const q = cur.pending; Object.assign(q.scores, body.scores); for (const [k, t] of Object.entries(sentNotes)) if (!q.notes[k]) q.notes[k] = t; q.pairs.push(...body.pairs); q.skips.push(...body.skips.filter(k => !q.skips.includes(k))); };
+    flushing = post(rid, body).then(r => { if (!r || r.status === 0 || r.status >= 500) back(); return r; }).catch(() => { back(); return null; }); return flushing; }
+  const post = async (rid, body) => { let r = await api('/lab/review/' + rid, body); if (r.status === 403 && r.j && r.j.team) { await api('/lab/team/' + r.j.team + '/join', { bkey: body.bkey }); r = await api('/lab/review/' + rid, body); } return r; };
   addEventListener('pagehide', () => flush(true));
 
   // swipe by dragging (touch, pen or mouse): right ✓, left ✕, up ★ (the big ▶ in the middle can start a swipe too; the click that ends it doesn't replay)
   function dragOn(card) { let sx = 0, sy = 0, dx = 0, dy = 0, on = false, id = null;
     const stamp = (k, a) => { const s = card.querySelector('.stamp.' + k); if (s) s.style.opacity = a; };
     card.addEventListener('pointerdown', e => { const bt = e.target.closest('button,textarea'); if (bt && !bt.classList.contains('big')) return; card.__moved = false; on = true; id = e.pointerId; sx = e.clientX; sy = e.clientY; dx = dy = 0; card.style.transition = 'none'; try { card.setPointerCapture(id); } catch (er) {} });
-    card.addEventListener('pointermove', e => { if (!on || e.pointerId !== id) return; dx = e.clientX - sx; dy = e.clientY - sy; card.style.transform = `translate(${dx}px, ${Math.min(0, dy)}px) rotate(${dx / 24}deg)`;
+    card.addEventListener('pointermove', e => { if (!on || e.pointerId !== id) return; dx = e.clientX - sx; dy = e.clientY - sy; card.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 24}deg)`;
       stamp('like', Math.max(0, Math.min(1, dx / 120))); stamp('nah', Math.max(0, Math.min(1, -dx / 120))); stamp('love', Math.max(0, Math.min(1, -dy / 120)) * (Math.abs(dx) < 80 ? 1 : 0)); });
     const end = () => { if (!on) return; on = false; const W = Math.max(90, card.clientWidth * 0.22); card.__moved = Math.abs(dx) > 6 || Math.abs(dy) > 6;
-      if (-dy > 110 && Math.abs(dx) < 90) return judge('love'); if (dx > W) return judge('like'); if (dx < -W) return judge('nah');
+      if (-dy > 110 && Math.abs(dx) < 90) return judge('love'); if (dy > 110 && Math.abs(dx) < 90) return skipCard(); if (dx > W) return judge('like'); if (dx < -W) return judge('nah');
       card.style.transition = 'transform .2s'; card.style.transform = ''; ['like', 'nah', 'love'].forEach(k => stamp(k, 0));
       if (Math.abs(dx) < 6 && Math.abs(dy) < 6 && cur && cur.live && !cur.live.playing()) cur.live.play(); };
     card.addEventListener('pointerup', end); card.addEventListener('pointercancel', end); }
@@ -346,15 +413,28 @@
   el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || !cur) return;
     const a = b.dataset.a, act = b.dataset.act;
     if (b.dataset.pk) return pickGo(b.dataset.pk);
+    if (a === 'gallery') return toGallery(); if (a === 'deck') return toDeck(); if (a === 'playall') return playAll(); if (a === 'stopall') { cur.playAll = 0; Object.values(cur.gm || {}).forEach(m => { try { m.stop(); } catch (er) {} }); return; }
+    if (a === 'sendnote') return void sendNote(b.dataset.item);
+    if (a === 'again') { mark('rv_skipagain'); cur.queue = cur.again.slice(); cur.i = 0; cur.view = 'card'; return paint(); } if (a === 'noagain') { cur.view = 'card'; return finish(); }
+    if (cur.view === 'gallery') { const id = b.dataset.item || (b.closest('.card') && b.closest('.card').dataset.item);
+      if (b.dataset.g && id) { takeNote(id); if (b.dataset.g === 'skip') skip(id); else rate(id, ACT[b.dataset.g], b.dataset.g); if (due()) flush();
+        const cd = b.closest('.card'); cd.querySelectorAll('.gacts button').forEach(x => { x.disabled = b.dataset.g !== 'skip' || x.dataset.g === 'skip'; x.classList.toggle('chosen', x === b); });
+        const pr = el.querySelector('.top .prog'); if (pr) pr.textContent = `${Object.keys(cur.mine.rated || {}).length} / ${cur.cfg.items.length} rated`; return; }
+      if (a === 'note' && id) { cur.noteOpen = cur.noteOpen || {}; cur.noteOpen[id] = true; const nb = b.closest('.notebar'); nb.innerHTML = noteHtml(id, true); const t = nb.querySelector('textarea'); t && t.focus(); return; }
+      if (act === 'replay' && id) return gPlay(id);
+      if (a === 'close') return close(); return; }
     if (a === 'close') return close(); if (a === 'more') { mark('rv_more'); cur.view = 'card'; return paint(); } if (a === 'done') return finish();
-    if (a === 'note') { cur.note = true; const id = cur.queue[cur.i]; const nb = el.querySelector('.notebar'); if (nb) { nb.innerHTML = `<textarea maxlength="300" data-note placeholder="what would you change? (optional)">${esc(cur.pending.notes[id] || '')}</textarea>`; const t = nb.querySelector('textarea'); setTimeout(() => t.focus(), 30); } return; }
+    if (a === 'note') { cur.note = true; const id = cur.queue[cur.i]; const nb = el.querySelector('.notebar'); if (nb) { nb.innerHTML = noteHtml(id, true); const t = nb.querySelector('textarea'); setTimeout(() => t.focus(), 30); } return; }
     if (a === 'skiph2h') { cur.h2hDone = true; (cur.h2 || []).forEach(m => { try { m.stop(); } catch (er) {} }); cur.h2 = null; return finish(); }
     if (b.dataset.pick) return pick(b.dataset.pick);
     if (act === 'replay') { const cd = b.closest('.card'); if (cd && cd.__moved) { cd.__moved = false; return; } if (cur.view === 'h2h' && cd) { const k = [...el.querySelectorAll('.h2h .card')].indexOf(cd); (cur.h2 || []).forEach((m, j) => { if (j !== k) m.stop(); }); cur.h2[k] && cur.h2[k].play(); return; } if (cur.live) cur.live.play(); return; }
+    if (act === 'skip') return skipCard();
     if (act) judge(act); });
-  el.addEventListener('input', e => { if (cur && e.target.matches('textarea[data-note]')) { const id = cur.queue[cur.i]; if (id) cur.pending.notes[id] = e.target.value.slice(0, 300); } });
+  el.addEventListener('input', e => { if (cur && e.target.matches('textarea[data-note]') && !e.target.readOnly) { const id = e.target.dataset.item || cur.queue[cur.i]; if (id) cur.pending.notes[id] = e.target.value.slice(0, 300); } });
+  el.addEventListener('keydown', e => { if (cur && e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.target.matches('textarea[data-note]')) { e.preventDefault(); e.stopPropagation(); sendNote(e.target.dataset.item || cur.queue[cur.i]); } });
   addEventListener('keydown', e => { if (!cur) return; if (e.key === 'Escape') { e.stopPropagation(); return close(); } if (e.target.closest && e.target.closest('textarea,input')) return;
     if (cur.view !== 'card') return; const k = { ArrowLeft: 'nah', ArrowRight: 'like', ArrowUp: 'love' }[e.key];
+    if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); return skipCard(); }
     if (k) { e.preventDefault(); e.stopPropagation(); judge(k); } else if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); cur.live && cur.live.play(); } }, true);
 
   // ---------- 🧑‍🤝‍🧑 the HITL tab (v3, Nico: "do we have a Reviewer's tab? or a HITL's 🌱 tab where they can check the current/pending and past
@@ -421,7 +501,8 @@
     if (cfg.stage === 'team' && !team()) return invite(rid, 'link', rv); return nudge(rv, 'link'); }
   // the pick link (Nov 6, Nico: "post only the 'reviews' thing as a direct link … when they close the screen they are dropped into the game"):
   // the logo review opens first thing, for anyone (no team: the worker takes via 'pick' for the logos review), over the world behind it
-  const PICK = /^\/(review\/intro-logo-animation|pick\/logos?)\/?$/.test(location.pathname) || Q.has('pick') ? 'logos' : null;
+  const PICK = /^\/(review\/intro-logo-animation(\/gallery)?|pick\/logos?)\/?$/.test(location.pathname) || Q.has('pick') ? 'logos' : null;
+  const GALLERY = /\/gallery\/?$/.test(location.pathname) || Q.get('view') === 'gallery';
   if (PICK) { auto = false; try { if (!localStorage.getItem('idle.gv') && !localStorage.getItem('idle.entry')) localStorage.setItem('idle.entry', 'pick'); } catch (e) {}
     const t1 = Date.now(), go = () => { if (!document.body || (!window.__idle && Date.now() - t1 < 8000)) return setTimeout(go, 100); open(PICK, 'pick'); }; setTimeout(go, 0); }
   if (want && !PICK) { const w0 = Date.now(); const tick = () => { if (busy() && Date.now() - w0 < 90e3) return setTimeout(tick, 400); arrive(String(want).toLowerCase()); }; setTimeout(tick, 300); auto = false; }

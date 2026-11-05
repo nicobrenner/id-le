@@ -157,7 +157,7 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['entry_pick', 'pk_open', 'pk_first', 'pk_done', 'pk_go_story', 'pk_go_free', 'pk_go_lab', 'pk_close', 'entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown_old', 'offer_go_old', 'offer_later_old', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'offer_shown_v3', 'offer_go_v3', 'offer_later_v3', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip',
+const SFSTEP = ['rv_skip', 'rv_skipagain', 'rv_note', 'rv_gallery', 'rv_playall', 'pk_skip', 'pk_note', 'pk_gallery', 'entry_pick', 'pk_open', 'pk_first', 'pk_done', 'pk_go_story', 'pk_go_free', 'pk_go_lab', 'pk_close', 'entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown_old', 'offer_go_old', 'offer_later_old', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'offer_shown_v3', 'offer_go_v3', 'offer_later_v3', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
@@ -357,7 +357,7 @@ export async function statsAcc(storage, path, body, now = Date.now()) {
 // is stored. The salt is new each UTC day (from the UV_SECRET env var + the date, or a random value kept in KV that expires 30 hours
 // after its day starts), so a hash can't be linked across days. A visit is a page view whose hash wasn't seen in the last 30 minutes
 // in this isolate's memory (so the one-time reload for cross-origin isolation doesn't count twice); that memory is never written.
-const PV_PAGES = { '/review/intro-logo-animation': 'game', '/pick/logo': 'game', '/pick/logos': 'game', '/': 'game', '/index.html': 'game', '/arena.html': 'game', '/pedia': 'pedia', '/pedia.html': 'pedia', '/privacy': 'privacy', '/privacy.html': 'privacy' };
+const PV_PAGES = { '/review/intro-logo-animation': 'game', '/review/intro-logo-animation/gallery': 'game', '/pick/logo': 'game', '/pick/logos': 'game', '/': 'game', '/index.html': 'game', '/arena.html': 'game', '/pedia': 'pedia', '/pedia.html': 'pedia', '/privacy': 'privacy', '/privacy.html': 'privacy' };
 const HLL_P = 11, HLL_M = 1 << HLL_P, PV_CAP = { ref: 40, utm: 30, cc: 80 };
 const EMPTY_PV = () => ({ views: {}, visits: {}, gpc: {}, bots: {}, botWhy: {}, ref: {}, utm: {}, dev: {}, cc: {}, hll: {} });
 // bots, previews and scripts: never counted with people. Real browsers send a long UA and Accept-Language; these don't, or say so.
@@ -835,11 +835,15 @@ async function review(req, env, path, ip) {
   const txt = await req.text(); if (txt.length > 8000) return json({ error: 'too big' }, 413);
   let q; try { q = JSON.parse(txt); } catch (e) { return json({ error: 'not JSON' }, 400); }
   const sc = q && typeof q.scores === 'object' && !Array.isArray(q.scores) ? q.scores : {}, nt = q && typeof q.notes === 'object' && !Array.isArray(q.notes) ? q.notes : {}, pr = q && Array.isArray(q.pairs) ? q.pairs : [];
-  const scores = {}, notes = {}, pairs = [];
+  // (Nov 6, Nico: "we should add a Skip button/action, and there should be a submit/send/save … for the comments/notes"): skips are items
+  // seen and passed without a score (counted per item, once per browser), and a note may come on its own
+  const sk = q && Array.isArray(q.skips) ? q.skips : [];
+  const scores = {}, notes = {}, pairs = [], skips = [];
   for (const [k, v] of Object.entries(sc).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); if (!Number.isInteger(v) || v < 0 || v > 5) return json({ error: 'scores are 0 to 5' }, 400); scores[k] = v; }
   for (const [k, v] of Object.entries(nt).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); const t = scrub(v, 300); if (t) notes[k] = t; }
   for (const p of pr.slice(0, 12)) { if (!Array.isArray(p) || p.length !== 2 || p[0] === p[1] || !c.items.includes(p[0]) || !c.items.includes(p[1])) return json({ error: 'a pair is two different items of this review' }, 400); pairs.push(p[0] + '>' + p[1]); }
-  if (!Object.keys(scores).length && !pairs.length) return json({ error: 'score at least one, please' }, 400);
+  for (const k of sk.slice(0, 40)) { if (typeof k !== 'string' || !c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); if (!skips.includes(k)) skips.push(k); }
+  if (!Object.keys(scores).length && !pairs.length && !skips.length && !Object.keys(notes).length) return json({ error: 'score at least one, please' }, 400);
   const bk = typeof q.bkey === 'string' && BKEY.test(q.bkey) ? await bkHash(q.bkey) : null; if (!bk) return json({ error: 'a browser key is needed' }, 400);
   // the one-tap ask at EPOCH 0 COMPLETE (Nov 4): a single 'which one?' pair between the two openings players actually saw, from anyone (no team)
   const ASK_PAIR = ['c3-typed-dust', 'c3-typed-crt'];
@@ -847,9 +851,10 @@ async function review(req, env, path, ip) {
   // the logo pick link (Nov 6, Nico: "post only the 'reviews' thing as a direct link … Show HN"): the logos review takes anyone who came by it
   const pickOk = q && q.via === 'pick' && PICK_OPEN.includes(rid);
   let td = null; if (c.stage === 'team' && !askOk && !pickOk) { td = await teamDoc(env, c.team); if (!td.m[bk]) return json({ error: 'this review is for the team: join it first', team: c.team }, 403); }
-  const a = await rvAgg(env, rid), mine = a.k[bk] || { i: [], p: [], t: 0 }, all = mine.i.includes('*');
+  const a = await rvAgg(env, rid), mine = a.k[bk] || { i: [], p: [], t: 0 }, all = mine.i.includes('*'); mine.s = mine.s || [];
   const newS = Object.entries(scores).filter(([k]) => !all && !mine.i.includes(k)), newP = pairs.filter(p => { const [x, y] = p.split('>'); return !mine.p.includes(p) && !mine.p.includes(y + '>' + x); });
-  if (!newS.length && !newP.length) return json({ error: 'this browser already sent these', already: true }, 409);
+  const newK = skips.filter(k => !mine.s.includes(k) && !mine.i.includes(k) && !newS.some(([x]) => x === k));
+  if (!newS.length && !newP.length && !newK.length && !Object.keys(notes).length) return json({ error: 'this browser already sent these', already: true }, 409);
   // per address only a daily cap (people behind one address may each send theirs)
   const [day, h] = await fbHash(env, ip, 'review'), ck = 'rvrl:' + day + ':' + h;
   const n = Math.max(rvMem.n.get(ck) || 0, +(await kv.get(ck)) || 0); if (n >= RV_DAY_MAX) return json({ error: 'that is a lot of reviews for one day' }, 429);
@@ -857,6 +862,8 @@ async function review(req, env, path, ip) {
   if (!a.k[bk]) { a.sends++; if (pickOk) a.pick = (a.pick || 0) + 1; } mine.t = Date.now();
   for (const [k, v] of newS) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.n++; x.sum += v; x.s[v] = (x.s[v] || 0) + 1; mine.i.push(k); }
   for (const p of newP) { a.pw[p] = (a.pw[p] || 0) + 1; mine.p.push(p); }
+  for (const k of newK) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.skip = (x.skip || 0) + 1; mine.s.push(k); }
+  for (const k of Object.keys(notes)) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.notes = (x.notes || 0) + 1; }   // a count only: the words go to the private queue
   a.k[bk] = mine; await kv.put('review:' + rid + ':agg', JSON.stringify(a));
   // the team counts what a member contributed (one per batch with something new): the server's half of the cliff check
   if (!td) { const tt = await teamDoc(env, 'loop'); if (tt.m[bk]) td = tt, td._t = 'loop'; } else td._t = c.team;
@@ -864,7 +871,7 @@ async function review(req, env, path, ip) {
   if (Object.keys(notes).length) { const id = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + '-' + crypto.randomUUID().slice(0, 6);
     const text = (rid + ': ' + Object.entries(notes).map(([k, t]) => `${k}${scores[k] != null ? ' ' + scores[k] + '/5' : ''} “${t}”`).join(' · ')).slice(0, 2400);
     await kv.put('fb:' + id, JSON.stringify({ t: Date.now(), kind: 'review', rid, scores, notes, text, ctx: fbCtx(q.ctx), status: 'new' }), { expirationTtl: FB_TTL }); }
-  const o = { ok: true, added: newS.length, pairs: newP.length, skipped: Object.keys(scores).length - newS.length }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o);
+  const o = { ok: true, added: newS.length, pairs: newP.length, skips: newK.length, notes: Object.keys(notes).length, skipped: Object.keys(scores).length - newS.length }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o);
 }
 
 // the player's own writes (🧪, votes, reviews, the team, gift claims). If KV refuses a write (the daily free-tier cap: 429), the action

@@ -180,7 +180,7 @@ def main():
     if a.staging: mark_staging(out)
     stamp_versions(out)
     pk = pick_page(open(os.path.join(out, "index.html"), encoding="utf-8").read())
-    for rel in ("review/intro-logo-animation.html", "pick/logo.html", "pick/logos.html"):
+    for rel in ("review/intro-logo-animation.html", "review/intro-logo-animation-gallery.html", "pick/logo.html", "pick/logos.html"):
         os.makedirs(os.path.dirname(os.path.join(out, rel)), exist_ok=True); open(os.path.join(out, rel), "w", encoding="utf-8").write(pk)
     open(os.path.join(out, "_headers"), "w").write(HEADERS.replace("/*\n", "/*\n  X-Robots-Tag: noindex, nofollow\n", 1) if a.staging else HEADERS)
     if a.staging or a.agent: open(os.path.join(out, "_headers"), "a").write("/agent/SKILL.md\n  Content-Type: text/markdown; charset=utf-8\n  Cache-Control: no-cache\n")
@@ -201,7 +201,8 @@ export default {
       r = new HTMLRewriter().on('meta[property="og:image"]', set(img)).on('meta[name="twitter:image"]', set(img)).on('meta[property="og:title"]', set(t)).on('meta[name="twitter:title"]', set(t))
         .on('meta[property="og:description"]', set(d)).on('meta[name="twitter:description"]', set(d)).on('meta[property="og:url"]', set(u.origin + '/?halloween'))
         .on('meta[property="og:image:alt"]', set("The Id|le wordmark with an orange bar over a moonlit world of words: it is Halloween")).transform(a);
-    } else r = await env.ASSETS.fetch(req);
+    } else if (p === '/review/intro-logo-animation/gallery' || p === '/review/intro-logo-animation/gallery/') r = await env.ASSETS.fetch(new Request(new URL('/review/intro-logo-animation-gallery' + u.search, req.url), req));   // the gallery: the same page under its own path (no folder next to the page's file)
+    else r = await env.ASSETS.fetch(req);
     // the logo pick's paths (/review/…, /pick/…): one that doesn't exist goes to the game, never a bare 404
     if (r.status === 404 && (p.startsWith('/review/') || p.startsWith('/pick/'))) return Response.redirect(new URL('/', req.url).toString(), 302);
     // every HTML page served here is counted by the server (pageview in helper/worker.js), after the response and never delaying it
