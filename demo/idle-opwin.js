@@ -28,6 +28,9 @@
 @keyframes opGlow{0%,100%{box-shadow:0 0 0 0 #9fb0ff00}50%{box-shadow:0 0 14px 2px #9fb0ffaa}}
 @media (prefers-reduced-motion:reduce){#opTray .opc.glow{animation:none;box-shadow:0 0 10px 1px #9fb0ff88}}
 @media (max-width:500px){#opTray .opc{min-height:44px;font-size:14px}}
+@media (max-width:500px){html:not(.gen-box):not(.gen-float) #lab.opMore{height:auto!important;min-height:min(45dvh,calc(100dvh - var(--op-top,52px) - var(--kb,0px) - 8px))!important;max-height:min(82dvh,calc(100dvh - var(--op-top,52px) - var(--kb,0px) - 8px))!important}
+html #lab>#opTray.all{max-height:none!important;scroll-snap-type:y mandatory;scroll-padding-top:8px}#opTray.all .opc{min-height:36px;font-size:13px;padding:5px 10px;scroll-snap-align:start}
+#lab.opMore>:is(#ai-thread,#lab-thread){min-height:6.5em}}
 #lab-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}#lab-form>#lab-text{flex:1 1 200px;min-width:0;order:1}#lab-form>#lab-send{flex:none;order:2;min-height:40px;padding:0 14px}#lab-form>:not(#lab-text):not(#lab-send){order:3;flex-basis:100%}
 #lab>*{flex:none}#lab>:is(#ai-thread,#lab-thread){flex:1 1 auto;min-height:0;overflow:auto}
 html:not(.gen-box):not(.gen-float) #lab>:is(#genConsole,#ai-set,#ai-smart,#ai-bar,#opTray,#genDay){max-height:34%;overflow:auto}
@@ -84,17 +87,26 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
     // collapsed (Nov 4, Nico: "more" was pinned on top of the chips): every chip is rendered, then fit() hides the ones that don't fit the
     // row's real width (and those past the first ~5); "⋯ more" shows only when something is hidden. Expanded: all of them, wrapped
     const s2 = s + showAll; if (!force && s2 === sig) return fit(); sig = s2; tray.hidden = !open; tray.classList.toggle('all', showAll);
+    // the phone sheet grows down to fit the grid when expanded (up to 82%) (Nov 4, Nico: on a phone the grid was cut in half and the chat squeezed): its top and width stay, the
+    // arena below is free; on a computer the window keeps its size (tray7)
+    lab.classList.toggle('opMore', open && showAll);
     if (chips.length) chips = chips.concat([{ text: showAll ? '‹ less' : '⋯ more', more: 1 }]);
     tray.innerHTML = chips.map((x, i) => `<button type="button" class="opc${x.glow ? ' glow' : ''}${x.more ? ' more' : ''}${x.glow && coarse() ? ' big' : ''}" data-opc="${i}"${x.gsay ? ' data-gsay="1"' : ''}${x.disabled ? ' disabled' : ''}>${x.gsay && coarse() ? '▶ ' : ''}${esc(x.text)}</button>`).join('');
     tray._chips = chips; fit(); }
   function fit() { if (tray.hidden) return; const B = [...tray.querySelectorAll('[data-opc]')], more = B.find(b => (tray._chips[+b.dataset.opc] || {}).more); if (!more) return;
-    B.forEach(b => b.classList.remove('cut')); if (showAll) { more.classList.toggle('cut', !(tray._chips || []).some(x => x.extra)); return; }
+    B.forEach(b => b.classList.remove('cut')); if (showAll) { more.classList.toggle('cut', !(tray._chips || []).some(x => x.extra)); rows(B); return; }
     const cs = getComputedStyle(tray), gap = parseFloat(cs.columnGap || cs.gap) || 6, W = tray.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const chips = B.filter(b => b !== more), mw = more.getBoundingClientRect().width, info = chips.map(b => ({ b, x: tray._chips[+b.dataset.opc] || {}, w: b.getBoundingClientRect().width }));
     const shown = info.filter(o => !o.x.extra), total = shown.reduce((a, o, i) => a + o.w + (i ? gap : 0), 0), needMore = info.some(o => o.x.extra) || total > W;
     const budget = needMore ? W - mw - gap : W; let used = 0, full = false;
     info.forEach(o => { if (o.x.extra || full || used + (used ? gap : 0) + o.w > budget) { o.b.classList.add('cut'); full = full || !o.x.extra; } else used += (used ? gap : 0) + o.w; });
     if (!needMore) more.classList.add('cut'); }
+  // phone, expanded: if the grid still doesn't fit (a short screen, the keyboard up) it scrolls by whole rows (snap), and its height is cut at the
+  // last row that fits, so no row rests half-visible
+  function rows(B) { tray.style.maxHeight = ''; if (!phone()) return; const room = tray.clientHeight; if (tray.scrollHeight <= room + 1) return;
+    const pb = parseFloat(getComputedStyle(tray).paddingBottom) || 0, top = tray.getBoundingClientRect().top - tray.scrollTop;
+    const fits = B.filter(b => !b.classList.contains('cut')).map(b => b.getBoundingClientRect().bottom - top).filter(y => y <= room);
+    if (fits.length) tray.style.maxHeight = Math.ceil(Math.max(...fits) + pb) + 'px'; }
   try { new ResizeObserver(() => fit()).observe(tray); } catch (e) {}
   tools.addEventListener('click', e => { e.stopPropagation(); userOpen = trayOpen() ? '0' : '1'; try { localStorage.setItem('idle.opTray', userOpen); } catch (er) {} render(true); });
   // a chip: on a phone it is sent (typing costs too much there); on a computer it fills the input, to send or change. Genesis's chip is
