@@ -18,6 +18,9 @@ html.story-boot body>*:not(#idleIntro):not(#genBlack):not(#genChoose):not(script
     ['gift', /[?&]gift=/], ['halloween', /[?&]halloween\b/], ['world', /[?&](world|w)=/], ['intro', /[?&]intro=/]];
   const INTENT_HASH = [['lab', /^#(.*&)?lab(&|$)/], ['creature', /^#(.*&)?c=[^&]/], ['recover', /^#recover$/]];
   let intent = (INTENT_PARAMS.find(([, re]) => re.test(location.search)) || INTENT_HASH.find(([, re]) => re.test(location.hash)) || [null])[0];
+  // the logo pick (Nov 6, Nico: "post only the 'reviews' thing as a direct link … Show HN"): /review/intro-logo-animation (to post), /pick/logo
+  // and ?pick=logo open the logo review first thing (idle-reviews.js PICK), with the world behind it: no A/B/C draw, no storyline
+  if (/^\/(review\/intro-logo-animation|pick\/logos?)\/?$/.test(location.pathname) || /[?&]pick(=[^&]*)?(&|$)/.test(location.search)) intent = 'pick';
   // ?offer=a|b|c|old (staging/local only): preview the storyline offer in a returning player's world (no arm, no story, no guided start)
   if (!intent && testHost && /^(a|b|c|old|v3)$/.test(q.get('offer') || '')) intent = 'offer';
   // ?storydump (staging/local only): the Director's view reads the storyline's data from a sandboxed page that plays nothing

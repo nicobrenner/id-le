@@ -70,6 +70,10 @@
     publicAsk: (rv, knows) => [[knows ? `the ${TEAM.name} narrowed ${rv.title} down to ${rv.n}` : `the ${TEAM.name} (${TEAM.what}) narrowed ${rv.title} down to ${rv.n}`, 'help pick the winner?']], publicYes: 'sure ›',
     vested: `you're vested: ${LBL.vested}. thank you for sticking around 🙌`,
     thanks: 'thank you!! Nico reads every one 🧪',
+    // the pick link (/review/intro-logo-animation, /pick/logo, ?pick=logo): a visitor from a post, who may never have seen Id|le
+    pick: { intro: 'help me pick the best animation for my logo: swipe → if you like it, ← if not, ↑ if you love it', by: '— Nico, who makes Id|le',
+      thanks: 'thank you!! Nico reads every pick. Id|le is the little world this logo opens: have a look 👇', try: 'Try out Id|le:',
+      story: '📖 story mode', free: '🌱 free play', lab: '🧪 data lab', end: '🌱 try Id|le ›' },
     short: TEAM.short,
     // the 🧑‍🤝‍🧑 tab (DRAFT)
     tab: { title: `🧑‍🤝‍🧑 ${TEAM.name} (${TEAM.short})`, open: 'to do', past: 'done', none: 'nothing to review right now. thank you!', pitch: `a few players help Nico decide what ships: quick reviews now and then, swipe and pick. want in?`, join: 'join ›',
@@ -242,6 +246,10 @@
 #review .panel h3{margin:0;font:600 22px 'Idle F4',system-ui;letter-spacing:.04em}#review .panel p{margin:0;color:var(--dim);max-width:520px;line-height:1.5}#review .panel .btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 #review .panel button,#review .h2h .pick{background:var(--accent);color:#000;border:0;border-radius:8px;padding:9px 16px;font:600 14px inherit;cursor:pointer}#review .panel button.alt{background:none;color:var(--ink);border:1px solid var(--line)}
 #review .h2h{flex:1;display:flex;gap:12px;min-height:0}#review .h2h .card{touch-action:auto}#review .h2h .pick{margin-top:8px}#review .h2q{text-align:center;font:600 18px 'Idle F4',system-ui;margin:2px 0 6px}
+#review .pkhead{color:var(--dim);font-size:13px;margin:0 0 6px;line-height:1.4}#review .pkhead b{color:var(--ink);font-weight:600}
+#review .pktry{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:13px;color:var(--dim)}
+#review .pktry button{background:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font:600 13px inherit;cursor:pointer}#review .pktry button:hover{border-color:var(--accent)}
+@media (max-width:640px){#review .pktry{gap:6px}#review .pktry span{width:100%;text-align:center}#review .pktry button{padding:7px 10px;font-size:12px}}
 @media (max-width:640px){#review .box{padding:8px 8px 10px}#review .card{padding:8px;justify-content:center}#review .stage{flex:0 0 auto}#review .h2h{flex-direction:column}#review .acts{gap:10px}#review .acts button{width:54px;height:54px}#review .idea{font-size:12px;margin:2px 0 6px}}`;
   document.head.appendChild(dcss);
   const el = document.createElement('div'); el.id = 'review'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); document.body.appendChild(el);
@@ -251,10 +259,10 @@
   async function open(rid, from = 'lab') {
     rid = String(rid || '').toLowerCase(); if (!/^[a-z0-9-]{1,40}$/.test(rid)) return false;
     if (cur) close(); hushGame(true); cur = { rid, from, view: 'msg', msg: 'opening…', pending: { scores: {}, notes: {}, pairs: [] }, judged: 0 }; el.classList.add('on'); paint();
-    mark('rv_open_' + (from === 'link' ? 'link' : from === 'end' ? 'end' : 'lab'));
+    mark('rv_open_' + (from === 'link' || from === 'pick' ? 'link' : from === 'end' ? 'end' : 'lab')); if (from === 'pick') mark('pk_open');
     const cfg = await getCfg(rid); if (!cur || cur.rid !== rid) return false;
     if (!cfg) { cur.msg = 'this review doesn’t exist (or it has closed)'; paint(); return false; }
-    if (cfg.stage === 'team' && !team()) { close(); invite(rid, from === 'link' ? 'link' : 'lab', { rid, title: cfg.title, n: cfg.items.length }); return false; }
+    if (cfg.stage === 'team' && !team() && from !== 'pick') { close(); invite(rid, from === 'link' ? 'link' : 'lab', { rid, title: cfg.title, n: cfg.items.length }); return false; }
     const P = PLUGINS[cfg.kind]; if (!P) { cur.msg = 'this kind of review isn’t in this version of Id|le yet'; paint(); return false; }
     try { await P.load(); } catch (e) { cur.msg = String(e.message || e); paint(); return false; }
     if (!cur || cur.rid !== rid) return false;
@@ -263,13 +271,25 @@
     if (!cur.queue.length) cur.view = 'end';
     paint(); return true; }
   function close() { if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true);
+    // the pick link: closing drops the visitor into the world behind (free play), at the site's root so a reload is the game, not the review
+    if (cur.from === 'pick') { if (!cur.went) mark('pk_close'); cur = null; el.classList.remove('on'); el.innerHTML = ''; hushGame(false); paintTab();
+      try { history.replaceState(history.state, '', '/' + location.hash); } catch (e) {} return; }
     // opened from the Operator's message (or a link): it says where to find the reviews again, and the 🧑‍🤝‍🧑 lights up
     const after = (cur.from === 'invite' || cur.from === 'link') && cur.cfg ? (Object.keys((cur.mine && cur.mine.rated) || {}).length ? TEXT.closedSome : TEXT.closedNone)(knows()) : null;
     cur = null; el.classList.remove('on'); el.innerHTML = ''; hushGame(false); paintTab();
     if (after) setTimeout(async () => { openOperator(); await opTyping(400); opPoint(after); highlight(); }, 250);
     if (/[?&]review=/.test(location.search)) try { const u = new URL(location.href); u.searchParams.delete('review'); history.replaceState(history.state, '', u); } catch (e) {} }
   const ACT = { nah: 1, like: 3, love: 5 };
-  function paint() {
+  function paint() { paint0(); if (cur && cur.from === 'pick') pickChrome(); }
+  // the pick link's frame: Nico's one line on top, and "Try out Id|le:" at the bottom of every view (the deck, which one?, the thanks)
+  function pickChrome() { const box = el.querySelector('.box'); if (!box) return; const T = TEXT.pick;
+    const hd = document.createElement('p'); hd.className = 'pkhead'; hd.innerHTML = `<b>${esc(T.intro)}</b> <span>${esc(T.by)}</span>`; const top = box.querySelector('.top'); top ? top.after(hd) : box.prepend(hd);
+    const tr = document.createElement('div'); tr.className = 'pktry'; tr.innerHTML = `<span>${esc(T.try)}</span><button data-pk="story">${esc(T.story)}</button><button data-pk="free">${esc(T.free)}</button><button data-pk="lab">${esc(T.lab)}</button>`; box.appendChild(tr);
+    if (cur.view === 'end') { const p = box.querySelector('.panel p'); if (p) p.textContent = T.thanks; const b = box.querySelector('.panel [data-a="close"]'); if (b) { b.textContent = T.end; b.dataset.a = ''; b.dataset.pk = 'free'; } } }
+  function pickGo(where) { if (!cur || cur.from !== 'pick') return; cur.went = where; mark('pk_go_' + where); flush(true);
+    if (where === 'free') return close();
+    const q = where === 'story' ? '?story' : '?lab'; try { cur.live && cur.live.stop(); } catch (e) {} location.href = '/' + q; }
+  function paint0() {
     if (!cur) return; try { cur.live && cur.live.stop(); } catch (e) {} cur.live = null; const c = cur.cfg, ts = teamStatus();
     const total = c ? c.items.length : 0, done = c && cur.mine ? Object.keys(cur.mine.rated || {}).length : 0;
     const top = `<div class="top"><b>⭐ ${esc((c && c.title) || cur.rid)}</b><span class="prog">${c ? `${Math.min(done + 1, total)} / ${total}` : ''}</span>${ts ? `<span class="tm" title="${esc(ts.detail)}">${esc(ts.label)}</span>` : '<span class="tm"></span>'}<button class="x" data-a="close" title="close (esc)">✕</button></div>`;
@@ -288,7 +308,7 @@
     const { ctx } = audio(); if (ctx.state === 'running' && cur.cfg.kind === 'logos') setTimeout(() => { if (cur && cur.view === 'card' && cur.queue[cur.i] === id && cur.live) cur.live.play(); }, 350); }
   function judge(act) { if (!cur || cur.view !== 'card' || cur.flying) return; const id = cur.queue[cur.i], v = ACT[act]; if (!id || !v) return;
     const ta = el.querySelector('textarea[data-note]'); if (ta && ta.value.trim()) cur.pending.notes[id] = ta.value.trim().slice(0, 300);
-    cur.pending.scores[id] = v; cur.mine.rated = cur.mine.rated || {}; cur.mine.rated[id] = v; saveMine(); cur.judged++; addContrib(1); mark('rv_' + act); cur.note = false;
+    cur.pending.scores[id] = v; cur.mine.rated = cur.mine.rated || {}; cur.mine.rated[id] = v; saveMine(); cur.judged++; addContrib(1); mark('rv_' + act); cur.note = false; if (cur.from === 'pick') mark('pk_first');
     const card = el.querySelector('.deck .card'), next = () => { cur.flying = false; if (!cur) return; cur.i++; if (Object.keys(cur.pending.scores).length >= 3) flush();
       const left = cur.queue.length - cur.i; if (!left) return finish(); if (Object.keys(cur.mine.rated).length % 6 === 0) { cur.view = 'check'; flush(); } paint(); };   // every 6 judged in all (a resumed deck counts what came before)
     if (card && !RM) { cur.flying = true; const dx = act === 'nah' ? -1 : act === 'like' ? 1 : 0, dy = act === 'love' ? -1 : 0; card.style.transition = 'transform .28s ease-in, opacity .28s'; card.style.transform = `translate(${dx * 120}%, ${dy * 110}%) rotate(${dx * 18}deg)`; card.style.opacity = '0'; setTimeout(next, 280); } else next(); }
@@ -298,14 +318,14 @@
     const done = (cur.mine.pairs || []).map(p => p.slice().sort().join('|'));
     let pair = null; for (let x = 0; x < fav.length && !pair; x++) for (let y = x + 1; y < fav.length && !pair; y++) if (!done.includes([fav[x], fav[y]].sort().join('|'))) pair = [fav[x], fav[y]];
     if (pair && cur.view !== 'h2h' && !cur.h2hDone) { cur.view = 'h2h'; cur.pair = pair; paint(); return; }
-    if (Object.keys(r).length >= Math.min(6, cur.cfg.items.length)) reviewDone(cur.rid); mark('rv_done'); flush(); cur.view = 'end'; paint(); }
+    if (Object.keys(r).length >= Math.min(6, cur.cfg.items.length)) reviewDone(cur.rid); mark('rv_done'); if (cur.from === 'pick') mark('pk_done'); flush(); cur.view = 'end'; paint(); }
   function pick(w) { const [a, b] = cur.pair, l = w === a ? b : a; cur.pending.pairs.push([w, l]); cur.mine.pairs = (cur.mine.pairs || []).concat([[w, l]]); saveMine(); addContrib(1); mark('rv_h2h');
     (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); cur.h2 = null; cur.h2hDone = true; flush(); finish(); }
 
   // sending: small batches (3 swipes, a checkpoint, the pick, closing, leaving the page); a team review asks the server to join first if needed
   let flushing = null;
   function flush(leaving) { if (!cur) return null; const p = cur.pending, rid = cur.rid; if (!Object.keys(p.scores).length && !p.pairs.length) return flushing;
-    const body = { bkey: bkey(), scores: p.scores, notes: p.notes, pairs: p.pairs }; cur.pending = { scores: {}, notes: {}, pairs: [] };
+    const body = { bkey: bkey(), scores: p.scores, notes: p.notes, pairs: p.pairs, ...(cur.from === 'pick' ? { via: 'pick' } : {}) }; cur.pending = { scores: {}, notes: {}, pairs: [] };
     if (leaving && document.visibilityState === 'hidden' && navigator.sendBeacon) { try { const base = (window.__idle && window.__idle.cfg && window.__idle.cfg.helper || '').replace(/\/$/, ''); if (navigator.sendBeacon(base + '/lab/review/' + rid, new Blob([JSON.stringify(body)], { type: 'application/json' }))) return null; } catch (e) {} }
     const go = async () => { let r = await api('/lab/review/' + rid, body); if (r.status === 403 && r.j && r.j.team) { await api('/lab/team/' + r.j.team + '/join', { bkey: body.bkey }); r = await api('/lab/review/' + rid, body); } return r; };
     flushing = go().catch(() => null); return flushing; }
@@ -325,6 +345,7 @@
 
   el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || !cur) return;
     const a = b.dataset.a, act = b.dataset.act;
+    if (b.dataset.pk) return pickGo(b.dataset.pk);
     if (a === 'close') return close(); if (a === 'more') { mark('rv_more'); cur.view = 'card'; return paint(); } if (a === 'done') return finish();
     if (a === 'note') { cur.note = true; const id = cur.queue[cur.i]; const nb = el.querySelector('.notebar'); if (nb) { nb.innerHTML = `<textarea maxlength="300" data-note placeholder="what would you change? (optional)">${esc(cur.pending.notes[id] || '')}</textarea>`; const t = nb.querySelector('textarea'); setTimeout(() => t.focus(), 30); } return; }
     if (a === 'skiph2h') { cur.h2hDone = true; (cur.h2 || []).forEach(m => { try { m.stop(); } catch (er) {} }); cur.h2 = null; return finish(); }
@@ -398,7 +419,12 @@
   // gets Nico's invitation for that review; a member (or anyone, for a public review) gets one Operator line and [open ›]
   async function arrive(rid) { const cfg = await getCfg(rid); if (!cfg) return; const rv = { rid, title: cfg.title, n: cfg.items.length, stage: cfg.stage, team: cfg.team };
     if (cfg.stage === 'team' && !team()) return invite(rid, 'link', rv); return nudge(rv, 'link'); }
-  if (want) { const w0 = Date.now(); const tick = () => { if (busy() && Date.now() - w0 < 90e3) return setTimeout(tick, 400); arrive(String(want).toLowerCase()); }; setTimeout(tick, 300); auto = false; }
+  // the pick link (Nov 6, Nico: "post only the 'reviews' thing as a direct link … when they close the screen they are dropped into the game"):
+  // the logo review opens first thing, for anyone (no team: the worker takes via 'pick' for the logos review), over the world behind it
+  const PICK = /^\/(review\/intro-logo-animation|pick\/logos?)\/?$/.test(location.pathname) || Q.has('pick') ? 'logos' : null;
+  if (PICK) { auto = false; try { if (!localStorage.getItem('idle.gv') && !localStorage.getItem('idle.entry')) localStorage.setItem('idle.entry', 'pick'); } catch (e) {}
+    const t1 = Date.now(), go = () => { if (!document.body || (!window.__idle && Date.now() - t1 < 8000)) return setTimeout(go, 100); open(PICK, 'pick'); }; setTimeout(go, 0); }
+  if (want && !PICK) { const w0 = Date.now(); const tick = () => { if (busy() && Date.now() - w0 < 90e3) return setTimeout(tick, 400); arrive(String(want).toLowerCase()); }; setTimeout(tick, 300); auto = false; }
   // ---------- when the invitation comes by itself (Nico: "you decide when to show it to users on each mode at the appropriate time"), once
   // per browser, never during the intro, Genesis, a modal, a cut-scene or an open panel, never while typing:
   //  - the storyline: once the player has left the end of what's built (closed its card, or the 🗺 roadmap it opened), or 20 s into the

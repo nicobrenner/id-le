@@ -874,7 +874,7 @@ class Page:
                 if not cfg: return route.fulfill(status=404, content_type="application/json", body='{"error":"no such review"}')
                 if route.request.method == "POST":
                     body = json.loads(route.request.post_data or "{}")
-                    if cfg.get("stage") == "team" and body.get("bkey") not in self.team_keys: return route.fulfill(status=403, content_type="application/json", body=json.dumps({"error": "join first", "team": "loop"}))
+                    if cfg.get("stage") == "team" and body.get("bkey") not in self.team_keys and not (body.get("via") == "pick" and rid == "logos"): return route.fulfill(status=403, content_type="application/json", body=json.dumps({"error": "join first", "team": "loop"}))
                     self.fb.append(("review:" + rid, route.request.post_data or ""))
                     return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "added": len(body.get("scores") or {}), "pairs": len(body.get("pairs") or [])}))
                 return route.fulfill(status=200, content_type="application/json", body=json.dumps({"rid": rid, **cfg, "order": self.rv_order}))
@@ -3356,6 +3356,100 @@ def t_reviews_fresh(P):
     return f"old stored activity → nothing after 11 s ({r['on']} s counted this visit); 3 min + a click → the invitation, logged rv_inv_auto; a ?review= link → rv_inv_link"
 
 
+PICK_CFG = """(() => { let c; Object.defineProperty(window, 'IDLE_CFG', { configurable: true, get() { return c; }, set(v) { c = Object.assign(v || {}, { helper: location.origin }); } }); })()"""   # the test build has no helper: the pick link opens before a test could set it
+
+
+def t_pick(P, phone=False):
+    """The logo pick link (Nov 6, Nico: "post only the 'reviews' thing as a direct link … Show HN … when they close the screen they are
+    dropped into the game … Try out Id|le: [story mode] [free play] [data lab]"; then "id-le.com/pick/logo or
+    id-le.com/review/intro-logo-animation … better for SEO"): /review/intro-logo-animation opens the logo review first thing, for a
+    non-member, with no A/B draw, no title card and no storyline behind it; its page has its own title, canonical and preview; a swipe is
+    sent (via 'pick', no team); the bottom row goes to the story, free play or the lab; closing lands in free play at /; the browser counts
+    as 'pick' in the engaged lines; on a phone nothing overflows."""
+    P.ctx.add_init_script(PICK_CFG)
+    pg = P.open("/review/intro-logo-animation?statstest")   # statstest: stats are sent from a local host (idle-settings.js)
+    wait_for(pg, "() => window.__reviews && window.__reviews.state() && window.__reviews.state().view === 'card'", 60, P=P)
+    head = pg.evaluate("""() => ({ title: document.title, canon: document.querySelector('link[rel=canonical]').href, og: document.querySelector('meta[property="og:url"]').content,
+      ogt: document.querySelector('meta[property="og:title"]').content, h1: (document.querySelector('#pickSeo h1') || {}).textContent, base: document.baseURI,
+      path: location.pathname, gv: localStorage.getItem('idle.gv'), entry: localStorage.getItem('idle.entry'), intent: window.__intentEntry, intro: !!document.querySelector('#idleIntro'),
+      void: !!window.__genesisVoid, story: (() => { try { return window.__genesis.storyLive(); } catch (e) { return null; } })(),
+      pk: [...document.querySelectorAll('#review .pktry button')].map(b => b.dataset.pk), hd: (document.querySelector('#review .pkhead') || {}).textContent || '' })""")
+    need(head["path"] == "/review/intro-logo-animation" and head["canon"] == head["og"] == "https://id-le.com/review/intro-logo-animation" and "pick the best animation" in head["title"]
+         and "pick the best animation" in (head["h1"] or "") and head["base"].endswith("/"), f"the page at the posted address: {head}")
+    need(head["intent"] == "pick" and head["gv"] is None and head["entry"] == "pick" and not head["intro"] and not head["void"], f"no A/B draw, no title card, no storyline: {head}")
+    need(head["pk"] == ["story", "free", "lab"] and "pick the best animation for my logo" in head["hd"], f"the frame: {head}")
+    if phone:
+        w = pg.evaluate("""() => { const t = document.querySelector('#review .pktry').getBoundingClientRect(), c = document.querySelector('#review .deck .card').getBoundingClientRect();
+          return { sw: document.documentElement.scrollWidth, w: innerWidth, tr: t.right, tb: t.bottom, h: innerHeight, cw: c.width, acts: [...document.querySelectorAll('#review .acts button')].every(b => b.getBoundingClientRect().bottom <= innerHeight) }; }""")
+        need(w["sw"] <= w["w"] and w["tr"] <= w["w"] + 1 and w["tb"] <= w["h"] + 1 and w["acts"] and w["cw"] > 250, f"the pick at 375 px: {w}")
+    shots = os.environ.get("IDLE_PICK_SHOTS")
+    if shots: pg.wait_for_timeout(1500); pg.screenshot(path=os.path.join(shots, f"pick-{'phone' if phone else 'desktop'}.png"))
+    pg.keyboard.press("ArrowRight"); wait_for(pg, "() => window.__funnel.reached().includes('pk_first')", 20, P=P)
+    for k in ("ArrowLeft", "ArrowUp"):
+        pg.wait_for_timeout(900); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 20, P=P); pg.keyboard.press(k)
+    t0 = time.time()
+    while time.time() - t0 < 20 and sum(len(json.loads(b).get("scores") or {}) for k, b in P.fb if k == "review:logos") < 3: pg.wait_for_timeout(400)
+    sent = [json.loads(b) for k, b in P.fb if k == "review:logos"]
+    need(sent and all(x.get("via") == "pick" for x in sent) and sum(len(x.get("scores") or {}) for x in sent) >= 3, f"the swipes go to the logos review, via 'pick', no team needed: {sent}")
+    pg.keyboard.press("Escape"); wait_for(pg, "() => !document.querySelector('#review.on')", 15, P=P)
+    after = pg.evaluate("() => ({ path: location.pathname, c: window.__arena.raw().filter(c => !c.lab).length, f: window.__funnel.reached(), story: (() => { const g = window.__genesis.state(); return !!(g && g.on && g.mode === 'story'); })(), dark: !!window.__genesisVoid })")
+    need(after["path"] == "/" and after["c"] > 0 and not after["story"] and not after["dark"] and {"entry_pick", "pk_open", "pk_first", "pk_close"} <= set(after["f"]), f"closing lands in free play at /: {after}")
+    wait_for(pg, "() => true", 1)
+    t0 = time.time()
+    while time.time() - t0 < 30 and not any('"dd":"pick"' in b for b in P.stats): pg.wait_for_timeout(500)
+    need(any('"dd":"pick"' in b for b in P.stats), "the browser counts as 'pick' in the engaged lines (the dd beacon)")
+    pg.close()
+    # the short alias and the bottom row: 🧪 data lab and 📖 story mode leave for their own links; 🌱 free play closes into the world
+    out = []
+    for path, pk, want in (("/pick/logo", "lab", "?lab"), ("/pick/logo", "story", "?story"), ("/?pick=logo", "free", None)):
+        q = P.open(path); wait_for(q, "() => !!document.querySelector('#review.on .pktry button')", 60, P=P)
+        if want:
+            with q.expect_navigation(timeout=30000): q.click(f"#review .pktry button[data-pk={pk}]")
+            u = q.evaluate("() => location.pathname + location.search"); need(u == "/" + want, f"{pk} → {u}")
+        else:
+            q.click(f"#review .pktry button[data-pk={pk}]"); wait_for(q, "() => !document.querySelector('#review.on')", 15, P=P)
+            r = q.evaluate("() => ({ f: window.__funnel.reached(), path: location.pathname })"); need("pk_go_free" in r["f"] and r["path"] == "/", f"free play: {r}")   # (the funnel is per browser: the first page's pk_close is in it too)
+            u = "free play at " + r["path"]
+        out.append(f"{path} {pk} → {u}"); q.close()
+    P.clean()
+    return (f"{'phone: ' if phone else ''}/review/intro-logo-animation → the logo review first (no draw/title/story, canonical + og:url + h1), 3 swipes via 'pick', Esc → free play at /, "
+            f"counted as 'pick'; " + "; ".join(out))
+
+
+def pick_routes_unit():
+    """the generated Pages worker for the pick's paths: /review/intro-logo-animation and /pick/logo are served (their HTML, counted as game
+    page views); a /review/… or /pick/… that doesn't exist goes to / (302), never a bare 404; _routes.json sends them through the worker;
+    a production build lists the page in sitemap.xml and robots.txt points at it; staging has neither"""
+    tmp = tempfile.mkdtemp(prefix="idle-pick-")
+    try:
+        for flag in ([], ["--staging"]):
+            d = os.path.join(tmp, "st" if flag else "prod")
+            r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_static.py"), "--helper", "https://id-le.com", "--pages-helper", "--out", d, *flag], capture_output=True, text=True, timeout=240)
+            need(r.returncode == 0, "build failed: " + (r.stderr or r.stdout)[-300:])
+        prod = os.path.join(tmp, "prod")
+        routes = json.load(open(os.path.join(prod, "_routes.json")))["include"]
+        need("/review/*" in routes and "/pick/*" in routes, f"_routes.json: {routes}")
+        sm = open(os.path.join(prod, "sitemap.xml")).read(); rb = open(os.path.join(prod, "robots.txt")).read()
+        need("https://id-le.com/review/intro-logo-animation" in sm and "Sitemap: https://id-le.com/sitemap.xml" in rb, "sitemap/robots")
+        need(not os.path.exists(os.path.join(tmp, "st", "sitemap.xml")), "staging must not have a sitemap (it is noindex)")
+        for rel in ("review/intro-logo-animation.html", "pick/logo.html"):
+            h = open(os.path.join(prod, rel), encoding="utf-8").read()
+            need('<base href="/">' in h and 'rel="canonical" href="https://id-le.com/review/intro-logo-animation"' in h and "noindex" not in h and "?v=" in h, f"{rel}: base, canonical, indexable, stamped scripts")
+        js = r"""
+const W = (await import(process.argv[2])).default, html = '<!doctype html><title>x</title>';
+const ASSETS = { fetch: async (r) => { const p = new URL(r.url).pathname; return ['/review/intro-logo-animation', '/pick/logo', '/'].includes(p) ? new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } }) : new Response('nf', { status: 404 }); } };
+const env = { ASSETS }, out = {};
+for (const p of ['/review/intro-logo-animation', '/pick/logo', '/review/nope', '/pick/whatever']) { const r = await W.fetch(new Request('https://id-le.com' + p), env, {}); out[p] = [r.status, r.headers.get('Location')]; }
+console.log(JSON.stringify(out));"""
+        open(os.path.join(tmp, "t.mjs"), "w").write(js); shutil.copy(os.path.join(prod, "_worker.js"), os.path.join(tmp, "w.mjs"))
+        r = subprocess.run(["node", os.path.join(tmp, "t.mjs"), "file://" + os.path.join(tmp, "w.mjs")], capture_output=True, text=True, timeout=60)
+        need(r.returncode == 0, (r.stderr or r.stdout)[-400:]); o = json.loads(r.stdout.strip().splitlines()[-1])
+        need(o["/review/intro-logo-animation"][0] == 200 and o["/pick/logo"][0] == 200 and o["/review/nope"] == [302, "https://id-le.com/"] and o["/pick/whatever"][0] == 302, f"routes: {o}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return f"served 200: /review/intro-logo-animation, /pick/logo; unknown → 302 /; _routes, sitemap + robots (prod only), base + canonical + stamped scripts"
+
+
 def t_reviews_phone(P):
     """⭐ reviews at 375 px: the card is ≥ 70% of the lightbox and fills the width, no sideways scroll, ✕ ✓ ★ on screen."""
     pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()"); pg.wait_for_timeout(200)
@@ -5434,7 +5528,7 @@ def browser_tests(a, out):
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
-        ("reviews link", t_reviews_link, (), {}), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
+        ("reviews link", t_reviews_link, (), {}), ("pick", t_pick, (), {}), ("pick phone", lambda P: t_pick(P, True), (), PHONE), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
         ("founder personal", t_founder_personal, (), {}), ("founder phone", t_founder_phone, (), {"is_mobile": True, "has_touch": True}),
         ("story landing", t_story_landing, (), {}), ("story intro", t_story_intro, (), {}), ("logo thunder", t_logo_thunder, (), {}),
         ("story fans", t_story_fans, (), {}), ("story clock", t_story_clock, (), {}), ("logo solo", t_logo_solo, (), {}), ("logo ab", t_logo_ab, (), {}),
@@ -5458,11 +5552,11 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"agent relay", "genpan", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "rave2", "rave2 phone", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"pick", "pick phone", "agent relay", "genpan", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "rave2", "rave2 phone", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("agent relay", "agent relay: bring your own agent (pairing, tokens, limits, gate)", lambda: agent_unit()), ("agent relay server", "agent relay server: server.py's relay for local copies", lambda: agent_server_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
-          ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
+          ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("pick routes", "pick routes: the logo pick's paths on Pages", lambda: pick_routes_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
 # checks that pass the same assertions with the page's clock sped up (?timescale). Measured Nov 4 on 15 of the slowest at 5×: none got
 # meaningfully faster (they wait on the test's own fixed pauses and on the audio clock, which can't run faster) and 4 broke (story keys
 # logo, story landing, founder, reviews cutscene), so none is listed yet; the mechanism stays for checks written to use it

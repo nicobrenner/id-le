@@ -201,7 +201,7 @@ def engaged_lines(days):
     if not dd and not en and not cb:
         return
     print("engaged (browser-days: here, did something on purpose, came back; once per browser per day; our own checks excluded):")
-    for arm in ["story", "choose", "play", "none"]:
+    for arm in ["story", "choose", "play", "none", "pick"]:   # pick: came by the logo pick link (/review/intro-logo-animation), whatever it did after
         here, acts, back = dd.get(arm, 0), en.get(arm, {}), cb.get(arm, {})
         if not (here or acts or back):
             continue
@@ -279,6 +279,9 @@ def sf_split(sf):
             o["skips"][step[5:]] = o["skips"].get(step[5:], 0) + n
         elif step.startswith("fd_"):
             o.setdefault("fd", {})[step[3:]] = o.setdefault("fd", {}).get(step[3:], 0) + n
+        elif step.startswith("pk_") or step == "entry_pick":
+            k = "entry" if step == "entry_pick" else step[3:]
+            o.setdefault("pk", {})[k] = o.setdefault("pk", {}).get(k, 0) + n
         elif step.startswith("rv_"):
             o.setdefault("rv", {})[step[3:]] = o.setdefault("rv", {}).get(step[3:], 0) + n
         elif step.startswith("sc_"):
@@ -297,6 +300,14 @@ def sf_split(sf):
 RV_STEPS = [("invite", "invited"), ("inv_link", "· by a link"), ("inv_auto", "· by the timing rule"), ("inv_other", "· from 🌱 / the game"), ("in", "I'm in"), ("notnow", "not now"), ("pledge", "pledge"), ("open_link", "opened by a link"), ("open_lab", "opened in the game"),
             ("open_end", "opened from the end card"), ("play", "played an item"), ("nah", "✕"), ("like", "✓"), ("love", "★"), ("more", "kept going"), ("done", "done"),
             ("h2h", "which one?"), ("sent", "finished a review"), ("tab", "opened 🌱"), ("vested", "vested")]
+
+
+# the logo pick link (Nov 6: /review/intro-logo-animation, /pick/logo, ?pick=logo; idle-reviews.js PICK), from its once-per-browser moments
+def pk_line(pk):
+    n = pk.get("open") or pk.get("entry") or 0
+    pct = lambda k: f" ({100 * pk.get(k, 0) / n:.0f}%)" if n else ""
+    return (f"🎬 logo pick link: arrived {pk.get('entry', 0)} → review opened {pk.get('open', 0)} → judged 1+ {pk.get('first', 0)}{pct('first')} → finished {pk.get('done', 0)}{pct('done')}"
+            f" · then: 📖 story {pk.get('go_story', 0)}, 🌱 free play {pk.get('go_free', 0)}, 🧪 data lab {pk.get('go_lab', 0)}, closed (→ free play) {pk.get('close', 0)}")
 
 
 def rv_line(rv):
@@ -639,6 +650,8 @@ def main():
                     if o['offer'].get('shown_' + vv): print(f"             offer {vv}: shown {o['offer'].get('shown_' + vv, 0)}, played {o['offer'].get('go_' + vv, 0)}, later {o['offer'].get('later_' + vv, 0)}")
             if o.get("rv"):
                 print("           ⭐ reviews: " + rv_line(o["rv"]))
+            if o.get("pk"):
+                print("           " + pk_line(o["pk"]))
             if o.get("end"):
                 en = o["end"]; print(f"           end of what's built: shown {en.get('shown', 0)}, roadmap {en.get('roadmap', 0)}, GitHub {en.get('github', 0)}, the playground {en.get('free', 0)}")
         sc = sc_total(sfs)

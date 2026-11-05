@@ -284,7 +284,8 @@
   // { en: act, ar: arm } its first deliberate act today (the act from a fixed list), { cb: arm, b: bucket } it came back on a later day than
   // its first visit (the come-back buckets). Passive viewing never counts; nor do the Genesis commands themselves (finishing Genesis does)
   const EN_ACTS = ['op_msg', 'irc_msg', 'cr_talk', 'cr_card', 'cr_name', 'cr_feed', 'e0_done', 'vote', 'sci_sent', 'hitl_join', 'review', 'ask_name', 'ask_logo'];
-  const armNow = () => { let g = null; try { g = localStorage.getItem('idle.gv'); } catch (e) {} g = g === 'current' ? 'play' : g; return ARMS3.includes(g) ? g : 'none'; };
+  // (Nov 6) a browser that first came by the logo pick link (idle-reviews.js PICK) is its own group, 'pick', whatever it did after
+  const armNow = () => { let g = null, e = null; try { g = localStorage.getItem('idle.gv'); e = localStorage.getItem('idle.entry'); } catch (er) {} if (e === 'pick') return 'pick'; g = g === 'current' ? 'play' : g; return ARMS3.includes(g) ? g : 'none'; };
   const dayIs = k => { try { return localStorage.getItem(k) === TODAY; } catch (e) { return true; } }, dayMark = k => { try { localStorage.setItem(k, TODAY); } catch (e) {} };
   const daily = () => { if (document.hidden || document.prerendering || !live()) return false;
     if (!dayIs('idle.ddDay')) confirmed('dd', { v: 1, dd: armNow() }, TODAY, () => dayMark('idle.ddDay'));
