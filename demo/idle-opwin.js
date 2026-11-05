@@ -20,8 +20,8 @@
 @media (min-width:501px){#lab-head{cursor:grab;user-select:none}#lab-head.drag{cursor:grabbing}html:is(.gen-box,.gen-float) #lab-head{cursor:default}}
 #op-tools{margin-left:auto;margin-right:6px;font-size:14px;line-height:1;padding:3px 8px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer}
 #op-tools.on{background:#6b7cff33;border-color:#9fb0ff}html:is(.gen-box,.gen-float) #op-tools{display:none!important}
-#opTray{display:flex;flex-wrap:nowrap;gap:6px;padding:8px 10px 4px;border-top:1px solid #8884;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}#opTray::-webkit-scrollbar{display:none}#opTray .opc{flex:0 0 auto;white-space:nowrap}#opTray.all{flex-wrap:wrap;overflow-x:visible}#opTray[hidden]{display:none}#opTray .opc.more{border-style:dashed;position:sticky;right:0;background:var(--bg);box-shadow:-10px 0 10px var(--bg)}#opTray.all .opc.more{position:static;box-shadow:none}
-#opTray .opc{font:12.5px var(--ui-font,system-ui);padding:6px 11px;border-radius:14px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:32px}
+#opTray{display:flex;flex-wrap:nowrap;gap:6px;padding:8px 10px 6px;border-top:1px solid #8884;overflow:hidden}#opTray .opc{flex:0 0 auto;white-space:nowrap}#opTray .opc.cut{display:none}#opTray[hidden]{display:none}#opTray .opc.more{border-style:dashed}#opTray.all{flex-wrap:wrap;overflow:visible}html #lab>#opTray.all{max-height:none;overflow:visible;flex:0 0 auto}#lab>#ai-thread{min-height:0}#lab.opMore{height:auto!important;max-height:calc(100dvh - var(--op-top,52px) - var(--kb,0px) - 8px)!important}
+#opTray .opc{font:12.5px var(--ui-font,system-ui);padding:6px 9px;border-radius:14px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:32px}
 #opTray .opc:hover{background:#6b7cff40}#opTray .opc[disabled]{opacity:.45;cursor:default}
 #opTray .opc.glow{border-color:#cfd6ff;font-weight:600;background:#3a46c8;color:#fff;animation:opGlow 1.8s ease-in-out infinite}
 #opTray .opc.big{font-size:15px;padding:9px 18px}
@@ -81,11 +81,21 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
     if (!Array.isArray(chips)) chips = templateChips(c);
     const open = trayOpen() && chips.length > 0, s = JSON.stringify([open, chips, c.phone]); tools.classList.toggle('on', open); tools.hidden = !!c.genesis;
     if (!open) showAll = false;
-    const extra = chips.filter(x => x.extra).length; if (!showAll) chips = chips.filter(x => !x.extra);
-    const s2 = s + showAll; if (!force && s2 === sig) return; sig = s2; tray.hidden = !open; tray.classList.toggle('all', showAll);
-    if (extra) chips = chips.concat([{ text: showAll ? '‹ less' : '⋯ more', more: 1 }]);
+    // collapsed (Nov 4, Nico: "more" was pinned on top of the chips): every chip is rendered, then fit() hides the ones that don't fit the
+    // row's real width (and those past the first ~5); "⋯ more" shows only when something is hidden. Expanded: all of them, wrapped
+    const s2 = s + showAll; if (!force && s2 === sig) return fit(); sig = s2; tray.hidden = !open; tray.classList.toggle('all', showAll); { const L = document.getElementById('lab'); if (L) L.classList.toggle('opMore', open && showAll); }
+    if (chips.length) chips = chips.concat([{ text: showAll ? '‹ less' : '⋯ more', more: 1 }]);
     tray.innerHTML = chips.map((x, i) => `<button type="button" class="opc${x.glow ? ' glow' : ''}${x.more ? ' more' : ''}${x.glow && coarse() ? ' big' : ''}" data-opc="${i}"${x.gsay ? ' data-gsay="1"' : ''}${x.disabled ? ' disabled' : ''}>${x.gsay && coarse() ? '▶ ' : ''}${esc(x.text)}</button>`).join('');
-    tray._chips = chips; }
+    tray._chips = chips; fit(); }
+  function fit() { if (tray.hidden) return; const B = [...tray.querySelectorAll('[data-opc]')], more = B.find(b => (tray._chips[+b.dataset.opc] || {}).more); if (!more) return;
+    B.forEach(b => b.classList.remove('cut')); if (showAll) { more.classList.toggle('cut', !(tray._chips || []).some(x => x.extra)); return; }
+    const cs = getComputedStyle(tray), gap = parseFloat(cs.columnGap || cs.gap) || 6, W = tray.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const chips = B.filter(b => b !== more), mw = more.getBoundingClientRect().width, info = chips.map(b => ({ b, x: tray._chips[+b.dataset.opc] || {}, w: b.getBoundingClientRect().width }));
+    const shown = info.filter(o => !o.x.extra), total = shown.reduce((a, o, i) => a + o.w + (i ? gap : 0), 0), needMore = info.some(o => o.x.extra) || total > W;
+    const budget = needMore ? W - mw - gap : W; let used = 0, full = false;
+    info.forEach(o => { if (o.x.extra || full || used + (used ? gap : 0) + o.w > budget) { o.b.classList.add('cut'); full = full || !o.x.extra; } else used += (used ? gap : 0) + o.w; });
+    if (!needMore) more.classList.add('cut'); }
+  try { new ResizeObserver(() => fit()).observe(tray); } catch (e) {}
   tools.addEventListener('click', e => { e.stopPropagation(); userOpen = trayOpen() ? '0' : '1'; try { localStorage.setItem('idle.opTray', userOpen); } catch (er) {} render(true); });
   // a chip: on a phone it is sent (typing costs too much there); on a computer it fills the input, to send or change. Genesis's chip is
   // handled by idle-genesis.js (data-gsay: the same as saying the step's words)
@@ -190,5 +200,5 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   //   refresh(), tray(), toggleTray(), yielding(), pos()/setPos(), templates()   (tests and the tray's own state)
   //   command(name, fn)                       a one-off slash command typed in the chat (/name + Enter); the slash table proper is idle-slash.js
   //   window.__opSuggest(ctx) → chips | Promise<chips>: the hook for generated suggestions (ctx: { genesis, step, phone })
-  window.__opwin = { command: (name, fn) => { COMMANDS[String(name).toLowerCase()] = fn; }, commands: () => Object.keys(COMMANDS), open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, glowing: () => glowSel, clearGlow, cutting: () => cutting, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text), all: templateChips(ctx()).map(x => x.text), more: showAll }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
+  window.__opwin = { command: (name, fn) => { COMMANDS[String(name).toLowerCase()] = fn; }, commands: () => Object.keys(COMMANDS), open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, glowing: () => glowSel, clearGlow, cutting: () => cutting, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: tray.hidden ? [] : [...tray.querySelectorAll('[data-opc]:not(.cut)')].map(b => ((tray._chips || [])[+b.dataset.opc] || {}).text).filter(Boolean), all: templateChips(ctx()).map(x => x.text), more: showAll }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
 })();
