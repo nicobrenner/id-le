@@ -21,7 +21,7 @@
     spawn: { help: 'spawn {kind}: crawly, tok or a special job (namer, blursort, crawler, debug, designer, counter, math, sorter)', run: a => AI().runTool('spawn', { kind: a.kind }) },
     rename: { help: 'rename {name, new_name}', run: a => AI().runTool('rename', { name: a.name, new_name: a.new_name }) },
     evolve: { help: 'evolve {name|"world", how?: mutate|big}', run: a => AI().runTool('evolve', { name: a.name, how: a.how }) },
-    rave: { help: 'rave {on: true|false}', run: a => { const m = M(); if (!m) return { error: 'no music deck here' }; if (a.on === false || a.on === 'off') m.setRave(false); else { m.setSource('deck'); m.setRave(true); } return { ok: true, rave: m.rave() }; } },
+    rave: { help: 'rave {on: true|false}', run: a => { const m = M(); if (!m) return { error: 'no music deck here' }; if (a.on === false || a.on === 'off') m.setRave(false); else m.setRave(true); return { ok: true, rave: m.rave() }; } },
     feed: { help: 'feed {words: [..up to 12], near?}: drop words on the floor for the creatures', run: a => AI().runTool('place_words', { words: [].concat(a.words || []).slice(0, 12).map(String), near: a.near }) },
   };
   // a line in the Operator chat the player is looking at: your own AI's thread, or the lab's (the coding-agent relay, the default)
