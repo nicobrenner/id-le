@@ -84,7 +84,7 @@
   css.textContent = `#ai-bar{display:flex;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid #8884;font-size:12px}#ai-bar select{flex:1 1 0;min-width:0;font:12px var(--ui-font,system-ui);background:transparent;color:inherit;border:1px solid #8886;border-radius:6px;padding:3px}
 #ai-bar button{font-size:12px;padding:2px 8px}#ai-set{display:none;padding:8px 10px;border-bottom:1px solid #8884;font-size:12px;line-height:1.5}#ai-set.on{display:block}#ai-set label{display:block;margin:4px 0}#ai-set input[type=text],#ai-set input[type=password]{width:100%;box-sizing:border-box;font:12px ui-monospace,Menlo,monospace;background:transparent;color:inherit;border:1px solid #8886;border-radius:5px;padding:3px 5px}
 #ai-set small{display:block;opacity:.65}#ai-set .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}#ai-thread{flex:1;overflow:auto;padding:8px 10px;font-size:16px;line-height:1.45;display:none}#lab.ai #ai-thread{display:block}#lab.ai #lab-thread{display:none}
-.ai-row{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881;white-space:pre-wrap}.ai-row>b:first-child{display:none}.ai-row.you{margin-left:18%;background:#2b5cff2e}.ai-row:not(.you):not(.err):not(.page){margin-right:12%}.ai-row.page{background:none;opacity:.65;font-size:.92em;padding:2px 4px}.ai-row.you{background:#2b5cff22}.ai-row.err{background:#e5484d22}.ai-chip{display:inline-block;margin:3px 0;padding:2px 8px;border-radius:10px;border:1px solid #8886;font-size:12px;opacity:.9}
+.ai-row .ai-deck{font:inherit;margin:0 0 0 2px;padding:2px 9px;border-radius:12px;border:1px solid #ffd54a88;background:#ffd54a22;color:inherit;cursor:pointer;min-height:28px}.ai-row .ai-deck:hover{background:#ffd54a44}.ai-row a.mn{pointer-events:auto}.ai-row{margin:6px 0;padding:6px 8px;border-radius:8px;background:#8881;white-space:pre-wrap}.ai-row>b:first-child{display:none}.ai-row.you{margin-left:18%;background:#2b5cff2e}.ai-row:not(.you):not(.err):not(.page){margin-right:12%}.ai-row.page{background:none;opacity:.65;font-size:.92em;padding:2px 4px}.ai-row.you{background:#2b5cff22}.ai-row.err{background:#e5484d22}.ai-chip{display:inline-block;margin:3px 0;padding:2px 8px;border-radius:10px;border:1px solid #8886;font-size:12px;opacity:.9}
 .ai-chip.err{border-color:#e5484d;color:#e5484d}.ai-ask{margin:6px 0;padding:6px 8px;border:1px dashed #8888;border-radius:8px;font-size:12px}.ai-ask button{margin:4px 4px 0 0}.ai-busy{opacity:.6;font-size:12px;margin:4px 0}
 #ai-smart-btn{margin:6px 10px 0;font-size:12px;padding:4px 10px;border-radius:14px;border:1px solid #b07cff;background:#b07cff18;color:inherit;cursor:pointer;animation:aiGlow 2.6s ease-in-out infinite}
 @keyframes aiGlow{0%,100%{box-shadow:0 0 0 #b07cff00}50%{box-shadow:0 0 12px #b07cff99}}@media (prefers-reduced-motion:reduce){#ai-smart-btn{animation:none}}
@@ -160,7 +160,10 @@
     const o = brainSel.querySelector('option[value=relay]'); if (o) o.remove(); if (cfg.brain === 'relay' || (!ready() && !cfg.chosen)) { cfg.brain = 'tiny'; brainSel.value = 'tiny'; }
     { const N = window.IDLE_NAMES; const hb = $('#lab-head b'); const P_ = N && N.op; hb.textContent = P_ ? `${P_.icon} ${P_.short}` : '📟 Operator'; hb.title = P_ ? P_.sub : 'the Tiny Operator: the chat that runs the consciousness'; } applyBrain(); if (!thread.childElementCount) add('page', cfg.brain === 'tiny' ? 'the Operator runs this consciousness: ask it to change the weather, add a creature, start a rave, rename someone, or just chat. ⚡ has quick actions' : 'the Operator talks to the AI you brought (⚙ settings → 🔮 Oracle to change it). ⚡ has quick actions'); });
 
-  function add(who, msg, cls) { const d = document.createElement('div'); d.className = 'ai-row ' + (cls || who); d.innerHTML = '<b>' + esc(who) + '</b> ' + esc(msg); thread.appendChild(d); thread.scrollTop = 1e9; return d; }
+  // the Operator's own lines name creatures as @mentions (Nov 4, Nico: "Lindle just walked in 🐣 ... remember our rule of @ mentions"): the arena's
+  // linker, the same hover card and click-to-find as IRC and the notices
+  const linked = (who, msg) => (who === 'TO' || who === 'AI') && window.__linkNames ? window.__linkNames(esc(msg), true) : esc(msg);
+  function add(who, msg, cls) { const d = document.createElement('div'); d.className = 'ai-row ' + (cls || who); d.innerHTML = '<b>' + esc(who) + '</b> ' + linked(who, msg); thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   function chip(t, err) { const d = document.createElement('div'); d.className = 'ai-chip' + (err ? ' err' : ''); d.textContent = t; thread.appendChild(d); thread.scrollTop = 1e9; return d; }
   const ask = q => new Promise(ok => { const d = document.createElement('div'); d.className = 'ai-ask'; d.innerHTML = `<b>your AI asks:</b> ${esc(q)}<br><button data-a="1">allow</button><button data-a="0">no</button>`; thread.appendChild(d); thread.scrollTop = 1e9;
     d.addEventListener('click', e => { const a = e.target.dataset.a; if (a == null) return; d.innerHTML = '<b>your AI asked:</b> ' + esc(q) + ' · ' + (a === '1' ? 'allowed' : 'declined'); ok(a === '1'); }); });
@@ -296,7 +299,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
         const [name, input] = call; let res;
         if (name === 'words' || name === 'first_creatures' || name === 'light' || name === 'music') { res = await genesisAct(name, input.arg);
           const el = chip({ words: '🔤 let there be words' + (res.topic ? ': ' + res.topic : ''), first_creatures: '🐣 the first creatures' + (res.fam ? ' (' + res.fam + ')' : ''), light: '☀ let there be light', music: '🎵 music' }[name]); el.title = tip; if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; } }
-        else if (name === 'rave_on' || name === 'rave_off') { const M = window.__music; const el = chip((name === 'rave_on' ? '🕺 rave on' : '🔇 rave off')); el.title = tip; if (M) { if (name === 'rave_on') { M.setSource('deck'); M.setRave(true); } else M.setRave(false); res = { ok: true }; } else { res = { error: 'no music deck here' }; el.classList.add('err'); } }
+        else if (name === 'rave_on' || name === 'rave_off') { const M = window.__music; const el = chip((name === 'rave_on' ? '🕺 rave on' : '🔇 rave off')); el.title = tip; if (M) { M.setRave(name === 'rave_on'); res = { ok: true }; } else { res = { error: 'no music deck here' }; el.classList.add('err'); } }
         else { const el = chip(chipText(name, input)); el.title = tip; try { res = await runTool(name, input); } catch (e) { res = { error: String(e.message || e) }; } if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; } }
         acted = name; lastRes = res;
         // the Oracle's line starts from what just happened (like its comments on the world), then the model goes on in its own voice
@@ -317,11 +320,21 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     const unsure = !opts.noAct && !acted && WORLD_OPTS.has(r.option) && r.option !== 'look';
     let said = unsure ? UNSURE_LINE : await O.reply(t, seed); if (!unsure && (!said || said.length < 3)) said = await O.reply(t, seed);   // one retry: the tiny model sometimes stops at once
     if (said) add('TO', said, 'ai');
+    if (acted === 'rave_on' && lastRes && lastRes.ok) deckHint();
     const out = acted ? (lastRes && lastRes.error ? 'error' : 'acted') : WORLD_OPTS.has(r.option) ? 'unsure' : 'chat';
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'tiny_operator', extra: { option: r.option, p: +p.toFixed(2), acted, out } } })); } catch (e) {}
     return { option: r.option, p, arg: r.arg, target: r.target, acted, said };
   }
 
+  // after a rave starts here (Nov 4, Nico: "starting a rave should either open the deck/music, or display a music/deck button on the operator
+  // chat"): a line with a 🎧 chip that opens the deck; on a phone the Operator closes first (both sheets don't fit), on a computer both stay open
+  const isPhone = () => matchMedia('(max-width: 500px)').matches;
+  function openDeck() { const M = window.__music; if (!M) return; if (isPhone()) try { window.__opwin && window.__opwin.close && window.__opwin.close(); } catch (e) {} if (M.open) M.open(true); else document.getElementById('djBtn')?.click();
+    const op = document.getElementById('lab'); if (!isPhone() && op && op.getClientRects().length && M.beside) M.beside(op.getBoundingClientRect()); }
+  function deckHint() { const d = add('TO', 'the rave is on 🕺 · ', 'ai'); d.classList.add('ai-deckhint'); const b = document.createElement('button'); b.className = 'ai-deck'; b.type = 'button';
+    b.title = 'open the 🎧 deck: tempo, drums, the drop, the lights'; b.textContent = '🎧 open the deck to DJ'; b.addEventListener('click', openDeck); d.appendChild(b); thread.scrollTop = 1e9; return d; }
+  const raveOn = () => { const M = window.__music; if (!M) return { error: 'no music deck here' }; M.setRave(true); return { ok: true, rave: true }; };
+  const raveOff = () => { const M = window.__music; if (!M) return { error: 'no music deck here' }; M.setRave(false); return { ok: true }; };
   // ---------- quick actions (the ⚡ tray; Nov 4, Nico: "some of the basic auto-actions/predefined on the operator chat, don't even work! those
   // should all work always"): a chip, or its exact words typed (command syntax, like /slash: case, spaces and end punctuation only), runs its
   // action directly through the same tools, with a short line from the Operator; never through the model's reading of free text (which had
@@ -333,8 +346,11 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
     'make it rain': { tag: '☔ rain', run: () => runTool('weather', { kind: 'bitrain' }), say: () => 'rain it is ☔' },
     'a sunny day': { tag: '☀ a sunny day', run: () => runTool('weather', { kind: 'clear' }), say: () => 'clear skies it is ☀' },
     'add a new creature': { tag: '🐣 a new creature', run: () => runTool('spawn', { kind: NEWKINDS[Math.floor(Math.random() * NEWKINDS.length)] }), say: r => `${r.name} just walked in 🐣` },
-    'start a rave': { tag: '🕺 rave on', run: async () => { const M = window.__music; if (!M) return { error: 'no music deck here' }; M.setSource('deck'); M.setRave(true); return { ok: true }; }, say: () => 'the music is up and they are dancing 🕺' },
-    'stop the rave': { tag: '🔇 rave off', run: async () => { const M = window.__music; if (!M) return { error: 'no music deck here' }; M.setRave(false); return { ok: true }; }, say: () => 'party over, the floor is quiet again' },
+    'start a rave': { tag: '🕺 rave on', run: async () => raveOn(), say: () => null, after: deckHint },
+    'stop the rave': { tag: '🔇 rave off', run: async () => raveOff(), say: () => 'party over, the floor is quiet again' },
+    // music off with no rave: plays → off; during a rave it ends the rave (the music goes back to what it was)
+    'music off': { tag: '🔇 music off', run: async () => { const M = window.__music; if (!M) return { error: 'no music here' }; if (M.rave()) { M.setRave(false); return { ok: true, rave: true }; } M.setSource('off'); return { ok: true }; },
+      say: r => r.rave ? 'party over, the music is back to how it was' : 'music off 🔇' },
     'evolve a creature': { tag: '🧬 evolve', run: () => { const n = someone(); return n ? runTool('evolve', { name: n }) : { error: 'nobody here to evolve yet' }; }, say: r => `${r.evolved} just mutated 🧬` },
     "what's happening?": { tag: '👀 a look around', run: () => runTool('look', {}), say: r => { const c = r.counts || {}, w = (r.weather && r.weather.name) || 'quiet weather';
       return `${c.creatures ?? 'some'} creatures, ${c.words ?? 'lots of'} words, ${w}` + (r.mood ? `. the mood: ${r.mood}` : ''); } },
@@ -343,6 +359,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   // the opposites (Nov 4, Nico: "with a ⚡ I can easily start the rave, but then I can't turn it off"): explicit words, command syntax only
   QUICK['clear the sky'] = { tag: '☀ clear skies', run: () => runTool('weather', { kind: 'clear' }), say: () => 'the rain stops ☀' };
   for (const k of ['stop a rave', 'stop rave', 'rave off', 'end the rave', 'end rave']) QUICK[k] = QUICK['stop the rave'];
+  for (const k of ['stop music', 'stop the music', 'music stop', 'turn off the music', 'no music']) QUICK[k] = QUICK['music off'];
   for (const k of ['stop the rain', 'stop rain', 'sunny']) QUICK[k] = QUICK['clear the sky'];
   // the world's state for the ⚡ chips (idle-opwin.js shows "stop the rave" while it's on, "clear the sky" while it rains)
   const WET = new Set(['bitrain', 'storm', 'static']);
@@ -357,7 +374,7 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   async function quick(t, from) { const q = quickOf(t); if (!q || quickBusy) return null; quickBusy = true;
     try { add('you', t); const el = chip(q.tag); let res; try { res = await q.run(); } catch (e) { res = { error: String(e.message || e) }; }
       if (res && res.error) { el.classList.add('err'); el.textContent += ' · ' + res.error; add('TO', 'that did not work: ' + res.error, 'ai'); }
-      else add('TO', q.say(res || {}), 'ai');
+      else { const line = q.say(res || {}); if (line) add('TO', line, 'ai'); if (q.after) q.after(res || {}); }
       qsVal = null; try { window.__opwin && window.__opwin.refresh && window.__opwin.refresh(); } catch (e) {}
       try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_quick', extra: { q: QK(t).slice(0, 24), from: from || 'typed', ok: !(res && res.error) } } })); } catch (e) {}
       return res || { ok: true }; } finally { quickBusy = false; } }
@@ -381,5 +398,5 @@ Be brief, warm and a little playful; talk about the creatures by name. Look befo
   const quickFirst = e => { const t = text.value.trim(); if (!quickOf(t)) return false; e.stopImmediatePropagation(); e.preventDefault(); text.value = ''; quick(t, 'typed'); return true; };
   sendBtn.addEventListener('click', e => { if (quickFirst(e)) return; if (cfg.brain === 'relay') return; e.stopImmediatePropagation(); e.preventDefault(); sendAI(); }, true);
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing && quickFirst(e)) return; if (cfg.brain === 'relay') return; if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.stopImmediatePropagation(); e.preventDefault(); sendAI(); } }, true);
-  window.__idleAI = { quick, quickOf, quickState, unsureLine: UNSURE_LINE, bar: o => WORLD_OPTS.has(o) ? (SURE[o] ?? SURE0) : null, quickList: () => Object.keys(QUICK), cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: (t, opts) => tinyTurn(t, opts), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
+  window.__idleAI = { openDeck, quick, quickOf, quickState, unsureLine: UNSURE_LINE, bar: o => WORLD_OPTS.has(o) ? (SURE[o] ?? SURE0) : null, quickList: () => Object.keys(QUICK), cfg: () => ({ ...cfg, anthropic: { ...cfg.anthropic, key: cfg.anthropic.key ? '•••' : '' }, openai: { ...cfg.openai, key: cfg.openai.key ? '•••' : '' } }), tools: () => TOOLS.map(t => t.name), runTool, send: s => { text.value = s; return sendAI(); }, convo: () => convo, tiny: (t, opts) => tinyTurn(t, opts), heads: loadH3, add: (who, msg, cls) => add(who, msg, cls) };
 })();
