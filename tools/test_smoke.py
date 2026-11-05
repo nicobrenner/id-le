@@ -3551,6 +3551,32 @@ def t_arm_stats(P):
     return "visit reports carry their arm: " + ", ".join(f"{a} {len(r)} reports" for a, r in got.items())
 
 
+
+def t_arm_draw(P, root, n=30):
+    """Nov 4: production counted arms assigned story 9 · choose 6 · play 1. On the production hostname (served from the build), n fresh
+    browsers with Math.random left alone: every drawn arm (idle.gv) must send exactly one confirmed arm beacon (aa) within 20 s"""
+    P.base, P.root = "https://id-le.com", root
+    drawn, sent, late = {}, {}, []
+    for i in range(n):
+        P.stats.clear(); P.beacon_seen = set() if hasattr(P, "beacon_seen") else set()
+        ctx = P.ctx.browser.new_context(viewport={"width": 1280, "height": 800}); Q = Page(ctx, P.base, P.stats); Q.root = root
+        try:
+            q = Q.open("/"); t0 = time.time(); gv = None; got = []
+            while time.time() - t0 < 20:
+                q.wait_for_timeout(500)
+                gv = q.evaluate("() => { try { return localStorage.getItem('idle.gv') } catch (e) { return null } }")
+                got = [json.loads(b) for b in P.stats if '"aa"' in b]
+                if gv and got: break
+            drawn[gv] = drawn.get(gv, 0) + 1
+            for x in got: sent[x["aa"]] = sent.get(x["aa"], 0) + 1
+            if gv and not got: late.append((i, gv, q.evaluate("() => ({ pend: window.__stats && window.__stats.pending(), live: window.__stats && window.__stats.live(), hidden: document.hidden, sent: localStorage.getItem('idle.armSent') })")))
+        finally:
+            ctx.close()
+    need(not late, f"arms drawn without a confirmed beacon within 20 s: {late[:5]} (drawn {drawn}, beacons {sent})")
+    need(sum(sent.values()) == sum(v for k, v in drawn.items() if k), f"one beacon per drawn arm: drawn {drawn}, beacons {sent}")
+    P.clean()
+    return f"{n} fresh browsers on id-le.com: drawn {drawn}, beacons {sent}"
+
 def t_beacon_ack(P):
     """Confirmed beacons (Nov 4, after a stale accumulator dropped the daily beacons while pages had already set their flags): a beacon's
     flag is set only when the server answers { stored: true }. A failed answer → still pending → sent again on the next load, counted once;
@@ -4912,7 +4938,7 @@ def browser_tests(a, out):
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
         ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
-        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
+        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("arm draw", t_arm_draw, (out,), {"service_workers": "block"}), ("arm draw sw", t_arm_draw, (out,), {}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
