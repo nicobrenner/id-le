@@ -2426,6 +2426,61 @@ def t_intent_story(P):
     P.clean()
     return f"Genesis 'start a rave' → not yet; ?start=ready and ?lab with words pending → playground, no badge, ⚡, rave works, resumable; open steady ({len(rects)} frames)"
 
+# genpan: what covers the black hole (screen point W*.74, H*.3 of the cosmos canvas): any element painted over it with a visible background
+GP_COVER = r"""() => { const A = document.getElementById('arena').getBoundingClientRect(), x = innerWidth * 0.74, y = innerHeight * 0.3, cv = document.getElementById('genCosmos'); const out = [];
+  if (!cv) return ['no cosmos'];
+  for (const el of document.querySelectorAll('#arena *, body > *')) { if (el === cv || el.contains(cv)) continue; const r = el.getBoundingClientRect(); if (!(r.left <= x && r.right >= x && r.top <= y && r.bottom >= y)) continue;
+    let op = 1, vis = true; for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const c = getComputedStyle(e); op *= +c.opacity; if (c.display === 'none' || c.visibility === 'hidden') vis = false; }
+    const cs = getComputedStyle(el), m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/), al = m ? (m[1].split(',')[3] === undefined ? 1 : +m[1].split(',')[3]) : 0;
+    if (vis && op > 0.02 && (al > 0.02 || cs.backgroundImage !== 'none')) out.push(`${el.tagName}#${el.id}.${String(el.className).slice(0, 30)} bg=${cs.backgroundColor} img=${cs.backgroundImage.slice(0, 30)} op=${op.toFixed(2)}`); }
+  return out; }"""
+
+def gp_to_genesis(pg, P):
+    wait_for(pg, "() => !!(window.__epoch0 && window.__epoch0.waiting())", 60, P=P); pg.keyboard.press("k"); pg.wait_for_timeout(1500); pg.keyboard.press("Escape")
+    for _ in range(60):
+        pg.wait_for_timeout(1000)
+        if pg.evaluate("() => window.__genesis.ready()"): break
+        pg.mouse.click(400, 300)
+
+def gp_drag(pg, dx, dy):
+    W, H = pg.viewport_size["width"], pg.viewport_size["height"]; x0, y0 = W * 0.35, H * 0.55
+    pg.mouse.move(x0, y0); pg.mouse.down()
+    for i in range(1, 13): pg.mouse.move(x0 + dx * i / 12, y0 + dy * i / 12); pg.wait_for_timeout(16)
+    pg.mouse.up(); pg.wait_for_timeout(500)
+
+GP_NIGHT = "() => { const d = document.getElementById('daylight'); if (d) d.style.background = 'rgba(10,20,70,0.3)'; }"   # the day cycle's night veil (it comes every few minutes)
+GP_CORNERS = ((-500, 400), (500, -400), (500, 400), (-500, -400))
+
+def t_genpan(P):
+    """Genesis with the floor dragged around (Nov 4, Nico: "I can drag the background... any corner I drag the mouse to, it ends up putting some
+    sort of overlay on the sun... when sending 'let there be life', the thunders hit kind of where I was looking, but the creatures appeared
+    elsewhere, in fact not on screen"). The veil was the day cycle's tint (#daylight, a night veil every few minutes) over the cosmos's own sky;
+    the creatures went to the words nearest the view's centre, wherever they were. Drag to each corner, before and after the words, with the
+    night veil on: nothing covers the hole; then life: the strikes and all three creatures are on screen"""
+    pg = P.open("/arena.html?story&noauto"); gp_to_genesis(pg, P); shots = os.environ.get("IDLE_GENPAN_SHOTS")
+    for step, say in (("light", "lights on"), ("words", "let there be words"), ("creatures", None)):
+        wait_for(pg, f"() => window.__genesis.next() === '{step}' && window.__genesis.ready()", 120, P=P)
+        if step == "light":
+            pg.fill("#lab-text", say); pg.press("#lab-text", "Enter"); continue
+        for i, (dx, dy) in enumerate(GP_CORNERS):
+            pg.evaluate(GP_NIGHT); gp_drag(pg, dx, dy)
+            cov = pg.evaluate(GP_COVER); need(not cov, f"{step}, dragged {i}: the hole is covered: {cov}")
+            if shots: pg.screenshot(path=os.path.join(shots, f"genesis-{step}-drag{i}.png"))
+        if say: pg.fill("#lab-text", say); pg.press("#lab-text", "Enter")
+    gp_drag(pg, -700, -300)   # the words are now off to the side: life must still land on screen
+    pg.fill("#lab-text", "let there be life"); pg.press("#lab-text", "Enter")
+    wait_for(pg, "() => (window.__genesis.gsound.state().strikes || []).length >= 3", 90, P=P); pg.wait_for_timeout(1200)
+    if shots: pg.screenshot(path=os.path.join(shots, "genesis-life.png"))
+    r = pg.evaluate("""() => { const S = window.__genesis.gsound.state(), A = document.getElementById('arena').getBoundingClientRect(), L = window.__lakeHooks, cam = L.cam(), sp = L.space(), z = cam.z || 1;
+      const scr = c => ({ x: A.left + A.width / 2 + L.wd(cam.x, c.x, sp.W) * z, y: A.top + A.height / 2 + L.wd(cam.y, c.y, sp.H) * z });
+      const ins = p => p.x >= A.left && p.x <= A.right && p.y >= A.top && p.y <= A.bottom;
+      const born = S.strikes.map(s => window.__genHooks.creatures().find(c => c.name === s.who)).filter(Boolean);
+      return { spots: S.spots, spotsIn: (S.spots || []).every(ins), born: born.map(c => [c.name, Math.round(scr(c).x), Math.round(scr(c).y), ins(scr(c))]), near: born.every((c, i) => S.spots[i] && Math.hypot(scr(c).x - S.spots[i].x, scr(c).y - S.spots[i].y) < 80) }; }""")
+    need(len(r["born"]) == 3 and all(b[3] for b in r["born"]), f"life after a drag: every creature on screen: {r}")
+    need(r["spotsIn"] and r["near"], f"life after a drag: strikes on screen, each creature where its strike hit: {r}")
+    P.clean()
+    return f"dragged to 4 corners at the words and at life with the night veil: hole never covered; life after a drag: strikes {[(round(s['x']), round(s['y']), s['word']) for s in r['spots']]}, creatures {[(b[0], b[1], b[2]) for b in r['born']]} on screen"
+
 def t_prelife(P):
     """No creature before life, also after a reload mid-Genesis (Nov 4, found by the greybox fork: a world restored at the life step showed a
     creature). Reload at each pending step (light, words, life): 0 creatures for a few seconds after the resume; then life brings 3"""
@@ -5373,7 +5428,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("intent story", t_intent_story, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("rave2", t_rave2, (), {}), ("rave2 phone", t_rave2, (True,), PHONE), ("rave2 reduced", t_rave2_reduced, (), {"reduced_motion": "reduce"}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("intent story", t_intent_story, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("rave2", t_rave2, (), {}), ("rave2 phone", t_rave2, (True,), PHONE), ("rave2 reduced", t_rave2_reduced, (), {"reduced_motion": "reduce"}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("genpan", t_genpan, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -5401,7 +5456,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"agent relay", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "rave2", "rave2 phone", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"agent relay", "genpan", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "rave2", "rave2 phone", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("agent relay", "agent relay: bring your own agent (pairing, tokens, limits, gate)", lambda: agent_unit()), ("agent relay server", "agent relay server: server.py's relay for local copies", lambda: agent_server_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
