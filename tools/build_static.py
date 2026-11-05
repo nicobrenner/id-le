@@ -22,6 +22,36 @@ ORT_TAG = f'<script src="{ORT_CDN}ort.min.js"></script>'
 # the one cached model is enough; the two old ones are only a fallback for checkouts without it
 COPY = ["pedia.html", "privacy.html", "live.html", "idle-runtime.js", "sw.js", "starter_world.json", "pedia_clips.json", "og-image.png", "og-image-square.png", "og-image-halloween.png", "intro_babble.json", "oracle_loss.json", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
         "arena_instr_v1.json", "arena_instr_v2.json", "arena_instr_v3.json", "arena_instr_v4.json", "genesis_gate.json", "arena_genomes.json", "datalab_stream.json"]
+PICK_URL = "https://id-le.com/review/intro-logo-animation"
+PICK_TITLE = "Help pick the best animation for Id|le's logo"
+PICK_DESC = "I built an animation picker: swipe through a dozen animations for Id|le's logo and help me pick the one that opens the story. No sign-up. Then try the game it opens: a little world of words and creatures, in your browser."
+SITEMAP = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://id-le.com/</loc></url>
+  <url><loc>https://id-le.com/review/intro-logo-animation</loc></url>
+  <url><loc>https://id-le.com/pedia</loc></url>
+</urlset>
+"""
+
+
+def pick_page(html):
+    """the game page for the logo pick's paths: base href, canonical, title and preview, and a readable heading"""
+    import html as H, re
+    t, d = H.escape(PICK_TITLE), H.escape(PICK_DESC)
+    def meta(h, attr, key, val):
+        pat = r'<meta %s="%s" content="[^"]*">' % (attr, re.escape(key))
+        assert len(re.findall(pat, h)) == 1, key
+        return re.sub(pat, lambda m: '<meta %s="%s" content="%s">' % (attr, key, val), h)
+    h = html.replace('<meta charset="utf-8">', '<meta charset="utf-8"><base href="/">', 1)
+    assert h.count('<link rel="canonical" href="https://id-le.com/">') == 1 and h.count("<title>Id|le</title>") == 1
+    h = h.replace('<link rel="canonical" href="https://id-le.com/">', '<link rel="canonical" href="%s">' % PICK_URL, 1).replace("<title>Id|le</title>", "<title>%s · Id|le</title>" % t, 1)
+    h = meta(h, "name", "description", d); h = meta(h, "property", "og:url", PICK_URL); h = meta(h, "property", "og:title", t); h = meta(h, "property", "og:description", d)
+    tag = "</style></head><body>"; assert h.count(tag) == 1
+    seo = ('<header id="pickSeo" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">'
+           '<h1>%s</h1><p>%s</p></header>' % (t, d))
+    return h.replace(tag, tag + seo, 1)
+
+
 HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
@@ -122,6 +152,13 @@ def main():
     html = html.replace(ORT_TAG, '<script src="vendor/ort/ort.min.js"></script>')
     for name in ("index.html", "arena.html"):   # index for the site root; arena.html because the pedia reads the game's own source
         open(os.path.join(out, name), "w", encoding="utf-8").write(html)
+    # the logo pick (Nov 6, Nico: "id-le.com/pick/logo or id-le.com/review/intro-logo-animation … better for SEO, easier to understand"): the
+    # game page at those paths (Cloudflare Pages serves review/intro-logo-animation.html at /review/intro-logo-animation: the URL stays as
+    # posted), with <base href="/"> so its relative files load from a nested path, its own title and preview, one canonical address, and a
+    # heading crawlers can read; idle-reviews.js opens the logo review first thing on these paths
+    # (written below, after stamp_versions, from the stamped index.html, so their scripts carry the same ?v= fingerprints)
+    if not a.staging:   # staging stays noindex; id-le.com lists its pages
+        open(os.path.join(out, "sitemap.xml"), "w").write(SITEMAP); open(os.path.join(out, "robots.txt"), "w").write("User-agent: *\nAllow: /\nSitemap: https://id-le.com/sitemap.xml\n")
     # every game module (idle-*.js) the page loads, so new ones are never left out of the build
     for f in COPY + sorted(x for x in os.listdir(DEMO) if x.startswith('idle-') and x.endswith('.js') and x not in COPY):
         src = os.path.join(DEMO, f)
@@ -142,6 +179,9 @@ def main():
     sums = vendor_ort(out)
     if a.staging: mark_staging(out)
     stamp_versions(out)
+    pk = pick_page(open(os.path.join(out, "index.html"), encoding="utf-8").read())
+    for rel in ("review/intro-logo-animation.html", "pick/logo.html", "pick/logos.html"):
+        os.makedirs(os.path.dirname(os.path.join(out, rel)), exist_ok=True); open(os.path.join(out, rel), "w", encoding="utf-8").write(pk)
     open(os.path.join(out, "_headers"), "w").write(HEADERS.replace("/*\n", "/*\n  X-Robots-Tag: noindex, nofollow\n", 1) if a.staging else HEADERS)
     if a.staging or a.agent: open(os.path.join(out, "_headers"), "a").write("/agent/SKILL.md\n  Content-Type: text/markdown; charset=utf-8\n  Cache-Control: no-cache\n")
     if a.pages_helper:   # Pages advanced mode: static files as usual, the helper (helper/worker.js) on the same origin
@@ -162,6 +202,8 @@ export default {
         .on('meta[property="og:description"]', set(d)).on('meta[name="twitter:description"]', set(d)).on('meta[property="og:url"]', set(u.origin + '/?halloween'))
         .on('meta[property="og:image:alt"]', set("The Id|le wordmark with an orange bar over a moonlit world of words: it is Halloween")).transform(a);
     } else r = await env.ASSETS.fetch(req);
+    // the logo pick's paths (/review/…, /pick/…): one that doesn't exist goes to the game, never a bare 404
+    if (r.status === 404 && (p.startsWith('/review/') || p.startsWith('/pick/'))) return Response.redirect(new URL('/', req.url).toString(), 302);
     // every HTML page served here is counted by the server (pageview in helper/worker.js), after the response and never delaying it
     const page = helper.pages[p]; if (page && ctx && ctx.waitUntil) ctx.waitUntil(helper.pageview(req, env, page, r));
     return r;
@@ -172,7 +214,7 @@ export default {
         # only these paths invoke the Worker (Pages Functions: 100,000 invocations a day on the free plan); every other file is served
         # as a plain asset. The pages themselves are in because the Worker counts page views (and swaps the link-preview tags for
         # Halloween links).
-        json.dump({"version": 1, "include": ["/", "/index.html", "/arena.html", "/pedia", "/pedia.html", "/privacy", "/privacy.html", "/lab/*", "/worlds/*", "/jeffy/*"], "exclude": []}, open(os.path.join(out, "_routes.json"), "w"))
+        json.dump({"version": 1, "include": ["/", "/index.html", "/arena.html", "/pedia", "/pedia.html", "/privacy", "/privacy.html", "/review/*", "/pick/*", "/lab/*", "/worlds/*", "/jeffy/*"], "exclude": []}, open(os.path.join(out, "_routes.json"), "w"))
     size = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(out) for f in fs)
     json.dump({"ort": ORT_VER, "ort_sha256_16": sums, "helper": a.helper, "bytes": size}, open(os.path.join(out, "build.json"), "w"), indent=1)
     print(f"dist ready: {out} ({size / 1e6:.1f} MB). Try: python3 -m http.server 8776 -d {os.path.relpath(out)}")

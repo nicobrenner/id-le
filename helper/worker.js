@@ -157,7 +157,7 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown_old', 'offer_go_old', 'offer_later_old', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'offer_shown_v3', 'offer_go_v3', 'offer_later_v3', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip',
+const SFSTEP = ['entry_pick', 'pk_open', 'pk_first', 'pk_done', 'pk_go_story', 'pk_go_free', 'pk_go_lab', 'pk_close', 'entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown_old', 'offer_go_old', 'offer_later_old', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'offer_shown_v3', 'offer_go_v3', 'offer_later_v3', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
@@ -186,7 +186,7 @@ const INTERNAL_TAGS = ['prod-check', 'launch-check', 'split-prod', 'split-stagin
 const AA_ARMS = ['story', 'choose', 'play'];
 // engaged (Nov 4): idle-stats.js's tiny daily beacons: { dd: arm } here today, { en: act, ar: arm } first deliberate act today,
 // { cb: arm, b: bucket } came back on a later day. Counted per arm (and act / bucket), once per browser per day by the page; never a batch
-const EN_ARMS = ['story', 'choose', 'play', 'none'];
+const EN_ARMS = ['story', 'choose', 'play', 'none', 'pick'];   // 'pick': came by the logo pick link (Nov 6)
 const EN_ACTS = ['op_msg', 'irc_msg', 'cr_talk', 'cr_card', 'cr_name', 'cr_feed', 'e0_done', 'vote', 'sci_sent', 'hitl_join', 'review', 'ask_name', 'ask_logo'];
 const enBeacon = (p, o) => { if (p.dd !== undefined) { if (EN_ARMS.includes(p.dd)) { o.dd = o.dd || {}; bump(o.dd, p.dd); } return true; }
   if (p.en !== undefined) { if (EN_ACTS.includes(p.en) && EN_ARMS.includes(p.ar)) { o.en = o.en || {}; bump(o.en, p.ar + '|' + p.en); } return true; }
@@ -357,7 +357,7 @@ export async function statsAcc(storage, path, body, now = Date.now()) {
 // is stored. The salt is new each UTC day (from the UV_SECRET env var + the date, or a random value kept in KV that expires 30 hours
 // after its day starts), so a hash can't be linked across days. A visit is a page view whose hash wasn't seen in the last 30 minutes
 // in this isolate's memory (so the one-time reload for cross-origin isolation doesn't count twice); that memory is never written.
-const PV_PAGES = { '/': 'game', '/index.html': 'game', '/arena.html': 'game', '/pedia': 'pedia', '/pedia.html': 'pedia', '/privacy': 'privacy', '/privacy.html': 'privacy' };
+const PV_PAGES = { '/review/intro-logo-animation': 'game', '/pick/logo': 'game', '/pick/logos': 'game', '/': 'game', '/index.html': 'game', '/arena.html': 'game', '/pedia': 'pedia', '/pedia.html': 'pedia', '/privacy': 'privacy', '/privacy.html': 'privacy' };
 const HLL_P = 11, HLL_M = 1 << HLL_P, PV_CAP = { ref: 40, utm: 30, cc: 80 };
 const EMPTY_PV = () => ({ views: {}, visits: {}, gpc: {}, bots: {}, botWhy: {}, ref: {}, utm: {}, dev: {}, cc: {}, hll: {} });
 // bots, previews and scripts: never counted with people. Real browsers send a long UA and Accept-Language; these don't, or say so.
@@ -780,6 +780,7 @@ const REVIEWS = {
 // SHA-256(key + BKEY_SALT) is kept: in a review's totals (what that browser already rated) and in a team (that it joined, when, and how many
 // review batches it sent: the cliff check). A future "claim" can prove ownership by presenting the key. The salt is a constant: the hash
 // must stay the same over time.
+const PICK_OPEN = ['logos'];   // reviews the pick link opens to everyone (/review/intro-logo-animation)
 const BKEY_SALT = 'id-le review bkey v1', BKEY = /^[a-z2-7]{26}$/;
 const bkHash = async k => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(k + '|' + BKEY_SALT))).slice(0, 16), x => x.toString(16).padStart(2, '0')).join('');
 const RID = /^[a-z0-9-]{1,40}$/, RITEM = /^[a-z0-9-]{1,40}$/, RV_KINDS = ['logos', 'fonts', 'creatures', 'objects'], RV_DAY_MAX = 60, rvMem = { cfg: new Map(), n: new Map() };
@@ -843,7 +844,9 @@ async function review(req, env, path, ip) {
   // the one-tap ask at EPOCH 0 COMPLETE (Nov 4): a single 'which one?' pair between the two openings players actually saw, from anyone (no team)
   const ASK_PAIR = ['c3-typed-dust', 'c3-typed-crt'];
   const askOk = q && q.ask === 'e0' && rid === 'logos' && !Object.keys(scores).length && pairs.length === 1 && pairs[0].split('>').every(x => ASK_PAIR.includes(x));
-  let td = null; if (c.stage === 'team' && !askOk) { td = await teamDoc(env, c.team); if (!td.m[bk]) return json({ error: 'this review is for the team: join it first', team: c.team }, 403); }
+  // the logo pick link (Nov 6, Nico: "post only the 'reviews' thing as a direct link … Show HN"): the logos review takes anyone who came by it
+  const pickOk = q && q.via === 'pick' && PICK_OPEN.includes(rid);
+  let td = null; if (c.stage === 'team' && !askOk && !pickOk) { td = await teamDoc(env, c.team); if (!td.m[bk]) return json({ error: 'this review is for the team: join it first', team: c.team }, 403); }
   const a = await rvAgg(env, rid), mine = a.k[bk] || { i: [], p: [], t: 0 }, all = mine.i.includes('*');
   const newS = Object.entries(scores).filter(([k]) => !all && !mine.i.includes(k)), newP = pairs.filter(p => { const [x, y] = p.split('>'); return !mine.p.includes(p) && !mine.p.includes(y + '>' + x); });
   if (!newS.length && !newP.length) return json({ error: 'this browser already sent these', already: true }, 409);
@@ -851,7 +854,7 @@ async function review(req, env, path, ip) {
   const [day, h] = await fbHash(env, ip, 'review'), ck = 'rvrl:' + day + ':' + h;
   const n = Math.max(rvMem.n.get(ck) || 0, +(await kv.get(ck)) || 0); if (n >= RV_DAY_MAX) return json({ error: 'that is a lot of reviews for one day' }, 429);
   rvMem.n.set(ck, n + 1); if (rvMem.n.size > 20000) rvMem.n.clear(); await kv.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
-  if (!a.k[bk]) a.sends++; mine.t = Date.now();
+  if (!a.k[bk]) { a.sends++; if (pickOk) a.pick = (a.pick || 0) + 1; } mine.t = Date.now();
   for (const [k, v] of newS) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.n++; x.sum += v; x.s[v] = (x.s[v] || 0) + 1; mine.i.push(k); }
   for (const p of newP) { a.pw[p] = (a.pw[p] || 0) + 1; mine.p.push(p); }
   a.k[bk] = mine; await kv.put('review:' + rid + ':agg', JSON.stringify(a));

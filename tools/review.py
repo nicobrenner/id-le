@@ -135,7 +135,8 @@ def main():
     if not cfg:
         sys.exit("no such review")
     agg = json.loads(kv.get(f"review:{a.rid}:agg") or "null") or {"sends": 0, "items": {}}
-    print(f"review {a.rid} ({cfg['kind']}, {cfg.get('stage', 'public')} stage, {'open' if cfg.get('open', True) else 'closed'}): {agg.get('sends', 0)} browsers, {sum((agg.get('pw') or {}).values())} 'which one?' picks")
+    print(f"review {a.rid} ({cfg['kind']}, {cfg.get('stage', 'public')} stage, {'open' if cfg.get('open', True) else 'closed'}): {agg.get('sends', 0)} browsers"
+          + (f" ({agg['pick']} from the pick link, id-le.com/review/intro-logo-animation)" if agg.get('pick') else "") + f", {sum((agg.get('pw') or {}).values())} 'which one?' picks")
     for score, it, lr, n, avg, bt, spread in ranking(cfg, agg):
         sp = " ".join(f"{k}:{v}" for k, v in enumerate(spread) if v)
         print(f"  {it:<22} {'like %3.0f%%' % (lr * 100) if lr is not None else 'no scores':<10} n={n:<4} avg={'%.2f' % avg if avg is not None else '-':<5} bt={bt:.2f}  {sp}")
