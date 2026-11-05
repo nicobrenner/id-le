@@ -65,8 +65,9 @@
       const k = WEATHER[a.trim().toLowerCase()]; if (!k) return { say: (a.trim() ? `no "${a.trim()}" weather here (yet). ` : '') + 'try: rain, sun, storm, fog, wind, static or hum' };
       const r = await tool('weather', { kind: k }); return { say: said(r) || `☁ ${a.trim().toLowerCase()}` }; } },
     { name: 'evolve', aliases: ['🧬'], args: '[name]', where: WIN, world: true, lock: 'evolve', desc: 'evolve a creature (in its mind chat: this one), or the whole world', run: async (a, ctx) => { const n = a.trim() || me(ctx) || 'world'; const r = await tool('evolve', { name: n }); return { say: said(r) || `🧬 evolving ${n === 'world' ? 'the world' : n}` }; } },
-    { name: 'rave', aliases: ['🕺'], args: '', where: OP_IRC, world: true, lock: 'music', desc: 'rave on (or off): the deck plays, the creatures dance', run: () => { const M = window.__music; if (!M) return { say: 'no music deck here' };
-      if (M.rave() && M.playing) { M.setRave(false); return { say: '🔇 rave off' }; } M.setSource('deck'); M.setRave(true); return { say: '🕺 rave on' }; } },
+    { name: 'rave', aliases: ['🕺'], args: '[on|off]', where: OP_IRC, world: true, lock: 'music', desc: 'rave on or off (no word: toggle): the deck plays, the creatures dance', run: a => { const M = window.__music; if (!M) return { say: 'no music deck here' };
+      const w = String(a || '').trim().toLowerCase(), off = w === 'off' || w === 'stop' || (!w && M.rave() && M.playing);
+      if (off) { M.setRave(false); return { say: '🔇 rave off' }; } M.setSource('deck'); M.setRave(true); return { say: '🕺 rave on' }; } },
     { name: 'spawn', aliases: ['new'], args: '[crawly|tok|namer|…]', where: OP_IRC, world: true, lock: 'creatures', desc: 'a new creature near you (/new creature)', run: async a => {
       const k = a.trim().toLowerCase().replace(/^creature\s*/, '') || 'crawly'; if (!SPAWN.includes(k)) return { say: 'a new what? try: ' + SPAWN.join(', ') };
       const r = await tool('spawn', { kind: k }); return { say: said(r) || `✦ a new ${k}` }; } },

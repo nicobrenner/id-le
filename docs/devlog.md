@@ -10,6 +10,14 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-04
 
+**⚡ toggles and no babble.** Nico: "with a ⚡ I can easily start the rave, but then I can't turn it off" ("stop a rave" got "Yes, it is. I'm sorry to hear that you're upset about your job").
+- The ⚡ rave chip follows the state: "start a rave" ↔ "stop the rave" (idle-opwin.js `stateful`, state from `__idleAI.quickState()`, read at most once a second). The weather already has both directions as chips ("make it rain" / "a sunny day").
+- Opposites as exact words (command syntax, like the chips): "stop the rave", "stop a rave", "stop rave", "rave off", "end the rave", "end rave"; "clear the sky", "stop the rain", "stop rain", "sunny". `/rave on|off` (no word: toggle); `/weather clear` already existed.
+- An action-like message the Tiny Operator's heads read below the bar now gets "I'm not sure what to do with that. try ⚡ for quick actions" instead of the model's free text. Probe (25 messages): 15 act, 5 unsure (stop a rave 0.72, no more rain 0.81, rename Crawly to Bob 0.83, wachito 0.86, stop 0.73), 5 chat.
+- Test 'toggles' (launch tier); 'unsure probe' (report only).
+
+## 2026-11-04
+
 **The Epoch 0 moment is its own modal.** Nico: "do we need the operator here? it's weird the way it's presented... there's also input requested in the lightbox, but there's also the operator chat under it.... I think these notices should be separate, like the one about the intro/story mode". EPOCH 0 COMPLETE now renders in #e0Modal, the same centred `.gModal` frame as the story-mode offer (shared CSS), over the modal backdrop; the Operator's window steps aside while it is up (#e0Modal in idle-opwin's yield list) and its lines are no longer copied into the chat. After it closes, the chat gets one line when the creature was named ("Echo it is. hello, Echo 👋 ✓"). Naming, start Epoch 1 → the end card, the playground → its confirm, the funnel and engaged logging are unchanged. Tests: 'story' (the moment outside #lab, the Operator yielded, no copies in the chat), 'story input visible' (no longer expects the moment inside the window), 'engage ask', 'story keys'; `-k story` 22/22, `-t launch -j 1` 28/28.
 
 ## 2026-11-04 (offer v3)
