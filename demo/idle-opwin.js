@@ -20,7 +20,7 @@
 @media (min-width:501px){#lab-head{cursor:grab;user-select:none}#lab-head.drag{cursor:grabbing}html:is(.gen-box,.gen-float) #lab-head{cursor:default}}
 #op-tools{margin-left:auto;margin-right:6px;font-size:14px;line-height:1;padding:3px 8px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer}
 #op-tools.on{background:#6b7cff33;border-color:#9fb0ff}html:is(.gen-box,.gen-float) #op-tools{display:none!important}
-#opTray{display:flex;flex-wrap:nowrap;gap:6px;padding:8px 10px 6px;border-top:1px solid #8884;overflow:hidden}#opTray .opc{flex:0 0 auto;white-space:nowrap}#opTray .opc.cut{display:none}#opTray[hidden]{display:none}#opTray .opc.more{border-style:dashed}#opTray.all{flex-wrap:wrap;overflow:visible}html #lab>#opTray.all{max-height:none;overflow:visible;flex:0 0 auto}#lab>#ai-thread{min-height:0}#lab.opMore{height:auto!important;max-height:calc(100dvh - var(--op-top,52px) - var(--kb,0px) - 8px)!important}
+#opTray{display:flex;flex-wrap:nowrap;gap:6px;padding:8px 10px 6px;border-top:1px solid #8884;overflow:hidden}#opTray .opc{flex:0 0 auto;white-space:nowrap}#opTray .opc.cut{display:none}#opTray[hidden]{display:none}#opTray .opc.more{border-style:dashed}#opTray.all{animation:opTrayIn .18s ease-out}@keyframes opTrayIn{from{opacity:.4}to{opacity:1}}@media (prefers-reduced-motion:reduce){#opTray.all{animation:none}}#opTray.all{flex-wrap:wrap;overflow:visible}html #lab>#opTray.all{max-height:62%!important;overflow-y:auto!important;flex:0 1 auto;overscroll-behavior:contain}#lab>#ai-thread{min-height:0}
 #opTray .opc{font:12.5px var(--ui-font,system-ui);padding:6px 9px;border-radius:14px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:32px}
 #opTray .opc:hover{background:#6b7cff40}#opTray .opc[disabled]{opacity:.45;cursor:default}
 #opTray .opc.glow{border-color:#cfd6ff;font-weight:600;background:#3a46c8;color:#fff;animation:opGlow 1.8s ease-in-out infinite}
@@ -83,7 +83,7 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
     if (!open) showAll = false;
     // collapsed (Nov 4, Nico: "more" was pinned on top of the chips): every chip is rendered, then fit() hides the ones that don't fit the
     // row's real width (and those past the first ~5); "⋯ more" shows only when something is hidden. Expanded: all of them, wrapped
-    const s2 = s + showAll; if (!force && s2 === sig) return fit(); sig = s2; tray.hidden = !open; tray.classList.toggle('all', showAll); { const L = document.getElementById('lab'); if (L) L.classList.toggle('opMore', open && showAll); }
+    const s2 = s + showAll; if (!force && s2 === sig) return fit(); sig = s2; tray.hidden = !open; tray.classList.toggle('all', showAll);
     if (chips.length) chips = chips.concat([{ text: showAll ? '‹ less' : '⋯ more', more: 1 }]);
     tray.innerHTML = chips.map((x, i) => `<button type="button" class="opc${x.glow ? ' glow' : ''}${x.more ? ' more' : ''}${x.glow && coarse() ? ' big' : ''}" data-opc="${i}"${x.gsay ? ' data-gsay="1"' : ''}${x.disabled ? ' disabled' : ''}>${x.gsay && coarse() ? '▶ ' : ''}${esc(x.text)}</button>`).join('');
     tray._chips = chips; fit(); }

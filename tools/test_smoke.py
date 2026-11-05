@@ -2935,7 +2935,7 @@ def t_reviews_invite(P):
     pg.evaluate("() => { localStorage.removeItem('idle.invite'); window.__reviews.invite('logos'); }"); wait_for(pg, "() => document.querySelectorAll('.rvbtns button:not([disabled])').length === 2", 30, P=P)
     pg.click(".rvbtns button:not(.alt):not([disabled])"); wait_for(pg, "() => [...document.querySelectorAll('.rvbtns button:not([disabled])')].some(b => b.textContent.includes('check them out'))", 30, P=P)
     last = pg.evaluate("() => { const b = [...document.querySelectorAll('.rvletter')].pop(), hr = b.parentElement.getBoundingClientRect(); return { top: b.getBoundingClientRect().top >= hr.top - 1, paras: [...b.querySelectorAll('p')].map(p => [...p.querySelectorAll('span')].map(s => s.textContent)), pledge: !!document.querySelector('.rvpledge'), team: window.__reviews.team.status() }; }")
-    need(last["top"] and last["paras"] == T["after"]["logos"] and last["pledge"] and last["team"]["label"] == "in the loop (vesting)", f"after I'm in: {last}")
+    need(last["top"] and last["paras"] == T["after"]["logos"] and last["pledge"] and last["team"]["label"] == "🧑‍🤝‍🧑 HITL vesting 🗓️", f"after I'm in: {last}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "invite-letter.png"))
     joins = [json.loads(b) for k, b in P.fb if k == "join"]; bk = pg.evaluate("() => localStorage.getItem('idle.bkey')")
     need(len(joins) == 1 and joins[0]["bkey"] == bk, f"the join: {joins}")
@@ -2976,7 +2976,7 @@ def t_reviews_tab(P):
     with contextlib.suppress(AssertionError): wait_for(pg, "() => window.__opwin.yielding() === '#hitl.on'", 3, P=P)
     yl = pg.evaluate("() => window.__opwin.yielding()"); need(yl == "#hitl.on", f"the 🌱 tab must make the Operator step aside: {yl}")
     t1 = pg.evaluate("() => ({ txt: document.getElementById('hitl').innerText, resume: [...document.querySelectorAll('#hitl [data-open=logos]')].map(b => b.textContent) })")
-    need("in the loop (vesting)" in t1["txt"] and "3 of 12 judged" in t1["txt"] and "0 of 8 judged" in t1["txt"] and t1["resume"] == ["resume ›"], f"the tab: {t1}")
+    need("🧑‍🤝‍🧑 HITL vesting 🗓️" in t1["txt"] and "3 of 12 judged" in t1["txt"] and "0 of 8 judged" in t1["txt"] and t1["resume"] == ["resume ›"], f"the tab: {t1}")
     if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "hitl-tab.png"))
     click("#hitl [data-open=logos]"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 20, P=P)
     st = pg.evaluate("() => window.__reviews.state()")
@@ -3056,10 +3056,10 @@ def t_reviews(P):
     sent = [json.loads(b) for k, b in P.fb if k == "review:logos"]; scores = {}; pairs = []; notes = {}
     for x in sent: scores.update(x["scores"]); pairs += x.get("pairs", []); notes.update(x.get("notes", {}))
     need(scores == st["rated"] and pairs == [[pair[1], pair[0]]] and notes == {seen[5]: "the typing is great"} and all(x["bkey"] == sent[0]["bkey"] for x in sent), f"sent: {sent}")
-    need("in the loop (vesting)" in end["txt"] and end["sent"], f"the end: {end}")
+    need("🧑‍🤝‍🧑 HITL vesting 🗓️" in end["txt"] and end["sent"], f"the end: {end}")
     pg.evaluate("() => window.__reviews.close()"); pg.evaluate("() => window.__settings.open()"); wait_for(pg, "() => !!document.querySelector('#settings.on')", 5)
     row = pg.evaluate("() => (document.getElementById('reviewerRow') || {}).innerText || ''"); pg.evaluate("() => window.__settings.close()")
-    need("in the loop (vesting)" in row, f"⚙ row: {row!r}")
+    need("🧑‍🤝‍🧑 HITL vesting 🗓️" in row, f"⚙ row: {row!r}")
     pg.evaluate("() => { window.__feedback.open('rev'); }"); wait_for(pg, "() => document.querySelectorAll('#oracle .rvview [data-open]').length === 2", 15, P=P)
     pg.click("#oracle .rvview [data-open=fonts]"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card' && window.__reviews.state().kind === 'fonts'", 20, P=P)
     pg.close(); P.clean()
@@ -3067,7 +3067,7 @@ def t_reviews(P):
 
 
 def t_reviews_cliff(P):
-    """Vesting with a cliff: 'in the loop (vesting)' until 14 days and 2 reviews (fake clock), then 'in the loop ✓' for good (still after
+    """Vesting with a cliff: '🧑‍🤝‍🧑 HITL vesting 🗓️' until 14 days and 2 reviews (fake clock), then '🧑‍🤝‍🧑 HITL ✓' for good (still after
     the founding period; no Founder gift: it's hidden); a member who doesn't reach the cliff before the founding period ends is 'lapsed'."""
     pg = _rv_page(P); pg.evaluate("() => window.__reviews.join()")
     s0 = pg.evaluate("() => window.__reviews.team.status()")
@@ -3075,13 +3075,13 @@ def t_reviews_cliff(P):
     pg.evaluate("() => { window.__reviews.test.done('x3'); window.__reviews.test.shift(10 * 864e5); }"); s2 = pg.evaluate("() => window.__reviews.team.status()")
     pg.evaluate("() => window.__reviews.test.shift(5 * 864e5)"); s3 = pg.evaluate("() => ({ s: window.__reviews.team.status(), off: window.__founder.off === true, avail: window.__founder.available() })")
     pg.evaluate("() => window.__reviews.test.shift(90 * 864e5)"); s4 = pg.evaluate("() => window.__reviews.team.status()")
-    need(s0["state"] == "vesting" and s1["state"] == "vesting" and s2["state"] == "vesting" and s3["s"]["state"] == "vested" and s3["s"]["label"] == "in the loop ✓" and s3["off"] and not s3["avail"] and s4["state"] == "vested",
+    need(s0["state"] == "vesting" and s1["state"] == "vesting" and s2["state"] == "vesting" and s3["s"]["state"] == "vested" and s3["s"]["label"] == "🧑‍🤝‍🧑 HITL ✓" and s3["off"] and not s3["avail"] and s4["state"] == "vested",
          f"the cliff: {s0['state']} → {s1['state']} → {s2['state']} → {s3} → {s4['state']}")
     pg.close(); P.clean()
     pg = _rv_page(P); pg.evaluate("() => { localStorage.removeItem('idle.team'); localStorage.removeItem('idle.reviews'); window.__reviews.join(); window.__reviews.test.shift(40 * 864e5); }"); s5 = pg.evaluate("() => ({ s: window.__reviews.team.status() })")
     need(s5["s"]["state"] == "lapsed", f"lapsed: {s5}")
     pg.close(); P.clean()
-    return "vesting (2 reviews at day 0, still at day 10) → in the loop ✓ at day 15 (no Founder gift) → still ✓ after the founding period; no cliff before it ends → lapsed"
+    return "vesting (2 reviews at day 0, still at day 10) → HITL ✓ at day 15 (no Founder gift) → still ✓ after the founding period; no cliff before it ends → lapsed"
 
 
 def t_founder_off(P):
@@ -4758,11 +4758,22 @@ def t_new_build(P):
     return f"IDLE_REV {mine}: a newer version.json shows the update offer; a restored page reloads"
 
 
+LAB_STEADY = """async () => { const L = document.querySelector('#lab'), r = () => { const b = L.getBoundingClientRect(); return [b.left, b.top, b.width, b.height].map(Math.round).join(','); };
+  const btn = t => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === t), F = document.querySelector('#lab-form');
+  const tog = () => (btn('⋯ more') || btn('‹ less')).click(), seen = new Set([r()]); let inputOk = true;
+  for (let k = 0; k < 2; k++) { tog(); for (let i = 0; i < 12; i++) { await new Promise(res => requestAnimationFrame(res)); seen.add(r()); const fr = F.getBoundingClientRect(), lr = L.getBoundingClientRect(); if (fr.bottom > lr.bottom + 1 || fr.height < 20) inputOk = false; } }
+  return seen.size === 1 && inputOk; }"""
+
+
 TRAY_GEO = """() => { const T = document.querySelector('#opTray'), L = document.querySelector('#lab'), F = document.querySelector('#lab-form'), tr = T.getBoundingClientRect(), lr = L.getBoundingClientRect(), fr = F.getBoundingClientRect();
   const b = [...T.querySelectorAll('[data-opc]:not(.cut)')].map(x => ({ t: x.textContent.trim(), r: x.getBoundingClientRect() })).filter(o => o.r.width > 0);
   let overlaps = []; for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) { const p = b[i].r, q = b[j].r; if (p.left < q.right - 0.5 && q.left < p.right - 0.5 && p.top < q.bottom - 0.5 && q.top < p.bottom - 0.5) overlaps.push(b[i].t + ' × ' + b[j].t); }
-  const outside = b.filter(o => o.r.left < tr.left - 0.5 || o.r.right > tr.right + 0.5 || o.r.left < lr.left - 0.5 || o.r.right > lr.right + 0.5 || o.r.top < lr.top - 0.5 || o.r.bottom > fr.top + 0.5).map(o => o.t);
-  return { n: b.length, texts: b.map(o => o.t), tops: [...new Set(b.map(o => Math.round(o.r.top)))].length, h: Math.min(...b.map(o => o.r.height)), overlaps, outside, over: document.documentElement.scrollWidth > innerWidth }; }"""
+  // a tall grid scrolls inside the tray (Nov 4: the window keeps its size): chips scrolled out of the tray's view count as scrolled, not clipped;
+  // the tray itself must sit inside the window and above the input
+  const inView = o => o.r.bottom > tr.top + 0.5 && o.r.top < tr.bottom - 0.5, scrolled = b.filter(o => !inView(o)).map(o => o.t);
+  const T2 = T.classList.contains('all'), outside = b.filter(inView).filter(o => o.r.left < tr.left - 0.5 || o.r.right > tr.right + 0.5 || o.r.left < lr.left - 0.5 || o.r.right > lr.right + 0.5 || (!T2 && (o.r.top < tr.top - 0.5 || o.r.bottom > tr.bottom + 0.5))).map(o => o.t)
+    .concat(tr.bottom > fr.top + 0.5 || tr.top < lr.top - 0.5 || fr.bottom > lr.bottom + 0.5 || fr.height < 20 ? ['(the tray or the input)'] : []);
+  return { n: b.length, scrolled, texts: b.map(o => o.t), tops: [...new Set(b.map(o => Math.round(o.r.top)))].length, h: Math.min(...b.map(o => o.r.height)), overlaps, outside, over: document.documentElement.scrollWidth > innerWidth }; }"""
 
 
 def t_operator_float(P):
@@ -4802,7 +4813,8 @@ def t_operator_float(P):
     pg.evaluate("() => window.__idleAI && window.__idleAI.quick && window.__idleAI.quick('stop the rave', 'test')"); pg.wait_for_timeout(300)
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '⋯ more').click()"); pg.wait_for_timeout(200)
     more = pg.evaluate("() => window.__opwin.tray().chips"); pg.wait_for_timeout(200); grid = pg.evaluate(TRAY_GEO)
-    need(not grid["overlaps"] and not grid["outside"] and grid["tops"] >= 2, f"expanded: the whole grid inside the window, above the input, no overlap: {grid}")
+    need(not grid["overlaps"] and not grid["outside"] and grid["tops"] >= 2, f"expanded: the grid inside the window, above the input, no overlap: {grid}")
+    need(pg.evaluate(LAB_STEADY), "the window keeps its size and place while ⋯ more / ‹ less toggles (desktop)")
     need("a sunny day" in more and "/pedia" in more and "‹ less" in more and not any(c in more for c in ("/settings", "/scientists", "/story")), f"'⋯ more' shows the rest, without the slash duplicates: {more}")
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '‹ less').click()"); pg.wait_for_timeout(200)
     pg.evaluate("() => { document.querySelector('#lab-text').value = ''; window.__opSuggest = () => [{ text: 'generated one' }]; }"); pg.wait_for_timeout(700)
@@ -4845,6 +4857,7 @@ def t_operator_float_phone(P):
     need(row["n"] <= 6 and row["tops"] == 1 and row["h"] >= 43.5 and not row["over"] and not row["overlaps"] and not row["outside"] and row["texts"][-1] == "⋯ more", f"phone: one row of chips + more, 44 px targets, no overlap or clipping: {row}")
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '⋯ more').click()"); pg.wait_for_timeout(300)
     grid = pg.evaluate(TRAY_GEO); need(not grid["overlaps"] and not grid["outside"] and "‹ less" in grid["texts"], f"phone, expanded: the grid inside the sheet, above the input: {grid}")
+    need(pg.evaluate(LAB_STEADY), "phone: the sheet keeps its size and place while ⋯ more / ‹ less toggles")
     if os.environ.get("IDLE_SHOTS"): pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], "tray-phone-more.png"))
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '‹ less').click()"); pg.wait_for_timeout(300)
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === \"what's happening?\").click()"); pg.wait_for_timeout(500)
