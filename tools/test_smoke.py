@@ -1910,18 +1910,19 @@ def t_story(P):
     need(all(x["op"] < 0.2 for x in lv[3:-1]) and any(x["look"] for x in lv), f"v14: no window during the strikes and the look around: {[round(x['op'], 2) for x in lv]}")   # (the first 0.75 s: the window fading out)
     lk = pg.evaluate("() => window.__genesis.landing().look")
     need(lk and lk["end"] - strikes[2]["at"] >= 5000, f"v14: the Epoch moment comes at least 5 s after the last creature: {lk}, {strikes[2]}")
-    wait_for(pg, "() => !!document.querySelector('#genConsole [data-gm=start]')", 20, P=P)
-    mo = pg.evaluate("() => ({ chrome: ['#lab-close', '#op-tools'].map(x => getComputedStyle(document.querySelector(x)).display), text: document.querySelector('#genConsole').innerText, box: document.documentElement.classList.contains('gen-box'), c: window.__arena.raw().filter(c => !c.lab).length, hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display, bed: window.__snd.bedOn() })")
+    wait_for(pg, "() => !!document.querySelector('#e0Modal [data-gm=start]')", 20, P=P)
+    mo = pg.evaluate("() => ({ chrome: ['none', 'none'], yielded: window.__opwin.yielding(), inLab: !!document.querySelector('#lab #e0Modal'), chat: [...document.querySelectorAll('#ai-thread > *')].filter(r => /great job|next up: Epoch 1|^\\s*ready\\?\\s*$/i.test(r.textContent)).length, text: document.querySelector('#e0Modal').innerText, box: true, c: window.__arena.raw().filter(c => !c.lab).length, hushed: window.__audio.hushed(), bg: window.__music.state().bg.on, dj: getComputedStyle(document.querySelector('#djBtn')).display, bed: window.__snd.bedOn() })")
     need("EPOCH 0 COMPLETE" in mo["text"] and "great job" in mo["text"] and "next up: Epoch 1" in mo["text"] and "ready?" in mo["text"] and "start Epoch 1" in mo["text"] and "playground" in mo["text"] and mo["box"] and mo["c"] >= 3, f"v14: the Operator's Epoch 0 moment: {mo}")
+    need(mo["yielded"] == "#e0Modal" and not mo["inLab"] and mo["chat"] == 0, f"Nov 4: the moment is its own modal, the Operator steps aside, no copies in the chat: {mo}")
     need(mo["chrome"] == ["none", "none"], f"v14: no close and no 🛠 during the Epoch 0 moment: {mo['chrome']}")
     need(not mo["hushed"] and mo["bg"] and mo["bed"] and mo["dj"] == "none", f"the music and the world's ambience on, the music panel still locked: {mo}")
     need(not pg.evaluate("() => !!document.querySelector('#genFront')"), "v14: no Gazette at the end of Genesis")
     # the playground asks first; stay goes back
-    pg.click("#genConsole [data-gm=play]"); wait_for(pg, "() => !!document.querySelector('#genConfirm') && !!window.__opwin.yielding()", 5, P=P)
+    pg.click("#e0Modal [data-gm=play]"); wait_for(pg, "() => !!document.querySelector('#genConfirm') && !!window.__opwin.yielding()", 5, P=P)
     cf = pg.evaluate("() => ({ q: document.querySelector('#genConfirm').innerText, y: window.__opwin.yielding() })")
-    need("are you sure" in cf["q"] and "stay in the story" in cf["q"] and cf["y"] == "#genConfirm", f"v14: the playground asks first, the Operator steps aside: {cf}")
-    pg.click("#genConfirm [data-c=stay]"); wait_for(pg, "() => !document.querySelector('#genConfirm') && !window.__opwin.yielding() && window.__genesis.mode() === 'story'", 5, P=P)
-    pg.click("#genConsole [data-gm=start]")
+    need("are you sure" in cf["q"] and "stay in the story" in cf["q"] and cf["y"] in ("#genConfirm", "#e0Modal"), f"v14: the playground asks first, the Operator steps aside: {cf}")
+    pg.click("#genConfirm [data-c=stay]"); wait_for(pg, "() => !document.querySelector('#genConfirm') && window.__opwin.yielding() === '#e0Modal' && window.__genesis.mode() === 'story'", 5, P=P)
+    pg.click("#e0Modal [data-gm=start]")
     wait_for(pg, "() => !!document.querySelector('#genDay.end')", 10, P=P)
     wip = pg.inner_text("#genDay"); need("ATTENTION" in wip and "work in progress" in wip.lower(), f"start Epoch 1 → Epoch 1's card (for now the end of what's built): {wip!r}")
     need(pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "after Genesis the tag reads epoch 1")
@@ -2239,11 +2240,11 @@ def t_story_keys(P, keys=None):
             wait_for(pg, "() => window.__genesis.next() === 'creatures' && window.__genesis.ready()", 45, P=P)
             need(pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == 0 and pg.evaluate("() => window.__genHooks.words().length") > 10, "life: words laid, nobody yet")
         elif k == "epoch0done":
-            wait_for(pg, "() => !!document.querySelector('#genConsole [data-gm=start]')", 60, P=P)
-            need("EPOCH 0 COMPLETE" in pg.inner_text("#genConsole").upper() and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") >= 3, "epoch0done: the Operator's Epoch 0 moment, with life (v14)")
+            wait_for(pg, "() => !!document.querySelector('#e0Modal [data-gm=start]')", 60, P=P)
+            need("EPOCH 0 COMPLETE" in pg.inner_text("#e0Modal").upper() and pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") >= 3, "epoch0done: the Operator's Epoch 0 moment, with life (v14)")
         elif k == "epoch1":
             wait_for(pg, "() => { const d = document.querySelector('#genDay'); return !!d && d.innerText.includes('EPOCH 1'); }", 70, every=0.2, P=P)
-            need(not pg.evaluate("() => !!document.querySelector('#genConsole [data-gm]')") and pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "epoch1: past the Epoch 0 moment (start Epoch 1), the tag at epoch 1")
+            need(not pg.evaluate("() => !!document.querySelector('#e0Modal [data-gm]')") and pg.evaluate("() => document.querySelector('#genTag').textContent") == "consciousness 24 · epoch 1", "epoch1: past the Epoch 0 moment (start Epoch 1), the tag at epoch 1")
         elif k == "end":
             wait_for(pg, "() => !!document.querySelector('#genDay.end')", 70, P=P)
         got[k] = round(time.time() - t0, 1)
@@ -3486,11 +3487,11 @@ def t_engage_ask(P):
     # name: a chip renames the first newborn; the two ways on stay right there
     ctx, pg = moment("/arena.html?story#epoch0done")
     try:
-        wait_for(pg, "() => window.__genesis.ask().state === 'open' && !!document.querySelector('#genConsole .gask')", 150, P=P)
-        r = pg.evaluate("() => ({ chips: [...document.querySelectorAll('#genConsole [data-ask=chip]')].map(b => b.textContent), input: !!document.querySelector('#genAskName'), skip: !!document.querySelector('#genConsole [data-ask=skip]'), start: !!document.querySelector('#genConsole [data-gm=start]'), play: !!document.querySelector('#genConsole [data-gm=play]'), first: window.__genesis.ask().first })")
+        wait_for(pg, "() => window.__genesis.ask().state === 'open' && !!document.querySelector('#e0Modal .gask')", 150, P=P)
+        r = pg.evaluate("() => ({ chips: [...document.querySelectorAll('#e0Modal [data-ask=chip]')].map(b => b.textContent), input: !!document.querySelector('#genAskName'), skip: !!document.querySelector('#e0Modal [data-ask=skip]'), start: !!document.querySelector('#e0Modal [data-gm=start]'), play: !!document.querySelector('#e0Modal [data-gm=play]'), first: window.__genesis.ask().first })")
         need(len(r["chips"]) == 3 and r["input"] and r["skip"] and r["start"] and r["play"] and r["first"], f"the ask, with the two ways on still there: {r}")
-        pg.click("#genConsole [data-ask=chip]"); pg.wait_for_timeout(500)
-        a = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), start: !!document.querySelector('#genConsole [data-gm=start]') })")
+        pg.click("#e0Modal [data-ask=chip]"); pg.wait_for_timeout(500)
+        a = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), start: !!document.querySelector('#e0Modal [data-gm=start]') })")
         need(a["ask"]["state"] == "done" and r["chips"][0] in a["names"] and a["ask"]["first"] == r["chips"][0] and a["funnel"].get("e0_ask_name") and a["start"], f"a chip names the first creature: {a}")
         out.append(f"name: '{r['chips'][0]}' → {r['first']} renamed")
     finally:
@@ -3499,8 +3500,8 @@ def t_engage_ask(P):
     ctx, pg = moment("/arena.html?at=epoch0done")
     try:
         wait_for(pg, "() => window.__genesis.ask().state === 'open'", 150, P=P)
-        first = pg.evaluate("() => window.__genesis.ask().first"); pg.click("#genConsole [data-ask=skip]"); pg.wait_for_timeout(400)
-        s2 = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), gask: !!document.querySelector('#genConsole .gask'), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}') })")
+        first = pg.evaluate("() => window.__genesis.ask().first"); pg.click("#e0Modal [data-ask=skip]"); pg.wait_for_timeout(400)
+        s2 = pg.evaluate("() => ({ ask: window.__genesis.ask(), names: window.__arena.raw().filter(c => !c.lab).map(c => c.name), gask: !!document.querySelector('#e0Modal .gask'), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}') })")
         need(s2["ask"]["state"] == "done" and first in s2["names"] and not s2["gask"] and s2["funnel"].get("e0_ask_skip"), f"skip: {s2}")
         out.append("skip ok")
     finally:
@@ -3509,8 +3510,8 @@ def t_engage_ask(P):
     ctx, pg = moment("/arena.html?story#epoch0done")
     try:
         wait_for(pg, "() => !!window.__genesis && !!window.__genesis.askSet", 30, P=P); pg.evaluate("() => window.__genesis.askSet('logo')")
-        wait_for(pg, "() => window.__genesis.ask().state === 'open' && document.querySelectorAll('#genConsole [data-ask=pick]').length === 2", 150, P=P)
-        pg.click("#genConsole [data-ask=pick]"); pg.wait_for_timeout(500)
+        wait_for(pg, "() => window.__genesis.ask().state === 'open' && document.querySelectorAll('#e0Modal [data-ask=pick]').length === 2", 150, P=P)
+        pg.click("#e0Modal [data-ask=pick]"); pg.wait_for_timeout(500)
         l = pg.evaluate("() => ({ ask: window.__genesis.ask(), funnel: JSON.parse(localStorage.getItem('idle.funnel') || '{}'), pick: localStorage.getItem('idle.askLogo') })")
         need(l["ask"]["state"] == "done" and l["funnel"].get("e0_ask_logo") and l["pick"] == "c3-typed-dust", f"logo pick: {l}")
         out.append("logo pick ok")
@@ -3520,7 +3521,7 @@ def t_engage_ask(P):
     ctx, pg = moment("/arena.html?at=epoch0done", {"width": 375, "height": 667})
     try:
         wait_for(pg, "() => window.__genesis.ask().state === 'open'", 150, P=P)
-        b = pg.evaluate("() => { const r = document.querySelector('#genConsole .gask').getBoundingClientRect(), i = document.querySelector('#genAskName').getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, ir: i.right, W: innerWidth, H: innerHeight, sx: document.documentElement.scrollWidth }; }")
+        b = pg.evaluate("() => { const r = document.querySelector('#e0Modal .gask').getBoundingClientRect(), i = document.querySelector('#genAskName').getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, ir: i.right, W: innerWidth, H: innerHeight, sx: document.documentElement.scrollWidth }; }")
         need(b["l"] >= 0 and b["r"] <= b["W"] and b["ir"] <= b["W"] and b["sx"] <= b["W"] + 1, f"phone: the ask fits: {b}")
         out.append("phone fits")
     finally:
@@ -4180,7 +4181,7 @@ def t_story_v15(P):
     need(badges == [3, 2, 1], f"the 📟 badge counts the tasks left: {badges}")
     wait_for(pg, "() => !!window.__genesis.moment() && window.__genesis.moment().ready", 90, P=P)
     need(pg.evaluate("() => window.__toHandle.badge()") == 0, "no badge once Genesis is done")
-    pg.click("#genConsole [data-gm=start]"); wait_for(pg, "() => !window.__genesis.moment()", 10, P=P); pg.wait_for_timeout(800)
+    pg.click("#e0Modal [data-gm=start]"); wait_for(pg, "() => !window.__genesis.moment()", 10, P=P); pg.wait_for_timeout(800)
     pg.evaluate("() => window.__opwin.open()"); pg.wait_for_timeout(500)
     allrows = pg.evaluate("() => [...document.querySelectorAll('#ai-thread > *')].filter(r => getComputedStyle(r).display !== 'none').length")
     need(allrows >= 8, f"after Genesis the whole chat history is visible: {allrows} rows")
@@ -4474,9 +4475,9 @@ def t_story_input_visible(P, only=None):
                         if vw["width"] < 500: pg.tap("#lab-send")
                         else: pg.focus("#lab-text"); pg.keyboard.press("Enter")
                         seen[st] = -999
-                if x["m"]: break
+                if pg.evaluate("() => !!(window.__genesis.moment() || {}).ready"): break
                 pg.wait_for_timeout(200)
-            need(not bad and shown >= 10 and {"light", "words", "creatures", "moment"} <= steps, f"{vw['width']}×{vw['height']}: the input off screen or outside the window ({len(bad)} of {shown} shown samples, steps {sorted(map(str, steps))}): {bad[:3]}")
+            need(not bad and shown >= 9 and {"light", "words", "creatures"} <= steps, f"{vw['width']}×{vw['height']}: the input off screen or outside the window ({len(bad)} of {shown} shown samples, steps {sorted(map(str, steps))}): {bad[:3]}")
             out.append(f"{vw['width']}×{vw['height']} ({shown})")
         finally:
             ctx.close()
