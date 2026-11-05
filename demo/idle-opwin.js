@@ -108,7 +108,7 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   { const vv = window.visualViewport; if (vv) { const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h + 'px'); }; vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); kb(); } }
 
   // ---------- stepping aside for lightboxes (never stacked underneath one)
-  const OVER = ['#mSheet.on', '#ntfpanel.on', '#oracle.on', '#hitl.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genResume', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront'];
+  const OVER = ['#mSheet.on', '#ntfpanel.on', '#oracle.on', '#hitl.on', '#review.on', '#oracleBox:not([hidden])', '#genDay.end', '#genConfirm', '#genResume', '#genChoose', '#founderLetter', '#founderLab', '#almanac.on', '#drawerView', '#genFront', '#e0Modal', '#offerModal'];
   const shown = el => { if (!el || !el.isConnected) return false; const s = getComputedStyle(el); if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity === 0) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const over = () => OVER.find(s => shown($(s))) || null;
   let yieldTo = null;

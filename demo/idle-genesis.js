@@ -307,8 +307,8 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     else body = (storyMode() ? '' : `<div class="gc">${freeChips().map(([k, t]) => `<button data-gen="${esc(k)}"${busy ? ' disabled' : ''}>${esc(t)}</button>`).join('')}</div>`) +
       (storyMode() ? '' : `<div class="gs">${alive ? 'alive · ' : ''}${done} of ${ORDER.length} steps · or type to the Operator: "let there be music"</div>`);
     let said = wakeShown.length || wakeTyping ? `<div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` : `<div class="gl">${esc(line || '')}</div>`;
-    if (moment) { said = `<div class="gstamp">${esc(MOMENT.stamp)}</div>` + said; body = moment.ready ? askHtml() + `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : ''; }
-    c.innerHTML = said + body; if (moment && moment.ready) setTimeout(askStills, 0); tag(); cls('gen-noclose', storyMode() && (!(S && S.days && S.days[0]) || !!moment));
+    if (moment) { renderMoment(); said = ''; body = ''; }
+    c.innerHTML = said + body; tag(); cls('gen-noclose', storyMode() && (!(S && S.days && S.days[0]) || !!moment));
     prefill(); trimChat(); if (storyMode() && S && S.on && !$('#op-check') && !(S.days && S.days[0])) try { renderDay(); } catch (e) {}   // the ✅ from the first line on
     try { window.__opwin && window.__opwin.refresh(); } catch (e) {} }
   // the 🛠 tray's chip in the storyline's Genesis (idle-opwin.js): the step's command, or nothing while the Operator talks or a step runs
@@ -564,7 +564,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     await actions.light(); await until(() => !document.documentElement.classList.contains('gen-box'), 9000); await sleep(400);
     if (!skAfter('words')) return; await actions.letThereBeWords(''); await sleep(1900);
     if (!skAfter('life')) return; await actions.firstCreatures();
-    if (!skAfter('epoch0done')) return; const b = await until(() => $('#genConsole [data-gm=start]'), 20000); if (b) $('#genConsole [data-gm=start]').click(); }
+    if (!skAfter('epoch0done')) return; const b = await until(() => $('#e0Modal [data-gm=start]'), 20000); if (b) $('#e0Modal [data-gm=start]').click(); }
 
   // ---------- stats (idle-stats.js): the steps reached and the seconds each took since the one before (or since the console opened)
   function stats() { if (!S || !S.on || !S.steps) return null; const t0 = S.tc || S.t0, ks = Object.keys(S.steps).sort((a, b) => S.steps[a] - S.steps[b]), out = {}; let prev = t0;
@@ -884,11 +884,11 @@ html.gen-story:is(.gen-box,.gen-float) #lab #ai-thread>:not(.glast){display:none
   const MODAL = { held: [], shown: 0 }; let origNotify = null;
   const modalUp = () => !!(moment || (S && S.endOpen && document.querySelector('#genDay.end')) || document.querySelector('#offerModal'));
   function modalSync() { const up = modalUp(); cls('gen-modal', up); let bd = $('#genModalBd');
-    if (up && !moment && !bd) { bd = document.createElement('div'); bd.id = 'genModalBd'; document.body.appendChild(bd); } else if ((!up || moment) && bd) bd.remove();
+    if (up && !bd) { bd = document.createElement('div'); bd.id = 'genModalBd'; document.body.appendChild(bd); } else if (!up && bd) bd.remove();
     if (!up && !window.__worldHold && MODAL.held.length && origNotify) { const h = MODAL.held.splice(0); h.forEach((a, i) => setTimeout(() => { try { origNotify(...a); MODAL.shown++; } catch (e) {} }, 500 + i * 700)); } }
   function wrapNotify() { const n = window.__notify; if (!n || n.__held) return; const w = (...a) => { if (modalUp() || window.__worldHold) { MODAL.held.push(a); return null; } return n(...a); }; Object.assign(w, n); w.__held = true; origNotify = n; window.__notify = w; }
   ['pointerdown', 'click', 'touchstart'].forEach(t => document.addEventListener(t, e => { if (!document.documentElement.classList.contains('gen-modal')) return;
-    if (e.target.closest && e.target.closest('#genDay.end, #lab, #genConfirm, #genResume, #oracle, #stagingRibbon, #offerModal')) return;
+    if (e.target.closest && e.target.closest('#genDay.end, #lab, #genConfirm, #genResume, #oracle, #stagingRibbon, #offerModal, #e0Modal')) return;
     e.stopPropagation(); if (t !== 'touchstart') e.preventDefault(); }, true));
   setInterval(() => { wrapNotify(); modalSync(); }, 400);
   addEventListener('idle:worldgo', () => { try { wrapNotify(); modalSync(); } catch (e) {} });   // notices held during the intro come after the landing
@@ -990,12 +990,12 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     const N = ASK.name, ch = moment.chips = moment.chips || askChips();
     return `<div class="gask"><div class="gq">${esc(N.q)}</div><div class="gaskr">${ch.map(n => `<button data-ask="chip" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div>` +
       `<div class="gaskr"><input id="genAskName" maxlength="24" placeholder="${esc(N.ph)}" autocomplete="off"><button data-ask="name" class="go">${esc(N.ok)}</button><button data-ask="skip" class="gskip">${esc(ASK.skip)}</button></div></div>`; };
-  const askStills = () => { try { const L = window.IdleLogos; if (!L || !L.byId) return; document.querySelectorAll('#genConsole canvas[data-still]').forEach(cv => { if (cv._s) return; cv._s = 1; const lg = L.byId(cv.dataset.still); if (lg && lg.still) Promise.resolve(lg.still(cv)).catch(() => {}); }); } catch (e) {} };
-  const askDone = (msg, k) => { if (!moment) return; moment.ask = 'done'; moment.askMsg = msg || ''; if (k) mark(k); renderConsole(); };
+  const askStills = () => { try { const L = window.IdleLogos; if (!L || !L.byId) return; document.querySelectorAll('#e0Modal canvas[data-still]').forEach(cv => { if (cv._s) return; cv._s = 1; const lg = L.byId(cv.dataset.still); if (lg && lg.still) Promise.resolve(lg.still(cv)).catch(() => {}); }); } catch (e) {} };
+  const askDone = (msg, k) => { if (!moment) return; moment.ask = 'done'; moment.askMsg = msg || ''; if (k) mark(k); renderMoment(); };
   const askName = raw => { const n = String(raw || '').replace(/[<>\n\r]/g, '').trim().slice(0, 24); if (!n) return;
     const old = land.firstBorn; let got = null; try { got = old && W() && W().rename(old, n); } catch (e) {} if (got) land.firstBorn = got;
     askDone(ASK.name.thanks(got || n), 'e0_ask_name'); };
-  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#genConsole [data-ask]'); if (!b || !moment || !moment.ready || moment.ask === 'done') return;
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#e0Modal [data-ask]'); if (!b || !moment || !moment.ready || moment.ask === 'done') return;
     const a = b.dataset.ask;
     if (a === 'chip') return askName(b.dataset.n);
     if (a === 'name') { const i = $('#genAskName'); return askName(i && i.value); }
@@ -1004,15 +1004,29 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     if (a === 'skip') return askDone('', 'e0_ask_skip'); });
   document.addEventListener('keydown', e => { if (e.key !== 'Enter' || !e.target || e.target.id !== 'genAskName') return; e.preventDefault(); e.stopPropagation(); askName(e.target.value); }, true);
   let moment = null;
+  // Nov 4 (Nico: "do we need the operator here? it's weird the way it's presented... there's also input requested in the lightbox, but there's
+  // also the operator chat under it.... I think these notices should be separate, like the one about the intro/story mode"): the moment is its own
+  // centred modal (#e0Modal, the same .gModal frame as the story-mode offer); the Operator's window steps aside while it's up, and the moment's
+  // lines are not copied into the chat
+  function renderMoment() { if (!moment) return; let el = $('#e0Modal');
+    if (!el) { el = document.createElement('div'); el.id = 'e0Modal'; el.className = 'gModal'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); document.body.appendChild(el); }
+    const keep = $('#genAskName'), typed = keep ? keep.value : '', had = document.activeElement === keep;
+    el.innerHTML = `<div class="gstamp">${esc(MOMENT.stamp)}</div><div class="gw">${wakeShown.map(l => `<p>${esc(l)}</p>`).join('')}${wakeTyping ? `<p>${esc(wakeTyping)}<i class="gcur"></i></p>` : ''}</div>` +
+      (moment.ready ? askHtml() + `<div class="gm"><button class="go" data-gm="start">${esc(MOMENT.start)}</button><button data-gm="play">${esc(MOMENT.play())}</button></div>` : '');
+    const ni = $('#genAskName'); if (ni && typed) ni.value = typed; if (ni && had) try { ni.focus(); } catch (e) {}
+    if (moment.ready) setTimeout(askStills, 0); }
   async function epochMoment(d) { const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; moment = { ready: false, at: now() };
-    let bd = $('#genBackdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'genBackdrop'; document.body.appendChild(bd); }
-    aside(1); cls('gen-float', 0); cls('gen-box', 1); { const l = $('#lab'); if (l && !l.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); } } wakeShown = []; wakeTyping = ''; wakeBusy = true; curLine = ''; renderConsole(); await sleep(60); aside(0);
-    for (const line of MOMENT.lines) { if (RM) { wakeShown.push(line); renderConsole(); continue; }
-      for (let i = 1; i <= line.length; i += 3) { wakeTyping = line.slice(0, i); renderConsole(); await sleep(22); }
-      wakeTyping = ''; wakeShown.push(line); renderConsole(); await sleep(Math.min(1200, 380 + line.length * 10)); }
-    wakeBusy = false; moment.ready = true; renderConsole(); try { MOMENT.lines.forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {} }
-  function leaveMoment() { moment = null; setTimeout(modalSync, 0); wakeShown = []; cls('gen-box', 0); const bd = $('#genBackdrop'); if (bd) bd.remove(); }
-  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#genConsole [data-gm]'); if (!b || !moment || !moment.ready) return;
+    closeOp(); cls('gen-float', 0); cls('gen-box', 0); { const bd = $('#genBackdrop'); if (bd) bd.remove(); } modalSync();
+    let bd = $('#genModalBd'); if (!bd) { bd = document.createElement('div'); bd.id = 'genModalBd'; document.body.appendChild(bd); }
+    wakeShown = []; wakeTyping = ''; wakeBusy = true; curLine = ''; renderMoment();
+    for (const line of MOMENT.lines) { if (RM) { wakeShown.push(line); renderMoment(); continue; }
+      for (let i = 1; i <= line.length; i += 3) { wakeTyping = line.slice(0, i); renderMoment(); await sleep(22); }
+      wakeTyping = ''; wakeShown.push(line); renderMoment(); await sleep(Math.min(1200, 380 + line.length * 10)); }
+    wakeBusy = false; moment.ready = true; renderMoment(); }
+  function leaveMoment() { const msg = moment && moment.ask === 'done' && moment.askMsg; moment = null; const el = $('#e0Modal'); if (el) el.remove(); const mb = $('#genModalBd'); if (mb) mb.remove();
+    setTimeout(modalSync, 0); wakeShown = []; cls('gen-box', 0); const bd = $('#genBackdrop'); if (bd) bd.remove();
+    if (msg) try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', msg + ' ✓', 'ai'); } catch (e) {} }
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#e0Modal [data-gm]'); if (!b || !moment || !moment.ready) return;
     if (b.dataset.gm === 'start') { mark('e0_start1'); aside(1); setTimeout(() => { leaveMoment(); closeOp(); aside(0); endGuide(false); renderDay(); if (!builtNext(1)) showEnd(); else renderConsole(); }, 450); return; }
     if (b.dataset.gm === 'play') confirmPlay(go => { if (!go) return; mark('e0_play'); aside(1); setTimeout(() => { leaveMoment(); aside(0); endGuide(false); freePlay(); }, 450); }); });
   const closeOp = () => { const l = $('#lab'); if (l && l.classList.contains('open')) { const t = $('#lab-toggle'); if (t) t.click(); } };
@@ -1173,7 +1187,7 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
         cv.dataset.frames = (+cv.dataset.frames || 0) + 1; if (!reduce) raf = requestAnimationFrame(frame); };
       frame(); }).catch(() => { still(); cv.dataset.still = '1'; }); }
   // v3: a centred modal like the EPOCH 0 COMPLETE moment (html.gen-modal: a backdrop, the guided start's tips and toasts held until it closes)
-  function offerModal() { const T = OFFERV.v3, el = document.createElement('div'); el.id = 'offerModal'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+  function offerModal() { const T = OFFERV.v3, el = document.createElement('div'); el.id = 'offerModal'; el.className = 'gModal'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
     el.innerHTML = `<div class="gstamp">${esc(T.stamp)}</div><canvas class="pv" width="560" height="200" aria-hidden="true"></canvas><p>${esc(T.line)}${T.sub ? `<br><small style="opacity:.75">${esc(T.sub)}</small>` : ''}</p><div class="gm"><button class="go">${esc(T.go)}</button><button class="lt">${esc(T.later)}</button></div>`;
     document.body.appendChild(el); el.querySelector('.go').onclick = () => offerGo('v3', el); el.querySelector('.lt').onclick = () => offerNotNow(el);
     teaser(el.querySelector('canvas.pv'), el, 64); setTimeout(() => { try { el.querySelector('.go').focus(); } catch (e) {} }, 50); return true; }
@@ -1222,14 +1236,15 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
 #storyOffer b{display:block;margin-bottom:4px;color:#e9ecff;font-size:14px}#storyOffer .go{margin-top:8px;font:600 13px var(--ui-font,system-ui);padding:6px 13px;border-radius:14px;border:1px solid #9fb0ff;background:#6b7cff44;color:#e9ecff;cursor:pointer}#storyOffer .lt{margin:8px 0 0 8px;font:12px var(--ui-font,system-ui);padding:6px 10px;border-radius:14px;border:0;background:none;color:#aeb6e8;cursor:pointer}#storyOffer .x{position:absolute;right:8px;top:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:14px}#storyOffer.out{opacity:0}
 #storyOffer.vb{padding:8px 8px 10px}#storyOffer .pv{display:block;width:100%;height:auto;aspect-ratio:300/112;border-radius:8px;background:#000}#storyOffer.vb .ln{margin:8px 4px 0;color:#e9ecff}#storyOffer.vb .bt{margin:0 4px}
 @media (max-width:600px){#storyOffer{left:8px;right:8px;bottom:84px;max-width:none}}
-#offerModal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147482420;width:min(600px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;padding:18px 20px 16px;border-radius:14px;background:#0a0b16f5;border:1px solid #6b7cff88;color:#dfe4ff;font:15px/1.5 var(--op-font,var(--ui-font,system-ui));box-shadow:0 20px 80px #000c;text-align:center;animation:offerIn .35s ease-out}
-#offerModal .gstamp{display:inline-block;font:700 13px/1 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.14em;color:#ffcf7a;border:1.5px solid #ffcf7a99;border-radius:4px;padding:5px 9px;margin:0 0 12px}
-#offerModal .pv{display:block;width:100%;height:auto;aspect-ratio:560/200;border-radius:10px;background:#000}#offerModal p{margin:12px 4px 4px}
-#offerModal .gm{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}#offerModal button{font:600 15px var(--op-font,var(--ui-font,system-ui));padding:9px 18px;border-radius:18px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:40px}
-#offerModal .go{background:#3a46c8;border-color:#cfd6ff;color:#fff}#offerModal .lt{opacity:.85}
+.gModal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147482420;width:min(600px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;padding:18px 20px 16px;border-radius:14px;background:#0a0b16f5;border:1px solid #6b7cff88;color:#dfe4ff;font:15px/1.5 var(--op-font,var(--ui-font,system-ui));box-shadow:0 20px 80px #000c;text-align:center;animation:offerIn .35s ease-out}
+.gModal .gstamp{display:inline-block;font:700 13px/1 var(--display-font,ui-monospace,Menlo,monospace);letter-spacing:.14em;color:#ffcf7a;border:1.5px solid #ffcf7a99;border-radius:4px;padding:5px 9px;margin:0 0 12px}
+.gModal .pv{display:block;width:100%;height:auto;aspect-ratio:560/200;border-radius:10px;background:#000}.gModal p{margin:12px 4px 4px}
+.gModal .gm{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}.gModal button{font:600 15px var(--op-font,var(--ui-font,system-ui));padding:9px 18px;border-radius:18px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:40px}
+.gModal .go{background:#3a46c8;border-color:#cfd6ff;color:#fff}.gModal .lt{opacity:.85}
+#e0Modal .gw p{margin:8px 4px;text-align:left;font-size:17px}#e0Modal .gask{margin:12px 0 4px;padding:12px;border:1px solid #6b7cff55;border-radius:12px;text-align:left}#e0Modal .gq{margin-bottom:8px}#e0Modal .gaskr{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}#e0Modal .gaskr input{flex:1 1 140px;min-width:0;font:15px var(--op-font,var(--ui-font,system-ui));padding:8px 12px;border-radius:12px;border:1px solid #8ea0ff88;background:#0003;color:inherit}#e0Modal .gask-done{margin:12px 0 4px;color:#9be7a0}#e0Modal .gaskr canvas{display:block;border-radius:6px;background:#000}#e0Modal .gcur{display:inline-block;width:.5em;height:1em;background:#dfe4ff;vertical-align:-2px;margin-left:2px;animation:e0cur 1s steps(1) infinite}@keyframes e0cur{50%{opacity:0}}@media (max-width:420px){.gModal{padding:14px 14px 12px;font-size:14px}#e0Modal .gw p{font-size:15px;margin:6px 2px}.gModal button{padding:8px 14px}}
 @keyframes offerIn{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
 #settings .row.offerHi{outline:2px solid #ffcf7a;outline-offset:2px;border-radius:8px;animation:offerRow 1s ease-in-out 3}@keyframes offerRow{50%{background:#ffcf7a33}}
-@media (prefers-reduced-motion: reduce){#offerModal{animation:none}#settings .row.offerHi{animation:none}}`; document.head.appendChild(css2); }
+@media (prefers-reduced-motion: reduce){.gModal{animation:none}#settings .row.offerHi{animation:none}}`; document.head.appendChild(css2); }
   // when: v1 20 s after load (?offer: 1 s); v2 once the player has been active (on screen + an interaction) and the moment is quiet
   { let k = 0; const iv = setInterval(() => { if (++k > 2400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return;
       const v = offerVariant();

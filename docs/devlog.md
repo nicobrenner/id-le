@@ -8,6 +8,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+## 2026-11-04
+
+**The Epoch 0 moment is its own modal.** Nico: "do we need the operator here? it's weird the way it's presented... there's also input requested in the lightbox, but there's also the operator chat under it.... I think these notices should be separate, like the one about the intro/story mode". EPOCH 0 COMPLETE now renders in #e0Modal, the same centred `.gModal` frame as the story-mode offer (shared CSS), over the modal backdrop; the Operator's window steps aside while it is up (#e0Modal in idle-opwin's yield list) and its lines are no longer copied into the chat. After it closes, the chat gets one line when the creature was named ("Echo it is. hello, Echo 👋 ✓"). Naming, start Epoch 1 → the end card, the playground → its confirm, the funnel and engaged logging are unchanged. Tests: 'story' (the moment outside #lab, the Operator yielded, no copies in the chat), 'story input visible' (no longer expects the moment inside the window), 'engage ask', 'story keys'; `-k story` 22/22, `-t launch -j 1` 28/28.
+
 ## 2026-11-04 (offer v3)
 
 **The storyline offer v3: b's logo preview, as a modal (staging; the default for id-le.com once Nico gives the go).** Nico, on a/b/c: "by far the b option was the best in terms of engagement, as it shows the logo animation… it should be more like a modal, more similar to what the Epoch finish notice is. If the user dismisses it… a little animation/'cut-scene' to let the user know where it is after dismissal"; c's "ask is not very clear"; a and b waited behind the guided start's step cards.
