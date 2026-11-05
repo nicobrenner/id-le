@@ -24,7 +24,9 @@
     const t0 = Date.now(), poll = () => { let w = null; try { w = f.contentWindow; } catch (e) {}
       const d = w && w.__storyDump; if (d && d.genesis && d.boot && d.epoch0 && d.keys) {
         try { D = { genesis: d.genesis(), boot: d.boot(), epoch0: d.epoch0(), keys: d.keys() }; } catch (e) { if (Date.now() - t0 < 30000) return setTimeout(poll, 300); $('#note').innerHTML = `<span id="err">couldn't read the storyline: ${esc(e.message)}</span>`; return; }
-        render(); return; }   // (the hidden page stays: removing it would abort its loads mid-flight; it plays nothing and writes nothing)
+        render();
+        // the hidden page is done once the data is read: unload it (Nov 4, Nico: "it also seems like it was eating up the computer"), its world's loops included
+        setTimeout(() => { try { f.src = 'about:blank'; f.remove(); } catch (e) {} }, 1500); return; }
       if (Date.now() - t0 > 60000) { $('#note').innerHTML = '<span id="err">the game page did not hand over its script (timeout)</span>'; return; }
       setTimeout(poll, 250); };
     poll();
@@ -108,8 +110,11 @@
   function play(key, el) {
     const url = 'arena?story&director&at=' + encodeURIComponent(key), f = $('#frame');
     document.querySelectorAll('.row.sel').forEach(r => r.classList.remove('sel')); if (el) el.querySelector(':scope>.row').classList.add('sel');
-    $('#empty').hidden = true; f.hidden = false; f.src = url + '&r=' + Date.now();   // a fresh load each time, so replay replays $('#cur').textContent = '▶ ' + key; const a = $('#tab'); a.href = url; a.hidden = false;
-    try { f.focus(); } catch (e) {}
+    // one preview alive at a time: the previous frame is torn down whole (its document, its game loop, its audio), and a new one is made
+    const nf = document.createElement('iframe'); nf.id = 'frame'; nf.title = 'keyframe preview'; nf.setAttribute('allow', 'autoplay');
+    try { f.src = 'about:blank'; } catch (e) {} f.replaceWith(nf);
+    $('#empty').hidden = true; nf.src = url + '&r=' + Date.now();   // a fresh load each time, so replay replays $('#cur').textContent = '▶ ' + key; const a = $('#tab'); a.href = url; a.hidden = false;
+    try { nf.focus(); } catch (e) {}
     window.__director.playing = key;
   }
 
@@ -126,6 +131,11 @@
   // local copies can pass ?stats=director_stats.json (a file next to the page; never deployed)
   const qs = new URLSearchParams(location.search).get('stats');
   if (qs && (h === 'localhost' || h === '127.0.0.1')) fetch(qs).then(r => r.json()).then(j => { PF = j; pfOn = true; $('#pfBtn').setAttribute('aria-pressed', true); paintPF(); }).catch(() => {});
+  // a hidden tab plays nothing: the preview is unloaded, and ▶ plays it again when you're back
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) return; const f = $('#frame'); if (!f || f.hidden || !window.__director.playing) return;
+    const blank = document.createElement('iframe'); blank.id = 'frame'; blank.title = 'keyframe preview'; blank.setAttribute('allow', 'autoplay'); blank.hidden = true;
+    try { f.src = 'about:blank'; } catch (e) {} f.replaceWith(blank); $('#empty').hidden = false;
+    $('#empty').innerHTML = `paused while the tab was hidden<br><small>press ▶ to play “${esc(window.__director.playing)}” again</small>`; $('#cur').textContent = 'paused'; });
   // the frame's end screen: replay the scene, or play the next one
   addEventListener('message', e => { const m = e.data; if (e.origin !== location.origin || !m || !m.idleDirector) return; const cur = window.__director.playing;
     if (m.act === 'replay' && cur) play(cur, document.querySelector('.row.sel') && document.querySelector('.row.sel').parentElement);

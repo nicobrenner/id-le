@@ -3929,7 +3929,7 @@ window.__boot = (() => { const t0 = performance.now(), P = window.__bootPlace ||
   renderEvo();
   // ---------- boot ----------
   (async () => {
-    if (window.__storyDumpPage) { statusEl.textContent = 'the director reads this page: no model'; return; }   // ?storydump (staging/local): the Director's view only needs the modules' constants
+    if (window.__storyDumpPage || window.__directorFilm) { statusEl.textContent = 'the director: no model needed here'; return; }   // ?storydump (staging/local): the Director's view only needs the modules' constants
     try {
       statusEl.textContent = 'loading tokenizer…'; tokenizer = new BPETokenizer(await (await fetch('tokenizer_chat_v2.json')).json());
       statusEl.textContent = 'loading the instruction model…'; instr = await (await fetch('arena_instr_v2.json')).json(); ort.env.wasm.numThreads = (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && !window.__isIOS && !window.__safeLevel) ? Math.min(4, navigator.hardwareConcurrency || 4) : 1;   // iOS: one thread (threaded wasm reserves shared memory iOS Safari kills tabs over)

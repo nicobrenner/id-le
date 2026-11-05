@@ -74,11 +74,18 @@
       document.head.appendChild(st); document.body.appendChild(el);
       el.addEventListener('click', e => { const b = e.target.closest('button'); if (b) say(b.dataset.a); });
       if (film) addEventListener('keydown', e => { if (shown && !e.metaKey && !e.ctrlKey) say('replay'); }, true); };
-    const tick = () => { if (shown) return; const F = window.__funnel, G = window.__genesis;
-      try { const m = JSON.parse(localStorage.getItem('idle.funnel') || '{}') || {}, d = F && F.durations ? F.durations() : {}; if (endStep && (m[endStep] || d[endStep] != null) && Date.now() - t0 > 1500) return show('next'); } catch (e) {}
+    // film scenes end on the film's own clock (Nov 4, Nico saw "the training run" end at ~9 s while it was still running): the scene is over when
+    // the film's time reaches the next keyframe's second (idle-epoch0's keyOffset), and never earlier than that span in real time; the logo
+    // and the dark (whose next moment isn't a second of the film) end when the next funnel moment is marked
+    const film0 = () => { const E = window.__epoch0, c = E && E.cur && E.cur(); return c && c.time ? c : null; };
+    let span = null;
+    const tick = () => { if (shown) return; const F = window.__funnel, G = window.__genesis, c = film0();
+      try { if (film && c && next && c.keyAt) { const a = c.keyAt(k === 'title' ? 'computer' : k), b = c.keyAt(next);
+          if (a != null && b != null) { if (span == null) span = Math.max(1, b - a); if (c.time() >= b && Date.now() - t0 > span * 800) return show('next'); return setTimeout(tick, 500); } } } catch (e) {}
+      try { const m = JSON.parse(localStorage.getItem('idle.funnel') || '{}') || {}, d = F && F.durations ? F.durations() : {}; if (endStep && (m[endStep] || d[endStep] != null) && Date.now() - t0 > (span || 1.5) * 1000) return show('next'); } catch (e) {}
       try { const waiting = !film && G && ((G.ready && G.ready()) || (G.modalUp && G.modalUp())); waitSince = waiting ? (waitSince || Date.now()) : 0;
         if (waitSince && Date.now() - waitSince > 3000) return show('waits'); } catch (e) {}
-      setTimeout(tick, 400); };
+      setTimeout(tick, 500); };
     setTimeout(tick, 1200);
     window.__dirEnd = { shown: () => shown, show };
   }
@@ -96,6 +103,8 @@
     // gesture, and the frame is allowed to autoplay (allow="autoplay"). If the sound is still held back, the first click or key resumes it.
     const DIR = Q.has('director') && (() => { try { return window.parent !== window && /\/director/.test(window.parent.location.pathname); } catch (e) { return false; } })();
     window.__storyKey.director = DIR;
+    // a film scene in the director needs no model (the run's samples come from the bank): skip loading the 11 MB Tiny Oracle there
+    if (DIR && FILM.includes(key)) window.__directorFilm = true;
     if (key === 'title' || DIR) { window.__storyKey.started = true; go();
       if (DIR) { const wake = () => { try { window.__audio && window.__audio.resume && window.__audio.resume(); } catch (e) {} };
         wake(); addEventListener('pointerdown', wake, true); addEventListener('keydown', wake, true); directorEnd(key); } }
