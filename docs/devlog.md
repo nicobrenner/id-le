@@ -10,6 +10,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-04
 
+**⚡ quick actions: ~5 at a time.** Nico: "maybe these are too many actions at once... let's only show ~5 at the same time". The tray is one row (swipe on phones), most relevant first: 📖 back to the story (when paused), the rave toggle, make it rain ↔ clear the sky, add a new creature, what's happening? (evolve when there's room); "⋯ more" (sticky at the row's end) opens the rest (a sunny day, 🔮 bring your own AI, /pedia, /roadmap, /hitl, /music…) and "‹ less" folds it. /settings, /scientists and /story left the tray (⚙, 🧪 and 📖 already do that). 44 px chips on phones. Tests: 'operator float' (≤5 + more in one row, a chip runs at once, more/less), 'operator float phone' (one row, 44 px, a chip runs), 'chips playground' (taps through "more"; a fresh page before the typed check); the duplicate t_chips_playground/t_chips_genesis definitions removed.
+
+## 2026-11-04
+
 **Play arm undercount checked (stats).** Production at 14:52 PT read "arms assigned: story 9 · choose 6 · play 1". New test 'arm draw' (and 'arm draw sw', with the service worker live): 30 fresh browsers each on the production hostname, Math.random untouched: drawn {choose 13, play 8, story 9} → beacons {13, 8, 9}; with the service worker {9, 11, 10} → {9, 11, 10}. Every drawn arm sent exactly one confirmed beacon within 20 s; the draw (arena.html's head, one Math.random over three arms) is unbiased. No loss in the current code (confirmed beacons, live since 14:3x PT); the morning's play count came from the earlier fire-and-forget beacon plus small numbers (P(play ≤ 1 of 16) ≈ 1.3%). Watch the counts from the confirmed path.
 
 ## 2026-11-04
