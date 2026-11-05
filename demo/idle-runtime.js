@@ -102,6 +102,7 @@ window.__funnel = (() => { const K = 'idle.funnel', KD = 'idle.funnelDt', KA = '
     // a personal gift link (idle-founder.js): the site's own service; with no helper configured, the page's own origin answers (or doesn't)
     if (/^\/lab\/gift\/[a-z2-7]{20,40}(\/claim)?$/.test(path)) return realFetch((CFG.helper ? CFG.helper.replace(/\/$/, '') : '') + path, init);
     if (path === '/lab/p' || path === '/lab/stats') return realFetch(path, init);   // stats (idle-stats.js): the same origin, as its sendBeacons go (the confirmed beacons need the real answer)
+    if (path.startsWith('/lab/agent/')) return realFetch(path, init);   // bring your own agent (idle-agent.js): the same origin's relay (helper/worker.js)
     if (path === '/lab/here') return realFetch((CFG.helper ? CFG.helper.replace(/\/$/, '') : '') + path, init);   // presence (idle-presence.js): the site's own service, like the gift links
     if (OWN_PATHS.test(path)) return CFG.helper ? realFetch(CFG.helper.replace(/\/$/, '') + path, init) : json({ ok: false, error: 'telling the scientists needs the id-le.com helper: on a copy of your own, open an issue on GitHub instead' }, 503);
     if (CFG.helper && HELPER_PATHS.some(p => path.startsWith(p))) {

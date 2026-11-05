@@ -437,6 +437,88 @@ def kv_writes_unit():
     return f"a day of 790 reports: {o['newPuts']} KV writes (old path: {o['oldPuts']} for 300); every visit kept; a failed write recovered; a refused 🧪 queued and written"
 
 
+AGENT_TEST = r"""
+// bring your own agent (helper/worker.js AgentRelay + /lab/agent/*): consent first, codes once and for 10 minutes, tokens revoked on
+// disconnect or a silent tab, the rate limit, and the production gate (404 on id-le.com)
+const M = await import(process.argv[2]), W = M.default, o = {};
+const at = (host, p, init = {}, env = {}) => W.fetch(new Request('https://' + host + p, init), env);
+const P = (host, p, b, tok, env) => at(host, p, { method: 'POST', body: JSON.stringify(b || {}), headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '9.9.9.' + (Math.random() * 200 | 0), ...(tok ? { Authorization: 'Bearer ' + tok } : {}) } }, env);
+const J = async r => ({ s: r.status, j: await r.json().catch(() => ({})) });
+// production: every agent path is a 404, and so is the opening; AGENT_ON=1 turns it on (the go)
+o.prod = [(await at('id-le.com', '/lab/agent/state')).status, (await P('id-le.com', '/lab/agent/open')).status, (await P('id-le.com', '/lab/agent/pair', { code: 'AAAAAA' })).status];
+o.prodOn = (await P('id-le.com', '/lab/agent/open', {}, null, { AGENT_ON: '1' })).status;
+o.staging = (await P('staging.id-le.pages.dev', '/lab/agent/open')).status;
+// no allow, no code: pairing with a made-up code is refused, and so is a code from another site's relay
+o.noAllow = (await J(await P('localhost', '/lab/agent/pair', { code: 'ABCDEF' }))).s;
+const op = (await J(await P('localhost', '/lab/agent/open'))).j;
+o.codeShape = /^[A-Z2-9]{6}$/.test(op.code) && /^[0-9a-f]{32}$/.test(op.sid);
+o.wrong = (await J(await P('localhost', '/lab/agent/pair', { code: op.code.slice(0, 5) + (op.code[5] === 'A' ? 'B' : 'A') }))).s;
+o.otherSite = (await J(await P('staging.id-le.pages.dev', '/lab/agent/pair', { code: op.code }))).s;
+const pr = await J(await P('localhost', '/lab/agent/pair', { code: op.code.toLowerCase() }));
+o.paired = pr.s === 200 && /^[0-9a-f]{48}$/.test(pr.j.token); const tok = pr.j.token;
+const early = at('localhost', '/lab/agent/state', { headers: { Authorization: 'Bearer ' + tok } }).then(J);   // asked before the tab's first summary: it waits for it
+o.reuse = (await J(await P('localhost', '/lab/agent/pair', { code: op.code }))).s;   // once only
+o.noTok = (await at('localhost', '/lab/agent/state')).status;
+// the tab shares its state; the agent reads it; an action round-trips through the tab
+await P('localhost', '/lab/agent/tab', { sid: op.sid, state: { weather: { kind: 'clear' }, creatures: [{ name: 'Mo' }] } });
+o.early = (await early).j.state; o.state = (await J(await at('localhost', '/lab/agent/state', { headers: { Authorization: 'Bearer ' + tok } }))).j.state;
+const doP = P('localhost', '/lab/agent/do', { action: 'weather', args: { kind: 'bitrain' } }, tok).then(J);
+await new Promise(r => setTimeout(r, 30));
+const tb = (await J(await P('localhost', '/lab/agent/tab', { sid: op.sid }))).j; o.cmds = tb.cmds; o.tabPaired = tb.paired && tb.code === null;
+await P('localhost', '/lab/agent/tab', { sid: op.sid, results: [{ id: tb.cmds[0].id, action: 'weather', result: { ok: true, weather: 'bitrain' } }], events: [{ kind: 'world', who: 'Mo', text: 'ate rain' }] });
+o.done = (await doP).j;
+o.events = (await J(await at('localhost', '/lab/agent/events?after=0', { headers: { Authorization: 'Bearer ' + tok } }))).j.events.map(e => e.kind);
+o.badAction = (await J(await P('localhost', '/lab/agent/do', { action: 'rm -rf' }, tok))).s;
+// the rate limit: 30 a minute per token (the 31st is a 429; these never reach a tab: the relay answers "pending" after its wait, so
+// the test answers each one at once as the tab would)
+const R = new M.AgentRelay(); const o2 = R.open(), t2 = R.pair({ code: o2.code }).token; let codes = [];
+for (let i = 0; i < 31; i++) { const p = R.act(t2, { action: 'look' }); const c = R.tab({ sid: o2.sid }).cmds; R.tab({ sid: o2.sid, results: c.map(x => ({ id: x.id, result: { ok: true } })) }); const r = await p; codes.push(r.status || 200); }
+o.rate = [codes.filter(c => c === 200).length, codes[30]];
+// expiry on a clock: a code dies after 10 minutes; a silent tab after 30 s takes its token with it; 4 h ends any token
+let now = 1e12; const C = new M.AgentRelay(() => now); const o3 = C.open(); for (let i = 0; i < 25; i++) { now += 25e3; C.tab({ sid: o3.sid }); }   // the tab keeps polling; 625 s later its code is dead
+ o.expired = [C.pair({ code: o3.code }).status, C.tab({ sid: o3.sid }).expired];
+const o4 = C.open(), t4 = C.pair({ code: o4.code }).token; now += 31e3; o.silent = (await C.state(t4)).status;
+const o5 = C.open(), t5 = C.pair({ code: o5.code }).token; for (let i = 0; i < 9; i++) { now += 29e3; C.tab({ sid: o5.sid, state: { n: i } }); } o.alive = !!(await C.state(t5)).ok;
+now += 4 * 3600e3; C.tab({ sid: o5.sid }); o.fourH = (await C.state(t5)).status;
+// disconnect: the token is gone at once, and a waiting action is answered
+const o6 = R.open(), t6 = R.pair({ code: o6.code }).token; const w6 = R.act(t6, { action: 'look' }); R.close({ sid: o6.sid }); o.closeWait = (await w6).result; o.revoked = (await R.state(t6)).status;
+o.closeHttp = await (async () => { const a = (await J(await P('localhost', '/lab/agent/close', { sid: op.sid }))).s; const b = (await at('localhost', '/lab/agent/state', { headers: { Authorization: 'Bearer ' + tok } })).status; return [a, b]; })();
+// through the Durable Object (the Presence class, as bound on Cloudflare): one instance per site, 'agent-staging' here
+{ const inst = {}, names = []; const env = { PRESENCE: { idFromName: n => { names.push(n); return n; }, get: id => { const d = inst[id] || (inst[id] = new M.Presence({}, {})); return { fetch: (u, i) => d.fetch(new Request(u, i)) }; } } };
+  const a = (await J(await P('staging.id-le.pages.dev', '/lab/agent/open', {}, null, env))).j, b = await J(await P('staging.id-le.pages.dev', '/lab/agent/pair', { code: a.code }, null, env));
+  const old = { PRESENCE: { idFromName: n => n, get: () => ({ fetch: async () => new Response('{"error":"unknown"}', { status: 404 }) }) } };
+  o.dobj = { paired: b.s === 200 && !!b.j.token, names: [...new Set(names)], old: (await P('staging.id-le.pages.dev', '/lab/agent/open', {}, null, old)).status }; }
+console.log(JSON.stringify(o));
+"""
+
+
+def agent_unit():
+    tmp = tempfile.mkdtemp(prefix="idle-agent-")
+    try:
+        shutil.copy(os.path.join(ROOT, "helper", "worker.js"), os.path.join(tmp, "worker.mjs"))
+        t = os.path.join(tmp, "t.mjs"); open(t, "w").write(AGENT_TEST)
+        r = subprocess.run(["node", t, "file://" + os.path.join(tmp, "worker.mjs")], capture_output=True, text=True, timeout=60)
+        need(r.returncode == 0, (r.stderr or r.stdout)[-600:])
+        o = json.loads(r.stdout.strip().splitlines()[-1])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    need(o["prod"] == [404, 404, 404], f"production must not answer /lab/agent/*: {o['prod']}")
+    need(o["prodOn"] == 200 and o["staging"] == 200, f"AGENT_ON=1 {o['prodOn']}, staging {o['staging']}")
+    need(o["noAllow"] == 403 and o["codeShape"] and o["wrong"] == 403 and o["otherSite"] == 403, f"pairing needs the code the tab got after allow: {o}")
+    need(o["paired"] and o["reuse"] == 403 and o["noTok"] == 401, f"a code pairs once; no token, no state: {o}")
+    need(o["state"] == o["early"] == {"weather": {"kind": "clear"}, "creatures": [{"name": "Mo"}]}, f"state: {o['state']}, asked early: {o['early']}")
+    need(o["tabPaired"] and o["cmds"] and o["cmds"][0]["action"] == "weather" and o["cmds"][0]["args"] == {"kind": "bitrain"}, f"the tab gets the action: {o['cmds']}")
+    need(o["done"].get("ok") and o["done"].get("result") == {"ok": True, "weather": "bitrain"}, f"do waits for the tab's answer: {o['done']}")
+    need(o["events"] == ["paired", "asked", "result", "world"], f"events: {o['events']}")
+    need(o["badAction"] == 400, f"a bad action name: {o['badAction']}")
+    need(o["rate"] == [30, 429], f"rate limit: {o['rate']}")
+    need(o["expired"] == [403, True], f"a code after 10 minutes: {o['expired']}")
+    need(o["silent"] == 401 and o["alive"] and o["fourH"] == 401, f"silent tab {o['silent']}, polling tab alive {o['alive']}, after 4 h {o['fourH']}")
+    need(o["closeWait"] == {"error": "the tab disconnected"} and o["revoked"] == 401 and o["closeHttp"] == [200, 401], f"disconnect revokes at once: {o['closeWait']}, {o['revoked']}, {o['closeHttp']}")
+    need(o["dobj"] == {"paired": True, "names": ["agent-staging"], "old": 503}, f"through the Durable Object: {o['dobj']}")
+    return "pair needs allow, wrong/used/expired codes refused, state → do → result, rate limit 30/min, disconnect and silence revoke, 404 on id-le.com"
+
+
 def worker_unit():
     tmp = tempfile.mkdtemp(prefix="idle-worker-")
     try:
@@ -716,14 +798,14 @@ class Page:
             path = u[len(self.base):].split("?")[0]
             if path.startswith("/jeffy/capabilities"): return route.fulfill(status=200, content_type="application/json", body=json.dumps(CAPS))
             if path.startswith("/jeffy/"): return route.fulfill(status=503, content_type="application/json", body='{"error":"busy"}')
-            if path in ("/lab/here", "/lab/live"):
+            if path in ("/lab/here", "/lab/live") or path.startswith("/lab/agent/"):
                 if path == "/lab/here": self.here.append(route.request.post_data or "")
-                if not self.helper: return route.fulfill(status=204, body="")
+                if not self.helper: return route.fulfill(status=404 if path.startswith("/lab/agent/") else 204, body="")
                 import urllib.request, urllib.error
                 rq = urllib.request.Request(self.helper + path, data=(route.request.post_data or "").encode() if route.request.method == "POST" else None, method=route.request.method,
                                             headers={k: v for k, v in route.request.headers.items() if k.lower() in ("authorization", "content-type")} | {"X-Country": "CL", "CF-Connecting-IP": "203.0.113.5"})
                 try:
-                    with urllib.request.urlopen(rq, timeout=10) as r: return route.fulfill(status=r.status, content_type="application/json", body=r.read())
+                    with urllib.request.urlopen(rq, timeout=15) as r: return route.fulfill(status=r.status, content_type="application/json", body=r.read())
                 except urllib.error.HTTPError as e: return route.fulfill(status=e.code, content_type="application/json", body=e.read())
             if path in ("/lab/stats", "/lab/p"):
                 body = route.request.post_data or ""
@@ -1121,7 +1203,7 @@ def t_genesis_gate(P):
         need(r["next"] == "light" and not pg.evaluate(lit), f"'wachito' advanced the lights (#{i + 1}): {r}")
         need(all(a is None for a in r["acted"]), f"a world tool ran during Genesis from free text: {r['acted']}")
         need(r["pre"] == "let there be light", f"the nudge must type the command back: {r['pre']!r}")
-    thread = pg.evaluate("() => document.getElementById('ai-thread').innerText")
+    thread = pg.evaluate("() => [...document.querySelectorAll('#ai-thread .ai-row, #lab-thread .lab-row')].map(e => e.textContent).join('\\n')")
     need("not quite" in thread, "no nudge line in the Operator's chat")
     wach = pg.evaluate("() => window.__genesis.gate()")
     # the step's own command, typed differently, still advances (command syntax: case, punctuation, the story's wording)
@@ -4186,6 +4268,9 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
         need(pg.evaluate("() => window.__genesis.offer()") is False, "the offer shows once per browser")
         # the Director's view is staging/local only: not in a production build at all
         need(pg.evaluate("async () => (await fetch('/director.html')).status") == 404, "the director's view must not be on id-le.com")
+        # bring your own agent: staging/local only until Nico's go (no Oracle section, no skill file; the relay's 404s are in "agent relay")
+        ag = pg.evaluate("async () => ({ ui: !!document.getElementById('agentOpt'), api: !!window.__idleAgent, skill: (await fetch('/agent/SKILL.md')).status })")
+        need(ag == {"ui": False, "api": False, "skill": 404}, f"bring your own agent must be off on id-le.com: {ag}")
         # presence: ON on id-le.com since Nico's go (11-03); the beats carry only the allowlisted fields; a ?fresh page never beats
         P.here.clear()   # (the returning page above beats, as it should; the checks below use a fresh tab from a link)
         pz = P.open("/arena.html?utm_source=prod-check", referer="https://www.reddit.com/r/WebGames/comments/x/y"); booted(pz)
@@ -4263,6 +4348,64 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
     need(not P.outside or all("id-le.com" not in u for u in P.outside), f"requests left the stubs: {P.outside[:3]}")
     P.clean()
     return "id-le.com (launched): " + "; ".join(said)
+
+
+def t_agent(P):
+    """bring your own agent, end to end with the real relay (helper/dev_server.mjs) and the CLI (tools/idle-agent.py): nothing before
+    "allow"; the code pairs the CLI; state → do weather/rename/say → the effect in the page; Genesis allows only look/creature/say;
+    the pill's disconnect revokes the token at once"""
+    import socket, subprocess as sp
+    s_ = socket.socket(); s_.bind(("127.0.0.1", 0)); port = s_.getsockname()[1]; s_.close()
+    node = sp.Popen(["node", os.path.join(ROOT, "helper", "dev_server.mjs"), str(port)], stdout=sp.PIPE, stderr=sp.STDOUT)
+    tmp = tempfile.mkdtemp(prefix="idle-agent-cli-")
+    try:
+        t0 = time.time()
+        while time.time() - t0 < 10:
+            try: socket.create_connection(("127.0.0.1", port), 0.3).close(); break
+            except OSError: time.sleep(0.2)
+        P.helper = f"http://localhost:{port}"   # localhost: the relay is on (as on staging)
+        env = {**os.environ, "IDLE_AGENT_FILE": os.path.join(tmp, "tok.json"), "IDLE_SITE": P.helper}
+        def cli(pg, *args):   # the CLI runs while the page keeps going (the tab answers through the test's routes)
+            pr = sp.Popen([sys.executable, os.path.join(ROOT, "tools", "idle-agent.py"), *args], env=env, stdout=sp.PIPE, stderr=sp.STDOUT, text=True)
+            while pr.poll() is None: pg.wait_for_timeout(150)
+            out = pr.stdout.read()
+            try: return pr.returncode, json.loads(out)
+            except ValueError: return pr.returncode, {"raw": out}
+        pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+        pg.evaluate("() => window.__oracleBox.open('test')")
+        before = pg.evaluate("() => ({ ui: !!document.getElementById('agentOpt'), code: !!document.getElementById('agentCode'), s: window.__idleAgent.session() })")
+        need(before == {"ui": True, "code": False, "s": None}, f"before allow: a section, no code, no session: {before}")
+        rc, r = cli(pg, "pair", "ZZZZZZ"); need(rc == 1 and "expired" in r.get("error", ""), f"a made-up code: {rc} {r}")
+        pg.click("#agentOpt [data-ag=allow]"); wait_for(pg, "() => !!document.getElementById('agentCode')", 10, P=P)
+        code = pg.evaluate("() => document.getElementById('agentCode').textContent")
+        rc, r = cli(pg, "pair", code); need(rc == 0 and r.get("ok"), f"pair: {rc} {r}")
+        wait_for(pg, "() => window.__idleAgent.session().paired && !document.getElementById('agentPill').hidden", 10, P=P)
+        rc, r = cli(pg, "state"); st = r.get("state") or {}
+        need(rc == 0 and st.get("creatures") and st.get("weather") and "rave" in st and "weather" in st.get("allowed_actions", []), f"state: {rc} {json.dumps(r)[:300]}")
+        need(not any(k in json.dumps(st) for k in ("anthropic", "apiKey", "autosave")), "the state carries only the summary")
+        rc, r = cli(pg, "do", "weather", "kind=bitrain"); need(rc == 0 and r["result"].get("ok"), f"do weather: {r}")
+        need(pg.evaluate("() => window.__idleWorld.summary({}).weather.kind") == "bitrain", "the weather in the page")
+        who = st["creatures"][0]["name"]
+        rc, r = cli(pg, "do", "rename", f"name={who}", "new_name=Agentina"); need(rc == 0 and r["result"].get("name") == "Agentina", f"rename: {r}")
+        need(pg.evaluate("() => window.__arena.raw().some(c => c.name === 'Agentina')"), "the renamed creature in the page")
+        rc, r = cli(pg, "do", "say", "text=hello from the test agent"); need(rc == 0, f"say: {r}")
+        need("🤖 agent: hello from the test agent" in pg.evaluate("() => [...document.querySelectorAll('#ai-thread .ai-row, #lab-thread .lab-row')].map(e => e.textContent).join('\\n')"), "the agent's line in the Operator chat")
+        rc, r = cli(pg, "do", "rave", "on=true"); need(rc == 0 and r["result"].get("rave") is True, f"rave: {r}")
+        rc, r = cli(pg, "events"); kinds = [e["kind"] for e in r.get("events", [])]
+        need("paired" in kinds and kinds.count("result") >= 4, f"events: {kinds}")
+        # Genesis: the story builds the world; only the actions that change nothing
+        pg.evaluate("() => { window.__genesis._gp = window.__genesis.genPending; window.__genesis.genPending = () => true; }")
+        rc, r = cli(pg, "do", "weather", "kind=fog"); need(rc == 1 and "Genesis" in r["result"].get("error", ""), f"weather during Genesis: {r}")
+        need(pg.evaluate("() => window.__idleWorld.summary({}).weather.kind") == "bitrain", "Genesis: the weather must not change")
+        rc, r = cli(pg, "do", "look"); need(rc == 0, f"look during Genesis: {r}")
+        rc, r = cli(pg, "state"); need(r["state"]["allowed_actions"] == ["look", "creature", "say"] and r["state"]["story"]["genesis"], f"Genesis state: {r['state'].get('allowed_actions')}")
+        pg.evaluate("() => { window.__genesis.genPending = window.__genesis._gp; }")
+        # disconnect: the pill ends it, the token is dead at once
+        pg.click("#agentPill button"); pg.wait_for_timeout(300)
+        rc, r = cli(pg, "state"); need(rc == 1 and "not paired" in r.get("error", ""), f"after disconnect: {r}")
+        need(pg.evaluate("() => window.__idleAgent.session() === null && document.getElementById('agentPill').hidden && !!document.querySelector('#agentOpt [data-ag=allow]')"), "after disconnect: no session, no pill, allow again")
+    finally:
+        node.kill(); P.helper = None; shutil.rmtree(tmp, ignore_errors=True)
 
 
 def t_presence(P):
@@ -5013,7 +5156,7 @@ def browser_tests(a, out):
         ("story keys logo", t_story_keys_logo, (), {}), ("story ring", t_story_ring, (), {}), ("boot intro", t_boot_intro, (), {}), ("chooser", t_chooser, (), {}),
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
-        ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
+        ("presence", t_presence, (), {"service_workers": "block"}), ("agent", t_agent, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
         ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("arm draw", t_arm_draw, (out,), {"service_workers": "block"}), ("arm draw sw", t_arm_draw, (out,), {}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
@@ -5030,10 +5173,10 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"agent relay", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
-          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
+          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("agent relay", "agent relay: bring your own agent (pairing, tokens, limits, gate)", lambda: agent_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
           ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
 # checks that pass the same assertions with the page's clock sped up (?timescale). Measured Nov 4 on 15 of the slowest at 5×: none got
 # meaningfully faster (they wait on the test's own fixed pauses and on the audio clock, which can't run faster) and 4 broke (story keys
