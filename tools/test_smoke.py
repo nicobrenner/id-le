@@ -2801,6 +2801,42 @@ def _rv_page(P, q="/arena.html?test"):
     pg = P.open(q); booted(pg); pg.evaluate("() => { window.__idle.cfg.helper = location.origin; window.__reviews.test.fast(); }"); return pg
 
 
+def t_reviews_split(P, phone=False):
+    """Nico 11-04: the roadmap tab shows only the roadmap (no review rows above it); reviews have their own view (🧪 ⭐ reviews and the 🌱
+    tab, the same view): a non-member sees the pitch + join, then 'to do' (unfinished, with progress) and 'done' (finished, with the date
+    and your ★). Before a deck: both reviews in 'to do'; half-way: still 'to do' with '3 of 12'; finished: moved to 'done'."""
+    pg = _rv_page(P)
+    pg.evaluate("() => window.__feedback.open('road')"); wait_for(pg, "() => /roadmap/i.test((document.querySelector('#oracle.on') || {}).innerText || '')", 10, P=P)
+    pg.wait_for_timeout(1200)
+    road = pg.evaluate("() => ({ rows: document.querySelectorAll('#oracle .rvview, #oracle [data-review], #oracle .rvit, #oracle [data-open]').length, txt: document.getElementById('oracle').innerText })")
+    need(road["rows"] == 0 and "open reviews" not in road["txt"].lower(), f"the roadmap tab must hold only the roadmap: {road}")
+    def view(where):
+        if where == "rev":
+            pg.evaluate("() => window.__feedback.open('rev')"); wait_for(pg, "() => !!document.querySelector('#oracle .rvview h4.past')", 10, P=P); sel = "#oracle .rvview"
+        else:
+            pg.evaluate("() => { window.__feedback.close(); window.__reviews.tab.open(); }"); wait_for(pg, "() => !!document.querySelector('#hitl.on h4.past')", 10, P=P); sel = "#hitl"
+        return pg.evaluate("""s => { const el = document.querySelector(s), h = [...el.querySelectorAll('h4')], rows = [...el.querySelectorAll('.rv')];
+          const sec = r => { let n = r.previousElementSibling; while (n && n.tagName !== 'H4') n = n.previousElementSibling; return n ? n.className : null; };
+          return { heads: h.map(x => x.textContent.trim().toLowerCase()), join: !!el.querySelector('[data-a=join]'),
+            todo: rows.filter(r => sec(r) === 'todo').map(r => r.innerText), done: rows.filter(r => sec(r) === 'past').map(r => r.innerText) }; }""", sel)
+    for w in ("rev", "hitl"):
+        v = view(w); need(v["heads"] == ["to do", "done"] and v["join"] and len(v["todo"]) == 0 and len(v["done"]) == 0, f"non-member {w}: {v}")
+    pg.evaluate("() => { localStorage.setItem('idle.team', JSON.stringify({ team: 'loop', j: Date.now(), c: 0 })); }")
+    for w in ("rev", "hitl"):
+        v = view(w); need(not v["join"] and len(v["todo"]) == 2 and not v["done"], f"member, before: {w} {v}")
+    pg.evaluate("() => { localStorage.setItem('idle.reviews', JSON.stringify({ logos: { rated: { a: 5, b: 3, c: 1 }, pairs: [] } })); }")
+    v = view("rev"); need(any("3 of 12" in t for t in v["todo"]) and not v["done"], f"half-way: {v}")
+    pg.evaluate("() => { localStorage.setItem('idle.reviews', JSON.stringify({ logos: { rated: { a: 5, b: 3, c: 1 }, pairs: [], done: Date.now() } })); }")
+    for w in ("rev", "hitl"):
+        v = view(w); need(len(v["todo"]) == 1 and "fonts" in v["todo"][0].lower() and len(v["done"]) == 1 and "★" in v["done"][0] and "a" in v["done"][0], f"after: {w} {v}")
+    if phone:
+        ov = pg.evaluate("() => ({ sw: document.documentElement.scrollWidth, w: innerWidth, r: document.getElementById('hitl').getBoundingClientRect().right })")
+        need(ov["sw"] <= ov["w"] + 1 and ov["r"] <= ov["w"] + 1, f"375 px: {ov}")
+    if SHOTS: pg.screenshot(path=os.path.join(SHOTS, f"reviews-split-{'phone' if phone else 'desktop'}.png"))
+    pg.close(); P.clean()
+    return f"roadmap tab: no review rows; ⭐ and 🌱: to do / done (non-member pitch+join; before 2 to do; half-way '3 of 12'; finished → done with ★ and date){' at 375 px' if phone else ''}"
+
+
 def t_reviews_invite(P):
     """v3: the 📟 Operator relays Nico's message: it types (its own dots), says 'I have a message from Nico:', then the letter appears
     as one '📨 from Nico' card, first line in view (no 'Nico is typing'); [I'm in ✌️] / [not now]. not now → the Operator's line and the 🌱
@@ -2876,7 +2912,7 @@ def t_reviews_tab(P):
     for _ in range(3): pg.keyboard.press("ArrowRight"); pg.wait_for_timeout(450)
     click("#review [data-a=done]"); wait_for(pg, "() => window.__reviews.state().view === 'h2h'", 10, P=P)
     click("#review [data-a=skiph2h]"); wait_for(pg, "() => window.__reviews.state().view === 'end'", 10, P=P); pg.evaluate("() => window.__reviews.close()")
-    pg.evaluate("() => window.__reviews.tab.open()"); wait_for(pg, "() => /sent/i.test(document.getElementById('hitl').innerText)", 10, P=P)
+    pg.evaluate("() => window.__reviews.tab.open()"); wait_for(pg, "() => /done/i.test(document.getElementById('hitl').innerText)", 10, P=P)
     t2 = pg.evaluate("() => document.getElementById('hitl').innerText")
     need(f"your ★: {first[1]}" in t2, f"past: {t2!r}")
     pg.evaluate("() => window.__reviews.tab.close()"); pg.close()
@@ -2952,8 +2988,8 @@ def t_reviews(P):
     pg.evaluate("() => window.__reviews.close()"); pg.evaluate("() => window.__settings.open()"); wait_for(pg, "() => !!document.querySelector('#settings.on')", 5)
     row = pg.evaluate("() => (document.getElementById('reviewerRow') || {}).innerText || ''"); pg.evaluate("() => window.__settings.close()")
     need("in the loop (vesting)" in row, f"⚙ row: {row!r}")
-    pg.evaluate("() => { window.__feedback.open('rev'); }"); wait_for(pg, "() => document.querySelectorAll('#oracle [data-review]').length === 2", 15, P=P)
-    pg.click("#oracle [data-review=fonts]"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card' && window.__reviews.state().kind === 'fonts'", 20, P=P)
+    pg.evaluate("() => { window.__feedback.open('rev'); }"); wait_for(pg, "() => document.querySelectorAll('#oracle .rvview [data-open]').length === 2", 15, P=P)
+    pg.click("#oracle .rvview [data-open=fonts]"); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card' && window.__reviews.state().kind === 'fonts'", 20, P=P)
     pg.close(); P.clean()
     return f"order b3b-crt (0 ratings) first, crt-off (30) last; card {size['area'] * 100:.0f}% of the lightbox; ▶ drew; → ← ↑ + drag → + drag ↑ + note → 1/3/5 scores; done → which one? (the two ★) → pair; {len(sent)} batches with the key; ⚙ in the loop (vesting); 🧪 → fonts deck"
 
@@ -4821,7 +4857,7 @@ def browser_tests(a, out):
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
         ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
-        ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
+        ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
         ("reviews link", t_reviews_link, (), {}), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
         ("founder personal", t_founder_personal, (), {}), ("founder phone", t_founder_phone, (), {"is_mobile": True, "has_touch": True}),
@@ -4846,7 +4882,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"beacon ack", "arm reload", "arm stats", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "worker", "world hold", "toggles"}
+LAUNCH = {"arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),

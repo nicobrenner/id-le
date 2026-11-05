@@ -70,7 +70,7 @@
     thanks: 'thank you!! Nico reads every one 🧪',
     short: TEAM.short,
     // the 🌱 tab (DRAFT)
-    tab: { title: `🌱 ${TEAM.name} (${TEAM.short})`, open: 'open reviews', past: 'sent', none: 'nothing to review right now. thank you!', pitch: `a few players help Nico decide what ships: quick reviews now and then, swipe and pick. want in?`, join: 'join ›',
+    tab: { title: `🌱 ${TEAM.name} (${TEAM.short})`, open: 'to do', past: 'done', none: 'nothing to review right now. thank you!', pitch: `a few players help Nico decide what ships: quick reviews now and then, swipe and pick. want in?`, join: 'join ›',
       judged: (n, of) => `${n} of ${of} judged`, start: 'start ›', resume: 'resume ›', again: 'see it ›', picks: 'your ★' },
   };
 
@@ -356,20 +356,27 @@
   setInterval(() => { const o = $('#oracleBtn'); if (o) hb.style.display = getComputedStyle(o).display === 'none' ? 'none' : ''; }, 1500);
   let tabOpen = false; hb.addEventListener('click', () => toggleTab());
   function toggleTab(on) { tabOpen = on ?? !tabOpen; tab.classList.toggle('on', tabOpen); hb.classList.toggle('on', tabOpen); if (tabOpen) { if (!ld('idle.hitlSeen', null)) sv('idle.hitlSeen', Date.now()); try { window.__feedback && window.__feedback.close(); } catch (e) {} mark('rv_tab'); paintTab(); } }
-  async function paintTab() { if (!tabOpen) return; const st = teamStatus(), rvs = await list(), all = sentAll(), member = !!team();
+  // the same view in two places (Nico 11-04: "the roadmap in its own section, and the reviews in their own… 2 sections: TODO… and past/completed"):
+  // the 🌱 tab and 🧪's ⭐ reviews tab both show viewHtml(); viewAct() handles their buttons
+  async function viewHtml() { const st = teamStatus(), rvs = await list(), all = sentAll(), member = !!team();
     const row = r => { const m = all[r.rid] || {}, n = Object.keys(m.rated || {}).length, pct = Math.round(n / Math.max(1, r.n) * 100);
       return `<div class="rv"><div><b>${esc(r.title || r.rid)}</b><small>${esc(TEXT.tab.judged(n, r.n))}</small><div class="bar"><i style="width:${pct}%"></i></div></div><button class="go" data-open="${esc(r.rid)}">${esc(n ? TEXT.tab.resume : TEXT.tab.start)}</button></div>`; };
+    const day = t => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
     const pastRow = r => { const m = all[r.rid] || {}, loves = Object.keys(m.rated || {}).filter(k => m.rated[k] >= 5);
-      return `<div class="rv"><div><b>${esc(r.title || r.rid)} ✓</b><small>${loves.length ? esc(TEXT.tab.picks) + ': ' + loves.map(esc).join(', ') : esc(TEXT.tab.judged(Object.keys(m.rated || {}).length, r.n))}</small></div><button class="go alt" data-open="${esc(r.rid)}">${esc(TEXT.tab.again)}</button></div>`; };
-    const mine = rvs.filter(r => member || r.stage === 'public'), open = mine.filter(r => !(all[r.rid] && all[r.rid].done)), past = rvs.filter(r => all[r.rid] && all[r.rid].done);
-    tab.innerHTML = `<div class="hd"><b>${esc(TEXT.tab.title)}</b><button class="x" data-a="close" title="close">✕</button></div>`
-      + (st ? `<div class="st">🌱 <b>${esc(st.label)}</b><br><small>${esc(st.detail)}</small></div>` : `<div class="st">${esc(TEXT.tab.pitch)}<br><button class="go" data-a="join" style="margin-top:6px">${esc(TEXT.tab.join)}</button></div>`)
-      + `<h4>${esc(TEXT.tab.open)}</h4>` + (open.length ? open.map(row).join('') : `<small>${esc(TEXT.tab.none)}</small>`)
-      + (past.length ? `<h4>${esc(TEXT.tab.past)}</h4>` + past.map(pastRow).join('') : ''); }
+      return `<div class="rv done"><div><b>${esc(r.title || r.rid)} ✓</b><small>${m.done ? esc(day(m.done)) + ' · ' : ''}${loves.length ? esc(TEXT.tab.picks) + ': ' + loves.map(esc).join(', ') : esc(TEXT.tab.judged(Object.keys(m.rated || {}).length, r.n))}</small></div><button class="go alt" data-open="${esc(r.rid)}">${esc(TEXT.tab.again)}</button></div>`; };
+    const mine = rvs.filter(r => member || r.stage === 'public'), todo = mine.filter(r => !(all[r.rid] && all[r.rid].done)), past = rvs.filter(r => all[r.rid] && all[r.rid].done);
+    return (st ? `<div class="st">🌱 <b>${esc(st.label)}</b><br><small>${esc(st.detail)}</small></div>` : `<div class="st">${esc(TEXT.tab.pitch)}<br><button class="go" data-a="join" style="margin-top:6px">${esc(TEXT.tab.join)}</button></div>`)
+      + `<h4 class="todo">${esc(TEXT.tab.open)}</h4>` + (todo.length ? todo.map(row).join('') : `<small>${esc(TEXT.tab.none)}</small>`)
+      + `<h4 class="past">${esc(TEXT.tab.past)}</h4>` + (past.length ? past.map(pastRow).join('') : `<small>nothing yet</small>`); }
+  // a button from either view: join, or open a review (the caller closes its own panel first)
+  async function viewAct(b) { if (!b) return false;
+    if (b.dataset.a === 'join') { const rvs = await list(), first = rvs.find(r => r.stage === 'team' && !(sentAll()[r.rid] && sentAll()[r.rid].done)) || rvs[0]; invite(first ? first.rid : 'logos', 'tab', first); return true; }
+    if (b.dataset.open) { open(b.dataset.open, 'tab'); return true; } return false; }
+  async function paintTab() { if (!tabOpen) return; const body = await viewHtml(); if (!tabOpen) return;
+    tab.innerHTML = `<div class="hd"><b>${esc(TEXT.tab.title)}</b><button class="x" data-a="close" title="close">✕</button></div>` + body; }
   tab.addEventListener('click', async e => { const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.a === 'close') return toggleTab(false);
-    if (b.dataset.a === 'join') { toggleTab(false); const rvs = await list(), first = rvs.find(r => r.stage === 'team' && !(sentAll()[r.rid] && sentAll()[r.rid].done)) || rvs[0]; return invite(first ? first.rid : 'logos', 'tab', first); }
-    if (b.dataset.open) { toggleTab(false); return open(b.dataset.open, 'tab'); } });
+    if (b.dataset.a === 'join' || b.dataset.open) { toggleTab(false); return viewAct(b); } });
   addEventListener('keydown', e => { if (e.key === 'Escape' && tabOpen) toggleTab(false); });
   // the 🌱 lights up for ~4 s: a pulsing ring and an arrow (on a phone, where the top bar folds into ☰, the ☰)
   let lastHl = null;
@@ -427,7 +434,7 @@
   window.__reviews = { askPick, open, close, list, invite, join, team: { status: teamStatus, vested: () => !!(teamStatus() || {}).vested, member: () => !!team(), name: TEAM.name, id: TEAM.id },
     state: () => cur && { rid: cur.rid, view: cur.view, kind: cur.cfg && cur.cfg.kind, items: cur.cfg ? cur.cfg.items.slice() : [], queue: cur.queue ? cur.queue.slice() : [], i: cur.i, current: cur.queue ? cur.queue[cur.i] : null,
       rated: { ...((cur.mine && cur.mine.rated) || {}) }, pairs: ((cur.mine && cur.mine.pairs) || []).slice(), pair: cur.pair || null, playing: !!(cur.live && cur.live.playing && cur.live.playing()) },
-    sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), tab: { open: () => toggleTab(true), close: () => toggleTab(false), isOpen: () => tabOpen }, highlight, arrive, nudge, hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },
+    sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), tab: { open: () => toggleTab(true), close: () => toggleTab(false), isOpen: () => tabOpen }, viewHtml, viewAct, highlight, arrive, nudge, hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },
     badge: () => { const s = teamStatus(), rids = Object.keys(sentAll()).filter(k => sentAll()[k].done); return s || rids.length ? { rids, status: s } : null; }, plugins: () => Object.keys(PLUGINS),
     moment, quiet, text: TEXT, test: { ready, busy: () => busy(), touch: () => { touched = true; }, onScreen: v => { if (v != null) onScreen = v; return onScreen; }, fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) { onScreen = Math.max(onScreen, since / 1000); touched = true; } }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl, knows } };
 })();
