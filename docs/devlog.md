@@ -8,6 +8,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+## 2026-11-04 (evening)
+
+**⚡ tray, take 3, and the HITL label.** Nico on tray6: "the 2 states look good, but the transition is bad, because the height of the window changes". The Operator window never changes size now: "⋯ more" takes room from the chat (which shrinks and scrolls), the grid gets at most 62% of the window and scrolls inside itself when taller, with a short fade (none with reduced motion). Test LAB_STEADY: the window's rect is the same on every frame of more → less → more, and the input stays inside (desktop + 375 px). The team's status reads "🧑‍🤝‍🧑 HITL vesting 🗓️" / "🧑‍🤝‍🧑 HITL ✓" / "🧑‍🤝‍🧑 HITL (lapsed)" (Nico), built from TEAM in idle-reviews.js (LBL), in ⚙, the 🌱 tab, the pledge's cliff line, the vested line and the pedia.
+
 ## 2026-11-04 (later)
 
 **⚡ tray, take 2.** Nico on tray5: "⋯ more" was pinned over the chips ("make i… ⋯ more …dd") and the expanded grid was cut by the input. Now every chip is rendered and fit() measures the row: chips that don't fit (and those past ~5) are hidden, "⋯ more" sits after the last visible chip and only shows when something is hidden; no horizontal scroll, no pinning. Expanded: the full wrapped grid; the window grows (#lab.opMore: height auto up to the screen) and the chat shrinks, so the grid and the input both stay visible. Tests ('operator float', 'operator float phone'): no chip overlaps another or "more" (bounding boxes), every chip inside the window and above the input, collapsed and expanded, desktop and 375 px.

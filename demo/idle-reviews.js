@@ -31,7 +31,9 @@
   // ---------- the words (DRAFT: Nico rewrites any of it) ----------
   // the team: Humans in the Loop (Nico, 11-03: "I like Humans in the Loop"). Every word about it is made from this one line.
   // name: the team ("one of the Humans in the Loop"); member: the status before (vesting) / ✓; id: the server's key (keep it if it's ever renamed)
-  const TEAM = { id: 'loop', name: 'Humans in the Loop', short: 'HITL', member: 'in the loop', what: 'players who help decide what ships' };   // short: for tight spaces like ⚙ (Nico: "Humans in the Loop/HITL 👩🏻‍💻👨🏿‍💻")   // another name later: change name/short/member here (keep the id), e.g. { name: 'Reviewers', short: 'the Reviewers', member: 'Reviewer' }
+  const TEAM = { id: 'loop', name: 'Humans in the Loop', short: 'HITL', member: 'in the loop', what: 'players who help decide what ships' };
+  // the status labels (Nov 4, Nico: change "🌱 in the loop (vesting)" to "🧑‍🤝‍🧑 HITL vesting 🗓️"), built from TEAM
+  const LBL = { vesting: `🧑‍🤝‍🧑 ${TEAM.short} vesting 🗓️`, vested: `🧑‍🤝‍🧑 ${TEAM.short} ✓`, lapsed: `🧑‍🤝‍🧑 ${TEAM.short} (lapsed)` };   // short: for tight spaces like ⚙ (Nico: "Humans in the Loop/HITL 👩🏻‍💻👨🏿‍💻")   // another name later: change name/short/member here (keep the id), e.g. { name: 'Reviewers', short: 'the Reviewers', member: 'Reviewer' }
   const DRAFT_END = 'to be the logo that opens the story, for everyone who plays after you 🙌';   // DRAFT (Nico kept it): his message stopped at "…the default logo animation for the story that"
   const TEXT = {
     operator: 'I have a message from Nico:',
@@ -61,12 +63,12 @@
     // the pledge, after "I'm in" (DRAFT)
     pledge: { title: `🌱 you're one of the ${TEAM.name} now`, ask: 'what we’ll ask: a few quick reviews now and then (a minute or two: swipe, pick, a word if you like)',
       // DRAFT
-      get: `what you get: a say in what ships, a 🌱 ${TEAM.member} badge, and your name on the ${TEAM.name} list when you're vested (if you want it)`,
-      cliff: `the cliff: ${CLIFF_DAYS} days and ${CLIFF_REVIEWS} reviews. until then you’re ${TEAM.member} (vesting); after it, ${TEAM.member} ✓ for good` },
+      get: `what you get: a say in what ships, a ${LBL.vested} badge, and your name on the ${TEAM.name} list when you're vested (if you want it)`,
+      cliff: `the cliff: ${CLIFF_DAYS} days and ${CLIFF_REVIEWS} reviews. until then you’re ${LBL.vesting}; after it, ${LBL.vested} for good` },
     // a member (a link, or a new review): one line and a button, never the deck taking over by itself
     another: (rv, knows) => knows ? `Nico has a new review for the ${TEAM.name}: ${rv.title}` : `Nico has a new review: ${rv.title}. it's for the ${TEAM.name}, ${TEAM.what}`, open: 'open ›', later: 'later',
     publicAsk: (rv, knows) => [[knows ? `the ${TEAM.name} narrowed ${rv.title} down to ${rv.n}` : `the ${TEAM.name} (${TEAM.what}) narrowed ${rv.title} down to ${rv.n}`, 'help pick the winner?']], publicYes: 'sure ›',
-    vested: `you're vested: ${TEAM.member} ✓. thank you for sticking around 🌱`,
+    vested: `you're vested: ${LBL.vested}. thank you for sticking around 🌱`,
     thanks: 'thank you!! Nico reads every one 🧪',
     short: TEAM.short,
     // the 🌱 tab (DRAFT)
@@ -95,7 +97,7 @@
     if (!t.vested && cliffAt && now() >= cliffAt && cliffAt <= until()) { t.vested = cliffAt; sv(TK, t); mark('rv_vested'); setTimeout(() => opSay(TEXT.vested), 400); }
     const state = t.vested ? 'vested' : now() >= until() ? 'lapsed' : 'vesting';
     const days = Math.max(0, Math.ceil((t.j + CLIFF_DAYS * 864e5 - now()) / 864e5));
-    const label = state === 'vested' ? `${TEAM.member} ✓` : state === 'lapsed' ? `${TEAM.member} (lapsed)` : `${TEAM.member} (vesting)`;
+    const label = LBL[state];
     const detail = state === 'vested' ? `level ${level} · ${contrib} contributions` : state === 'lapsed' ? 'the founding period ended before your cliff (nothing you had vested is lost)'
       : `${days ? days + (days === 1 ? ' day' : ' days') : 'no days'} and ${Math.max(0, CLIFF_REVIEWS - done)} ${CLIFF_REVIEWS - done === 1 ? 'review' : 'reviews'} to your cliff · level ${level}`;
     return { team: t.team, joined: t.j, reviews: done, contrib, level, state, label, detail, vested: !!t.vested, cliffAt }; }
