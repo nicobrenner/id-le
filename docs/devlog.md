@@ -8,6 +8,10 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 
 
+## 2026-11-04 (later)
+
+**⚡ tray, take 2.** Nico on tray5: "⋯ more" was pinned over the chips ("make i… ⋯ more …dd") and the expanded grid was cut by the input. Now every chip is rendered and fit() measures the row: chips that don't fit (and those past ~5) are hidden, "⋯ more" sits after the last visible chip and only shows when something is hidden; no horizontal scroll, no pinning. Expanded: the full wrapped grid; the window grows (#lab.opMore: height auto up to the screen) and the chat shrinks, so the grid and the input both stay visible. Tests ('operator float', 'operator float phone'): no chip overlaps another or "more" (bounding boxes), every chip inside the window and above the input, collapsed and expanded, desktop and 375 px.
+
 ## 2026-11-04
 
 **⚡ quick actions: ~5 at a time.** Nico: "maybe these are too many actions at once... let's only show ~5 at the same time". The tray is one row (swipe on phones), most relevant first: 📖 back to the story (when paused), the rave toggle, make it rain ↔ clear the sky, add a new creature, what's happening? (evolve when there's room); "⋯ more" (sticky at the row's end) opens the rest (a sunny day, 🔮 bring your own AI, /pedia, /roadmap, /hitl, /music…) and "‹ less" folds it. /settings, /scientists and /story left the tray (⚙, 🧪 and 📖 already do that). 44 px chips on phones. Tests: 'operator float' (≤5 + more in one row, a chip runs at once, more/less), 'operator float phone' (one row, 44 px, a chip runs), 'chips playground' (taps through "more"; a fresh page before the typed check); the duplicate t_chips_playground/t_chips_genesis definitions removed.

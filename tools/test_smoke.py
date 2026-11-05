@@ -4597,6 +4597,13 @@ def t_new_build(P):
     return f"IDLE_REV {mine}: a newer version.json shows the update offer; a restored page reloads"
 
 
+TRAY_GEO = """() => { const T = document.querySelector('#opTray'), L = document.querySelector('#lab'), F = document.querySelector('#lab-form'), tr = T.getBoundingClientRect(), lr = L.getBoundingClientRect(), fr = F.getBoundingClientRect();
+  const b = [...T.querySelectorAll('[data-opc]:not(.cut)')].map(x => ({ t: x.textContent.trim(), r: x.getBoundingClientRect() })).filter(o => o.r.width > 0);
+  let overlaps = []; for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) { const p = b[i].r, q = b[j].r; if (p.left < q.right - 0.5 && q.left < p.right - 0.5 && p.top < q.bottom - 0.5 && q.top < p.bottom - 0.5) overlaps.push(b[i].t + ' × ' + b[j].t); }
+  const outside = b.filter(o => o.r.left < tr.left - 0.5 || o.r.right > tr.right + 0.5 || o.r.left < lr.left - 0.5 || o.r.right > lr.right + 0.5 || o.r.top < lr.top - 0.5 || o.r.bottom > fr.top + 0.5).map(o => o.t);
+  return { n: b.length, texts: b.map(o => o.t), tops: [...new Set(b.map(o => Math.round(o.r.top)))].length, h: Math.min(...b.map(o => o.r.height)), overlaps, outside, over: document.documentElement.scrollWidth > innerWidth }; }"""
+
+
 def t_operator_float(P):
     """v14 (Nico: "the operator should always be a floating window, never a fixed sidebar chat… during gameplay the user can toggle it from the
     bottom right operator button"; "The roadmap loads under the Operator... it should maybe close the operator"; "a tools icon to toggle a
@@ -4625,15 +4632,16 @@ def t_operator_float(P):
     t0 = pg.evaluate("() => window.__opwin.tray()"); need(not t0["open"], f"the tray starts closed in the playground: {t0}")
     pg.click("#op-tools"); wait_for(pg, "() => window.__opwin.tray().open", 3, P=P)
     t1 = pg.evaluate("() => ({ tray: window.__opwin.tray(), above: document.querySelector('#opTray').nextElementSibling === document.querySelector('#lab-form') })")
-    need(t1["above"] and "make it rain" in t1["tray"]["chips"] and "start a rave" in t1["tray"]["chips"] and "what's happening?" in t1["tray"]["chips"], f"the tray's chips: {t1}")
+    need(t1["above"] and "start a rave" in t1["tray"]["chips"] and "make it rain" in t1["tray"]["chips"] and "what's happening?" in t1["tray"]["all"], f"the tray's chips (as many as fit the row, the rest behind ⋯ more): {t1}")
     # ~5 at a time in one row, then "⋯ more" (Nov 4); a chip runs its action at once (chips2: no longer fills the input)
-    row = pg.evaluate("""() => { const b = [...document.querySelectorAll('#opTray [data-opc]')]; return { n: b.length, texts: b.map(x => x.textContent.trim()), tops: [...new Set(b.map(x => Math.round(x.getBoundingClientRect().top)))].length }; }""")
-    need(row["n"] <= 6 and row["texts"][-1] == "⋯ more" and row["tops"] == 1, f"⚡ shows at most 5 chips plus '⋯ more' in one row: {row}")
+    row = pg.evaluate(TRAY_GEO)
+    need(row["n"] <= 6 and row["texts"][-1] == "⋯ more" and row["tops"] == 1 and not row["overlaps"] and not row["outside"], f"⚡ shows at most 5 chips plus '⋯ more' in one row, nothing overlapping or clipped: {row}")
     pg.click("#opTray [data-opc='0']"); pg.wait_for_timeout(500)
     need(pg.evaluate("() => !!(window.__music && window.__music.rave())") and pg.evaluate("() => document.querySelector('#lab-text').value") == "", "the first chip (start a rave) runs at once")
     pg.evaluate("() => window.__idleAI && window.__idleAI.quick && window.__idleAI.quick('stop the rave', 'test')"); pg.wait_for_timeout(300)
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '⋯ more').click()"); pg.wait_for_timeout(200)
-    more = pg.evaluate("() => window.__opwin.tray().chips")
+    more = pg.evaluate("() => window.__opwin.tray().chips"); pg.wait_for_timeout(200); grid = pg.evaluate(TRAY_GEO)
+    need(not grid["overlaps"] and not grid["outside"] and grid["tops"] >= 2, f"expanded: the whole grid inside the window, above the input, no overlap: {grid}")
     need("a sunny day" in more and "/pedia" in more and "‹ less" in more and not any(c in more for c in ("/settings", "/scientists", "/story")), f"'⋯ more' shows the rest, without the slash duplicates: {more}")
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '‹ less').click()"); pg.wait_for_timeout(200)
     pg.evaluate("() => { document.querySelector('#lab-text').value = ''; window.__opSuggest = () => [{ text: 'generated one' }]; }"); pg.wait_for_timeout(700)
@@ -4672,8 +4680,12 @@ def t_operator_float_phone(P):
     need(r["h"] <= r["H"] * 0.46 + 1 and abs(r["w"] - r["W"]) < 2 and r["top"] >= r["hb"] - 2 and r["top"] < 80, f"phone: a sheet from the top (below the 📟) of at most 45%: {r}")   # v15
     pg.evaluate("() => { window.__sent = []; window.addEventListener('click', e => { if (e.target && e.target.closest && e.target.closest('#lab-send')) window.__sent.push(document.querySelector('#lab-text').value); }, true); window.addEventListener('idle:optext', e => window.__sent.push('optext:' + e.detail.text)); }")
     pg.tap("#op-tools"); wait_for(pg, "() => window.__opwin.tray().open", 3, P=P)
-    row = pg.evaluate("""() => { const b = [...document.querySelectorAll('#opTray [data-opc]')]; return { n: b.length, tops: [...new Set(b.map(x => Math.round(x.getBoundingClientRect().top)))].length, h: Math.min(...b.map(x => x.getBoundingClientRect().height)), over: document.documentElement.scrollWidth > innerWidth }; }""")
-    need(row["n"] <= 6 and row["tops"] == 1 and row["h"] >= 43.5 and not row["over"], f"phone: one row of ≤5 chips + more, 44 px targets, no page overflow: {row}")
+    row = pg.evaluate(TRAY_GEO)
+    need(row["n"] <= 6 and row["tops"] == 1 and row["h"] >= 43.5 and not row["over"] and not row["overlaps"] and not row["outside"] and row["texts"][-1] == "⋯ more", f"phone: one row of chips + more, 44 px targets, no overlap or clipping: {row}")
+    pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '⋯ more').click()"); pg.wait_for_timeout(300)
+    grid = pg.evaluate(TRAY_GEO); need(not grid["overlaps"] and not grid["outside"] and "‹ less" in grid["texts"], f"phone, expanded: the grid inside the sheet, above the input: {grid}")
+    if os.environ.get("IDLE_SHOTS"): pg.screenshot(path=os.path.join(os.environ["IDLE_SHOTS"], "tray-phone-more.png"))
+    pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '‹ less').click()"); pg.wait_for_timeout(300)
     pg.evaluate("() => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === \"what's happening?\").click()"); pg.wait_for_timeout(500)
     last = pg.evaluate("() => { const r = [...document.querySelectorAll('#ai-thread .ai-row')].pop(); return r ? r.innerText : ''; }")
     need("creatures" in last, f"phone: a chip runs at once (what's happening? answers from the world): {last!r}")
