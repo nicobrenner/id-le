@@ -10,6 +10,13 @@ Numbers come from tests on copies of Nico's world (headless, one browser at a ti
 
 ## 2026-11-04
 
+**🧪: the roadmap on its own; reviews as "to do" and "done".** Nico: "don't show the 'reviews' above the roadmap... that's confusing, just show the roadmap in its own section, and the reviews in their own too. in the reviews tab, there should be 2 sections: 1) TODO with the ones the user hasn't reviewed yet, and 2) past/completed reviews of the user".
+- 🧪's roadmap tab (also what the end card opens) shows only the roadmap; the review rows above it are gone.
+- 🧪's ⭐ reviews tab and the 🌱 HITL tab show the same view (`__reviews.viewHtml()` / `viewAct()` in idle-reviews.js): the status (or, for non-members, the pitch + join), then **to do** (unfinished reviews, "3 of 12 judged", start/resume) and **done** (finished, with the date and your ★, "see it ›").
+- Test 'reviews split' (+ phone, launch tier): no review rows in the roadmap tab; to do / done before, half-way and after a deck, in both places; 375 px fits.
+
+## 2026-11-04
+
 **The Epoch 0 moment is its own modal.** Nico: "do we need the operator here? it's weird the way it's presented... there's also input requested in the lightbox, but there's also the operator chat under it.... I think these notices should be separate, like the one about the intro/story mode". EPOCH 0 COMPLETE now renders in #e0Modal, the same centred `.gModal` frame as the story-mode offer (shared CSS), over the modal backdrop; the Operator's window steps aside while it is up (#e0Modal in idle-opwin's yield list) and its lines are no longer copied into the chat. After it closes, the chat gets one line when the creature was named ("Echo it is. hello, Echo 👋 ✓"). Naming, start Epoch 1 → the end card, the playground → its confirm, the funnel and engaged logging are unchanged. Tests: 'story' (the moment outside #lab, the Operator yielded, no copies in the chat), 'story input visible' (no longer expects the moment inside the window), 'engage ask', 'story keys'; `-k story` 22/22, `-t launch -j 1` 28/28.
 
 ## 2026-11-04 (offer v3)

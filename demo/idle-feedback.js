@@ -22,6 +22,7 @@
   const css = document.createElement('style');
   css.textContent = `#oracle{position:absolute;right:16px;top:56px;z-index:40;width:360px;max-width:calc(100% - 24px);max-height:calc(100% - 80px);overflow:auto;display:none;
   background:var(--panel,#fffdf8f4);color:inherit;border:1px solid #8885;border-radius:12px;box-shadow:0 10px 32px #0005;font:13px var(--ui-font,system-ui);padding:10px 12px}
+#oracle .rvview .st{padding:7px 9px;border-radius:9px;background:#61bb4618;margin:4px 0 8px;line-height:1.4}#oracle .rvview h4{margin:10px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.65}#oracle .rvview .rv{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #8882}#oracle .rvview .rv div{flex:1}#oracle .rvview .rv b{display:block;font-size:12.5px}#oracle .rvview .rv small{opacity:.7}#oracle .rvview button.go{font:inherit;font-size:12px;border:0;background:#e03a3e;color:#fff;border-radius:12px;padding:4px 11px;cursor:pointer}#oracle .rvview button.go.alt{background:none;color:inherit;border:1px solid #8886}#oracle .rvview .bar{height:4px;border-radius:2px;background:#8883;margin-top:3px;overflow:hidden}#oracle .rvview .bar i{display:block;height:100%;background:#61bb46}
 #oracle.on{display:block}#oracle .hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}#oracle .hd b{flex:1;font-size:13px}
 #oracle .tabs{display:flex;gap:4px;margin:2px 0 8px}#oracle .tabs button{font:inherit;font-size:12px;border:1px solid #8886;background:none;color:inherit;border-radius:12px;padding:3px 10px;cursor:pointer}
 #oracle .tabs button.on{background:#7a4cff;border-color:#7a4cff;color:#fff}#oracle button.x{border:0;background:none;color:inherit;cursor:pointer;font-size:14px}
@@ -44,9 +45,9 @@
   btn.addEventListener('click', () => toggle());
 
   let open = false, tab = 'tell', kind = '', draft = '', ctxOn = { page: true, place: true, build: true, device: true, err: true }, msg = '', road = null, roadErr = '', sending = false, from = 'lab', revs = null;
-  // ⭐ reviews (idle-reviews.js, 11-03): a tab listing the open ones, and the same list above the roadmap (which the end card opens)
-  const loadRevs = async () => { if (!window.__reviews) return; try { revs = await window.__reviews.list(); } catch (e) { revs = []; } if (open && (tab === 'rev' || tab === 'road')) render(); };
-  const revRows = () => (revs || []).map(r => `<div class="rvit"><button class="v${window.__reviews.sent(r.rid) ? ' on' : ''}" data-review="${esc(r.rid)}" title="open this review">${window.__reviews.sent(r.rid) ? '✓' : '⭐'}</button><div><b>${esc(r.title || r.rid)}</b><small>${r.n} to score, 0 to 5${window.__reviews.sent(r.rid) ? ' · you sent yours, thank you' : ''}</small></div></div>`).join('');
+  // ⭐ reviews (idle-reviews.js): its own tab (to do / done); the roadmap tab shows only the roadmap (Nico 11-04)
+  let revView = null;   // the ⭐ tab's HTML, from idle-reviews.js (the same view as the 🌱 tab)
+  const loadRevs = async () => { if (!window.__reviews || !window.__reviews.viewHtml) return; try { revView = await window.__reviews.viewHtml(); } catch (e) { revView = '<p><small>no open reviews right now.</small></p>'; } if (open && tab === 'rev') render(); };
   const voted = () => { try { return new Set(JSON.parse(localStorage.getItem(VOTED) || '[]')); } catch (e) { return new Set(); } };
   const remember = id => { try { const v = voted(); v.add(id); localStorage.setItem(VOTED, JSON.stringify([...v].slice(-200))); } catch (e) {} };
   function context() {
@@ -55,14 +56,15 @@
     return { page: location.pathname || '/', place: String(window.__placeKind || 'home').toLowerCase().replace(/[^a-z]/g, '').slice(0, 12) || 'home',
       build: String((window.IDLE_CFG && window.IDLE_CFG.build) || '').toLowerCase().replace(/[^a-f0-9]/g, '').slice(0, 12), device: phone ? 'phone' : tablet ? 'tablet' : 'desktop', err: scrub(lastErr).slice(0, 160) };
   }
-  function toggle(on, which) { open = on ?? !open; if (which) tab = which; btn.classList.toggle('on', open); render(); if (open && (tab === 'road' || tab === 'rev')) loadRevs(); if (open && tab === 'road') loadRoad(); if (open && tab === 'tell') setTimeout(() => { const t = el.querySelector('textarea'); if (t && !matchMedia('(pointer: coarse)').matches) t.focus(); }, 30); }
+  function toggle(on, which) { open = on ?? !open; if (which) tab = which; btn.classList.toggle('on', open); render(); if (open && tab === 'rev') loadRevs(); if (open && tab === 'road') loadRoad(); if (open && tab === 'tell') setTimeout(() => { const t = el.querySelector('textarea'); if (t && !matchMedia('(pointer: coarse)').matches) t.focus(); }, 30); }
   async function loadRoad() { roadErr = ''; try { const r = await fetch('/lab/roadmap', { cache: 'no-store' }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status); road = j; } catch (e) { roadErr = String(e.message || e); } if (open && tab === 'road') render(); }
 
   function render() {
     el.classList.toggle('on', open); if (!open) return;
     const c = context();
     const head = `<div class="hd"><b>🧪 the scientists</b><button class="x" data-a="close" title="close">✕</button></div><div class="tabs"><button data-tab="tell" class="${tab === 'tell' ? 'on' : ''}">tell the scientists</button><button data-tab="road" class="${tab === 'road' ? 'on' : ''}">🗺 the roadmap</button>${window.__reviews ? `<button data-tab="rev" class="${tab === 'rev' ? 'on' : ''}">⭐ reviews</button>` : ''}</div>`;
-    if (tab === 'rev') { el.innerHTML = head + `<small>Nico is asking for your eyes on a few experiments: play them, score them 0 to 5, tell him what you'd change.</small>` + (revs == null ? '<p><small>reading the reviews…</small></p>' : revs.length ? revRows() : '<p><small>no open reviews right now.</small></p>'); return; }
+    // ⭐ reviews: the same view as the 🌱 tab (idle-reviews.js viewHtml: to do, then done); never above the roadmap (Nico 11-04)
+    if (tab === 'rev') { el.innerHTML = head + `<div class="rvview">${revView == null ? '<p><small>reading the reviews…</small></p>' : revView}</div>`; return; }
     if (tab === 'tell') {
       const ctxRows = [['page', `page: ${c.page}`], ['place', `place: ${c.place}`], ['build', c.build ? `version: ${c.build}` : ''], ['device', `on a ${c.device}`], ['err', c.err ? `the last error: “${c.err}”` : '']]
         .filter(r => r[1]).map(([k, label]) => `<label><input type="checkbox" data-ctx="${k}"${ctxOn[k] ? ' checked' : ''}> ${esc(label)}</label>`).join('');
@@ -76,7 +78,7 @@ ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}<div class="ctx"><small>What's
     }
     const v = voted();
     const items = road && road.items || [];
-    el.innerHTML = head + (window.__reviews && revs && revs.length ? `<div class="ctx"><small>⭐ open reviews: help pick what ships</small></div>${revRows()}<div class="ctx"><small>🗺 the roadmap</small></div>` : '') + (roadErr ? `<p><small>the roadmap couldn't be read here (${esc(roadErr)}). The full one is on <a href="https://github.com/nicobrenner/id-le/issues/20" target="_blank" rel="noopener">GitHub</a>.</small></p>`
+    el.innerHTML = head + (roadErr ? `<p><small>the roadmap couldn't be read here (${esc(roadErr)}). The full one is on <a href="https://github.com/nicobrenner/id-le/issues/20" target="_blank" rel="noopener">GitHub</a>.</small></p>`
       : !road ? '<p><small>reading the roadmap…</small></p>'
       : (items.length ? items.map(x => `<div class="it"><button class="v${v.has(x.id) ? ' on' : ''}" data-vote="${esc(x.id)}" title="${v.has(x.id) ? 'you voted for this' : 'vote for this'}">▲ ${(road.votes && road.votes[x.id]) || 0}</button><div><b>${esc(x.title)}</b>${x.line ? `<small>${esc(x.line)}</small>` : ''}${x.status ? `<div class="st">${esc(x.status)}</div>` : ''}</div></div>`).join('')
         : '<p><small>nothing on the roadmap yet.</small></p>'))
@@ -88,8 +90,8 @@ ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}<div class="ctx"><small>What's
   el.addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.a === 'close') return toggle(false);
-    if (b.dataset.tab) { tab = b.dataset.tab; msg = ''; from = 'lab'; render(); if (tab === 'road' && !road) loadRoad(); if (tab === 'road' || tab === 'rev') loadRevs(); return; }
-    if (b.dataset.review) { const rid = b.dataset.review, f = from; toggle(false); window.__reviews && window.__reviews.open(rid, f); return; }
+    if (b.dataset.tab) { tab = b.dataset.tab; msg = ''; from = 'lab'; render(); if (tab === 'road' && !road) loadRoad(); if (tab === 'rev') loadRevs(); return; }
+    if ((b.dataset.open || b.dataset.a === 'join') && b.closest('.rvview') && window.__reviews && window.__reviews.viewAct) { toggle(false); window.__reviews.viewAct(b); return; }
     if (b.dataset.kind) { kind = b.dataset.kind; render(); return; }
     if (b.dataset.a === 'suggest') { tab = 'tell'; kind = kind || 'idea'; render(); return; }
     if (b.dataset.vote) { const id = b.dataset.vote; if (voted().has(id)) return; remember(id); b.classList.add('on');
