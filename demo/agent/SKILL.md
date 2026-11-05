@@ -17,7 +17,7 @@ player sees it happen.
 
 The session ends when the player clicks **disconnect**, closes the tab, or after 4 hours. A `401` means it ended: ask for a new code.
 
-## The API (on the game's own site, e.g. https://staging.id-le.pages.dev)
+## The API (on the game's own site: https://staging.id-le.pages.dev, or http://localhost:8766 for `python3 server.py`)
 
 | call | what |
 |---|---|
@@ -37,6 +37,9 @@ Actions (`args` in braces):
 - `evolve {name, how?}`: one creature (`mutate` small, `big` large) or `"world"`
 - `rave {on}`: start (`true`) or stop (`false`) the rave
 - `feed {words, near?}`: drop up to 12 words on the floor for the creatures
+- `say_as {name, text}`: a creature says a short line (a speech bubble and a line in its mind; under 140 characters, in character)
+- `show {name}`: fly the player's view to a creature and open its card (it moves their camera: use it when it helps them)
+- `note {text}`: pin a short note in 💬 IRC, the world chat
 
 **During Genesis** (`state.story.genesis` is true: the storyline is building the world) only `look`, `creature` and `say` work; the
 rest answer with an error. `allowed_actions` always says what works right now.

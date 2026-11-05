@@ -83,6 +83,10 @@ python3 server.py                  # http://localhost:8766 · Python's standard 
 
 Run it locally and the 📟 Operator chat becomes a line to **your coding agent** (Claude Code, on a subscription or a key, or any agent that reads files and runs commands): what you type lands in `lab/notes.jsonl`, the agent answers in `lab/replies.jsonl`, and it can change anything, the game's code included. That's how Id|le was built. Setup: [docs/operator-coding-agent.md](docs/operator-coding-agent.md); the agent's house rules: [AGENTS.md](AGENTS.md).
 
+## Bring your own agent (local and staging for now)
+
+Let an agent of yours (Claude Code, a script, anything that speaks HTTP) watch and play in your world, live: 🔮 Oracle → connect an agent → allow, then `python3 tools/idle-agent.py pair CODE --site http://localhost:8766`. `server.py` has the relay built in; `python3 tools/agent_local.py` starts a test drive with the same relay staging runs. The skill for agents: [demo/agent/SKILL.md](demo/agent/SKILL.md).
+
 Static build, no server needed (see `tools/build_static.py`):
 
 ```

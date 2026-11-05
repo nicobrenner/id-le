@@ -13,6 +13,8 @@ What it does, next to serving demo/:
       /lab/embed                                 sentence vectors for the Crawler (optional: onnxruntime + tokenizers, or sentence-transformers)
       /lab/stats, /lab/p                         accepted and dropped: a local game sends nothing anywhere
   - your world mirrored to disk (/lab/sync, /lab/world, /lab/recover): <lab>/sync_*.json, with a rolling history;
+  - bring your own agent (/lab/agent/*): 🔮 Oracle → connect an agent → allow, then python3 tools/idle-agent.py pair CODE --site
+    http://localhost:8766 (the skill: /agent/SKILL.md); sessions live in this process's memory only;
   - the Operator's line to your own coding agent (/lab/notes, /lab/replies): what you type in the 📟 Operator panel
     (brain: "your coding agent") is appended to <lab>/notes.jsonl; whatever your agent writes to <lab>/replies.jsonl shows
     up in the panel. docs/operator-coding-agent.md and AGENTS.md explain how to point Claude Code (or another agent) at it.
@@ -252,6 +254,86 @@ def jeffy_predict(base, task, text):   # /v1/predict/batch with one text: it doe
         with _jq["lock"]: _jq["inflight"] -= 1
 
 # ---------- HTTP ----------
+# ---------- bring your own agent (/lab/agent/*): the same relay as helper/worker.js's AgentRelay, in this process's memory ----------
+# The game tab (demo/idle-agent.js) opens a session after the player clicks "allow" and polls /lab/agent/tab; an agent pairs with the
+# 6-letter code and asks for actions, which the tab runs and answers. Nothing is written to disk; a restart forgets every session.
+AG_CODE_S, AG_IDLE_S, AG_TOKEN_S, AG_PER_MIN, AG_WAIT_S, AG_ABC = 600, 30, 4 * 3600, 30, 10, "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+class AgentRelay:
+    def __init__(self, now=time.time):
+        self.now, self.s, self.codes, self.tokens, self.cv = now, {}, {}, {}, threading.Condition()
+
+    def _sweep(self):
+        t = self.now()
+        for sid, x in list(self.s.items()):
+            if t - x["seen"] > AG_IDLE_S or (x["token_at"] and t - x["token_at"] > AG_TOKEN_S): self._drop(sid)
+        for c, sid in list(self.codes.items()):
+            x = self.s.get(sid)
+            if not x or t > x["code_exp"]: self.codes.pop(c, None)
+
+    def _drop(self, sid):
+        x = self.s.pop(sid, None)
+        if not x: return
+        if x["code"]: self.codes.pop(x["code"], None)
+        if x["token"]: self.tokens.pop(x["token"], None)
+        for i in list(x["wait"]): x["results"][i] = {"error": "the tab disconnected"}
+        self.cv.notify_all()
+
+    def _event(self, x, e):
+        x["n"] += 1; x["events"].append({"n": x["n"], "t": int(self.now() * 1000), **e}); del x["events"][:-100]
+
+    def op(self, op, body, token):
+        with self.cv:
+            self._sweep()
+            if op == "open":
+                t, sid = self.now(), os.urandom(16).hex()
+                while True:
+                    code = "".join(random.SystemRandom().choice(AG_ABC) for _ in range(6))
+                    if code not in self.codes: break
+                self.s[sid] = {"sid": sid, "seen": t, "code": code, "code_exp": t + AG_CODE_S, "token": None, "token_at": 0, "state": None, "cmds": [], "wait": set(), "results": {}, "events": [], "n": 0, "hits": []}
+                self.codes[code] = sid; return 200, {"ok": True, "sid": sid, "code": code, "expires": AG_CODE_S}
+            if op == "tab":
+                x = self.s.get(str(body.get("sid", "")))
+                if not x: return 200, {"error": "no such session", "gone": True}
+                x["seen"] = self.now()
+                if isinstance(body.get("state"), dict): x["state"] = body["state"]
+                for r in (body.get("results") or [])[:20]:
+                    if not isinstance(r, dict): continue
+                    self._event(x, {"kind": "result", "id": r.get("id"), "action": r.get("action"), "result": r.get("result")})
+                    if r.get("id") in x["wait"]: x["results"][r["id"]] = r.get("result")
+                for e in (body.get("events") or [])[:20]:
+                    if isinstance(e, dict) and isinstance(e.get("text"), str): self._event(x, {"kind": "chat" if e.get("kind") == "chat" else "world", "who": str(e.get("who") or "")[:30], "text": e["text"][:300]})
+                self.cv.notify_all(); cmds, x["cmds"] = x["cmds"], []; live = bool(x["code"]) and self.now() <= x["code_exp"]
+                return 200, {"ok": True, "paired": bool(x["token"]), "code": x["code"] if live else None, "expired": not x["token"] and not live, "cmds": cmds}
+            if op == "close":
+                self._drop(str(body.get("sid", ""))); return 200, {"ok": True}
+            if op == "pair":
+                code = re.sub(r"[^A-Z0-9]", "", str(body.get("code") or "").upper()); sid = self.codes.get(code); x = self.s.get(sid) if sid else None
+                if not x or self.now() > x["code_exp"]: return 403, {"error": "unknown or expired code: ask the player for a fresh one (🔮 Oracle → connect an agent)"}
+                self.codes.pop(code, None); x["code"] = None; x["token"] = os.urandom(24).hex(); x["token_at"] = self.now(); self.tokens[x["token"]] = sid
+                self._event(x, {"kind": "paired"}); return 200, {"ok": True, "token": x["token"], "expires": AG_TOKEN_S}
+            sid = self.tokens.get(str(token or "")); x = self.s.get(sid) if sid else None
+            if not x: return 401, {"error": "not paired (or the tab disconnected)"}
+            if op == "state":   # just paired: the tab's first summary is on its way
+                if not x["state"]: self.cv.wait_for(lambda: x["state"] or x["sid"] not in self.s, timeout=4)
+                return 200, ({"ok": True, "state": x["state"]} if x["state"] else {"ok": True, "state": None, "note": "the tab has not sent its world yet; try again in a moment"})
+            if op == "events":
+                a = str(body.get("after") or "0"); a = int(a) if a.isdigit() else 0
+                return 200, {"ok": True, "events": [e for e in x["events"] if e["n"] > a]}
+            if op == "do":
+                t = self.now(); x["hits"] = [h for h in x["hits"] if t - h < 60]
+                if len(x["hits"]) >= AG_PER_MIN: return 429, {"error": f"slow down: at most {AG_PER_MIN} actions a minute"}
+                x["hits"].append(t); action = str(body.get("action") or "")[:24]; args = body.get("args") if isinstance(body.get("args"), dict) else {}
+                if not re.fullmatch(r"[a-z_]+", action): return 400, {"error": "bad action"}
+                i = os.urandom(6).hex(); x["cmds"].append({"id": i, "action": action, "args": args}); x["wait"].add(i); self._event(x, {"kind": "asked", "id": i, "action": action})
+                self.cv.wait_for(lambda: i in x["results"], timeout=AG_WAIT_S); x["wait"].discard(i)
+                r = x["results"].pop(i) if i in x["results"] else {"pending": True, "note": "the tab has not answered yet; see /lab/agent/events"}
+                return 200, {"ok": not (isinstance(r, dict) and r.get("error")), "id": i, "result": r}
+            return 404, {"error": "unknown path"}
+
+AGENT = AgentRelay()
+AGENT_OPS = ("open", "tab", "close", "pair", "state", "events", "do")
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     jeffy = JEFFY
 
@@ -269,6 +351,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try: return json.loads(raw or b"{}")
         except Exception: return {}
 
+    def agent(self, op, body):
+        code, out = AGENT.op(op, body if isinstance(body, dict) else {}, re.sub(r"^Bearer\s+", "", self.headers.get("Authorization", ""), flags=re.I).strip())
+        return self.send(out, code=code)
+
     def do_GET(self):
         p = urllib.parse.urlparse(self.path).path
         try:
@@ -279,6 +365,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if p == "/lab/world": return self.send(lab_world())
             if p == "/lab/recover":
                 f = os.path.join(LAB, "recover.json"); return self.send(open(f, "rb").read() if os.path.exists(f) else b"null")
+            if p.startswith("/lab/agent/") and p[11:] in ("state", "events"): return self.agent(p[11:], {"after": self.q("after")})
             if p == "/lab/info": return self.send({"server": "server.py", "lab": LAB, "notes": os.path.join(LAB, "notes.jsonl"), "replies": os.path.join(LAB, "replies.jsonl")})
             if p == "/lab/fetch":
                 try: return self.send(read_page(self.q("url")))
@@ -315,6 +402,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 row = self.body()
                 if not isinstance(row, dict) or not str(row.get("text", "")).strip(): return self.send({"ok": False, "error": "a note needs text"}, code=400)
                 add_note(row); return self.send({"ok": True})
+            if p.startswith("/lab/agent/") and p[11:] in AGENT_OPS:   # bring your own agent
+                if int(self.headers.get("Content-Length", 0) or 0) > 16000: return self.send({"error": "too big"}, code=413)
+                return self.agent(p[11:], self.body())
             if p == "/lab/sync": lab_sync(self.body()); return self.send({"ok": True})
             if p in ("/lab/stats", "/lab/p"): return self.send(b"", "text/plain", 204)   # a local game sends nothing anywhere
             if p == "/lab/embed":

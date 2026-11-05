@@ -519,6 +519,38 @@ def agent_unit():
     return "pair needs allow, wrong/used/expired codes refused, state → do → result, rate limit 30/min, disconnect and silence revoke, 404 on id-le.com"
 
 
+def agent_server_unit():
+    """server.py's relay (someone running Id|le from the repo) keeps the same rules as the Worker's: codes once and for 10 minutes,
+    a silent tab or 4 h ends the token, 30 actions a minute, disconnect answers a waiting action"""
+    sys.path.insert(0, ROOT)
+    import importlib, server as SV; importlib.reload(SV)
+    now = [1e9]; R = SV.AgentRelay(now=lambda: now[0])
+    st, o = R.op("pair", {"code": "ABCDEF"}, ""); need(st == 403, f"a made-up code: {st}")
+    st, a = R.op("open", {}, ""); st, p = R.op("pair", {"code": a["code"].lower()}, ""); tok = p.get("token")
+    need(st == 200 and tok and R.op("pair", {"code": a["code"]}, "")[0] == 403, "a code pairs once")
+    R.op("tab", {"sid": a["sid"], "state": {"weather": "clear"}}, ""); need(R.op("state", {}, tok)[1]["state"] == {"weather": "clear"}, "state")
+    out = {}
+    def ask(): out["r"] = R.op("do", {"action": "weather", "args": {"kind": "fog"}}, tok)
+    th = threading.Thread(target=ask); th.start(); time.sleep(0.1)
+    cmds = R.op("tab", {"sid": a["sid"]}, "")[1]["cmds"]; R.op("tab", {"sid": a["sid"], "results": [{"id": cmds[0]["id"], "action": "weather", "result": {"ok": True}}]}, ""); th.join(5)
+    need(out["r"] == (200, {"ok": True, "id": cmds[0]["id"], "result": {"ok": True}}), f"do round trip: {out}")
+    need(R.op("do", {"action": "rm -rf"}, tok)[0] == 400, "a bad action name")
+    codes = []
+    for i in range(31):
+        th = threading.Thread(target=lambda: out.__setitem__("x", R.op("do", {"action": "look"}, tok))); th.start(); time.sleep(0.01)
+        c = R.op("tab", {"sid": a["sid"]}, "")[1]["cmds"]; R.op("tab", {"sid": a["sid"], "results": [{"id": x["id"], "result": {"ok": True}} for x in c]}, ""); th.join(5); codes.append(out["x"][0])
+    need(codes[:28] == [200] * 28 and set(codes[28:]) == {429}, f"rate limit: 30 a minute (a weather and a bad name already counted): {codes}")
+    st, b = R.op("open", {}, "")
+    for _ in range(25): now[0] += 25; R.op("tab", {"sid": b["sid"]}, "")
+    need(R.op("pair", {"code": b["code"]}, "")[0] == 403 and R.op("tab", {"sid": b["sid"]}, "")[1]["expired"], "a code after 10 minutes")
+    now[0] += 31; need(R.op("state", {}, tok)[0] == 401, "a tab silent for 30 s ends the token")
+    st, c = R.op("open", {}, ""); t3 = R.op("pair", {"code": c["code"]}, "")[1]["token"]; R.op("tab", {"sid": c["sid"], "state": {}}, "")
+    th = threading.Thread(target=lambda: out.__setitem__("w", R.op("do", {"action": "look"}, t3))); th.start(); time.sleep(0.1)
+    R.op("close", {"sid": c["sid"]}, ""); th.join(5)
+    need(out["w"][1]["result"] == {"error": "the tab disconnected"} and R.op("state", {}, t3)[0] == 401, f"disconnect: {out['w']}")
+    return "same rules as the Worker's relay: codes once/10 min, silence and disconnect revoke, 30/min"
+
+
 def worker_unit():
     tmp = tempfile.mkdtemp(prefix="idle-worker-")
     try:
@@ -4407,14 +4439,16 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
     return "id-le.com (launched): " + "; ".join(said)
 
 
-def t_agent(P):
-    """bring your own agent, end to end with the real relay (helper/dev_server.mjs) and the CLI (tools/idle-agent.py): nothing before
-    "allow"; the code pairs the CLI; state → do weather/rename/say → the effect in the page; Genesis allows only look/creature/say;
+def t_agent(P, relay="worker"):
+    """bring your own agent, end to end with a real relay and the CLI (tools/idle-agent.py): relay="worker" is helper/worker.js's (as on
+    staging, through helper/dev_server.mjs), relay="server" is server.py's (someone running Id|le from the repo). Nothing before "allow";
+    the code pairs the CLI; state → do weather/rename/say/say_as/note → the effect in the page; Genesis allows only look/creature/say;
     the pill's disconnect revokes the token at once"""
     import socket, subprocess as sp
     s_ = socket.socket(); s_.bind(("127.0.0.1", 0)); port = s_.getsockname()[1]; s_.close()
-    node = sp.Popen(["node", os.path.join(ROOT, "helper", "dev_server.mjs"), str(port)], stdout=sp.PIPE, stderr=sp.STDOUT)
     tmp = tempfile.mkdtemp(prefix="idle-agent-cli-")
+    cmd = ["node", os.path.join(ROOT, "helper", "dev_server.mjs"), str(port)] if relay == "worker" else [sys.executable, os.path.join(ROOT, "server.py"), str(port), "--lab", os.path.join(tmp, "lab")]
+    node = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
     try:
         t0 = time.time()
         while time.time() - t0 < 10:
@@ -4448,8 +4482,12 @@ def t_agent(P):
         rc, r = cli(pg, "do", "say", "text=hello from the test agent"); need(rc == 0, f"say: {r}")
         need("🤖 agent: hello from the test agent" in pg.evaluate("() => [...document.querySelectorAll('#ai-thread .ai-row, #lab-thread .lab-row')].map(e => e.textContent).join('\\n')"), "the agent's line in the Operator chat")
         rc, r = cli(pg, "do", "rave", "on=true"); need(rc == 0 and r["result"].get("rave") is True, f"rave: {r}")
+        rc, r = cli(pg, "do", "say_as", "name=Agentina", "text=I have a new name"); need(rc == 0 and r["result"].get("ok"), f"say_as: {r}")
+        need(pg.evaluate("() => window.__arena.raw().some(c => c.name === 'Agentina' && c.bub && /new name/.test(c.bub.textContent))"), "the creature's speech bubble")
+        rc, r = cli(pg, "do", "note", "text=pinned by the agent"); need(rc == 0 and r["result"].get("ok"), f"note: {r}")
+        rc, r = cli(pg, "do", "show", "name=Nobody-at-all"); need(rc == 1 and "no creature" in r["result"].get("error", ""), f"show an unknown creature: {r}")
         rc, r = cli(pg, "events"); kinds = [e["kind"] for e in r.get("events", [])]
-        need("paired" in kinds and kinds.count("result") >= 4, f"events: {kinds}")
+        need("paired" in kinds and kinds.count("result") >= 7, f"events: {kinds}")
         # Genesis: the story builds the world; only the actions that change nothing
         pg.evaluate("() => { window.__genesis._gp = window.__genesis.genPending; window.__genesis.genPending = () => true; }")
         rc, r = cli(pg, "do", "weather", "kind=fog"); need(rc == 1 and "Genesis" in r["result"].get("error", ""), f"weather during Genesis: {r}")
@@ -5225,7 +5263,7 @@ def browser_tests(a, out):
         ("story keys logo", t_story_keys_logo, (), {}), ("story ring", t_story_ring, (), {}), ("boot intro", t_boot_intro, (), {}), ("chooser", t_chooser, (), {}),
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
-        ("presence", t_presence, (), {"service_workers": "block"}), ("agent", t_agent, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
+        ("presence", t_presence, (), {"service_workers": "block"}), ("agent", t_agent, (), {"service_workers": "block"}), ("agent local server", lambda P: t_agent(P, "server"), (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
         ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("prod offer", t_prod_offer, (out,), {"service_workers": "block"}), ("arm draw", t_arm_draw, (out,), {"service_workers": "block"}), ("arm draw sw", t_arm_draw, (out,), {}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
@@ -5242,10 +5280,10 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"agent relay", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"agent relay", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
-          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("agent relay", "agent relay: bring your own agent (pairing, tokens, limits, gate)", lambda: agent_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
+          ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("agent relay", "agent relay: bring your own agent (pairing, tokens, limits, gate)", lambda: agent_unit()), ("agent relay server", "agent relay server: server.py's relay for local copies", lambda: agent_server_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),
           ("pages", "pages: server-side page views, visitors, bots", lambda: pages_unit()), ("local server", "local server: server.py, the Operator line", lambda: local_server_unit())]
 # checks that pass the same assertions with the page's clock sped up (?timescale). Measured Nov 4 on 15 of the slowest at 5×: none got
 # meaningfully faster (they wait on the test's own fixed pauses and on the audio clock, which can't run faster) and 4 broke (story keys

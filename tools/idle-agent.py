@@ -73,7 +73,7 @@ def main(argv):
         after = rest[rest.index("--after") + 1] if "--after" in rest else "0"
         st, r = call(site, "/lab/agent/events?after=" + str(int(after)), token=tok)
     elif cmd == "do":
-        if not rest: print("do needs an action: weather, spawn, rename, evolve, rave, look, creature, feed, say"); return 2
+        if not rest: print("do needs an action: look, creature, say, weather, spawn, rename, evolve, rave, feed, say_as, show, note (state lists what works right now)"); return 2
         kv = {}
         for p in rest[1:]:
             if "=" not in p: print("args are key=value, got %r" % p); return 2
