@@ -2147,7 +2147,7 @@ def t_chips_playground(P):
     tap("a sunny day"); res["a sunny day"] = pg.evaluate(W) == "clear" and "clear skies" in pg.evaluate(last)
     n0 = pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length")
     tap("add a new creature"); res["add a new creature"] = pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length") == n0 + 1 and "walked in" in pg.evaluate(last)
-    tap("start a rave"); res["start a rave"] = pg.evaluate("() => !!(window.__music && window.__music.rave())") and "dancing" in pg.evaluate(last)
+    tap("start a rave"); res["start a rave"] = pg.evaluate("() => !!(window.__music && window.__music.rave())") and "rave is on" in pg.evaluate(last)
     tap("evolve a creature"); res["evolve a creature"] = "mutated" in pg.evaluate(last)
     tap("what's happening?"); res["what's happening?"] = "creatures" in pg.evaluate(last) and "words" in pg.evaluate(last)
     chips = pg.evaluate("() => window.__opwin.tray().all")
@@ -2213,6 +2213,90 @@ def t_toggles(P):
     need(not bad, f"toggles: {res}")
     P.clean()
     return "; ".join(f"{k} ✓" for k in res)
+
+
+def t_rave2(P, phone=False):
+    """One rave state (Nov 4, Nico: "'start a rave' ... should also toggle the rave lights show on"; "when stopping the rave, the music
+    continues... the rave never stopped"; "stop rave and stop music stop the rave toggle, but not the rave music one"): the ⚡ chip starts
+    the rave, the deck and the lights; the 🎧 chip in the Operator's line opens the deck (phone: the Operator closes); the floor grooves on
+    the kick and snare, bigger when the deck is louder; stop (chip, typed "stop the rave", "music off", the deck's own toggle) ends all of it
+    and the music goes back to what it was; "music off" with no rave turns the music off; creature names in the Operator's lines are
+    @mentions (hover card, click flies to the creature)"""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => { window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")
+    wait_for(pg, "() => window.__opwin.tray().open && window.__opwin.tray().all.includes('start a rave')", 10, P=P)
+    tap = """t => { const find = () => [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === t);
+      let b = find(); if (!b) { const m = [...document.querySelectorAll('#opTray [data-opc]')].find(b => b.textContent.trim() === '⋯ more'); if (m) { m.click(); b = find(); } }
+      if (!b) throw new Error('no chip ' + t); b.click(); }"""
+    typed = "async t => { await window.__idleAI.quick(t, 'typed'); }"
+    st = "() => { const M = window.__music; return { rave: M.rave(), playing: M.playing, src: M.source(), lights: M.lights(), open: M.isOpen(), op: window.__opwin.isOpen() }; }"
+    src0 = pg.evaluate("() => window.__music.source()"); lights0 = pg.evaluate("() => { const l = window.__music.lights(); return { pulse: l.pulse, spots: l.spots }; }")
+    res = {}
+    # start from the chip: rave + deck playing + lights
+    pg.evaluate(tap, "start a rave"); wait_for(pg, "() => window.__music.rave() && window.__music.playing", 6, P=P)
+    s1 = pg.evaluate(st); res["chip: rave + deck + lights"] = s1["src"] == "deck" and s1["lights"]["on"] and s1["lights"]["pulse"] and s1["lights"]["spots"]
+    hint = pg.evaluate("() => { const r = [...document.querySelectorAll('#ai-thread .ai-row')].pop(); return r ? { t: r.innerText, b: !!r.querySelector('button.ai-deck') } : null; }")
+    res["hint line + 🎧 chip"] = bool(hint and "rave is on" in hint["t"] and hint["b"])
+    # the groove: kicks and snares move the floor; louder deck → bigger nudges
+    def amp(vol):
+        pg.evaluate("v => { window.__music.open(true); const r = document.querySelector('[data-r=\"vol\"]'); r.value = v; r.dispatchEvent(new Event('input', { bubbles: true })); }", vol)
+        n0 = pg.evaluate("() => window.__music.groove().n"); ds = []
+        for _ in range(16):
+            pg.wait_for_timeout(150); g = pg.evaluate("() => window.__music.groove()")
+            if g["last"] and g["last"]["kind"] == "kick": ds.append(abs(g["last"]["d"]))
+        return pg.evaluate("() => window.__music.groove().n") - n0, (sum(ds) / len(ds) if ds else 0)
+    nHi, aHi = amp(1); nLo, aLo = amp(0.25)
+    anim = pg.evaluate("() => new Promise(ok => { let seen = false; const t0 = performance.now(); (function f() { if (document.getElementById('floor').getAnimations().some(a => a.playState === 'running')) seen = true; if (seen || performance.now() - t0 > 1500) ok(seen); else requestAnimationFrame(f); })(); })")
+    res[f"groove on beats ({nHi} hits, kick {aHi:.1f}px at vol 1 vs {aLo:.1f}px at 0.25)"] = nHi >= 3 and anim and aHi > aLo > 0
+    pg.evaluate("() => window.__music.open(false)")
+    # the 🎧 chip opens the deck; on a phone the Operator closes, on a computer it stays
+    if not pg.evaluate("() => window.__opwin.isOpen()"): pg.evaluate("() => window.__opwin.open()")
+    pg.evaluate("() => [...document.querySelectorAll('#ai-thread button.ai-deck')].pop().click()"); pg.wait_for_timeout(400)
+    s2 = pg.evaluate(st); apart = phone or pg.evaluate("() => { const a = document.getElementById('lab').getBoundingClientRect(), b = document.getElementById('dj').getBoundingClientRect(); return b.right <= a.left || b.left >= a.right; }")
+    res["🎧 opens the deck" + (" (Operator closed)" if phone else " (Operator stays, deck beside it)")] = s2["open"] and (s2["op"] != phone) and apart
+    pg.evaluate("() => { window.__music.open(false); window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")
+    # stop: the chip, typed words, music off, the deck's own toggle → all off, the music back to where it was
+    def off_ok(): s = pg.evaluate(st); l = s["lights"]; return not s["rave"] and not s["playing"] and s["src"] == src0 and not l["on"] and {"pulse": l["pulse"], "spots": l["spots"]} == lights0
+    wait_for(pg, "() => window.__opwin.tray().all.includes('stop the rave')", 5, P=P)
+    pg.evaluate(tap, "stop the rave"); pg.wait_for_timeout(500); res["stop chip: all off, music back to " + src0] = off_ok()
+    for stop in ("stop the rave", "music off", "Stop music."):
+        pg.evaluate(typed, "start a rave"); wait_for(pg, "() => window.__music.rave() && window.__music.playing", 5, P=P); pg.evaluate(typed, stop); pg.wait_for_timeout(400)
+        res[f"typed {stop!r}: all off"] = off_ok()
+    pg.evaluate("() => window.__music.open(true)"); pg.click("#dj [data-x='rave']"); pg.wait_for_timeout(400)
+    s3 = pg.evaluate(st); pg.click("#dj [data-x='rave']"); pg.wait_for_timeout(400)
+    res["deck toggle: on starts the deck, off stops it"] = s3["rave"] and s3["playing"] and off_ok()
+    pg.evaluate("() => window.__music.open(false)")
+    pg.evaluate("() => window.__music.setSource('bg')"); pg.evaluate(typed, "music off"); pg.wait_for_timeout(300)
+    res["'music off' with no rave: plays off"] = pg.evaluate("() => window.__music.source()") == "off"
+    # @mentions in the Operator's lines
+    if not phone:
+        pg.evaluate("() => { window.__opwin.open(); if (!window.__opwin.tray().open) window.__opwin.toggleTray(); }")
+        pg.evaluate(tap, "add a new creature"); pg.wait_for_timeout(800)
+        mn = pg.evaluate("() => { const r = [...document.querySelectorAll('#ai-thread .ai-row')].pop(), a = r && r.querySelector('a.mn'); return a ? a.dataset.n : null; }")
+        ok = bool(mn)
+        if ok:
+            a = pg.locator("#ai-thread .ai-row a.mn").last; a.scroll_into_view_if_needed(); a.hover(); pg.wait_for_timeout(200)
+            tipok = pg.evaluate("n => { const t = document.getElementById('mtip'); return t.style.display === 'block' && t.textContent.includes(n); }", mn)
+            a.click(); pg.wait_for_timeout(400)
+            flew = pg.evaluate("n => { const c = window.__arena.raw().find(c => c.name === n), k = window.__testCam.get(); return !!c && Math.hypot(k.x - c.x, k.y - c.y) < 200; }", mn)
+            ok = tipok and flew
+        res[f"@mention {mn}: hover card + click flies"] = ok
+    bad = [k for k, v in res.items() if not v]
+    need(not bad, f"rave2: {res} start {s1}")
+    P.clean()
+    return "; ".join(f"{k} ✓" for k in res)
+
+
+def t_rave2_reduced(P):
+    """The groove is off with reduced motion (the rave still plays and the creatures still dance)"""
+    pg = P.open("/arena.html?fresh=1&test"); booted(pg)
+    pg.evaluate("() => window.__idleAI.quick('start a rave', 'typed')"); wait_for(pg, "() => window.__music.rave() && window.__music.playing", 6, P=P)
+    pg.wait_for_timeout(2500)
+    g = pg.evaluate("() => ({ n: window.__music.groove().n, anim: document.getElementById('floor').getAnimations().length })")
+    pg.evaluate("() => window.__idleAI.quick('stop the rave', 'typed')")
+    need(g["n"] == 0 and g["anim"] == 0, f"reduced motion grooved: {g}")
+    P.clean()
+    return "rave on, no groove with reduced motion ✓"
 
 
 def t_unsure_probe(P):
@@ -5248,7 +5332,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("intent story", t_intent_story, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("intent story", t_intent_story, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("rave2", t_rave2, (), {}), ("rave2 phone", t_rave2, (True,), PHONE), ("rave2 reduced", t_rave2_reduced, (), {"reduced_motion": "reduce"}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -5276,7 +5360,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"agent relay", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"agent relay", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "rave2", "rave2 phone", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("agent relay", "agent relay: bring your own agent (pairing, tokens, limits, gate)", lambda: agent_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),

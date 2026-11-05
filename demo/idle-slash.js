@@ -48,7 +48,9 @@
     { name: 'roadmap', aliases: ['vote'], args: '', where: WIN, lock: 'scientists', desc: 'what comes next, and your vote', run: () => { const F = window.__feedback; if (!F) return { say: 'not here yet' }; if (isOn('#oracleBtn')) F.close(); else F.open('road'); return {}; } },
     { name: 'hitl', aliases: ['🧑‍🤝‍🧑', 'reviews'], args: '', where: WIN, when: () => !!window.__reviews, desc: 'open or close 🧑‍🤝‍🧑 the Humans in the Loop: your reviews', run: () => { const R = window.__reviews, T = R.tab; if (T && T.open) { if (T.isOpen && T.isOpen()) T.close(); else T.open(); } else if (R.open) R.open('logos'); return {}; } },
     { name: 'oracle', aliases: ['🔮', 'ai'], args: '', where: WIN, story: false, desc: 'the Oracle: bring your own AI', run: () => { const O = window.__oracleBox; if (!O) return { say: 'the Oracle is not here' }; if (O.isOpen()) O.close(); else O.open('command'); return {}; } },
-    { name: 'music', aliases: ['🎧'], args: '', where: WIN, lock: 'music', desc: 'open or close the music: the background and the DJ deck', run: () => (click('#djBtn'), {}) },
+    { name: 'music', aliases: ['🎧'], args: '',   // takes no word in the list (its chip runs it); /music off still works
+      where: WIN, lock: 'music', desc: 'open or close the music: the background and the DJ deck (/music off: no music; during a rave it ends it)', run: a => { const M = window.__music;
+      if (String(a || '').trim().toLowerCase() === 'off' && M) { if (M.rave()) { M.setRave(false); return { say: '🔇 rave off, the music is back to how it was' }; } M.setSource('off'); return { say: '🔇 music off' }; } click('#djBtn'); return {}; } },
     { name: 'deck', aliases: ['dj'], args: '', where: WIN, lock: 'music', desc: 'the DJ deck (in the music panel)', run: () => (click('#djBtn'), {}) },
     { name: 'stats', aliases: ['📊', 'advisor'], args: '', where: WIN, lock: 'advisor', desc: 'the advisor: how your creatures are doing', run: () => (click('#advBtn'), {}) },
     { name: 'ocean', aliases: ['🌊', 'lake', 'almanac'], args: '', where: WIN, lock: 'almanac', desc: "the almanac, the data lake: your worlds' history and trends", run: () => (click('#almanacBtn'), {}) },
@@ -67,7 +69,7 @@
     { name: 'evolve', aliases: ['🧬'], args: '[name]', where: WIN, world: true, lock: 'evolve', desc: 'evolve a creature (in its mind chat: this one), or the whole world', run: async (a, ctx) => { const n = a.trim() || me(ctx) || 'world'; const r = await tool('evolve', { name: n }); return { say: said(r) || `🧬 evolving ${n === 'world' ? 'the world' : n}` }; } },
     { name: 'rave', aliases: ['🕺'], args: '[on|off]', where: OP_IRC, world: true, lock: 'music', desc: 'rave on or off (no word: toggle): the deck plays, the creatures dance', run: a => { const M = window.__music; if (!M) return { say: 'no music deck here' };
       const w = String(a || '').trim().toLowerCase(), off = w === 'off' || w === 'stop' || (!w && M.rave() && M.playing);
-      if (off) { M.setRave(false); return { say: '🔇 rave off' }; } M.setSource('deck'); M.setRave(true); return { say: '🕺 rave on' }; } },
+      if (off) { M.setRave(false); return { say: '🔇 rave off' }; } M.setRave(true); return { say: '🕺 rave on · 🎧 open the deck to DJ' }; } },
     { name: 'spawn', aliases: ['new'], args: '[crawly|tok|namer|…]', where: OP_IRC, world: true, lock: 'creatures', desc: 'a new creature near you (/new creature)', run: async a => {
       const k = a.trim().toLowerCase().replace(/^creature\s*/, '') || 'crawly'; if (!SPAWN.includes(k)) return { say: 'a new what? try: ' + SPAWN.join(', ') };
       const r = await tool('spawn', { kind: k }); return { say: said(r) || `✦ a new ${k}` }; } },
