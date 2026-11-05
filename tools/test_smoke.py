@@ -4164,6 +4164,45 @@ def t_director_play(P, root, engine="chromium"):
     P.clean()
     return f"{engine}: data frame at {src}; ▶ crash started in {dt:.1f} s with no gate; end screen → replay → crash again; lights → 'waits' bar → next → words; #keys → /director"
 
+
+def t_prod_offer(P, root):
+    """id-le.com (the production hostname, served from the build): the storyline offer's answers are counted. Nov 5: 'shown 63, accepted 0'
+    (all the old card, 20 s after load, which sat under the bottom-left tips). A returning browser gets the v3 modal (after a click; its 75 s
+    skipped here), the ▶ play button is on top and clickable, a real click starts the story, and the report carrying offer_accepted +
+    offer_go_v3 leaves at once (before the intro); in a second browser, 'not now' sends offer_later_v3 at once."""
+    P.base, P.root = "https://id-le.com", root
+    def returning(ctx_P):
+        seed = ctx_P.open("/arena.html?fresh=1&test"); booted(seed); wait_for(seed, "() => !!localStorage.getItem('arena.autosave')", 30, P=ctx_P); seed.close()
+        pg = ctx_P.open("/arena.html"); booted(pg); pg.wait_for_timeout(2500)
+        pg.evaluate("() => (document.querySelector('#topbar') || document.querySelector('#minimap')).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        need(pg.evaluate("() => window.__genesis.offer()") is True, "the returning world gets the offer")
+        wait_for(pg, "() => !!document.querySelector('#offerModal .go')", 10, P=ctx_P); pg.wait_for_timeout(500)
+        return pg
+    def offer_steps(ctx_P):
+        out = set()
+        for q in reports_of(ctx_P.stats):
+            out |= {x for x in (q.get("sf") or []) if x.startswith("offer")}
+        return out
+    pg = returning(P)
+    top = pg.evaluate("() => { const b = document.querySelector('#offerModal .go').getBoundingClientRect(), at = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return !!(at && at.closest('#offerModal .go')); }")
+    need(top, "▶ play must be the element under the pointer (nothing on top of it)")
+    P.stats.clear(); pg.click("#offerModal .go")
+    wait_for(pg, "() => !!document.querySelector('#idleIntro')", 20, P=P)
+    t = time.time()
+    while time.time() - t < 6 and not {"offer_accepted", "offer_go_v3"} <= offer_steps(P): pg.wait_for_timeout(250)
+    got = offer_steps(P)
+    need({"offer_accepted", "offer_go_v3"} <= got, f"the accept must be reported at once: {got}")
+    pg.keyboard.press("Escape"); pg.close()
+    # 'not now' in a second browser
+    ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); Q = Page(ctx, P.base); Q.root = root
+    q = returning(Q); Q.stats.clear(); q.click("#offerModal .lt")
+    t = time.time()
+    while time.time() - t < 6 and "offer_later_v3" not in offer_steps(Q): q.wait_for_timeout(250)
+    later = offer_steps(Q); ctx.close()
+    need("offer_later_v3" in later, f"'not now' must be reported at once: {later}")
+    P.clean()
+    return f"id-le.com: ▶ play on top, a click starts the story, the report carries {sorted(got)} at once; not now sends {sorted(later)} at once"
+
 def t_prod_gates(P, root, parts=("site", "links", "arms")):
     """id-le.com (the production hostname, served from the build, nothing leaves the browser), as launched on Nov 4 (Nico's go): the
     storyline and the A/B/C split are live (a new browser gets story / choose / play, a third each; ?arm= is ignored there); a returning
@@ -5014,7 +5053,7 @@ def browser_tests(a, out):
         ("genesis phone", t_genesis_phone, (), {"is_mobile": True, "has_touch": True}), ("pedia desktop", t_pedia, (), {}), ("pedia halloween", t_pedia_halloween, (), {}),
         ("fonts", t_fonts, (), {}), ("fonts phone", t_fonts_phone, (), {"is_mobile": True, "has_touch": True}),
         ("presence", t_presence, (), {"service_workers": "block"}),   # requests a service worker makes itself pass by the test routes
-        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("arm draw", t_arm_draw, (out,), {"service_workers": "block"}), ("arm draw sw", t_arm_draw, (out,), {}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
+        ("prod gates", lambda P, r: t_prod_gates(P, r, ("site",)), (out,), {"service_workers": "block"}), ("prod gates links", lambda P, r: t_prod_gates(P, r, ("links",)), (out,), {"service_workers": "block"}), ("prod offer", t_prod_offer, (out,), {"service_workers": "block"}), ("arm draw", t_arm_draw, (out,), {"service_workers": "block"}), ("arm draw sw", t_arm_draw, (out,), {}), ("prod gates arms", lambda P, r: t_prod_gates(P, r, ("arms",)), (out,), {"service_workers": "block"}), ("intent links", t_intent_links, (out,), {"service_workers": "block"}), ("story first paint", t_story_first_paint, (out,), {"service_workers": "block"}),
         ("story first paint phone", lambda P, r: t_story_first_paint(P, r, phone=True), (out,), {"service_workers": "block"}), ("ios sound desktop", t_ios_sound, (False,), {}),
     ]
     T = [(n, f, ar, kw, C) for n, f, ar, kw in T]
@@ -5030,7 +5069,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"prod offer", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),

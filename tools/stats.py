@@ -253,6 +253,20 @@ def internal_line(days):
         print()
 
 
+def offer_by_variant(of):
+    """' · v3 (modal): shown 4, play 1, not now 2 · old card: shown 63 (all before Nov 5, when its shows/answers weren't split)'"""
+    names = {"v3": "v3 (modal)", "old": "old card", "a": "a", "b": "b", "c": "c (Operator)"}
+    parts = []
+    for v, nm in names.items():
+        sh, go, lt = of.get("shown_" + v, 0), of.get("go_" + v, 0), of.get("later_" + v, 0)
+        if sh or go or lt:
+            parts.append(f"{nm}: shown {sh}, play {go}, not now {lt}")
+    unsplit = of.get("shown", 0) - sum(of.get("shown_" + v, 0) for v in names)
+    if unsplit > 0:
+        parts.append(f"{unsplit} shown before the shows were split by variant (the old card, 20 s after load, often under the bottom-left tips)")
+    return (" · " + " · ".join(parts)) if parts else ""
+
+
 def sf_split(sf):
     """{'story|title': n, 'story|skip:chat': n, 'none|offer_shown': n, ...} → {arm: {'steps': {...}, 'skips': {...}, 'offer': {...}}}"""
     out = {}
@@ -620,7 +634,7 @@ def main():
             if o["skips"]:
                 print(f"           skipped at: " + ", ".join(f"{SF_NAMES.get(k, k)} {n}" for k, n in sorted(o["skips"].items(), key=lambda kv: -kv[1])))
             if o["offer"]:
-                print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}")
+                print(f"           storyline offer: shown {o['offer'].get('shown', 0)}, accepted {o['offer'].get('accepted', 0)}" + offer_by_variant(o["offer"]))
                 for vv in ("a", "b", "c", "v3"):
                     if o['offer'].get('shown_' + vv): print(f"             offer {vv}: shown {o['offer'].get('shown_' + vv, 0)}, played {o['offer'].get('go_' + vv, 0)}, later {o['offer'].get('later_' + vv, 0)}")
             if o.get("rv"):

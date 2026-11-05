@@ -1219,8 +1219,9 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     if (Q.has('test') && !Q.has('offer')) return false;
     if (window.__genesisVoid || storyMode() || document.querySelector('#idleIntro') || window.__storyKey || window.__traveling) return false;
     return offerDue(); }
-  const offerGo = (v, el) => { const o = offerSeen(); offerSave({ ...o, ans: 'accepted' }); mark('offer_accepted'); mark('offer_go_' + v); if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 400); } newUniverse('story'); };
-  const offerLater = (v, el) => { const o = offerSeen(); offerSave({ ...o, ans: 'later' }); mark('offer_later_' + v); if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 400); } };
+  const flushNow = () => { try { window.__stats && window.__stats._send && window.__stats._send('offer'); } catch (e) {} };   // an offer's answer leaves at once (Nov 5: 63 shown, 0 accepted, so make the answer unmissable)
+  const offerGo = (v, el) => { const o = offerSeen(); offerSave({ ...o, ans: 'accepted' }); mark('offer_accepted'); mark('offer_go_' + v); flushNow(); if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 400); } newUniverse('story'); };
+  const offerLater = (v, el) => { const o = offerSeen(); offerSave({ ...o, ans: 'later' }); mark('offer_later_' + v); flushNow(); if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 400); } };
   function offerCard(v) { const T = OFFERV[v], el = document.createElement('div'); el.id = 'storyOffer'; el.className = 'v' + v; el.setAttribute('role', 'dialog');
     el.innerHTML = v === 'b'
       ? `<canvas class="pv" width="300" height="112" aria-hidden="true"></canvas><div class="ln">${esc(T.line)}</div><div class="bt"><button class="go">${esc(T.go)}</button><button class="lt">${esc(T.later)}</button></div>`
@@ -1267,10 +1268,10 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   function offerOld() { const el = document.createElement('div'); el.id = 'storyOffer'; el.setAttribute('role', 'dialog');
     el.innerHTML = `<button class="x" title="no thanks">×</button><b>✦ new: storyline mode</b><div>A training run that won't stop, a crash, and 10 epochs to raise a consciousness into autonomy with the Tiny Operator. Your world is kept as a snapshot first.</div><button class="go">start the storyline</button>`;
     document.body.appendChild(el); const close = v => { try { localStorage.setItem(OFFER, v); } catch (e) {} el.classList.add('out'); setTimeout(() => el.remove(), 400); };
-    el.querySelector('.x').onclick = () => close('dismissed'); el.querySelector('.go').onclick = () => { close('accepted'); mark('offer_accepted'); newUniverse('story'); }; return true; }
+    el.querySelector('.x').onclick = () => { close('dismissed'); mark('offer_later_old'); flushNow(); }; el.querySelector('.go').onclick = () => { close('accepted'); mark('offer_accepted'); mark('offer_go_old'); flushNow(); newUniverse('story'); }; return true; }
   // show it now (the timer below calls this when the moment is right; tests may call it directly)
   function offer(now_) { if (!offerEligible() || $('#storyOffer')) return false; const v = offerVariant();
-    if (v === 'old') { let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false; try { localStorage.setItem(OFFER, 'shown'); } catch (e) {} mark('offer_shown'); return offerOld(); }
+    if (v === 'old') { let st = null; try { st = localStorage.getItem(OFFER); } catch (e) {} if (st) return false; try { localStorage.setItem(OFFER, 'shown'); } catch (e) {} mark('offer_shown'); mark('offer_shown_old'); return offerOld(); }
     const o = offerSeen(); offerSave({ n: (o.n || 0) + 1, at: now(), v, ans: null }); mark('offer_shown'); mark('offer_shown_' + v); lastOffer = v; { const h = $('#offerHint'); if (h) h.remove(); }
     return v === 'c' ? offerOperator() : v === 'v3' ? offerModal() : offerCard(v); }
   let lastOffer = null;
@@ -1303,7 +1304,7 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   // when: v1 20 s after load (?offer: 1 s); v2 once the player has been active (on screen + an interaction) and the moment is quiet
   { let k = 0; const iv = setInterval(() => { if (++k > 2400) return clearInterval(iv); if (!window.__restoredOrFresh || document.documentElement.classList.contains('booting')) return;
       const v = offerVariant();
-      if (v === 'old') { if (k * 500 < (Q.has('offer') ? 1000 : 20000)) return; clearInterval(iv); offer(); return; }
+      if (v === 'old') { if (offerOn < (Q.has('offer') ? 1 : 20) || document.hidden) return; clearInterval(iv); offer(); return; }
       if (!offerEligible()) { if (storyMode() || !offerDue()) clearInterval(iv); return; }
       if (offerOn < offerWait() || !offerTouched || !offerQuiet(v === 'v3')) return; clearInterval(iv); offer(); }, 500); }
   if (S && S.mode === 'story' && S.on && S.tc && !(S.steps && (S.steps.music || S.steps.words)) && !genesisDone() && !Q.has('genesis') && !Q.has('story')) { const iv = setInterval(() => { if (window.__audio && window.__audio.hush) { clearInterval(iv); silence(true); } }, 200); setTimeout(() => clearInterval(iv), 10000); }
