@@ -532,7 +532,7 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
         const c0 = hold.shift(); let name = null;
         if (c0) { c0.x = c0.tx = w.x; c0.y = c0.ty = w.y + 8; if (c0.el) c0.el.style.visibility = ''; if (!cs.includes(c0)) cs.push(c0); name = c0.name; }
         else { name = W() && W().spawn(family || 'crawly'); const c = name && h.creatures().find(x => x.name === name); if (c) { c.x = c.tx = w.x; c.y = c.ty = w.y + 8; } }
-        if (name) names.push(name); snd.strikes.push({ at: now(), who: name });
+        if (name) names.push(name); { const cb = name && h.creatures().find(x => x.name === name); snd.strikes.push({ at: now(), who: name, born: cb ? { x: Math.round(cb.x), y: Math.round(cb.y) } : null }); }   // where it was born (it walks off soon after)
         { const cc = name && h.creatures().find(x => x.name === name); if (cc && !Q0) setTimeout(() => firstWords(cc, i), RM ? 100 : 450); }
         if (i < 2) await sleep(RM ? 300 : LIFE.gap); }
       if (!names.length) return null;
