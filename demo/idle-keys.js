@@ -27,7 +27,10 @@
   const asked = (Q.get('at') || '').toLowerCase() || hash, alias = ALIASES.find(a => a[0] === asked) || null;
   const key = alias ? alias[1] : names.includes((Q.get('at') || '').toLowerCase()) ? Q.get('at').toLowerCase() : names.includes(hash) ? hash : null;
   const idx = k => names.indexOf(k);
-  let strip = hash === 'keys';
+  // #keys (Nov 4, Nico: "https://staging.id-le.com/#keys doesn't work for me... maybe it's superseded now?"): it is, by the Director's view,
+  // which lists every keyframe with ▶; #keys now opens it (the ` strip still works on a keyframe page)
+  if (hash === 'keys' && !/\/director/.test(location.pathname)) { location.replace('/director'); return; }
+  let strip = false;
 
   // the film's sounds are scheduled from its second 0, which a keyframe (or __epoch0.play({ at })) puts in the past: events already over
   // are skipped (silent), sounds still going play on from now, and no time is ever negative (Web Audio throws on those). Installed once,
@@ -53,6 +56,32 @@
       ownKeys: () => [...m.keys()], getOwnPropertyDescriptor: (t, p) => m.has(String(p)) ? { value: m.get(String(p)), enumerable: true, configurable: true } : undefined });
     try { Object.defineProperty(window, 'localStorage', { value: mem, configurable: true }); } catch (e) { console.warn('keys: no sandbox', e); }
   }
+  // the Director's end screen: when the scene is over (the next keyframe's moment is reached, or the story waits for the player), a small
+  // "▶ replay · next scene ›"; for the film-like scenes (title .. the dark) it covers the frame and any key replays (Nico: "maybe it can end
+  // with that screen, so that it's easy to loop"). It tells the director by postMessage; the director reloads or plays the next scene.
+  const STEPOF = { title: 'title', computer: 'messages', labchat: 'chat', boot: 'boot', run: 'run', crash: 'crash', logo: 'landing', dark: 'landing', operator: 'operator',
+    lights: 'lights', words: 'e1words', life: 'e1life', epoch0done: 'e1done', epoch1: 'e0_start1', end: 'end_shown' };
+  const FILM = ['title', 'computer', 'labchat', 'boot', 'run', 'crash', 'logo', 'dark'];
+  function directorEnd(k) {
+    const i = idx(k), next = names[i + 1] || null, endStep = next ? STEPOF[next] : null, film = FILM.includes(k), t0 = Date.now();
+    let shown = false, waitSince = 0;
+    const say = act => { try { window.parent.postMessage({ idleDirector: 1, act, key: asked || k, next }, location.origin); } catch (e) {} };
+    const show = why => { if (shown) return; shown = true; const el = document.createElement('div'); el.id = 'dirEnd'; el.dataset.why = why;
+      el.innerHTML = `<div><b>${film ? 'end of the scene' : 'the story waits for the player here'}</b><span><button data-a="replay">▶ replay</button>${next ? `<button data-a="next">next scene ›</button>` : ''}</span>${film ? '<small>press any key to replay</small>' : ''}</div>`;
+      el.style.cssText = film ? 'position:fixed;inset:0;z-index:2147483600;background:#000c;display:flex;align-items:center;justify-content:center;text-align:center;color:#cfd6ff;font:14px var(--term-font,ui-monospace,Menlo,monospace)'
+        : 'position:fixed;left:12px;bottom:12px;z-index:2147483600;padding:8px 10px;border-radius:10px;background:#0a0b16f0;border:1px solid #6b7cff66;color:#cfd6ff;font:12px var(--term-font,ui-monospace,Menlo,monospace)';
+      const st = document.createElement('style'); st.textContent = '#dirEnd div{display:flex;flex-direction:column;gap:8px;align-items:center}#dirEnd b{font-weight:600}#dirEnd span{display:flex;gap:8px}#dirEnd button{font:inherit;color:#fff;background:#3a46c8;border:1px solid #cfd6ff55;border-radius:8px;padding:5px 12px;cursor:pointer}#dirEnd small{opacity:.6}';
+      document.head.appendChild(st); document.body.appendChild(el);
+      el.addEventListener('click', e => { const b = e.target.closest('button'); if (b) say(b.dataset.a); });
+      if (film) addEventListener('keydown', e => { if (shown && !e.metaKey && !e.ctrlKey) say('replay'); }, true); };
+    const tick = () => { if (shown) return; const F = window.__funnel, G = window.__genesis;
+      try { const m = JSON.parse(localStorage.getItem('idle.funnel') || '{}') || {}, d = F && F.durations ? F.durations() : {}; if (endStep && (m[endStep] || d[endStep] != null) && Date.now() - t0 > 1500) return show('next'); } catch (e) {}
+      try { const waiting = !film && G && ((G.ready && G.ready()) || (G.modalUp && G.modalUp())); waitSince = waiting ? (waitSince || Date.now()) : 0;
+        if (waitSince && Date.now() - waitSince > 3000) return show('waits'); } catch (e) {}
+      setTimeout(tick, 400); };
+    setTimeout(tick, 1200);
+    window.__dirEnd = { shown: () => shown, show };
+  }
   if (key) {
     sandbox();
     // the storyline and the test mode in the address (read by the game's modules as they load); the key stays in the hash
@@ -62,7 +91,14 @@
     let go; const ready = new Promise(r => go = r);
     window.__storyKey = { key, alias: alias ? alias[0] : null, sub: alias && alias[3] && alias[3].sub || null, keys: names.slice(), idx: idx(key), is: k => k === key, after: k => idx(key) > idx(k), atOrAfter: k => idx(key) >= idx(k), ready, started: false };
     // the gate: one key press or tap, so the browser lets the sound play (the title card is its own gate)
-    if (key === 'title') { window.__storyKey.started = true; go(); }
+    // the Director's view (Nov 4, Nico: "when pressing play, please skip the 'press key'/cutscene title message... I just want the thing to
+    // start playing"): a frame opened by /director (?director, same-origin parent) starts at once; the click on ▶ in the director is the
+    // gesture, and the frame is allowed to autoplay (allow="autoplay"). If the sound is still held back, the first click or key resumes it.
+    const DIR = Q.has('director') && (() => { try { return window.parent !== window && /\/director/.test(window.parent.location.pathname); } catch (e) { return false; } })();
+    window.__storyKey.director = DIR;
+    if (key === 'title' || DIR) { window.__storyKey.started = true; go();
+      if (DIR) { const wake = () => { try { window.__audio && window.__audio.resume && window.__audio.resume(); } catch (e) {} };
+        wake(); addEventListener('pointerdown', wake, true); addEventListener('keydown', wake, true); directorEnd(key); } }
     else {
       const gate = () => { const el = document.createElement('div'); el.id = 'keyGate';
         el.innerHTML = `<div><small>keyframe</small><b>${alias ? alias[2] : KEYS[idx(key)][1]}</b><span>press any key to start</span></div>`;
@@ -94,12 +130,12 @@
   function render() { let el = document.getElementById('keyStrip'); if (!strip) { if (el) el.remove(); return; }
     if (!el) { el = document.createElement('nav'); el.id = 'keyStrip'; el.setAttribute('aria-label', 'storyline keyframes'); document.body.appendChild(el);
       const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); }
-    el.innerHTML = '<b>keyframes</b>' + KEYS.map(([k, t]) => `<a href="arena.html?story&at=${k}" title="${t}" data-k="${k}" class="${k === key ? 'on' : ''}">${k}</a>`).join('') + '<button class="x" title="hide (`)">×</button>';
+    el.innerHTML = '<b>keyframes</b>' + KEYS.map(([k, t]) => `<a href="arena?story&at=${k}" title="${t}" data-k="${k}" class="${k === key ? 'on' : ''}">${k}</a>`).join('') + '<button class="x" title="hide (`)">×</button>';
     el.querySelector('.x').onclick = () => { strip = false; render(); };
     // a link to another key reloads the page there (the hash alone wouldn't)
     el.querySelectorAll('a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); location.href = a.getAttribute('href'); })); }
   addEventListener('keydown', e => { if (e.key !== '`' || e.metaKey || e.ctrlKey || e.altKey) return; const t = e.target; if (t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName))) return; strip = !strip; render(); });
-  addEventListener('hashchange', () => { if (location.hash === '#keys') { strip = true; render(); } });
+  addEventListener('hashchange', () => { if (location.hash === '#keys') location.replace('/director'); });
   if (strip) { if (document.body) render(); else document.addEventListener('DOMContentLoaded', render, { once: true }); }
-  window.__keys = { list: () => KEYS.map(k => ({ key: k[0], label: k[1], url: 'arena.html?story&at=' + k[0] })).concat(ALIASES.map(a => ({ key: a[0], label: a[2], url: 'arena.html?story&at=' + a[0], alias: a[1] }))), key, show: on => { strip = on !== false; render(); } };
+  window.__keys = { list: () => KEYS.map(k => ({ key: k[0], label: k[1], url: 'arena?story&at=' + k[0] })).concat(ALIASES.map(a => ({ key: a[0], label: a[2], url: 'arena?story&at=' + a[0], alias: a[1] }))), key, show: on => { strip = on !== false; render(); } };
 })();

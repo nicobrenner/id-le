@@ -20,7 +20,7 @@
 
   // ---------- the data, from the game's own modules
   function load() {
-    const f = $('#dumpFrame'); f.src = 'arena.html?storydump';
+    const f = $('#dumpFrame'); f.src = 'arena?storydump';   // the canonical path: /arena.html redirects to /arena, and Safari blocks a redirect inside a COEP frame
     const t0 = Date.now(), poll = () => { let w = null; try { w = f.contentWindow; } catch (e) {}
       const d = w && w.__storyDump; if (d && d.genesis && d.boot && d.epoch0 && d.keys) {
         try { D = { genesis: d.genesis(), boot: d.boot(), epoch0: d.epoch0(), keys: d.keys() }; } catch (e) { if (Date.now() - t0 < 30000) return setTimeout(poll, 300); $('#note').innerHTML = `<span id="err">couldn't read the storyline: ${esc(e.message)}</span>`; return; }
@@ -106,9 +106,9 @@
 
   // ---------- play: the keyframe in the frame (its own sandbox: in-memory storage, nothing written, no stats)
   function play(key, el) {
-    const url = 'arena.html?story&at=' + encodeURIComponent(key), f = $('#frame');
+    const url = 'arena?story&director&at=' + encodeURIComponent(key), f = $('#frame');
     document.querySelectorAll('.row.sel').forEach(r => r.classList.remove('sel')); if (el) el.querySelector(':scope>.row').classList.add('sel');
-    $('#empty').hidden = true; f.hidden = false; f.src = url; $('#cur').textContent = '▶ ' + key + ' · click into the frame to start'; const a = $('#tab'); a.href = url; a.hidden = false;
+    $('#empty').hidden = true; f.hidden = false; f.src = url + '&r=' + Date.now();   // a fresh load each time, so replay replays $('#cur').textContent = '▶ ' + key; const a = $('#tab'); a.href = url; a.hidden = false;
     try { f.focus(); } catch (e) {}
     window.__director.playing = key;
   }
@@ -126,6 +126,10 @@
   // local copies can pass ?stats=director_stats.json (a file next to the page; never deployed)
   const qs = new URLSearchParams(location.search).get('stats');
   if (qs && (h === 'localhost' || h === '127.0.0.1')) fetch(qs).then(r => r.json()).then(j => { PF = j; pfOn = true; $('#pfBtn').setAttribute('aria-pressed', true); paintPF(); }).catch(() => {});
+  // the frame's end screen: replay the scene, or play the next one
+  addEventListener('message', e => { const m = e.data; if (e.origin !== location.origin || !m || !m.idleDirector) return; const cur = window.__director.playing;
+    if (m.act === 'replay' && cur) play(cur, document.querySelector('.row.sel') && document.querySelector('.row.sel').parentElement);
+    if (m.act === 'next' && m.next) { const b = document.querySelector(`button.play[data-play="${m.next}"]`); play(m.next, b && b.closest('li')); } });
   window.__director = { data: () => D, setStats: j => { PF = j; pfOn = true; paintPF(); } };
   load();
 })();
