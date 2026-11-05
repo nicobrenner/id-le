@@ -20,14 +20,14 @@
 @media (min-width:501px){#lab-head{cursor:grab;user-select:none}#lab-head.drag{cursor:grabbing}html:is(.gen-box,.gen-float) #lab-head{cursor:default}}
 #op-tools{margin-left:auto;margin-right:6px;font-size:14px;line-height:1;padding:3px 8px;border-radius:10px;border:1px solid #8886;background:transparent;color:inherit;cursor:pointer}
 #op-tools.on{background:#6b7cff33;border-color:#9fb0ff}html:is(.gen-box,.gen-float) #op-tools{display:none!important}
-#opTray{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 2px;border-top:1px solid #8884}#opTray[hidden]{display:none}
+#opTray{display:flex;flex-wrap:nowrap;gap:6px;padding:8px 10px 4px;border-top:1px solid #8884;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}#opTray::-webkit-scrollbar{display:none}#opTray .opc{flex:0 0 auto;white-space:nowrap}#opTray.all{flex-wrap:wrap;overflow-x:visible}#opTray[hidden]{display:none}#opTray .opc.more{border-style:dashed;position:sticky;right:0;background:var(--bg);box-shadow:-10px 0 10px var(--bg)}#opTray.all .opc.more{position:static;box-shadow:none}
 #opTray .opc{font:12.5px var(--ui-font,system-ui);padding:6px 11px;border-radius:14px;border:1px solid #8ea0ff88;background:#6b7cff1f;color:inherit;cursor:pointer;min-height:32px}
 #opTray .opc:hover{background:#6b7cff40}#opTray .opc[disabled]{opacity:.45;cursor:default}
 #opTray .opc.glow{border-color:#cfd6ff;font-weight:600;background:#3a46c8;color:#fff;animation:opGlow 1.8s ease-in-out infinite}
 #opTray .opc.big{font-size:15px;padding:9px 18px}
 @keyframes opGlow{0%,100%{box-shadow:0 0 0 0 #9fb0ff00}50%{box-shadow:0 0 14px 2px #9fb0ffaa}}
 @media (prefers-reduced-motion:reduce){#opTray .opc.glow{animation:none;box-shadow:0 0 10px 1px #9fb0ff88}}
-@media (max-width:500px){#opTray .opc{min-height:40px;font-size:14px}}
+@media (max-width:500px){#opTray .opc{min-height:44px;font-size:14px}}
 #lab-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}#lab-form>#lab-text{flex:1 1 200px;min-width:0;order:1}#lab-form>#lab-send{flex:none;order:2;min-height:40px;padding:0 14px}#lab-form>:not(#lab-text):not(#lab-send){order:3;flex-basis:100%}
 #lab>*{flex:none}#lab>:is(#ai-thread,#lab-thread){flex:1 1 auto;min-height:0;overflow:auto}
 html:not(.gen-box):not(.gen-float) #lab>:is(#genConsole,#ai-set,#ai-smart,#ai-bar,#opTray,#genDay){max-height:34%;overflow:auto}
@@ -59,11 +59,19 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   // the 🔮 chip only in the playground (v15, Nico: "let's just hide it in storyline for now... only on freeplay")
   const inStory = () => document.documentElement.classList.contains('gen-story');
   // plus a few slash commands that take nothing (idle-slash.js: IdleSlash.list('operator'), already filtered by the storyline's unlocks): /music, /stats…
-  const slashChips = () => { try { const L = window.IdleSlash && window.IdleSlash.list ? window.IdleSlash.list('operator') : []; return L.filter(x => !x.args && !['help', 'operator', 'oracle'].includes(x.name)).slice(0, 4).map(x => ({ text: '/' + x.name, slash: 1 })); } catch (e) { return []; } };
-  // state-aware toggles (Nov 4): "start a rave" ↔ "stop the rave". The weather already has both directions as chips ("make it rain" / "a sunny day")
-  const stateful = list => { let st = {}; try { st = (window.__idleAI && window.__idleAI.quickState && window.__idleAI.quickState()) || {}; } catch (e) {}
-    return list.map(x => x.text === 'start a rave' && st.rave ? { text: 'stop the rave' } : x); };
-  function templateChips(c) { if (genOn()) return []; if (override) return override.slice(); const b = backChip(), T = stateful(TEMPLATES.filter(x => !(x.act === 'oracle' && inStory()))).concat(slashChips()); return b ? [b, ...T] : T; }
+  const slashChips = () => { try { const L = window.IdleSlash && window.IdleSlash.list ? window.IdleSlash.list('operator') : []; return L.filter(x => !x.args && !['help', 'operator', 'oracle', 'settings', 'scientists', 'story'].includes(x.name)).slice(0, 4).map(x => ({ text: '/' + x.name, slash: 1 })); } catch (e) { return []; } };
+  // ~5 at a time (Nov 4, Nico: "maybe these are too many actions at once... let's only show ~5 at the same time"): one row, most relevant
+  // first (the way back to the story, the two toggles, a new creature, what's happening?), then "⋯ more" opens the rest. The slash commands
+  // that only duplicate a button (/settings = ⚙, /scientists = 🧪, /story = 📖 back to the story) are left out of the tray
+  const SHOWN = 5, NO_SLASH = ['help', 'operator', 'oracle', 'settings', 'scientists', 'story'];
+  function templateChips(c) { if (genOn()) return []; if (override) return override.slice();
+    let st = {}; try { st = (window.__idleAI && window.__idleAI.quickState && window.__idleAI.quickState()) || {}; } catch (e) {}
+    const b = backChip(), rave = { text: st.rave ? 'stop the rave' : 'start a rave' }, sky = { text: st.wet ? 'clear the sky' : 'make it rain' };
+    const top = [b, rave, sky, { text: 'add a new creature' }, { text: "what's happening?" }, { text: 'evolve a creature' }].filter(Boolean);
+    const rest = [{ text: 'a sunny day' }, ...(inStory() ? [] : [{ text: '🔮 bring your own AI', act: 'oracle' }]), ...slashChips()];
+    const all = top.concat(rest).filter((x, i, a) => a.findIndex(y => y.text === x.text) === i);
+    return all.map((x, i) => i < SHOWN ? x : { ...x, extra: 1 }); }
+  let showAll = false;   // "⋯ more" pressed (until the tray closes)
   // the tray is open by default in Genesis (its chip is the step's glowing button), closed elsewhere unless the player opened it
   let userOpen = null; try { userOpen = localStorage.getItem('idle.opTray'); } catch (e) {}
   const trayOpen = () => genOn() ? false : override ? true : userOpen === '1';
@@ -72,14 +80,19 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
     if (!c.genesis && !override && typeof window.__opSuggest === 'function') { try { chips = await window.__opSuggest(c); } catch (e) { chips = null; } }
     if (!Array.isArray(chips)) chips = templateChips(c);
     const open = trayOpen() && chips.length > 0, s = JSON.stringify([open, chips, c.phone]); tools.classList.toggle('on', open); tools.hidden = !!c.genesis;
-    if (!force && s === sig) return; sig = s; tray.hidden = !open;
-    tray.innerHTML = chips.map((x, i) => `<button type="button" class="opc${x.glow ? ' glow' : ''}${x.glow && coarse() ? ' big' : ''}" data-opc="${i}"${x.gsay ? ' data-gsay="1"' : ''}${x.disabled ? ' disabled' : ''}>${x.gsay && coarse() ? '▶ ' : ''}${esc(x.text)}</button>`).join('');
+    if (!open) showAll = false;
+    const extra = chips.filter(x => x.extra).length; if (!showAll) chips = chips.filter(x => !x.extra);
+    const s2 = s + showAll; if (!force && s2 === sig) return; sig = s2; tray.hidden = !open; tray.classList.toggle('all', showAll);
+    if (extra) chips = chips.concat([{ text: showAll ? '‹ less' : '⋯ more', more: 1 }]);
+    tray.innerHTML = chips.map((x, i) => `<button type="button" class="opc${x.glow ? ' glow' : ''}${x.more ? ' more' : ''}${x.glow && coarse() ? ' big' : ''}" data-opc="${i}"${x.gsay ? ' data-gsay="1"' : ''}${x.disabled ? ' disabled' : ''}>${x.gsay && coarse() ? '▶ ' : ''}${esc(x.text)}</button>`).join('');
     tray._chips = chips; }
   tools.addEventListener('click', e => { e.stopPropagation(); userOpen = trayOpen() ? '0' : '1'; try { localStorage.setItem('idle.opTray', userOpen); } catch (er) {} render(true); });
   // a chip: on a phone it is sent (typing costs too much there); on a computer it fills the input, to send or change. Genesis's chip is
   // handled by idle-genesis.js (data-gsay: the same as saying the step's words)
   tray.addEventListener('click', e => { const b = e.target.closest('[data-opc]'); if (!b || b.disabled || b.dataset.gsay) return; const x = (tray._chips || [])[+b.dataset.opc]; if (!x) return;
+    if (x.more) { showAll = !showAll; render(true); return; }
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'op_chip', extra: { chip: x.act || x.text.slice(0, 24) } } })); } catch (er) {}
+    if (x.more) { showAll = !showAll; render(true); return; }
     if (typeof x.act === 'function') { try { x.act(x); } catch (er) { console.warn('opwin: chip', er); } return; }
     if (x.act === 'oracle') { try { window.__oracleBox && window.__oracleBox.open('tray'); } catch (er) {} return; }
     // a quick action (idle-ai.js QUICK) runs at once, deterministically (Nov 4: "make it rain" had gone through the model and got "Yes, it is")
@@ -177,5 +190,5 @@ html.gen-story #ai-oracle-link,html.gen-story #lab #ai-smart,html.gen-story #lab
   //   refresh(), tray(), toggleTray(), yielding(), pos()/setPos(), templates()   (tests and the tray's own state)
   //   command(name, fn)                       a one-off slash command typed in the chat (/name + Enter); the slash table proper is idle-slash.js
   //   window.__opSuggest(ctx) → chips | Promise<chips>: the hook for generated suggestions (ctx: { genesis, step, phone })
-  window.__opwin = { command: (name, fn) => { COMMANDS[String(name).toLowerCase()] = fn; }, commands: () => Object.keys(COMMANDS), open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, glowing: () => glowSel, clearGlow, cutting: () => cutting, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text) }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
+  window.__opwin = { command: (name, fn) => { COMMANDS[String(name).toLowerCase()] = fn; }, commands: () => Object.keys(COMMANDS), open: openWin, close: closeWin, isOpen, say: t => { try { window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', String(t), 'ai'); } catch (e) {} }, setChips: list => { override = Array.isArray(list) && list.length ? list.slice() : null; render(true); }, highlight, glowing: () => glowSel, clearGlow, cutting: () => cutting, refresh: () => render(true), tray: () => ({ open: !tray.hidden, chips: (tray._chips || []).map(x => x.text), all: templateChips(ctx()).map(x => x.text), more: showAll }), toggleTray: () => tools.click(), yielding: () => yieldTo, pos: () => pos, setPos: p => { pos = p; applyPos(); }, templates: () => TEMPLATES.map(x => x.text) };
 })();
