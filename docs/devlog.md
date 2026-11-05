@@ -970,3 +970,6 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - The 400 on /lab/p came from an 'Unknown' user agent posting a body that isn't `{v: 1}` (worker.js answers 400 only for not-JSON or another version); no page of ours sends that.
 - All three arms load idle-stats.js (arena.html's last script); story, choose and play probes each reported.
 - Left as is: "in-page reports from ~50% of game visits" is the rate of page requests that actually run. A better denominator would count first-script fetches on the server; not done (it would route every asset through the Worker).
+
+## weatherLabel guard (Nov 6)
+- id-le.com reported `Uncaught TypeError: Cannot set properties of null` at index.html:1841: the day-cycle interval wrote `#weatherLabel` after it had been removed. Both writes are now guarded (`($('#weatherLabel') || {}).title = …`).
