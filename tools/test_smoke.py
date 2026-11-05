@@ -397,6 +397,16 @@ out.visitsTotal = kvVisits + pendVisits;
   const pk = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json(), all = Object.values(pk.acc || {});
   const sum = k => all.reduce((a, r) => { for (const [x, n] of Object.entries(r[k] || {})) a[x] = (a[x] || 0) + n; return a; }, {});
   out.accEngaged = { dd: sum('dd'), en: sum('en'), cb: sum('cb'), zz: sum('zz') }; }
+// confirmed beacons (k): answered { stored: true } once the accumulator holds them; the same k again (the answer was lost) counts once;
+// without the accumulator (local) the isolate's own k memory does the same
+{ const env3 = { STATS: kv(), PRESENCE: NS, ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' }, send = async (e, b) => { const r = await W.fetch(new Request('https://id-le.com/lab/p', { method: 'POST', body: JSON.stringify(b), headers: { 'CF-Connecting-IP': '9.9.9.9', 'Content-Type': 'application/json' } }), e, { waitUntil() {} }); return { s: r.status, j: await r.json().catch(() => null) }; };
+  const pk0 = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json(), cnt = pk => Object.values(pk.acc || {}).reduce((a, r) => a + ((r.dd || {}).play || 0), 0);
+  const r1 = await send(env3, { v: 1, dd: 'play', k: 'abcd1234efgh' }), r2 = await send(env3, { v: 1, dd: 'play', k: 'abcd1234efgh' }), r3 = await send(env3, { v: 1, dd: 'play', k: 'zzzz9999yyyy' });
+  const pk1 = await (await NS.get('stats-live').fetch('https://presence/stats/peek', { method: 'POST', body: '{}' })).json();
+  const env4 = { STATS: kv(), ALLOWED_ORIGINS: '*', RATE_PER_MIN: '100000' };
+  const l1 = await send(env4, { v: 1, aa: 'story', k: 'loc1loc1loc1' }), l2 = await send(env4, { v: 1, aa: 'story', k: 'loc1loc1loc1' });
+  const lds = [...env4.STATS.m.values()].map(v => JSON.parse(v)), laa = lds.reduce((a, d) => a + ((d.aa || {}).story || 0), 0);
+  out.ack = { r1, r2, r3, added: cnt(pk1) - cnt(pk0), l1, l2, laa }; }
 console.log(JSON.stringify(out));
 """
 
@@ -418,6 +428,9 @@ def kv_writes_unit():
     need(o["newPuts"] <= 25, f"the accumulator wrote KV {o['newPuts']} times in a day (≤ 25 expected)")
     ae = o.get("accEngaged") or {}
     need(ae.get("dd") == {"story": 1} and ae.get("en") == {"story|cr_card": 1} and ae.get("cb") == {"none|d1": 1} and ae.get("zz") == {"a": 2}, f"the engaged beacons (and any newer count map) must survive the accumulator: {ae}")
+    ak = o.get("ack") or {}
+    need(ak.get("r1", {}).get("j", {}).get("stored") and ak.get("r2", {}).get("j", {}).get("dup") and ak.get("added") == 2, f"confirmed beacons through the accumulator: stored, a repeated k counted once: {ak}")
+    need(ak.get("l1", {}).get("j", {}).get("stored") and ak.get("l2", {}).get("j", {}).get("dup") and ak.get("laa") == 1, f"confirmed beacons without the accumulator: once per k: {ak}")
     need(o["visitsTotal"] == 790, f"visits kept {o['visitsTotal']} != 790 (KV + pending)")
     need(o["afterFailTotal"] == 793, f"after a failed KV write {o['afterFailTotal']} != 793")
     need(o["fbStatus"] == 200 and o["fbBody"].get("queued") and o["fbWritten"], f"a refused 🧪 write: {o['fbStatus']} {o['fbBody']}, written later {o['fbWritten']}")
@@ -687,6 +700,7 @@ class Page:
         self.ctx, self.base, self.errors, self.console, self.outside = ctx, base, [], [], []
         self.warns, self.notes, self.before_reload = [], [], []
         self.stats = stats_sink if stats_sink is not None else []
+        self.beacon_posts, self.beacon_seen, self.beacon_mode = [], set(), "ok"
         self.fb = []
         self.gifts = {}
         self.team_keys, self.rv_order = set(), {}   # ⭐ reviews: who joined the team (by browser key), the per-item counts the server would return
@@ -711,7 +725,19 @@ class Page:
                 try:
                     with urllib.request.urlopen(rq, timeout=10) as r: return route.fulfill(status=r.status, content_type="application/json", body=r.read())
                 except urllib.error.HTTPError as e: return route.fulfill(status=e.code, content_type="application/json", body=e.read())
-            if path in ("/lab/stats", "/lab/p"): self.stats.append(route.request.post_data or ""); return route.fulfill(status=204, body="")
+            if path in ("/lab/stats", "/lab/p"):
+                body = route.request.post_data or ""
+                try: k = (json.loads(body) or {}).get("k")
+                except Exception: k = None
+                if not k: self.stats.append(body); return route.fulfill(status=204, body="")
+                # a confirmed beacon (idle-stats.js confirmed()): stored once per k, like the accumulator; beacon_mode simulates a failing
+                # server ('fail': not stored, 503) or a lost answer ('lostack': stored, the response never arrives)
+                self.beacon_posts.append(body); mode = self.beacon_mode
+                if mode == "fail": return route.fulfill(status=503, content_type="application/json", body='{"ok":false,"stored":false}')
+                dup = k in self.beacon_seen
+                if not dup: self.beacon_seen.add(k); self.stats.append(body)
+                if mode == "lostack": return route.abort()
+                return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "stored": True, "dup": dup}))
             if path == "/lab/notices": return route.fulfill(status=200, content_type="application/json", body="[]")
             if path.startswith("/worlds/state"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"me": {"name": "", "links": [], "requests": [], "inbox": []}, "peers": {}}))
             if path == "/lab/fetch": return route.fulfill(status=200, content_type="application/json", body=json.dumps(WIKI_PAGE))
@@ -3433,9 +3459,45 @@ def t_arm_stats(P):
             ctx.close()
     for arm, rows in got.items():
         need(any(v == 1 and g == arm for _, v, g in rows), f"the {arm} arm's visit report must carry gv={arm}: {got}")
-        need(beacons.get(arm) == [{"v": 1, "aa": arm}], f"the {arm} arm sends one arm beacon with only v and aa: {beacons}")
+        need([{k: v for k, v in x.items() if k != "k"} for x in beacons.get(arm, [])] == [{"v": 1, "aa": arm}] and all(len(str(x.get("k", ""))) >= 8 for x in beacons.get(arm, [])), f"the {arm} arm sends one arm beacon with only v, aa and its one-time k: {beacons}")
     P.clean()
     return "visit reports carry their arm: " + ", ".join(f"{a} {len(r)} reports" for a, r in got.items())
+
+
+def t_beacon_ack(P):
+    """Confirmed beacons (Nov 4, after a stale accumulator dropped the daily beacons while pages had already set their flags): a beacon's
+    flag is set only when the server answers { stored: true }. A failed answer → still pending → sent again on the next load, counted once;
+    a lost answer (stored, the response never arrives) → sent again with the same k → counted once (the server ignores a k it has seen);
+    a confirmed one is not sent again, and the daily flags hold across reloads."""
+    def run(mode):
+        P.stats.clear(); P.beacon_posts.clear(); P.beacon_seen.clear(); P.beacon_mode = mode
+        pg = P.open("/arena.html?arm=play&statstest&test"); booted(pg)
+        pg.evaluate("() => { for (const k of ['idle.ddDay', 'idle.cbDay', 'idle.enDay', 'idle.armSent', 'idle.bpend']) localStorage.removeItem(k); }")
+        P.stats.clear(); P.beacon_posts.clear(); P.beacon_seen.clear(); pg.reload(); booted(pg)
+        wait_for(pg, "() => (window.__stats.pending().dd || null) !== null || localStorage.getItem('idle.ddDay')", 20, P=P); pg.wait_for_timeout(1500)
+        st1 = pg.evaluate("() => ({ pend: Object.keys(window.__stats.pending()).sort(), dd: localStorage.getItem('idle.ddDay'), arm: localStorage.getItem('idle.armSent') })")
+        P.beacon_mode = "ok"; pg.reload(); booted(pg)
+        wait_for(pg, "() => !!localStorage.getItem('idle.ddDay') && !!localStorage.getItem('idle.armSent')", 20, P=P); pg.wait_for_timeout(1500)
+        st2 = pg.evaluate("() => ({ pend: Object.keys(window.__stats.pending()).sort(), dd: localStorage.getItem('idle.ddDay'), arm: localStorage.getItem('idle.armSent') })")
+        n_posts = len(P.beacon_posts); pg.reload(); booted(pg); pg.wait_for_timeout(2500)
+        third = len(P.beacon_posts) - n_posts
+        counted = [json.loads(b) for b in P.stats if '"k"' in b]
+        pg.close(); P.clean(); return st1, st2, counted, third, list(P.beacon_posts)
+    st1, st2, counted, third, posts = run("fail")
+    need(st1["pend"] == ["aa", "dd"] and not st1["dd"] and not st1["arm"], f"failed answer: still pending, no flag: {st1}")
+    need(st2["pend"] == [] and st2["dd"] and st2["arm"] == "play", f"next load: sent again and confirmed: {st2}")
+    need(sorted(1 for x in counted if "dd" in x) == [1] and sorted(1 for x in counted if "aa" in x) == [1], f"failed then resent: counted once each: {counted}")
+    need(third == 0, f"confirmed: nothing sent on a later load: {third} more posts")
+    ks = [json.loads(b)["k"] for b in posts if '"dd"' in b]
+    need(len(ks) >= 2 and len(set(ks)) == 1, f"the resend reuses the message's k: {ks}")
+    st1, st2, counted, third, posts = run("lostack")
+    need(st1["pend"] == ["aa", "dd"] and not st1["dd"], f"lost answer: still pending: {st1}")
+    need(st2["pend"] == [] and st2["dd"], f"next load: confirmed: {st2}")
+    dd_posts = [b for b in posts if '"dd"' in b]
+    need(len(dd_posts) >= 2 and len([x for x in counted if "dd" in x]) == 1 and len([x for x in counted if "aa" in x]) == 1, f"lost answer then resent: posted {len(dd_posts)}×, counted once: {counted}")
+    need(third == 0, f"no resend once confirmed: {third}")
+    P.beacon_mode = "ok"
+    return "failed answer → pending → resent next load → counted once; lost answer → resent with the same k → counted once; confirmed → never resent"
 
 
 def t_engaged(P):
@@ -3447,7 +3509,7 @@ def t_engaged(P):
     sent = lambda: [json.loads(b) for b in P.stats]
     t_end = time.time() + 30
     while time.time() < t_end and not any("dd" in json.loads(b) for b in P.stats): pg.wait_for_timeout(300)
-    tiny = lambda: [{k: v for k, v in x.items() if k != "u"} for x in sent() if any(k in x for k in ("dd", "en", "cb"))]
+    tiny = lambda: [{k: v for k, v in x.items() if k not in ("u", "k")} for x in sent() if any(k in x for k in ("dd", "en", "cb"))]
     need([x for x in tiny() if "dd" in x] == [{"v": 1, "dd": "none"}] and not [x for x in tiny() if "en" in x], f"one day beacon, no act yet: {tiny()}")
     # passive: hovering, scrolling, opening the pedia link area → nothing
     pg.mouse.move(400, 400); pg.mouse.wheel(0, 300); pg.wait_for_timeout(600)
@@ -4706,7 +4768,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("chips playground", t_chips_playground, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("chips playground", t_chips_playground, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
@@ -4733,7 +4795,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"arm reload", "arm stats", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "worker", "world hold"}
+LAUNCH = {"beacon ack", "arm reload", "arm stats", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "engage ask", "engaged", "fresh load", "intent links", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),

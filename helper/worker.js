@@ -193,8 +193,8 @@ const enBeacon = (p, o) => { if (p.dd !== undefined) { if (EN_ARMS.includes(p.dd
   if (p.cb !== undefined) { if (EN_ARMS.includes(p.cb) && RBB.includes(p.b)) { o.cb = o.cb || {}; bump(o.cb, p.cb + '|' + p.b); } return true; }
   return false; };
 const internalTag = t => typeof t === 'string' && (INTERNAL_TAGS.includes(t) || /^(internal|smoke)|-(check|test)$/.test(t));
-function addStats(p) {
-  const day = new Date().toISOString().slice(0, 10), d = statBuf[day] = statBuf[day] || EMPTY();
+function addStats(p, buf = statBuf) {
+  const day = new Date().toISOString().slice(0, 10), d = buf[day] = buf[day] || EMPTY();
   { const tag = typeof p.u === 'string' ? p.u : typeof p.utm === 'string' ? p.utm : null;
     if (internalTag(tag)) { const q = d.int = d.int || { r: 0, v: 0, t: {} }; if (enBeacon(p, q)) return; if (p.aa !== undefined) { if (AA_ARMS.includes(p.aa)) { q.aa = q.aa || {}; bump(q.aa, p.aa); } return; } q.r++; if (p.visit === 1) q.v++; if (UTM.test(tag) && (q.t[tag] != null || Object.keys(q.t).length < 20)) bump(q.t, tag); return; } }
   // the arm beacon (idle-stats.js armBeacon): { v, aa, u } only, once per browser: arm_assigned per arm, not a batch or a visit
@@ -325,6 +325,15 @@ export async function statsAcc(storage, path, body, now = Date.now()) {
     for (const [day, add] of Object.entries((body && body.days) || {})) if (/^20\d\d-[01]\d-[0-3]\d$/.test(day) && add && typeof add === 'object') acc[day] = mergeStat(acc[day] || EMPTY(), add);
     await storage.put('acc', acc); return { ok: true, due: due() };
   }
+  // one confirmed beacon: merged at once, unless its k was already seen today (the page re-sent it because the answer got lost);
+  // 'seen' keeps today's and yesterday's k's only
+  if (path === '/stats/beacon') {
+    const day = body && body.day, k = body && body.k; if (!/^20\d\d-[01]\d-[0-3]\d$/.test(day || '') || !/^[a-z0-9]{8,40}$/.test(k || '') || !body.add || typeof body.add !== 'object') return { error: 'bad beacon' };
+    let seen = await storage.get('seen') || {}; const prev = new Date(Date.parse(day) - 86400e3).toISOString().slice(0, 10); for (const d of Object.keys(seen)) if (d < prev) delete seen[d];
+    seen[day] = seen[day] || []; if (seen[day].includes(k)) return { ok: true, dup: true };
+    acc[day] = mergeStat(acc[day] || EMPTY(), body.add); seen[day].push(k); if (seen[day].length > 20000) seen[day] = seen[day].slice(-20000);
+    await storage.put('acc', acc); await storage.put('seen', seen); return { ok: true, due: due() };
+  }
   if (path === '/stats/queue') { if (body && typeof body.path === 'string' && typeof body.body === 'string' && body.body.length <= 8000) { q.push({ path: body.path, body: body.body, ip: String(body.ip || 'local').slice(0, 64), t: body.t || now }); q = q.slice(-STATS_Q_MAX); await storage.put('q', q); } return { ok: true, due: due() }; }
   if (path === '/stats/take') {
     if (lent) {   // taken but never confirmed: offered again with the same token (KV keeps the tokens it applied, so a repeat is skipped)
@@ -440,12 +449,29 @@ async function pageview(req, env, page, res) {
   } catch (e) {}
 }
 
+const BEACON_K = /^[a-z0-9]{8,40}$/;
+const beaconSeen = new Map();   // without the accumulator (local copies, tests): the k's this isolate has stored, per day
+async function storeBeacon(env, p) {
+  const one = {}; addStats(p, one); const day = Object.keys(one)[0];
+  if (env.PRESENCE) { const r = await doStats(env, '/stats/beacon', { day, k: p.k, add: one[day] }); return r && r.ok ? r : null; }
+  let seen = beaconSeen.get(day); if (!seen) { beaconSeen.clear(); seen = new Set(); beaconSeen.set(day, seen); }
+  if (seen.has(p.k)) return { ok: true, dup: true };
+  if (env.STATS) await writeStats(env, one, SHARD); seen.add(p.k); return { ok: true };
+}
 async function stats(req, env, ctx) {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
   const txt = await req.text(); if (txt.length > 8000) return json({ error: 'too big' }, 413);
   let p; try { p = JSON.parse(txt); } catch (e) { return json({ error: 'not JSON' }, 400); }
   if (!p || p.v !== 1) return json({ error: 'unknown format' }, 400);
-  statSite = prTable(env, req); addStats(p);
+  statSite = prTable(env, req);
+  // a confirmed beacon (idle-stats.js confirmed(): aa / dd / en / cb carrying k, a random number made for that one message): stored right
+  // away, and answered { stored: true } only once it is safe, so the page sets its flag only then; a k seen today is not counted again
+  if (BEACON_K.test(p.k || '') && (p.aa !== undefined || p.dd !== undefined || p.en !== undefined || p.cb !== undefined)) {
+    let stored = false, dup = false;
+    try { const r = await storeBeacon(env, p); stored = !!(r && r.ok); dup = !!(r && r.dup); } catch (e) {}
+    return json({ ok: stored, stored, dup }, stored ? 200 : 503);
+  }
+  addStats(p);
   // the first report of a batch starts the timer and holds its request open (waitUntil) until the batch is written; reports that
   // arrive meanwhile join the same buffer, so a busy isolate writes at most once per STAT_EVERY
   const t = batch(env); if (t) { if (ctx && ctx.waitUntil) ctx.waitUntil(t); else await t; }

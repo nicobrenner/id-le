@@ -254,12 +254,30 @@
   // browser (idle.armSent). Only { v, aa, u }: the true count of assignments per arm, independent of the batches above (whose first report
   // can go missing). helper/worker.js counts it as arm_assigned per arm (our own checks' tags in their own bucket)
   const ARM_SENT = 'idle.armSent', ARMS3 = ['story', 'choose', 'play'];
+  // confirmed beacons (Nov 4, after 09:57–11:55 PT, when a stale accumulator dropped the daily beacons while the pages had already set their
+  // "sent" flags): each of these goes by fetch (keepalive) and its flag is set only when the server answers { stored: true }, i.e. the
+  // accumulator (or the KV fallback) has it. Until then it waits in idle.bpend and is sent again once per page load (on hide, as a
+  // sendBeacon too, never marked). It carries k: a random number made for that one message and dropped once acked, so a resend whose
+  // first copy did arrive (the answer lost) is counted once: the server keeps the k's it has seen today. Not an identifier: a new one per message
+  const PEND = 'idle.bpend', triedNow = new Set();
+  const pend = () => { try { return JSON.parse(localStorage.getItem(PEND) || '{}') || {}; } catch (e) { return {}; } };
+  const pendSet = o => { try { if (Object.keys(o).length) localStorage.setItem(PEND, JSON.stringify(o)); else localStorage.removeItem(PEND); } catch (e) {} };
+  const rnd = () => { try { const a = new Uint32Array(3); crypto.getRandomValues(a); return Array.from(a, x => x.toString(36)).join(''); } catch (e) { return Math.random().toString(36).slice(2) + Date.now().toString(36); } };
+  // key: which beacon (arm, dd, cb, en); p: its payload; day: the UTC day it belongs to (null for the once-per-browser arm beacon);
+  // done(): sets the flag once confirmed. A pending one from an earlier day is dropped (it would count on the wrong day)
+  const confirmed = (key, p, day, done) => { if (!live()) return false; const P0 = pend(); let e = P0[key];
+    if (e && day && e.day !== day) { delete P0[key]; e = null; }
+    if (!e) { const u0 = utm(); if (u0) p.u = u0; e = P0[key] = { p: { ...p, k: rnd() }, day: day || null }; pendSet(P0); }
+    if (triedNow.has(key)) return true; triedNow.add(key);
+    const body = JSON.stringify(e.p);
+    try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } })
+      .then(r => r.ok ? r.json() : null).then(j => { if (j && j.stored) { const P1 = pend(); if (P1[key] && P1[key].p.k === e.p.k) { delete P1[key]; pendSet(P1); } try { done(); } catch (x) {} } }).catch(() => {}); } catch (x) {}
+    return true; };
+  // the page going away: whatever is still unconfirmed goes once more by sendBeacon (no answer, so it stays pending for the next load)
+  addEventListener('pagehide', () => { const P0 = pend(); for (const e of Object.values(P0)) { try { navigator.sendBeacon('/lab/p', new Blob([JSON.stringify(e.p)], { type: 'application/json' })); } catch (x) {} } });
   const armBeacon = () => { try { if (!live() || document.hidden || document.prerendering) return false; if (localStorage.getItem(ARM_SENT)) return true;
       const g0 = localStorage.getItem('idle.gv'), g = g0 === 'current' ? 'play' : g0; if (!ARMS3.includes(g)) return false;
-      const p = { v: 1, aa: g }; const u0 = utm(); if (u0) p.u = u0; const body = JSON.stringify(p); let ok = false;
-      try { ok = navigator.sendBeacon('/lab/p', new Blob([body], { type: 'application/json' })); } catch (e) {}
-      if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = true; } catch (e) {}
-      if (ok) localStorage.setItem(ARM_SENT, g); return ok; } catch (e) { return false; } };
+      return confirmed('aa', { v: 1, aa: g }, null, () => localStorage.setItem(ARM_SENT, g)); } catch (e) { return false; } };
   { let n = 0; const iv = setInterval(() => { if (armBeacon() || ++n > 60) clearInterval(iv); }, 500); addEventListener('visibilitychange', () => { if (!document.hidden) armBeacon(); }); }
   // engaged (Nov 4, Nico: "real engagement… a user saw this, clicked/interacted, and they want to participate"): three tiny beacons on the
   // arm beacon's path, each at most once per browser per UTC day, aggregate only (no identifier): { dd: arm } this browser was here today,
@@ -268,17 +286,16 @@
   const EN_ACTS = ['op_msg', 'irc_msg', 'cr_talk', 'cr_card', 'cr_name', 'cr_feed', 'e0_done', 'vote', 'sci_sent', 'hitl_join', 'review', 'ask_name', 'ask_logo'];
   const armNow = () => { let g = null; try { g = localStorage.getItem('idle.gv'); } catch (e) {} g = g === 'current' ? 'play' : g; return ARMS3.includes(g) ? g : 'none'; };
   const dayIs = k => { try { return localStorage.getItem(k) === TODAY; } catch (e) { return true; } }, dayMark = k => { try { localStorage.setItem(k, TODAY); } catch (e) {} };
-  const tinyBeacon = p => { if (!live()) return false; const u0 = utm(); if (u0) p.u = u0; const body = JSON.stringify(p); let ok = false;
-    try { ok = navigator.sendBeacon('/lab/p', new Blob([body], { type: 'application/json' })); } catch (e) {}
-    if (!ok) try { fetch('/lab/p', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); ok = true; } catch (e) {}
-    return ok; };
   const daily = () => { if (document.hidden || document.prerendering || !live()) return false;
-    if (!dayIs('idle.ddDay') && tinyBeacon({ v: 1, dd: armNow() })) dayMark('idle.ddDay');
-    if (!dayIs('idle.cbDay') && since.d < TODAY && since.k && tinyBeacon({ v: 1, cb: armNow(), b: backBucket() })) dayMark('idle.cbDay');
-    return dayIs('idle.ddDay'); };
+    if (!dayIs('idle.ddDay')) confirmed('dd', { v: 1, dd: armNow() }, TODAY, () => dayMark('idle.ddDay'));
+    if (!dayIs('idle.cbDay') && since.d < TODAY && since.k) confirmed('cb', { v: 1, cb: armNow(), b: backBucket() }, TODAY, () => dayMark('idle.cbDay'));
+    return true; };
+  // the first deliberate act: once sent (pending or confirmed) today, a later act doesn't replace it
   const engaged = act => { if (!EN_ACTS.includes(act) || dayIs('idle.enDay')) return false; daily();
-    if (tinyBeacon({ v: 1, en: act, ar: armNow() })) { dayMark('idle.enDay'); return true; } return false; };
+    const e = pend().en; if (e && e.day === TODAY) { confirmed('en', e.p, TODAY, () => dayMark('idle.enDay')); return false; }
+    return confirmed('en', { v: 1, en: act, ar: armNow() }, TODAY, () => dayMark('idle.enDay')); };
   window.__engaged = engaged;
+  { const e = pend().en; if (e && e.day === TODAY && !dayIs('idle.enDay')) setTimeout(() => { if (live()) confirmed('en', e.p, TODAY, () => dayMark('idle.enDay')); }, 1500); }
   { let n = 0; const iv = setInterval(() => { if (daily() || ++n > 60) clearInterval(iv); }, 1000); addEventListener('visibilitychange', () => { if (!document.hidden) daily(); }); }
   const genesisNow = () => { try { const G = window.__genesis, st = G && G.state && G.state(); return !!(st && st.on && !st.alive); } catch (e) { return false; } };
   addEventListener('idle:optext', () => { if (!genesisNow()) engaged('op_msg'); });
@@ -295,5 +312,5 @@
   { const FM = { e1done: 'e0_done', rv_in: 'hitl_join', rv_nah: 'review', rv_like: 'review', rv_love: 'review', e0_ask_name: 'ask_name', e0_ask_logo: 'ask_logo' };
     const wrap = () => { const F = window.__funnel; if (!F || F._en) return !!F; const m0 = F.mark; F.mark = k => { const r = m0.call(F, k); if (FM[k]) engaged(FM[k]); return r; }; F._en = 1; return true; };
     if (!wrap()) addEventListener('load', wrap, { once: true }); }
-  window.__stats = { live, armBeacon, engaged, daily, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _e2: () => ({ ...e2part(), path: E2.path.join('>') }), _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop(), eg: engage(), since, back: backBucket() }) };
+  window.__stats = { live, armBeacon, engaged, daily, pending: pend, mark: f => { if (/^[a-z0-9_-]{1,24}$/.test(f)) feats.add(f); }, peek: () => payload(true), _send: send, _e2: () => ({ ...e2part(), path: E2.path.join('>') }), _parts: () => ({ ref: refHost(), utm: utm(), dw: dwell(), fl: f5Stop(), eg: engage(), since, back: backBucket() }) };
 })();
