@@ -990,3 +990,4 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - **Tools:** `tools/review.py results` prints the skips (total and per item) and the notes per item (`result_lines`, tested offline); stats.py's review and pick lines add skips, notes and the gallery.
 - Tests: 'pick more' and 'pick more phone' (↓ and the skip button, the note alone / with a swipe / Ctrl+Enter / a failed send, "you skipped 2: see them again?", the gallery's grid, lazy mounting on a phone, one plays at a time, play all and stop, a gallery rating sent and out of the deck), 'review results' (static), 'pick routes' now also serves the gallery path.
 
+- **Gallery toggle placement (Nov 6):** 🔲 gallery now sits left of ✎ add a note, under the main controls (Nico: "easier to find, close to the main controls").
