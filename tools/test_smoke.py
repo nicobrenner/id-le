@@ -3501,6 +3501,35 @@ def t_pick_stats(P, phone=False):
             "ticks where views moved on and '▶ 128 views · ✓ 41% like…'; under 5 views 'not enough views yet'; a view sent once with its swipe (its furthest twentieth)")
 
 
+def t_pick_autoplay(P, reduced=False):
+    """the logo pick autoplays (Nov 6, Show HN: 22 opened the review, 1 rated): the animation moves at once with no sound and no gesture (its
+    frames on performance.now()), a 🔊 chip offers the sound and restarts it with sound; after the end the poster comes back (CRT variants end
+    on black); the gallery autoplays one visible card; reduced motion: no autoplay. The page's AudioContext is held suspended here, as a
+    browser does before any gesture."""
+    P.ctx.add_init_script(PICK_CFG)
+    P.ctx.add_init_script("""(() => { const A = window.AudioContext || window.webkitAudioContext; if (!A) return; window.__heldAudio = true;
+      const res = A.prototype.resume; A.prototype.resume = function () { return window.__heldAudio ? Promise.resolve() : res.call(this); };
+      const d = Object.getOwnPropertyDescriptor(BaseAudioContext.prototype, 'state');
+      Object.defineProperty(BaseAudioContext.prototype, 'state', { configurable: true, get() { return window.__heldAudio ? 'suspended' : d.get.call(this); } }); })()""")
+    pg = P.open("/review/intro-logo-animation?autoplaytest")
+    wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card'", 60, P=P)
+    sig = """() => { const c = document.querySelector('#review .deck canvas.cv'); if (!c) return null; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let h = 0, lit = 0; for (let i = 0; i < d.length; i += 64) { h = (h * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) % 1000003; lit += d[i] + d[i + 1] + d[i + 2] > 60; } return { h, lit, chip: !(document.querySelector('#review .deck .sndchip') || {}).hidden, on: !!document.querySelector('#review .deck .card.on') }; }"""
+    pg.wait_for_timeout(1500); a = pg.evaluate(sig); pg.wait_for_timeout(900); b = pg.evaluate(sig); pg.wait_for_timeout(900); c = pg.evaluate(sig)
+    if reduced:
+        need(not a["on"] and not c["on"] and a["h"] == c["h"] and not a["chip"], f"reduced motion: no autoplay, the poster stays: {a} {c}")
+        return
+    need(a["on"] and a["chip"] and len({a["h"], b["h"], c["h"]}) >= 2, f"the deck moves with no gesture, silent, 🔊 chip shown: {a} {b} {c}")
+    pg.evaluate("() => { window.__heldAudio = false; }"); pg.click("#review .deck .sndchip")
+    wait_for(pg, "() => { const c = document.querySelector('#review .deck .sndchip'); return c && c.hidden && document.querySelector('#review .deck .card.on'); }", 10, P=P)
+    wait_for(pg, "() => !document.querySelector('#review .deck .card.on')", 20, P=P)
+    pg.wait_for_timeout(700); d = pg.evaluate(sig)
+    need(d["lit"] > 50, f"after the end the poster is back, not black: {d}")
+    pg.evaluate("() => { window.__heldAudio = true; }")
+    pg.click("#review [data-a=gallery]"); pg.wait_for_timeout(2500)
+    g = pg.evaluate("() => ({ on: document.querySelectorAll('#review .gal .card.on').length, chips: [...document.querySelectorAll('#review .gal .sndchip')].filter(x => !x.hidden).length })")
+    need(g["on"] == 1 and g["chips"] == 1, f"the gallery autoplays exactly one card, silently: {g}")
+
+
 def t_pick_more(P, phone=False):
     """The pick link, round 2 (Nov 6, Nico: "we should add a Skip button/action, and there should be a submit/send/save … for the
     comments/notes"; "a gallery view … so that users can see/compare all the animations"): ↓ skips (counted, sent as skips, the skipped
@@ -5714,7 +5743,7 @@ def browser_tests(a, out):
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
-        ("reviews link", t_reviews_link, (), {}), ("pick", t_pick, (), {}), ("pick phone", lambda P: t_pick(P, True), (), PHONE), ("pick more", t_pick_more, (), {}), ("pick more phone", lambda P: t_pick_more(P, True), (), PHONE), ("pick stats", t_pick_stats, (), {}), ("pick stats phone", lambda P: t_pick_stats(P, True), (), PHONE), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
+        ("reviews link", t_reviews_link, (), {}), ("pick", t_pick, (), {}), ("pick phone", lambda P: t_pick(P, True), (), PHONE), ("pick autoplay", t_pick_autoplay, (), {}), ("pick autoplay reduced", lambda P: t_pick_autoplay(P, True), (), {"reduced_motion": "reduce"}), ("pick more", t_pick_more, (), {}), ("pick more phone", lambda P: t_pick_more(P, True), (), PHONE), ("pick stats", t_pick_stats, (), {}), ("pick stats phone", lambda P: t_pick_stats(P, True), (), PHONE), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
         ("founder personal", t_founder_personal, (), {}), ("founder phone", t_founder_phone, (), {"is_mobile": True, "has_touch": True}),
         ("story landing", t_story_landing, (), {}), ("story intro", t_story_intro, (), {}), ("logo thunder", t_logo_thunder, (), {}),
         ("story fans", t_story_fans, (), {}), ("story clock", t_story_clock, (), {}), ("logo solo", t_logo_solo, (), {}), ("logo ab", t_logo_ab, (), {}),

@@ -208,7 +208,7 @@
       line(id) { const L = this.get(id); return L ? L.idea : ''; },
       // the logo lab's card: the frame, the waveform strip with its marks (pink: a beat you see and hear, blue: heard only), the legend
       mount(id, el) { const L = this.get(id); el.innerHTML = `<header><b>${esc(this.label(id))}</b> <span class="len">${L ? L.duration.toFixed(1) + ' s' : ''}</span></header><p class="idea">${esc(this.line(id))}</p>
-<div class="stage"><canvas class="cv" width="1120" height="460"></canvas><button class="big" data-act="replay" title="play (space)">▶</button></div><div class="stw"><canvas class="st" width="1120" height="104"></canvas><canvas class="ov" width="1120" height="104"></canvas></div>
+<div class="stage"><canvas class="cv" width="1120" height="460"></canvas><button class="big" data-act="replay" title="play (space)">▶</button><button class="sndchip" data-act="sound" hidden>🔊 tap for sound</button></div><div class="stw"><canvas class="st" width="1120" height="104"></canvas><canvas class="ov" width="1120" height="104"></canvas></div>
 <div class="row"><span class="leg"><i class="m vis"></i>visual + audible beat <i class="m snd"></i>sound only</span></div><div class="rstat" hidden></div>`;
         const cv = el.querySelector('.cv'), st = el.querySelector('.st'), ov = el.querySelector('.ov'), card = el.closest('.card') || el; let h = null, raf = 0, info = null, t0 = 0, ctxR = null;
         let maxF = 0, plays = 0;   // how far this browser got into it (the stats' view: the furthest twentieth before it moved on) and how often it played
@@ -217,12 +217,19 @@
           g.font = '20px system-ui'; let lastX = -99, row = 0; for (const e of info.ev) { const x = e.t / dur * W; g.fillStyle = e.vis ? '#ff5fa2' : '#7ee3f5'; g.fillRect(x, 0, 2, Hh); if (/^click [2-8]$/.test(e.k)) continue; row = x - lastX < 92 ? (row + 1) % 2 : 0; lastX = x; g.fillText(e.k, x + 4, 20 + row * 22); }
           if (t != null && t >= 0) { g.fillStyle = '#fff'; g.fillRect(t / dur * W, 0, 3, Hh); } };
         L.info().then(x => { info = x; strip(null); return L.still(cv, x.poster, { font: LOGO_FONT }); }).catch(() => {});
-        const stop = () => { cancelAnimationFrame(raf); if (h) { try { h.stop(); } catch (e) {} h = null; } card.classList.remove('on'); strip(null); };
-        return { play() { stop(); const { ctx, dest } = audio(); ctxR = ctx; try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} if (ctx.state !== 'running') ctx.resume().catch(() => {});
-            t0 = ctx.currentTime + 0.12; const me = h = L.build(ctx, cv, t0, { font: LOGO_FONT, destination: dest }); card.classList.add('on'); mark('rv_play');
+        const stop = () => { cancelAnimationFrame(raf); if (h) { try { h.stop(); } catch (e) {} h = null; } card.classList.remove('on'); strip(null); const c = el.querySelector('.sndchip'); if (c) c.hidden = true; };
+        // (Nov 6, Show HN: 22 opened, 1 rated) play({ silent }) starts the frames with no sound and no gesture (performance.now() clock); a 🔊 chip
+        // on the stage offers the sound, which restarts it with sound. After the end the poster comes back (several variants end on black).
+        const chip = el.querySelector('.sndchip'), poster = () => { if (info) L.still(cv, info.poster, { font: LOGO_FONT }).catch(() => {}); };
+        return { play(o = {}) { stop(); const silent = !!o.silent; let me;
+            if (silent) { me = h = L.build(null, cv, 0, { font: LOGO_FONT, silent: true }); mark('rv_autoplay'); }
+            else { const { ctx, dest } = audio(); ctxR = ctx; try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} if (ctx.state !== 'running') ctx.resume().catch(() => {});
+              t0 = ctx.currentTime + 0.12; me = h = L.build(ctx, cv, t0, { font: LOGO_FONT, destination: dest }); mark('rv_play'); }
+            card.classList.add('on'); if (chip) chip.hidden = !silent;
             plays++; const dur = L.duration || (info && info.dur) || 1;
-            const tick = () => { if (h !== me) return; const tt = ctxR.currentTime - t0; maxF = Math.max(maxF, Math.min(1, tt / dur)); strip(tt); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick);
-            me.done.then(() => { if (h === me) { maxF = 1; h = null; cancelAnimationFrame(raf); card.classList.remove('on'); strip(null); } }); return me; },
+            const tick = () => { if (h !== me) return; const tt = silent ? me.time() : ctxR.currentTime - t0; maxF = Math.max(maxF, Math.min(1, tt / dur)); strip(tt); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick);
+            me.done.then(() => { if (h === me) { maxF = 1; h = null; cancelAnimationFrame(raf); card.classList.remove('on'); strip(null); poster(); } }); return me; },
+          muted: () => !!(h && h.silent),
           stop, playing: () => !!h, canvas: cv, seen: () => ({ f: maxF, plays }),
           // the 📊 overlay over the strip: everyone's "still watching" curve, and ticks where views moved on (like YouTube's most-replayed graph)
           overlay(x) { const g = ov.getContext('2d'), W = ov.width, Hh = ov.height; g.clearRect(0, 0, W, Hh); if (!x || !x.ret) return;
@@ -261,7 +268,7 @@
 #review .sample{flex:1;background:#000;border-radius:8px;padding:18px;line-height:1.5;font-size:clamp(16px,2.6vw,26px);display:flex;flex-direction:column;justify-content:center}#review .sample .big{position:static;transform:none;width:auto;height:auto;border:0;background:none;font-size:clamp(48px,9vw,110px);line-height:1.05;opacity:1;cursor:default}
 #review .stamp{position:absolute;top:18px;padding:6px 14px;border:3px solid;border-radius:10px;font:700 26px 'Idle F4',system-ui;letter-spacing:.06em;opacity:0;pointer-events:none;z-index:3}#review .stamp.nah{right:18px;color:#ff6b6b;transform:rotate(12deg)}#review .stamp.like{left:18px;color:#9be08a;transform:rotate(-12deg)}#review .stamp.love{left:50%;transform:translateX(-50%);color:#fdb827}
 #review .acts{display:flex;justify-content:center;align-items:center;gap:14px;padding:4px 0}#review .acts button{width:58px;height:58px;border-radius:50%;border:2px solid var(--line);background:var(--floor);color:var(--ink);font-size:24px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
-#review .acts button small{font-size:9px;opacity:.7;margin-top:2px}#review .askq{text-align:center;font:600 13px var(--ui-font,system-ui);color:#ffd166;margin:2px 0 -2px;animation:rvAskIn .3s ease-out}#review .acts.ask [data-act=nah],#review .acts.ask [data-act=love],#review .acts.ask [data-act=like]{animation:rvAsk 1.2s ease-in-out infinite}#review .acts.ask [data-act=love]{animation-delay:.15s}#review .acts.ask [data-act=like]{animation-delay:.3s}@keyframes rvAsk{0%,100%{transform:scale(1);box-shadow:0 0 0 0 #fff0}50%{transform:scale(1.12);box-shadow:0 0 0 8px #ffffff1f}}@keyframes rvAskIn{from{opacity:0;transform:translateY(4px)}}@media (prefers-reduced-motion:reduce){#review .acts.ask button{animation:none!important;box-shadow:0 0 0 3px #ffd16688}}#review .acts [data-act=nah]{border-color:#ff6b6b;color:#ff6b6b}#review .acts [data-act=like]{border-color:#9be08a;color:#9be08a}#review .acts [data-act=love]{border-color:#fdb827;color:#fdb827}#review .acts [data-act=replay]{width:46px;height:46px;font-size:16px}
+#review .acts button small{font-size:9px;opacity:.7;margin-top:2px}#review .stage .sndchip{position:absolute;right:10px;bottom:10px;z-index:3;font:600 12px var(--ui-font,system-ui);padding:5px 10px;border-radius:999px;border:1px solid #fff5;background:#000a;color:#fff;cursor:pointer}#review .stage .sndchip:hover{background:#000d}#review .askq{text-align:center;font:600 13px var(--ui-font,system-ui);color:#ffd166;margin:2px 0 -2px;animation:rvAskIn .3s ease-out}#review .acts.ask [data-act=nah],#review .acts.ask [data-act=love],#review .acts.ask [data-act=like]{animation:rvAsk 1.2s ease-in-out infinite}#review .acts.ask [data-act=love]{animation-delay:.15s}#review .acts.ask [data-act=like]{animation-delay:.3s}@keyframes rvAsk{0%,100%{transform:scale(1);box-shadow:0 0 0 0 #fff0}50%{transform:scale(1.12);box-shadow:0 0 0 8px #ffffff1f}}@keyframes rvAskIn{from{opacity:0;transform:translateY(4px)}}@media (prefers-reduced-motion:reduce){#review .acts.ask button{animation:none!important;box-shadow:0 0 0 3px #ffd16688}}#review .acts [data-act=nah]{border-color:#ff6b6b;color:#ff6b6b}#review .acts [data-act=like]{border-color:#9be08a;color:#9be08a}#review .acts [data-act=love]{border-color:#fdb827;color:#fdb827}#review .acts [data-act=replay]{width:46px;height:46px;font-size:16px}
 #review .notebar{display:flex;gap:8px;align-items:center;justify-content:center}#review .notebar button{background:none;border:0;color:var(--dim);font:inherit;cursor:pointer;text-decoration:underline}#review .notebar textarea{flex:1;max-width:640px;min-height:38px;background:#0e0f12;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:13px inherit;padding:6px}
 #review .panel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;background:var(--floor);border:1px solid var(--line);border-radius:12px;padding:20px}
 #review .panel h3{margin:0;font:600 22px 'Idle F4',system-ui;letter-spacing:.04em}#review .panel p{margin:0;color:var(--dim);max-width:520px;line-height:1.5}#review .panel .btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
@@ -351,7 +358,7 @@
     clearTimeout(cur.askT); if (cur.askId !== id) { cur.askId = id; cur.askAt = Date.now(); }   // (a repaint mustn't restart the wait)
     if (!(cur.mine && Object.keys(cur.mine.rated || {}).length)) cur.askT = setTimeout(() => { const a = el.querySelector('.acts'); if (!a || cur.queue[cur.i] !== id || a.classList.contains('ask')) return;
       a.classList.add('ask'); const q = document.createElement('div'); q.className = 'askq'; q.textContent = 'your pick?'; a.before(q); mark('rv_ask'); }, Math.max(300, cur.askAt + 7500 - Date.now()));
-    const { ctx } = audio(); if (ctx.state === 'running' && cur.cfg.kind === 'logos') setTimeout(() => { if (cur && cur.view === 'card' && cur.queue[cur.i] === id && cur.live) cur.live.play(); }, 350); }
+    const { ctx } = audio(); if (cur.cfg.kind === 'logos' && (ctx.state === 'running' || !RM)) setTimeout(() => { if (cur && cur.view === 'card' && cur.queue[cur.i] === id && cur.live) cur.live.play({ silent: ctx.state !== 'running' }); }, 350); }
   function judge(act) { if (!cur || cur.view !== 'card' || cur.flying) return; const id = cur.queue[cur.i], v = ACT[act]; if (!id || !v) return;
     takeNote(id); takeView(id, cur.live); rate(id, v, act); cur.note = false;
     const card = el.querySelector('.deck .card'), next = () => { cur.flying = false; if (!cur) return; cur.i++; if (due()) flush();
@@ -386,7 +393,7 @@
 <div class="notebar">${noteHtml(id, !!(cur.noteOpen && cur.noteOpen[id]))}</div></section>`).join('')}</div></div>`;
     const gal = el.querySelector('.gal'), mount = cd => { const id = cd.dataset.item; if (cur.gm[id]) return cur.gm[id]; const b = cd.querySelector('.gbody'); b.innerHTML = ''; cur.gm[id] = cur.P.mount(id, b); applyOne(id, cur.gm[id]); return cur.gm[id]; };
     cur.gmount = mount;
-    if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { mount(e.target); io.unobserve(e.target); } }), { root: gal, rootMargin: '150px' }); cur.gio = io; gal.querySelectorAll('.card').forEach(cd => io.observe(cd)); }
+    if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { const m = mount(e.target); io.unobserve(e.target); if (!RM && !cur.playAll && !Object.values(cur.gm || {}).some(x => x.playing())) setTimeout(() => { if (cur && cur.view === 'gallery' && !Object.values(cur.gm || {}).some(x => x.playing())) try { m.play({ silent: audio().ctx.state !== 'running' }); } catch (er) {} }, 400); } }), { root: gal, rootMargin: '150px' }); cur.gio = io; gal.querySelectorAll('.card').forEach(cd => io.observe(cd)); }
     else gal.querySelectorAll('.card').forEach(mount); applyStats(); }
   function stopGallery() { if (!cur) return; cur.playAll = 0; Object.values(cur.gm || {}).forEach(m => { try { m.stop(); } catch (e) {} }); if (cur.gio) { try { cur.gio.disconnect(); } catch (e) {} cur.gio = null; } }
   function gPlay(id, then) { if (!cur || cur.view !== 'gallery') return; Object.entries(cur.gm || {}).forEach(([k, m]) => { if (k !== id) try { m.stop(); } catch (e) {} });
@@ -455,7 +462,7 @@
     const end = () => { if (!on) return; on = false; const W = Math.max(90, card.clientWidth * 0.22); card.__moved = Math.abs(dx) > 6 || Math.abs(dy) > 6;
       if (-dy > 110 && Math.abs(dx) < 90) return judge('love'); if (dy > 110 && Math.abs(dx) < 90) return skipCard(); if (dx > W) return judge('like'); if (dx < -W) return judge('nah');
       card.style.transition = 'transform .2s'; card.style.transform = ''; ['like', 'nah', 'love'].forEach(k => stamp(k, 0));
-      if (Math.abs(dx) < 6 && Math.abs(dy) < 6 && cur && cur.live && !cur.live.playing()) cur.live.play(); };
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6 && cur && cur.live && (!cur.live.playing() || (cur.live.muted && cur.live.muted()))) cur.live.play(); };
     card.addEventListener('pointerup', end); card.addEventListener('pointercancel', end); }
 
   el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || !cur) return;
@@ -469,13 +476,14 @@
         const cd = b.closest('.card'); cd.querySelectorAll('.gacts button').forEach(x => { x.disabled = b.dataset.g !== 'skip' || x.dataset.g === 'skip'; x.classList.toggle('chosen', x === b); });
         const pr = el.querySelector('.top .prog'); if (pr) pr.textContent = `${Object.keys(cur.mine.rated || {}).length} / ${cur.cfg.items.length} rated`; return; }
       if (a === 'note' && id) { cur.noteOpen = cur.noteOpen || {}; cur.noteOpen[id] = true; const nb = b.closest('.notebar'); nb.innerHTML = noteHtml(id, true); const t = nb.querySelector('textarea'); t && t.focus(); return; }
-      if (act === 'replay' && id) return gPlay(id);
+      if ((act === 'replay' || act === 'sound') && id) return gPlay(id);
       if (a === 'close') return close(); return; }
     if (a === 'close') return close(); if (a === 'more') { mark('rv_more'); cur.view = 'card'; return paint(); } if (a === 'done') return finish();
     if (a === 'note') { cur.note = true; const id = cur.queue[cur.i]; const nb = el.querySelector('.notebar'); if (nb) { nb.innerHTML = noteHtml(id, true); const t = nb.querySelector('textarea'); setTimeout(() => t.focus(), 30); } return; }
     if (a === 'skiph2h') { cur.h2hDone = true; (cur.h2 || []).forEach(m => { try { m.stop(); } catch (er) {} }); cur.h2 = null; return finish(); }
     if (b.dataset.pick) return pick(b.dataset.pick);
     if (act === 'replay') { const cd = b.closest('.card'); if (cd && cd.__moved) { cd.__moved = false; return; } if (cur.view === 'h2h' && cd) { const k = [...el.querySelectorAll('.h2h .card')].indexOf(cd); (cur.h2 || []).forEach((m, j) => { if (j !== k) m.stop(); }); cur.h2[k] && cur.h2[k].play(); return; } if (cur.live) cur.live.play(); return; }
+    if (act === 'sound') { mark('rv_sound'); cur.live && cur.live.play(); return; }
     if (act === 'skip') return skipCard();
     if (act) judge(act); });
   el.addEventListener('input', e => { if (cur && e.target.matches('textarea[data-note]') && !e.target.readOnly) { const id = e.target.dataset.item || cur.queue[cur.i]; if (id) cur.pending.notes[id] = e.target.value.slice(0, 300); } });
