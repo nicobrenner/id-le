@@ -596,8 +596,23 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   // every Genesis command steps aside the same way (v14, Nico: "the operator chat doesn't disappear after each command to let the user see
   // the animation, it just stays there blocking the view"): the window fades out on send and comes back when the animation is over
   const aside = on => { cls('gen-aside', on); land.aside = land.aside || []; land.aside.push({ on: !!on, at: now() }); };
-  async function _weather(kind) { { if (did('weather')) return 'already'; const ks = (W() && W().weathers()) || [];
-      const k = ks.includes(kind) ? kind : pick(ks.filter(x => x !== 'clear')) || 'rain'; const r = W() && W().setWeather(k); if (!r) return null; done('weather', null, null, { kind: k }); return r; } }
+  // the first weather (Nov 6, Nico: during a rave he got "packet fog" at night, saw nothing, and the line only said "weather. they will have
+  // opinions about it"): a weather you can see (bit rain or packet storm; never fog, hum, wind or static for this step), strong, above the
+  // rave lights (they dim while it arrives), the Operator names it and who minds, and two or three creatures nearby say something about it
+  const WX_SEEN = ['bitrain', 'storm'];   // (static storm reads as faint lines at a glance: not for this step)
+  const WX_SAY = { bitrain: { op: ['hates getting wet', 'is catching the bits on its tongue', 'is looking for a roof'], says: ['bits! everywhere!', 'my words are getting soggy', 'is it raining ones or zeros?', 'ok who turned on the sky'], rave: ['rain rave!!', 'dancing in the bits', 'the floor is slippery and I love it'] },
+    storm: { op: ['does not like thunder at all', 'is hiding behind a word', 'wants to see the lightning up close'], says: ['THUNDER', 'that one was close', 'everyone under a word, now', 'the sky is shouting'], rave: ['the lightning is on beat!', 'best light show ever', 'louder than the bass'] },
+    static: { op: ['has gone all fuzzy', 'is sparking a little', 'says its legs tingle'], says: ['my legs are fizzing', 'shhhhhkkk', 'everything is crackling', 'I can hear the static in my head'], rave: ['static on the dancefloor!', 'it crackles with the beat', 'electric!!'] } };
+  async function _weather(kind) { { if (did('weather')) return 'already'; const w = W(), ks = (w && w.weathers()) || [];
+      const k = WX_SEEN.includes(kind) && ks.includes(kind) ? kind : pick(WX_SEEN.filter(x => ks.includes(x))) || 'bitrain';
+      cls('wx-arrive', 1); setTimeout(() => cls('wx-arrive', 0), 5000);
+      const r = w && w.setWeather(k, 0.85); if (!r) { cls('wx-arrive', 0); return null; }
+      let sum = null; try { sum = w.summary({ limit: 6 }); } catch (e) {}
+      const near = ((sum && sum.nearby_creatures) || []).filter(c => c && c.name && c.state !== 'sleep'), B = WX_SAY[k] || WX_SAY.bitrain;
+      const raving = !!(window.__music && window.__music.rave && window.__music.rave()), who = near.slice(0, 3).map(c => c.name);
+      const name = (sum && sum.weather && sum.weather.name) || k, line = who.length ? `${name}. ${who[0]} ${pick(B.op)}` : `${name}. look up`;
+      who.forEach((n, i) => setTimeout(() => { try { w.sayAs(n, pick(raving && (i > 0 || who.length === 1) ? B.rave : B.says)); } catch (e) {} }, 500 + i * 650));
+      done('weather', line, null, { kind: k, said: who.length, rave: raving }); return r; } }
   async function _hut() { { if (did('hut')) return 'already'; const h = H(); if (!h) return null;
       if (!h.words().length) await _letThereBeWords(''); if (!did('creatures')) await _firstCreatures();
       if (!window.__build || !window.__build._seed) return null; window.__build._seed(); done('hut'); return true; } }

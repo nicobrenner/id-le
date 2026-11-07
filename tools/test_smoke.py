@@ -1894,6 +1894,33 @@ def t_pedia(P, phone=False):
     return f"{len(toc)} sections, {live} live creatures, {len(imgs)} pictures, {len(moving)} clips playing"
 
 
+def t_wxstep(P):
+    """The first weather (Nov 6, Nico: during a rave at night he got "packet fog", saw nothing, and the line only said "weather. they will
+    have opinions about it"): the step picks a weather you can see (never fog), strong, with the rave lights under it and dimmed while it
+    arrives; the Operator's line names the weather and a creature; two or three creatures nearby say something within ~3 s"""
+    pg = P.open("/arena.html?genesis&start=guided&intro=0&test")
+    wait_for(pg, "() => !!(window.__genesis && document.querySelector('[data-gsay]'))", 40, P=P)
+    pg.evaluate("() => window.__genesis.actions.letThereBeWords('')"); wait_for(pg, "() => window.__genHooks.words().length > 10", 30, P=P)
+    pg.evaluate("() => window.__genesis.actions.light()"); pg.evaluate("() => window.__genesis.actions.firstCreatures()")
+    wait_for(pg, "() => window.__arena.raw().filter(c => !c.lab).length >= 2", 30, P=P)
+    # night and a rave (the case Nico hit)
+    pg.evaluate("() => { try { window.__day && window.__day.set && window.__day.set(0.75); } catch (e) {} const M = window.__music; if (M.setRave) M.setRave(true); }")
+    wait_for(pg, "() => window.__music.rave()", 8, P=P)
+    pg.evaluate("() => { window.__wxBubbles = []; const o = window.__idleWorld.sayAs; window.__idleWorld.sayAs = (n, t) => { window.__wxBubbles.push([n, t, performance.now()]); return o(n, t); }; window.__wxT0 = performance.now(); }")
+    r = pg.evaluate("async () => window.__genesis.actions.weather()")
+    need(r and r.get("ok"), f"the weather step should work during a rave: {r}")
+    pg.wait_for_timeout(3000)
+    s = pg.evaluate("""() => { const w = window.__idleWorld.summary({ limit: 3 }), rows = [...document.querySelectorAll('#ai-thread .ai-row, #genConsole')].map(e => e.innerText).join(' | ');
+      return { kind: w.weather.kind, name: w.weather.name, strength: w.weather.strength, said: (window.__wxBubbles || []).filter(b => b[2] - window.__wxT0 < 3200).length,
+        line: rows.slice(-600), lz: getComputedStyle(document.getElementById('djlights')).zIndex, wz: getComputedStyle(document.getElementById('weather')).zIndex }; }""")
+    need(s["kind"] in ("bitrain", "storm"), f"a weather you can see, never fog or static: {s}")
+    need(s["strength"] >= 0.8, f"strong enough to see: {s}")
+    need(s["name"].lower() in s["line"].lower(), f"the Operator should name the weather: {s['name']} in {s['line'][-200:]!r}")
+    need(s["said"] >= 2, f"two or three creatures should say something within ~3 s: {s}")
+    need(int(s["lz"]) < int(s["wz"]), f"the rave lights sit under the weather: {s}")
+    return f"{s['name']} at night during a rave (strength {s['strength']}), {s['said']} creatures spoke, the line names it, lights under the weather"
+
+
 def t_genesis(P):
     """The guided genesis (?genesis&intro=0): a calm, dark void with the Operator open and "let there be light" pre-filled; words made
     out of order are still visible; enter on the pre-filled phrase builds the step; the glowing suggestion too; after four guided steps
@@ -5796,7 +5823,7 @@ def browser_tests(a, out):
         ("operator", t_operator, (), {}), ("tiny genesis", t_tiny_genesis, (), {}), ("halloween", t_halloween, (), {}),
         ("halloween light", t_halloween_light, (), {"color_scheme": "light"}), ("intro", t_intro, (), {}),
         ("intro reduced", t_intro_reduced, (), {"reduced_motion": "reduce"}), ("intro epoch0", t_intro_epoch0, (), {}), ("trick or treat", t_treat, (), {}),
-        ("wikipedia world", t_wiki, (), {}), ("genesis", t_genesis, (), {}), ("genesis gate", t_genesis_gate, (), {}), ("story", t_story, (), {}), ("story migrate", t_story_migrate, (), {}),
+        ("wikipedia world", t_wiki, (), {}), ("genesis", t_genesis, (), {}), ("wxstep", t_wxstep, (), {}), ("genesis gate", t_genesis_gate, (), {}), ("story", t_story, (), {}), ("story migrate", t_story_migrate, (), {}),
         ("story keys", t_story_keys, (), {}), ("director", t_director, (out,), {}), ("director play", t_director_play, (out,), {}), ("story phone steps", t_story_phone_steps, (), PHONE), ("story input visible", t_story_input_visible, (), {}),
         ("story row", t_story_row, (), {}), ("story modal", t_story_modal, (), {}), ("operator float", t_operator_float, (), {}),
         ("v15 story", t_story_v15, (), {}), ("v15 creatures", t_v15_creatures, (), {}), ("v15 operator top", t_operator_top, (), {}),

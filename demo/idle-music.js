@@ -306,7 +306,7 @@
 
   // ---------- the deck panel ----------
   const css = document.createElement('style'); css.textContent = `
-#djlights{position:absolute;inset:0;pointer-events:none;z-index:6;display:none}#djlights.on{display:block}#djlights i{position:absolute;inset:0;opacity:0;transition:opacity .09s}
+#djlights{position:absolute;inset:0;pointer-events:none;z-index:5;display:none;transition:opacity .6s}html.wx-arrive #djlights{opacity:.35}#djlights.on{display:block}#djlights i{position:absolute;inset:0;opacity:0;transition:opacity .09s}
 #djlights .pulse{background:radial-gradient(120% 80% at 50% 110%,hsla(300,90%,65%,.9),transparent 60%)}#djlights.keep .pulse{background:radial-gradient(120% 80% at 50% 110%,rgba(160,160,160,.9),transparent 60%)}
 #djlights .spot{opacity:0;inset:auto;top:-12%;width:18%;height:135%;transform-origin:50% 0;will-change:transform;transition:opacity .6s;background:linear-gradient(to bottom,var(--c),transparent 85%);clip-path:polygon(46% 0,54% 0,100% 100%,0 100%)}#djlights.spots .spot{opacity:.42}
 #djlights .s1{left:12%;--c:hsla(190,95%,60%,.45);animation:djsw 7s ease-in-out infinite alternate}#djlights .s2{left:70%;--c:hsla(320,95%,62%,.45);animation:djsw 9s ease-in-out infinite alternate-reverse}#djlights .s3{left:41%;--c:hsla(50,95%,62%,.35);animation:djsw 5s ease-in-out infinite alternate}
