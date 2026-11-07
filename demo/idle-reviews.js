@@ -348,8 +348,9 @@
       const nb = el.querySelector('.notebar'); if (nb) { const row = document.createElement('div'); row.className = 'vrow'; row.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap'; nb.before(row); row.append(g, statsBtn(), nb); } else tb.after(g, statsBtn()); } }
     const card = el.querySelector('.deck .card'); cur.live = cur.P.mount(id, card.querySelector('.body')); dragOn(card); applyStats();
     // (Nov 6, Show HN: 6 opened the review, 0 swiped) once the animation has played, the choices pulse with "your pick?"; until the first rating
-    clearTimeout(cur.askT); if (!(cur.mine && Object.keys(cur.mine.rated || {}).length)) cur.askT = setTimeout(() => { const a = el.querySelector('.deck .acts'); if (!a || cur.queue[cur.i] !== id || a.classList.contains('ask')) return;
-      a.classList.add('ask'); const q = document.createElement('div'); q.className = 'askq'; q.textContent = 'your pick?'; a.before(q); mark('rv_ask'); }, 7500);
+    clearTimeout(cur.askT); if (cur.askId !== id) { cur.askId = id; cur.askAt = Date.now(); }   // (a repaint mustn't restart the wait)
+    if (!(cur.mine && Object.keys(cur.mine.rated || {}).length)) cur.askT = setTimeout(() => { const a = el.querySelector('.deck .acts'); if (!a || cur.queue[cur.i] !== id || a.classList.contains('ask')) return;
+      a.classList.add('ask'); const q = document.createElement('div'); q.className = 'askq'; q.textContent = 'your pick?'; a.before(q); mark('rv_ask'); }, Math.max(300, cur.askAt + 7500 - Date.now()));
     const { ctx } = audio(); if (ctx.state === 'running' && cur.cfg.kind === 'logos') setTimeout(() => { if (cur && cur.view === 'card' && cur.queue[cur.i] === id && cur.live) cur.live.play(); }, 350); }
   function judge(act) { if (!cur || cur.view !== 'card' || cur.flying) return; const id = cur.queue[cur.i], v = ACT[act]; if (!id || !v) return;
     takeNote(id); takeView(id, cur.live); rate(id, v, act); cur.note = false;
