@@ -343,11 +343,14 @@ const LOGOS = V.map(v => { const probe = new OfflineAudioContext(1, SR, SR), dur
     info: () => prepareLogo(v).then(r => ({ buf: r.buf, ev: r.R.ev || [], dur: r.R.dur, poster: Math.min(r.R.dur - 0.6, r.R.M && r.R.M.c != null ? r.R.M.c + 1.0 : 2) })),
     still(canvas, t, opts = {}) { return prepareLogo(v).then(r => { const g = canvas.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, canvas.width, canvas.height); r.S.font = opts.font || v.font || "'Idle F1', monospace"; v.draw(g, canvas.width, canvas.height, t, r.S); }); },
     build(ctx, canvas, t0, opts = {}) { if (opts.dust) DUST_MODE = opts.dust; let stopped = false, src = null, raf = 0, end; const done = new Promise(r => end = r), font = opts.font || v.font || "'Idle F1', monospace";
-      prepareLogo(v).then(r => { if (stopped) return; src = ctx.createBufferSource(); src.buffer = r.buf; src.connect(opts.destination || ctx.destination); const now = ctx.currentTime; if (t0 >= now) src.start(t0); else src.start(now, now - t0);
-        const g = canvas.getContext('2d'), lat = () => ctx.outputLatency || ctx.baseLatency || 0;
-        const tick = () => { if (stopped) return; const t = ctx.currentTime - lat() - t0, W = canvas.width, H = canvas.height; g.fillStyle = '#000'; g.fillRect(0, 0, W, H); if (t >= 0) { r.S.font = font; v.draw(g, W, H, t, r.S); }
+      // opts.silent (Nov 6, the logo review autoplays before any tap): no sound, the frames run on performance.now(), which doesn't wait for a gesture
+      const silent = !!opts.silent || !ctx; let p0 = 0;
+      prepareLogo(v).then(r => { if (stopped) return; if (!silent) { src = ctx.createBufferSource(); src.buffer = r.buf; src.connect(opts.destination || ctx.destination); const now = ctx.currentTime; if (t0 >= now) src.start(t0); else src.start(now, now - t0); }
+        const g = canvas.getContext('2d'), lat = () => ctx.outputLatency || ctx.baseLatency || 0; p0 = performance.now() + 120;
+        const clock = silent ? () => (performance.now() - p0) / 1000 : () => ctx.currentTime - lat() - t0;
+        const tick = () => { if (stopped) return; const t = clock(), W = canvas.width, H = canvas.height; g.fillStyle = '#000'; g.fillRect(0, 0, W, H); if (t >= 0) { r.S.font = font; v.draw(g, W, H, t, r.S); }
           if (t > r.R.dur) { stopped = true; end(); return; } raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); });
-      return { stop() { stopped = true; cancelAnimationFrame(raf); try { src && src.stop(); } catch (e) {} end(); }, done }; } }; });
+      return { stop() { stopped = true; cancelAnimationFrame(raf); try { src && src.stop(); } catch (e) {} end(); }, done, silent, time: () => p0 ? (performance.now() - p0) / 1000 : 0 }; } }; });
 
 // by id, with the round each came from (for ⭐ reviews and the intro's logo A/B): IdleLogos.byId('c3-typed-crt'), IdleLogos.ids, logo.round
 const ROUND = id => /^(strike-purr-static|crt-off)$/.test(id) ? 1 : /^(a3|b3a|b3b|c3)-/.test(id) ? 3 : 2;

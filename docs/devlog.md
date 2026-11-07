@@ -999,3 +999,9 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - **UI:** 📊 stats next to 🔲 gallery (deck) and in the gallery's bar. Default: on for items this browser judged or skipped, off before (no bias); the toggle wins for all items and is remembered (`idle.rvstats`). On: a translucent "still watching" curve over the strip, orange ticks where views moved on, "still watching to the end: N%", and "▶ 128 views · ✓ 41% like · ★ 12% love · ✕ 30% nah · » 7% skip · ✎ 7 notes"; under 5 views "not enough views yet". In the deck the next card is unjudged, so it starts off unless the toggle is on.
 - **Tools:** `review.py results` prints views, the share to the end, replays and a ▁▂▃…█ sparkline per item, plus the toggle counts; stats.py's review line adds 📊 turned on/off and the pick line 📊 toggled.
 - Tests: 'pick stats' (+ phone) and the worker unit's review stats block; 'review results' covers the sparkline.
+
+## The logo pick autoplays (Nov 6, during the Show HN)
+- 22 opened the review and 1 rated. Now each animation starts moving as soon as it shows, with no sound and no tap (`L.build(null, cv, 0, { silent: true })`: frames on performance.now(), which doesn't wait for a gesture); a "🔊 tap for sound" chip on the stage, a tap on the stage or space restarts it with sound; once sound is allowed, the next ones autoplay with sound as before.
+- After an animation ends its poster frame comes back (several CRT variants end on black).
+- The gallery autoplays one visible card at a time (silently until sound is allowed). Reduced motion: no autoplay, the poster and ▶ as before.
+- Funnel steps rv_autoplay, rv_sound. Test 'pick autoplay' (+ reduced): the deck moves with the AudioContext held suspended, the chip restarts with sound, the poster after the end, one gallery card playing.
