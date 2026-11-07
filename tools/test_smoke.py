@@ -4652,13 +4652,14 @@ def t_story_first_paint(P, root, phone=False):
         need(not bright, f"{what}: {len(bright)} of {len(before)} frames before the story's black were not black (mean luminance {bright[:6]})")
         return len(shots), len(before)
     out_ = []
-    for rnd, path, what in ((0.5, "/?story", "/?story"), (0.01, "/", "a new browser in the story arm")):
+    for rnd, path, what in ((0.5, "/?story", "/?story"), (0.01, "/", "a new browser in the light arm (the storyline's dark, Nov 7)")):
         ctx = P.ctx.browser.new_context(service_workers="block", **opts); ctx.add_init_script(f"Math.random = () => {rnd};"); ctx.add_init_script(LOG)
         Q = Page(ctx, P.base); Q.root = root
         try:
             q = ctx.new_page(); cdp = ctx.new_cdp_session(q)
             out_.append(check(*film(q, cdp, lambda: q.goto(P.base + path, wait_until="commit")), what))
-            wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title !== undefined", 40)
+            if path == "/": wait_for(q, "() => !!window.__genesis && window.__genesis.landing().phase === 'dark'", 40)
+            else: wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title !== undefined", 40)
             need(not q.evaluate("() => document.documentElement.classList.contains('story-boot')"), f"{what}: the first-paint black must lift once the story is up")
             # the service worker's first-visit reload comes moments after the first load: the same address again, nothing kept from the story yet
             q.goto(P.base + "/about:blank".replace("/about:blank", "/privacy.html"), wait_until="commit"); q.evaluate("() => { for (const k of Object.keys(localStorage)) if (!/^idle\\.gv/.test(k)) localStorage.removeItem(k); }")
@@ -4930,12 +4931,12 @@ def t_prod_gates(P, root, parts=("site", "links", "arms")):
     if "arms" in parts:
         # the A/B/C on id-le.com (Nov 4): a NEW browser gets an arm at random (Math.random pinned per context here), ?arm= forces nothing
         seen = {}
-        for rnd, want, forced in ((0.01, "story", "play"), (0.5, "choose", "story"), (0.99, "play", "story")):
+        for rnd, want, forced in ((0.01, "light", "play"), (0.5, "choose", "story"), (0.99, "play", "story")):   # (Nov 7) light/choose/play a third each
             ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script(f"Math.random = () => {rnd};"); Q = Page(ctx, P.base); Q.root = root
             try:
                 q = Q.open(f"/arena.html?arm={forced}")
-                if want == "story":
-                    wait_for(q, "() => !!document.querySelector('#idleIntro') && (document.querySelector('#idleIntro').dataset.title === '1' || (window.__epoch0 && window.__epoch0.time && window.__epoch0.time() > 0))", 60)   # the title card, or the intro it auto-started after 2 s (Nov 4)
+                if want == "light":   # the dark first, no title card
+                    wait_for(q, "() => !!window.__genesis && window.__genesis.landing().phase === 'dark' && !document.querySelector('#idleIntro')", 60)
                 elif want == "choose":
                     wait_for(q, "() => document.querySelectorAll('#genChoose button[data-m]').length >= 2", 40)
                 else:
