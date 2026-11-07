@@ -20,7 +20,7 @@ ORT_FILES = ["ort.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded
 ORT_CDN = f"https://cdn.jsdelivr.net/npm/onnxruntime-web@{ORT_VER}/dist/"
 ORT_TAG = f'<script src="{ORT_CDN}ort.min.js"></script>'
 # the one cached model is enough; the two old ones are only a fallback for checkouts without it
-COPY = ["pedia.html", "privacy.html", "live.html", "idle-runtime.js", "sw.js", "starter_world.json", "pedia_clips.json", "og-image.png", "og-image-square.png", "og-image-halloween.png", "intro_babble.json", "oracle_loss.json", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
+COPY = ["pedia.html", "privacy.html", "live.html", "idle-runtime.js", "sw.js", "starter_world.json", "pedia_clips.json", "og-image.png", "og-review-intro-logo-animation.png", "og-image-square.png", "og-image-halloween.png", "intro_babble.json", "oracle_loss.json", "oracle_v2_grown_ct2_kv_w8.onnx", "tokenizer_chat_v2.json", "assoc_v1.json",
         "arena_instr_v1.json", "arena_instr_v2.json", "arena_instr_v3.json", "arena_instr_v4.json", "genesis_gate.json", "arena_genomes.json", "datalab_stream.json"]
 PICK_URL = "https://id-le.com/review/intro-logo-animation"
 PICK_TITLE = "Help pick the best animation for Id|le's logo"
@@ -46,6 +46,9 @@ def pick_page(html):
     assert h.count('<link rel="canonical" href="https://id-le.com/">') == 1 and h.count("<title>Id|le</title>") == 1
     h = h.replace('<link rel="canonical" href="https://id-le.com/">', '<link rel="canonical" href="%s">' % PICK_URL, 1).replace("<title>Id|le</title>", "<title>%s · Id|le</title>" % t, 1)
     h = meta(h, "name", "description", d); h = meta(h, "property", "og:url", PICK_URL); h = meta(h, "property", "og:title", t); h = meta(h, "property", "og:description", d)
+    # the pick page's own preview (Nov 6, Nico: "that's the preview image, please deploy"; made by the VM agent)
+    h = meta(h, "property", "og:image", "https://id-le.com/og-review-intro-logo-animation.png")
+    h = meta(h, "property", "og:image:alt", "The Id|le logo review: one of 12 animated intros (Typed, CRT off) with nah, love and like buttons. 12 animations, swipe to vote, no sign-up")
     tag = "</style></head><body>"; assert h.count(tag) == 1
     seo = ('<header id="pickSeo" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">'
            '<h1>%s</h1><p>%s</p></header>' % (t, d))

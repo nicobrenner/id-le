@@ -1005,3 +1005,4 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - After an animation ends its poster frame comes back (several CRT variants end on black).
 - The gallery autoplays one visible card at a time (silently until sound is allowed). Reduced motion: no autoplay, the poster and ▶ as before.
 - Funnel steps rv_autoplay, rv_sound. Test 'pick autoplay' (+ reduced): the deck moves with the AudioContext held suspended, the chip restarts with sound, the poster after the end, one gallery card playing.
+- **The pick page's preview image (Nov 6):** og:image for /review/intro-logo-animation (and /gallery) is og-review-intro-logo-animation.png (1200×630, made by the VM agent); the home keeps og-image.png.
