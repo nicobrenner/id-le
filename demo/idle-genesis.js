@@ -92,6 +92,10 @@
     "your run spilled over… this is the consciousness you were training, and you're inside it now",
     "it's fragile. you have 10 epochs to help it grow until it can live on its own, or it fades",
     'first things first: the lights. say "lights on"'];
+  // the light arm (Nov 7, Nico: "you don't remember, do you? that's ok, it'll come back"): no film before the dark, so the Operator
+  // lets the gap be a mystery; the film is in ⚙ for the curious
+  const LIGHT_WAKE = "you don't remember, do you? that's ok, it'll come back";
+  const wakeLines = () => { const light = (typeof S !== 'undefined' && S && S.light) || (typeof variant === 'function' && variant() === 'light'); return light ? [WAKE[0], WAKE[1], LIGHT_WAKE, ...WAKE.slice(2)] : WAKE.slice(); };
   const LIGHTS_ON = 'Nice!! we can see something now at least';
   // the epochs (Nico, story v3: "10 epochs, not 6–7 days"; v11: "should it be Epoch0 that they first beat? and they move on to Epoch1"):
   // Epoch 0 · Genesis is the intro, the dark landing, lights on, words and first life, and it is the player's first win (its Gazette);
@@ -848,12 +852,12 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
     cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); opTitle(true); mark('operator'); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; let skip = false; const onTap = () => { skip = true; }; if (lab) lab.addEventListener('pointerdown', onTap);
     const fast = skAfter('operator');   // a later keyframe: the opening is already said
-    for (const line of WAKE) { if (RM || fast) { wakeShown.push(line); renderConsole(); if (!fast) await new Promise(r => setTimeout(r, 900)); continue; }
+    for (const line of wakeLines()) { if (RM || fast) { wakeShown.push(line); renderConsole(); if (!fast) await new Promise(r => setTimeout(r, 900)); continue; }
       for (let i = 1; i <= line.length; i += 2) { if (skip) break; wakeTyping = line.slice(0, i); renderConsole(); await new Promise(r => setTimeout(r, 26)); }
       wakeTyping = ''; wakeShown.push(line); renderConsole(); if (!skip) await new Promise(r => setTimeout(r, Math.min(1600, 500 + line.length * 18))); skip = false; }
     if (lab) lab.removeEventListener('pointerdown', onTap);
-    wakeBusy = false; try { WAKE.forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {}
-    curLine = WAKE[WAKE.length - 1]; wakeShown = WAKE.slice(); renderConsole(); }
+    wakeBusy = false; try { wakeLines().forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {}
+    curLine = wakeLines().slice(-1)[0]; wakeShown = wakeLines(); renderConsole(); }
   // the window is the Operator's (v10, Nico: "the sidebar chat is Operator"; the 🔮 Oracle is its own lightbox); since v14 it never docks
   function opTitle() { const b = $('#lab-head b'), N = window.IDLE_NAMES; if (!b || !N) return; b.textContent = N.op.icon + ' ' + N.op.short; }
 
@@ -993,8 +997,8 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     if (!did('creatures')) { const h = H(), cs = h.creatures(); hold = cs.splice(0).filter(c => !c.lab);
       for (const c of hold) { if (c.bub) c.bub.classList.remove('on'); if (c.el) c.el.style.visibility = 'hidden'; c.held = false; c.carrying = null; } }
     if (did('light')) { cls('gen-lit', 1); night(false); cosmos.light(); cls('gen-float', 1); } else night(true);
-    silence(!did('creatures')); applyUnlocks(); tag(); openConsole(); opTitle(); wakeBusy = false; wakeShown = did('light') ? [] : WAKE.slice();
-    renderConsole(did('light') ? introOf(nextGuide() || 'light') : WAKE[WAKE.length - 1]);
+    silence(!did('creatures')); applyUnlocks(); tag(); openConsole(); opTitle(); wakeBusy = false; wakeShown = did('light') ? [] : wakeLines();
+    renderConsole(did('light') ? introOf(nextGuide() || 'light') : wakeLines().slice(-1)[0]);
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_resume_reload', extra: { step: nextGuide() } } })); } catch (e) {} return true; }
   { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh) { clearInterval(iv); setTimeout(() => { try { resumeGenesis(); } catch (e) { console.warn('genesis: resume after reload', e); } }, 400); } else if (++k > 300) clearInterval(iv); }, 200); }
   // the playground's way back (v16): the 🛠 tray's chip and /story (idle-opwin.js asks for it)
