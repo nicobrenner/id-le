@@ -75,6 +75,11 @@
     notePh: 'a note for Nico about this one (private: only Nico reads it)', noteSend: 'send note', noteSent: '✓ sent, thanks', noteFail: 'couldn’t send it (no connection?): your note is still here, try again',
     noteNone: 'no agent here: write something first', skipAgain: n => `you skipped ${n}: see ${n === 1 ? 'it' : 'them'} again?`, skipYes: 'see them again', skipNo: 'no, I’m done',
     gallery: '🔲 gallery', deck: '🃏 one by one', playAll: '▶ play all', stopAll: '■ stop',
+    // the 📊 numbers (Nov 6, Nico: "the same style/data as the director views/players have, but for each of the animation options, so users can
+    // see the overall engagement, just like youtube… users should be able to toggle it on/off too")
+    stats: '📊 stats', statsTitle: 'everyone’s numbers for this animation (on by itself once you’ve judged it, so they don’t sway your own pick)',
+    statsFew: 'not enough views yet', statsCurve: 'still watching',
+    statsLine: x => [`▶ ${x.views} view${x.views === 1 ? '' : 's'}`, x.n ? `✓ ${x.like}% like` : '', x.n ? `★ ${x.love}% love` : '', x.n ? `✕ ${x.nah}% nah` : '', x.skipPct != null ? `» ${x.skipPct}% skip` : '', x.notes ? `✎ ${x.notes} note${x.notes === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · '),
     // the pick link (/review/intro-logo-animation, /pick/logo, ?pick=logo): a visitor from a post, who may never have seen Id|le
     pick: { intro: 'help me pick the best animation for my logo: swipe → if you like it, ← if not, ↑ if you love it', by: '— Nico, who makes Id|le',
       thanks: 'thank you!! Nico reads every pick. Id|le is the little world this logo opens: have a look 👇', try: 'Try out Id|le:',
@@ -203,9 +208,10 @@
       line(id) { const L = this.get(id); return L ? L.idea : ''; },
       // the logo lab's card: the frame, the waveform strip with its marks (pink: a beat you see and hear, blue: heard only), the legend
       mount(id, el) { const L = this.get(id); el.innerHTML = `<header><b>${esc(this.label(id))}</b> <span class="len">${L ? L.duration.toFixed(1) + ' s' : ''}</span></header><p class="idea">${esc(this.line(id))}</p>
-<div class="stage"><canvas class="cv" width="1120" height="460"></canvas><button class="big" data-act="replay" title="play (space)">▶</button></div><canvas class="st" width="1120" height="104"></canvas>
-<div class="row"><span class="leg"><i class="m vis"></i>visual + audible beat <i class="m snd"></i>sound only</span></div>`;
-        const cv = el.querySelector('.cv'), st = el.querySelector('.st'), card = el.closest('.card') || el; let h = null, raf = 0, info = null, t0 = 0, ctxR = null;
+<div class="stage"><canvas class="cv" width="1120" height="460"></canvas><button class="big" data-act="replay" title="play (space)">▶</button></div><div class="stw"><canvas class="st" width="1120" height="104"></canvas><canvas class="ov" width="1120" height="104"></canvas></div>
+<div class="row"><span class="leg"><i class="m vis"></i>visual + audible beat <i class="m snd"></i>sound only</span></div><div class="rstat" hidden></div>`;
+        const cv = el.querySelector('.cv'), st = el.querySelector('.st'), ov = el.querySelector('.ov'), card = el.closest('.card') || el; let h = null, raf = 0, info = null, t0 = 0, ctxR = null;
+        let maxF = 0, plays = 0;   // how far this browser got into it (the stats' view: the furthest twentieth before it moved on) and how often it played
         const strip = t => { if (!info) return; const g = st.getContext('2d'), W = st.width, Hh = st.height, d = info.buf.getChannelData(0), dur = info.dur; g.fillStyle = '#0d0e12'; g.fillRect(0, 0, W, Hh);
           g.fillStyle = '#5d6b86'; const per = d.length / W; for (let x = 0; x < W; x++) { let lo = 0, hi = 0; for (let j = Math.floor(x * per); j < Math.floor((x + 1) * per); j++) { lo = Math.min(lo, d[j]); hi = Math.max(hi, d[j]); } g.fillRect(x, Hh * 0.55 - hi * Hh * 0.4, 1, Math.max(1, (hi - lo) * Hh * 0.4)); }
           g.font = '20px system-ui'; let lastX = -99, row = 0; for (const e of info.ev) { const x = e.t / dur * W; g.fillStyle = e.vis ? '#ff5fa2' : '#7ee3f5'; g.fillRect(x, 0, 2, Hh); if (/^click [2-8]$/.test(e.k)) continue; row = x - lastX < 92 ? (row + 1) % 2 : 0; lastX = x; g.fillText(e.k, x + 4, 20 + row * 22); }
@@ -214,9 +220,19 @@
         const stop = () => { cancelAnimationFrame(raf); if (h) { try { h.stop(); } catch (e) {} h = null; } card.classList.remove('on'); strip(null); };
         return { play() { stop(); const { ctx, dest } = audio(); ctxR = ctx; try { window.__audio && window.__audio.wantSound && window.__audio.wantSound(); } catch (e) {} if (ctx.state !== 'running') ctx.resume().catch(() => {});
             t0 = ctx.currentTime + 0.12; const me = h = L.build(ctx, cv, t0, { font: LOGO_FONT, destination: dest }); card.classList.add('on'); mark('rv_play');
-            const tick = () => { if (h !== me) return; strip(ctxR.currentTime - t0); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick);
-            me.done.then(() => { if (h === me) { h = null; cancelAnimationFrame(raf); card.classList.remove('on'); strip(null); } }); return me; },
-          stop, playing: () => !!h, canvas: cv }; },
+            plays++; const dur = L.duration || (info && info.dur) || 1;
+            const tick = () => { if (h !== me) return; const tt = ctxR.currentTime - t0; maxF = Math.max(maxF, Math.min(1, tt / dur)); strip(tt); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick);
+            me.done.then(() => { if (h === me) { maxF = 1; h = null; cancelAnimationFrame(raf); card.classList.remove('on'); strip(null); } }); return me; },
+          stop, playing: () => !!h, canvas: cv, seen: () => ({ f: maxF, plays }),
+          // the 📊 overlay over the strip: everyone's "still watching" curve, and ticks where views moved on (like YouTube's most-replayed graph)
+          overlay(x) { const g = ov.getContext('2d'), W = ov.width, Hh = ov.height; g.clearRect(0, 0, W, Hh); if (!x || !x.ret) return;
+            const ret = x.ret, tot = ret.reduce((a, b) => a + b, 0); if (!tot) return; const B = ret.length - 1, still = []; let left = tot;
+            for (let j = 0; j < B; j++) { still.push(left / tot); left -= ret[j]; } still.push(left / tot);
+            g.beginPath(); g.moveTo(0, Hh); still.forEach((v, j) => { const xx = j / B * W, y = Hh - v * Hh * 0.86; if (!j) g.lineTo(0, y); g.lineTo(xx, y); g.lineTo(Math.min(W, (j + 1) / B * W), y); }); g.lineTo(W, Hh); g.closePath();
+            g.fillStyle = 'rgba(255,255,255,.14)'; g.fill(); g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 2; g.stroke();
+            const mx = Math.max(...ret.slice(0, B)); if (mx) for (let j = 0; j < B; j++) if (ret[j]) { const hh = Math.max(4, ret[j] / mx * Hh * 0.38); g.fillStyle = '#ff8a5c'; g.fillRect(j / B * W + W / B / 2 - 3, Hh - hh, 6, hh); }
+            g.fillStyle = 'rgba(255,255,255,.8)'; g.font = '600 18px system-ui'; g.textAlign = 'right'; g.fillText(TEXT.statsCurve + ' to the end: ' + Math.round(still[B] * 100) + '%', W - 8, Hh - 10); g.textAlign = 'left'; },
+          line: el.querySelector('.rstat') }; },
     },
     fonts: {
       load() { return document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve(); },
@@ -259,6 +275,8 @@
 #review .gal .gacts [data-g=nah]{border-color:#ff6b6b;color:#ff6b6b}#review .gal .gacts [data-g=like]{border-color:#9be08a;color:#9be08a}#review .gal .gacts [data-g=love]{border-color:#fdb827;color:#fdb827}#review .gal .gacts [data-g=skip]{border-style:dashed;font-size:13px}
 #review .gal .gacts button.chosen{background:#ffffff22;box-shadow:0 0 0 2px #fff4}#review .gal .gacts button:disabled:not(.chosen){opacity:.35}#review .gal .ph{aspect-ratio:1120/460;background:#000;border-radius:8px}
 @media (max-width:640px){#review .gal{grid-template-columns:minmax(0,1fr)}}
+#review .stw{position:relative;margin-top:4px}#review .stw canvas.st{margin-top:0}#review canvas.ov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#review .rstat{min-height:16px;margin-top:4px;font-size:12px;color:var(--dim);text-align:center}#review .rstat[hidden]{display:block;visibility:hidden}
+#review button.sbtn{flex:0 0 auto;background:none;color:inherit;border:1px solid #fff3;border-radius:999px;padding:3px 10px;font:600 12px inherit;cursor:pointer;opacity:.75}#review button.sbtn.on{opacity:1;border-color:var(--accent);color:var(--accent)}
 #review .pkhead{color:var(--dim);font-size:13px;margin:0 0 6px;line-height:1.4}#review .pkhead b{color:var(--ink);font-weight:600}
 #review .pktry{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:13px;color:var(--dim)}
 #review .pktry button{background:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font:600 13px inherit;cursor:pointer}#review .pktry button:hover{border-color:var(--accent)}
@@ -271,7 +289,7 @@
   let cur = null;   // { rid, cfg, P, mine, queue, i, judged, pending: {scores, notes, pairs}, view: 'card'|'check'|'h2h'|'end'|'msg', live, note }
   async function open(rid, from = 'lab') {
     rid = String(rid || '').toLowerCase(); if (!/^[a-z0-9-]{1,40}$/.test(rid)) return false;
-    if (cur) close(); hushGame(true); cur = { rid, from, view: 'msg', msg: 'opening…', pending: { scores: {}, notes: {}, pairs: [], skips: [] }, judged: 0 }; el.classList.add('on'); paint();
+    if (cur) close(); hushGame(true); cur = { rid, from, view: 'msg', msg: 'opening…', pending: { scores: {}, notes: {}, pairs: [], skips: [], views: {} }, judged: 0, viewSent: {} }; el.classList.add('on'); paint();
     mark('rv_open_' + (from === 'link' || from === 'pick' ? 'link' : from === 'end' ? 'end' : 'lab')); if (from === 'pick') mark('pk_open');
     const cfg = await getCfg(rid); if (!cur || cur.rid !== rid) return false;
     if (!cfg) { cur.msg = 'this review doesn’t exist (or it has closed)'; paint(); return false; }
@@ -283,8 +301,8 @@
     Object.assign(cur, { cfg: { ...cfg, items }, P, mine, queue: orderOf(items.filter(id => !(id in (mine.rated || {}))), cfg.order), i: 0, view: 'card' });
     if (!cur.queue.length) cur.view = 'end';
     if (cur.wantGallery || (from === 'pick' && GALLERY)) cur.view = 'gallery';
-    paint(); return true; }
-  function close() { if (!cur) return; stopGallery(); try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true);
+    paint(); loadStats(); return true; }
+  function close() { if (!cur) return; takeViews(); stopGallery(); try { cur.live && cur.live.stop(); } catch (e) {} (cur.h2 || []).forEach(m => { try { m.stop(); } catch (e) {} }); flush(true);
     // the pick link: closing drops the visitor into the world behind (free play), at the site's root so a reload is the game, not the review
     if (cur.from === 'pick') { if (!cur.went) mark('pk_close'); cur = null; el.classList.remove('on'); el.innerHTML = ''; hushGame(false); paintTab();
       try { history.replaceState(history.state, '', '/' + location.hash); } catch (e) {} return; }
@@ -327,11 +345,11 @@
 <div class="notebar">${noteHtml(id, cur.note)}</div></div>`;
     { const tb = el.querySelector('.top .prog'); if (tb) { const g = document.createElement('button'); g.className = 'vbtn'; g.dataset.a = 'gallery'; g.textContent = TEXT.gallery; g.style.cssText = 'flex:0 0 auto;background:none;color:inherit;border:1px solid #fff3;border-radius:999px;padding:3px 10px;font:600 12px inherit;cursor:pointer';
       // (Nov 6, Nico: "should be left of the 'add a note' link, easier to find, close to the main controls")
-      const nb = el.querySelector('.notebar'); if (nb) { const row = document.createElement('div'); row.className = 'vrow'; row.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap'; nb.before(row); row.append(g, nb); } else tb.after(g); } }
-    const card = el.querySelector('.deck .card'); cur.live = cur.P.mount(id, card.querySelector('.body')); dragOn(card);
+      const nb = el.querySelector('.notebar'); if (nb) { const row = document.createElement('div'); row.className = 'vrow'; row.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap'; nb.before(row); row.append(g, statsBtn(), nb); } else tb.after(g, statsBtn()); } }
+    const card = el.querySelector('.deck .card'); cur.live = cur.P.mount(id, card.querySelector('.body')); dragOn(card); applyStats();
     const { ctx } = audio(); if (ctx.state === 'running' && cur.cfg.kind === 'logos') setTimeout(() => { if (cur && cur.view === 'card' && cur.queue[cur.i] === id && cur.live) cur.live.play(); }, 350); }
   function judge(act) { if (!cur || cur.view !== 'card' || cur.flying) return; const id = cur.queue[cur.i], v = ACT[act]; if (!id || !v) return;
-    takeNote(id); rate(id, v, act); cur.note = false;
+    takeNote(id); takeView(id, cur.live); rate(id, v, act); cur.note = false;
     const card = el.querySelector('.deck .card'), next = () => { cur.flying = false; if (!cur) return; cur.i++; if (due()) flush();
       const left = cur.queue.length - cur.i; if (!left) return finish(); if (Object.keys(cur.mine.rated).length % 6 === 0) { cur.view = 'check'; flush(); } paint(); };   // every 6 judged in all (a resumed deck counts what came before)
     if (card && !RM) { cur.flying = true; const dx = act === 'nah' ? -1 : act === 'like' ? 1 : 0, dy = act === 'love' ? -1 : 0; card.style.transition = 'transform .28s ease-in, opacity .28s'; card.style.transform = `translate(${dx * 120}%, ${dy * 110}%) rotate(${dx * 18}deg)`; card.style.opacity = '0'; setTimeout(next, 280); } else next(); }
@@ -342,7 +360,7 @@
   const due = () => Object.keys(cur.pending.notes).length > 0 || Object.keys(cur.pending.scores).length + cur.pending.skips.length >= 3;
   // skip: seen and passed, no score (counted per item); the skipped ones can come back at the end
   function skip(id) { if (!cur || !id) return; takeNote(id); if (!cur.pending.skips.includes(id)) cur.pending.skips.push(id); cur.mine.skipped = [...new Set([...(cur.mine.skipped || []), id])]; saveMine(); mark('rv_skip'); if (cur.from === 'pick') mark('pk_skip'); }
-  function skipCard() { if (!cur || cur.view !== 'card' || cur.flying) return; const id = cur.queue[cur.i]; if (!id) return; skip(id); cur.note = false;
+  function skipCard() { if (!cur || cur.view !== 'card' || cur.flying) return; const id = cur.queue[cur.i]; if (!id) return; takeView(id, cur.live); skip(id); cur.note = false;
     const card = el.querySelector('.deck .card'), next = () => { cur.flying = false; if (!cur) return; cur.i++; if (due()) flush(); if (cur.queue.length - cur.i <= 0) return finish(); paint(); };
     if (card && !RM) { cur.flying = true; card.style.transition = 'transform .25s ease-in, opacity .25s'; card.style.transform = 'translate(0, 60%)'; card.style.opacity = '0'; setTimeout(next, 250); } else next(); }
   // sending a note on its own (the existing private queue): ✓ sent, or why not (the text stays)
@@ -358,14 +376,14 @@
   function paintGallery() { const c = cur.cfg, r = cur.mine.rated || {}, sk = cur.mine.skipped || [];
     stopGallery(); cur.gm = {}; const n = c.items.length, done = Object.keys(r).length;
     el.innerHTML = `<div class="box"><div class="top"><b>⭐ ${esc(c.title || cur.rid)}</b><span class="prog">${done} / ${n} rated</span><span class="tm"></span><button class="x" data-a="close" title="close (esc)">✕</button></div>
-<div class="vbar"><button data-a="playall">${esc(TEXT.playAll)}</button><button data-a="stopall">${esc(TEXT.stopAll)}</button><button data-a="deck">${esc(TEXT.deck)}</button></div>
+<div class="vbar"><button data-a="playall">${esc(TEXT.playAll)}</button><button data-a="stopall">${esc(TEXT.stopAll)}</button><button data-a="deck">${esc(TEXT.deck)}</button><button class="sbtn" data-a="stats" title="${esc(TEXT.statsTitle)}"${cur.stats ? '' : ' hidden'}>${esc(TEXT.stats)}</button></div>
 <div class="gal">${c.items.map(id => `<section class="card" data-item="${esc(id)}"><div class="gbody"><div class="ph"></div></div>
 <div class="gacts">${['nah', 'love', 'like'].map(a => `<button data-g="${a}" data-item="${esc(id)}" title="${a}"${r[id] ? ' disabled' : ''} class="${r[id] === ACT[a] ? 'chosen' : ''}">${{ nah: '✕', love: '★', like: '✓' }[a]}</button>`).join('')}<button data-g="skip" data-item="${esc(id)}" title="skip"${r[id] || sk.includes(id) ? ' disabled' : ''} class="${sk.includes(id) && !r[id] ? 'chosen' : ''}">skip</button></div>
 <div class="notebar">${noteHtml(id, !!(cur.noteOpen && cur.noteOpen[id]))}</div></section>`).join('')}</div></div>`;
-    const gal = el.querySelector('.gal'), mount = cd => { const id = cd.dataset.item; if (cur.gm[id]) return cur.gm[id]; const b = cd.querySelector('.gbody'); b.innerHTML = ''; cur.gm[id] = cur.P.mount(id, b); return cur.gm[id]; };
+    const gal = el.querySelector('.gal'), mount = cd => { const id = cd.dataset.item; if (cur.gm[id]) return cur.gm[id]; const b = cd.querySelector('.gbody'); b.innerHTML = ''; cur.gm[id] = cur.P.mount(id, b); applyOne(id, cur.gm[id]); return cur.gm[id]; };
     cur.gmount = mount;
     if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { mount(e.target); io.unobserve(e.target); } }), { root: gal, rootMargin: '150px' }); cur.gio = io; gal.querySelectorAll('.card').forEach(cd => io.observe(cd)); }
-    else gal.querySelectorAll('.card').forEach(mount); }
+    else gal.querySelectorAll('.card').forEach(mount); applyStats(); }
   function stopGallery() { if (!cur) return; cur.playAll = 0; Object.values(cur.gm || {}).forEach(m => { try { m.stop(); } catch (e) {} }); if (cur.gio) { try { cur.gio.disconnect(); } catch (e) {} cur.gio = null; } }
   function gPlay(id, then) { if (!cur || cur.view !== 'gallery') return; Object.entries(cur.gm || {}).forEach(([k, m]) => { if (k !== id) try { m.stop(); } catch (e) {} });
     const cd = el.querySelector(`.gal .card[data-item="${CSS.escape(id)}"]`); if (!cd) return; const m = cur.gmount(cd); cd.scrollIntoView({ block: 'nearest', behavior: RM ? 'auto' : 'smooth' });
@@ -390,15 +408,39 @@
 
   // sending: small batches (3 swipes, a checkpoint, the pick, closing, leaving the page); a team review asks the server to join first if needed
   let flushing = null;
-  function flush(leaving) { if (!cur) return null; const p = cur.pending, rid = cur.rid; if (!Object.keys(p.scores).length && !p.pairs.length && !p.skips.length && !Object.keys(p.notes).length) return flushing;
-    const body = { bkey: bkey(), scores: p.scores, notes: p.notes, pairs: p.pairs, skips: p.skips, ...(cur.from === 'pick' ? { via: 'pick' } : {}) }; cur.pending = { scores: {}, notes: {}, pairs: [], skips: [] };
+  function flush(leaving) { if (!cur) return null; const p = cur.pending, rid = cur.rid; if (!Object.keys(p.scores).length && !p.pairs.length && !p.skips.length && !Object.keys(p.notes).length && !Object.keys(p.views || {}).length && !p.ui) return flushing;
+    const body = { bkey: bkey(), scores: p.scores, notes: p.notes, pairs: p.pairs, skips: p.skips, ...(Object.keys(p.views || {}).length ? { views: p.views } : {}), ...(p.ui ? { ui: p.ui } : {}), ...(cur.from === 'pick' ? { via: 'pick' } : {}) }; cur.pending = { scores: {}, notes: {}, pairs: [], skips: [], views: {} };
     const sentNotes = body.notes, me = cur;
     if (leaving && document.visibilityState === 'hidden' && navigator.sendBeacon) { try { const base = (window.__idle && window.__idle.cfg && window.__idle.cfg.helper || '').replace(/\/$/, ''); if (navigator.sendBeacon(base + '/lab/review/' + rid, new Blob([JSON.stringify(body)], { type: 'application/json' }))) return null; } catch (e) {} }
     // a batch that didn't arrive (no connection, a server error) goes back into the next one: a note is never lost
-    const back = () => { if (cur !== me) return; const q = cur.pending; Object.assign(q.scores, body.scores); for (const [k, t] of Object.entries(sentNotes)) if (!q.notes[k]) q.notes[k] = t; q.pairs.push(...body.pairs); q.skips.push(...body.skips.filter(k => !q.skips.includes(k))); };
-    flushing = post(rid, body).then(r => { if (!r || r.status === 0 || r.status >= 500) back(); return r; }).catch(() => { back(); return null; }); return flushing; }
+    const back = () => { if (cur !== me) return; const q = cur.pending; Object.assign(q.scores, body.scores); for (const [k, t] of Object.entries(sentNotes)) if (!q.notes[k]) q.notes[k] = t; q.pairs.push(...body.pairs); q.skips.push(...body.skips.filter(k => !q.skips.includes(k)));
+      Object.assign(q.views, body.views || {}); if (body.ui && !q.ui) q.ui = body.ui; };
+    flushing = post(rid, body).then(r => { if (!r || r.status === 0 || r.status >= 500) back(); else if (cur === me) loadStats(true); return r; }).catch(() => { back(); return null; }); return flushing; }
+  // ---------- 📊 the public numbers (GET /lab/review/<rid>/stats: aggregates only), the toggle, and this browser's views ----------
+  // a view: the first time this browser moves on from an item it played, filed as the furthest twentieth reached (20: to the end) and its replays
+  function takeView(id, m) { if (!cur || !id || !m || !m.seen || cur.viewSent[id]) return; const v = m.seen(); if (!v || !v.plays) return;
+    cur.viewSent[id] = 1; cur.pending.views[id] = { b: v.f >= 0.999 ? 20 : Math.max(0, Math.min(19, Math.floor(v.f * 20))), r: Math.min(9, v.plays - 1) }; }
+  function takeViews() { if (!cur) return; if (cur.view === 'card' && cur.live && cur.queue) takeView(cur.queue[cur.i], cur.live); Object.entries(cur.gm || {}).forEach(([k, m]) => takeView(k, m)); }
+  const SPREF = 'idle.rvstats';
+  const statsPref = () => { try { const v = localStorage.getItem(SPREF); return v === 'on' || v === 'off' ? v : null; } catch (e) { return null; } };
+  // on by itself once this browser judged (or skipped) the item, so the numbers don't sway its own pick; the toggle always wins, and is remembered
+  const statsOn = id => { const p = statsPref(); if (p) return p === 'on'; const m = cur && cur.mine; return !!(m && ((m.rated && id in m.rated) || (m.skipped || []).includes(id))); };
+  let statsT = 0;
+  async function loadStats(force) { if (!cur) return; const me = cur; if (!force && cur.stats !== undefined && Date.now() - statsT < 30e3) return applyStats();
+    statsT = Date.now(); let o = null; try { const r = await api('/lab/review/' + encodeURIComponent(me.rid) + '/stats'); if (r.status === 200 && r.j && r.j.items) o = r.j; } catch (e) {}
+    if (cur !== me) return; cur.stats = o; applyStats(); }
+  function statsOf(id) { const S = cur && cur.stats, x = S && S.items && S.items[id]; if (!x) return null; const views = Math.max(x.views || 0, (x.n || 0) + (x.skip || 0)), min = S.min || 5;
+    return { ...x, views, few: views < min, skipPct: views ? Math.round((x.skip || 0) / views * 100) : null }; }
+  function applyOne(id, m) { if (!m || !cur) return; const on = !!cur.stats && statsOn(id), x = on ? statsOf(id) : null;
+    if (m.overlay) try { m.overlay(x && !x.few ? x : null); } catch (e) {}
+    const ln = m.line; if (ln) { ln.hidden = !on || !x; ln.textContent = x ? (x.few ? `📊 ${TEXT.statsFew}` : '📊 ' + TEXT.statsLine(x)) : ''; } }
+  function applyStats() { if (!cur) return; if (cur.view === 'card' && cur.live && cur.queue) applyOne(cur.queue[cur.i], cur.live); Object.entries(cur.gm || {}).forEach(([k, m]) => applyOne(k, m));
+    el.querySelectorAll('[data-a=stats]').forEach(b => { b.hidden = !cur.stats; const on = cur.view === 'gallery' ? statsPref() === 'on' : statsOn(cur.queue && cur.queue[cur.i]); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }); }
+  function toggleStats() { if (!cur) return; const was = cur.view === 'gallery' ? statsPref() === 'on' : statsOn(cur.queue && cur.queue[cur.i]), v = was ? 'off' : 'on';
+    try { localStorage.setItem(SPREF, v); } catch (e) {} cur.pending.ui = v; mark('rv_stats_' + v); if (cur.from === 'pick') mark('pk_stats'); applyStats(); }
+  const statsBtn = () => { const b = document.createElement('button'); b.className = 'sbtn'; b.dataset.a = 'stats'; b.textContent = TEXT.stats; b.title = TEXT.statsTitle; b.hidden = !(cur && cur.stats); return b; };
   const post = async (rid, body) => { let r = await api('/lab/review/' + rid, body); if (r.status === 403 && r.j && r.j.team) { await api('/lab/team/' + r.j.team + '/join', { bkey: body.bkey }); r = await api('/lab/review/' + rid, body); } return r; };
-  addEventListener('pagehide', () => flush(true));
+  addEventListener('pagehide', () => { if (cur) takeViews(); flush(true); });
 
   // swipe by dragging (touch, pen or mouse): right ✓, left ✕, up ★ (the big ▶ in the middle can start a swipe too; the click that ends it doesn't replay)
   function dragOn(card) { let sx = 0, sy = 0, dx = 0, dy = 0, on = false, id = null;
@@ -415,11 +457,11 @@
   el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || !cur) return;
     const a = b.dataset.a, act = b.dataset.act;
     if (b.dataset.pk) return pickGo(b.dataset.pk);
-    if (a === 'gallery') return toGallery(); if (a === 'deck') return toDeck(); if (a === 'playall') return playAll(); if (a === 'stopall') { cur.playAll = 0; Object.values(cur.gm || {}).forEach(m => { try { m.stop(); } catch (er) {} }); return; }
+    if (a === 'stats') return toggleStats(); if (a === 'gallery') return toGallery(); if (a === 'deck') return toDeck(); if (a === 'playall') return playAll(); if (a === 'stopall') { cur.playAll = 0; Object.values(cur.gm || {}).forEach(m => { try { m.stop(); } catch (er) {} }); return; }
     if (a === 'sendnote') return void sendNote(b.dataset.item);
     if (a === 'again') { mark('rv_skipagain'); cur.queue = cur.again.slice(); cur.i = 0; cur.view = 'card'; return paint(); } if (a === 'noagain') { cur.view = 'card'; return finish(); }
     if (cur.view === 'gallery') { const id = b.dataset.item || (b.closest('.card') && b.closest('.card').dataset.item);
-      if (b.dataset.g && id) { takeNote(id); if (b.dataset.g === 'skip') skip(id); else rate(id, ACT[b.dataset.g], b.dataset.g); if (due()) flush();
+      if (b.dataset.g && id) { takeNote(id); takeView(id, cur.gm && cur.gm[id]); if (b.dataset.g === 'skip') skip(id); else rate(id, ACT[b.dataset.g], b.dataset.g); if (due()) flush(); applyOne(id, cur.gm && cur.gm[id]);
         const cd = b.closest('.card'); cd.querySelectorAll('.gacts button').forEach(x => { x.disabled = b.dataset.g !== 'skip' || x.dataset.g === 'skip'; x.classList.toggle('chosen', x === b); });
         const pr = el.querySelector('.top .prog'); if (pr) pr.textContent = `${Object.keys(cur.mine.rated || {}).length} / ${cur.cfg.items.length} rated`; return; }
       if (a === 'note' && id) { cur.noteOpen = cur.noteOpen || {}; cur.noteOpen[id] = true; const nb = b.closest('.notebar'); nb.innerHTML = noteHtml(id, true); const t = nb.querySelector('textarea'); t && t.focus(); return; }
@@ -547,7 +589,8 @@
     return api('/lab/review/logos', { bkey: bkey(), ask: 'e0', pairs: [[win, lose]] }).then(r => r.status === 200).catch(() => false); };
   window.__reviews = { askPick, open, close, list, invite, join, team: { status: teamStatus, vested: () => !!(teamStatus() || {}).vested, member: () => !!team(), name: TEAM.name, id: TEAM.id },
     state: () => cur && { rid: cur.rid, view: cur.view, kind: cur.cfg && cur.cfg.kind, items: cur.cfg ? cur.cfg.items.slice() : [], queue: cur.queue ? cur.queue.slice() : [], i: cur.i, current: cur.queue ? cur.queue[cur.i] : null,
-      rated: { ...((cur.mine && cur.mine.rated) || {}) }, pairs: ((cur.mine && cur.mine.pairs) || []).slice(), pair: cur.pair || null, playing: !!(cur.live && cur.live.playing && cur.live.playing()) },
+      rated: { ...((cur.mine && cur.mine.rated) || {}) }, pairs: ((cur.mine && cur.mine.pairs) || []).slice(), pair: cur.pair || null, playing: !!(cur.live && cur.live.playing && cur.live.playing()),
+      stats: { loaded: !!cur.stats, pref: statsPref(), on: id => statsOn(id), of: id => statsOf(id), pending: { ...((cur.pending && cur.pending.views) || {}) }, sent: Object.keys(cur.viewSent || {}) } },
     sent: rid => !!(sentAll()[rid] && sentAll()[rid].done), tab: { open: () => toggleTab(true), close: () => toggleTab(false), isOpen: () => tabOpen }, viewHtml, viewAct, highlight, arrive, nudge, hasKey: () => { try { return /^[a-z2-7]{26}$/.test(localStorage.getItem(BKEY) || ''); } catch (e) { return false; } },
     badge: () => { const s = teamStatus(), rids = Object.keys(sentAll()).filter(k => sentAll()[k].done); return s || rids.length ? { rids, status: s } : null; }, plugins: () => Object.keys(PLUGINS),
     moment, quiet, text: TEXT, test: { ready, busy: () => busy(), touch: () => { touched = true; if (endSeen) touchedAfter = true; }, touchAfter: () => { touchedAfter = true; }, onScreen: v => { if (v != null) onScreen = v; return onScreen; }, fast: on => { FAST = on !== false; }, shift: ms => { NOW_OFF += ms; }, order: (items, order) => orderOf(items, order), flush: () => flush(), auto: (on, since) => { auto = on !== false; if (since != null) { onScreen = Math.max(onScreen, since / 1000); touched = true; } }, delivering: () => delivering, done: rid => reviewDone(rid), lastHighlight: () => lastHl, knows } };
