@@ -991,3 +991,11 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - Tests: 'pick more' and 'pick more phone' (↓ and the skip button, the note alone / with a swipe / Ctrl+Enter / a failed send, "you skipped 2: see them again?", the gallery's grid, lazy mounting on a phone, one plays at a time, play all and stop, a gallery rating sent and out of the deck), 'review results' (static), 'pick routes' now also serves the gallery path.
 
 - **Gallery toggle placement (Nov 6):** 🔲 gallery now sits left of ✎ add a note, under the main controls (Nico: "easier to find, close to the main controls").
+
+## 📊 stats on the logo pick (Nov 6, revstats)
+- Nico: "let's add the same style/data as the director views/players have, but for each of the animation options, so users can see the overall engagement, just like youtube..." and "users should be able to toggle it on/off too".
+- **Data:** a view is a browser's first move-on from an item it played: the furthest twentieth reached (20 = to the end) and replays, once per browser key per item (`views: {item: {b, r}}` in the review batches; `items[id].v/rp/ret[21]` in the aggregate). The 📊 toggle counts once per key each way (`ui`, `a.ui`).
+- **Public numbers:** `GET /lab/review/<rid>/stats` (public stage or pick-open reviews only): views, like/love/nah %, skips, note counts, replays, the retention histogram; no keys, no notes' words; 30 s cache (memory + Cache-Control). idle-runtime.js routes it like the other review paths.
+- **UI:** 📊 stats next to 🔲 gallery (deck) and in the gallery's bar. Default: on for items this browser judged or skipped, off before (no bias); the toggle wins for all items and is remembered (`idle.rvstats`). On: a translucent "still watching" curve over the strip, orange ticks where views moved on, "still watching to the end: N%", and "▶ 128 views · ✓ 41% like · ★ 12% love · ✕ 30% nah · » 7% skip · ✎ 7 notes"; under 5 views "not enough views yet". In the deck the next card is unjudged, so it starts off unless the toggle is on.
+- **Tools:** `review.py results` prints views, the share to the end, replays and a ▁▂▃…█ sparkline per item, plus the toggle counts; stats.py's review line adds 📊 turned on/off and the pick line 📊 toggled.
+- Tests: 'pick stats' (+ phone) and the worker unit's review stats block; 'review results' covers the sparkline.

@@ -157,7 +157,7 @@ const CAP = { ref: 30, utm: 20, psec: 80 };   // distinct names kept per day and
 const capped = (o, k, n, cap) => bump(o, o[k] != null || Object.keys(o).length < cap ? k : 'other', n);
 const EMPTY_PD = () => ({ visits: 0, back: 0, dev: {}, ref: {}, utm: {}, dw: {}, sec: {}, clips: 0 });   // the pedia's own block
 // the storyline's funnel moments (demo/idle-epoch0.js, idle-genesis.js); anything else is dropped
-const SFSTEP = ['rv_skip', 'rv_skipagain', 'rv_note', 'rv_gallery', 'rv_playall', 'pk_skip', 'pk_note', 'pk_gallery', 'entry_pick', 'pk_open', 'pk_first', 'pk_done', 'pk_go_story', 'pk_go_free', 'pk_go_lab', 'pk_close', 'entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown_old', 'offer_go_old', 'offer_later_old', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'offer_shown_v3', 'offer_go_v3', 'offer_later_v3', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip',
+const SFSTEP = ['rv_stats_on', 'rv_stats_off', 'pk_stats', 'rv_skip', 'rv_skipagain', 'rv_note', 'rv_gallery', 'rv_playall', 'pk_skip', 'pk_note', 'pk_gallery', 'entry_pick', 'pk_open', 'pk_first', 'pk_done', 'pk_go_story', 'pk_go_free', 'pk_go_lab', 'pk_close', 'entry_lab', 'entry_start', 'entry_wiki', 'entry_offer', 'entry_review', 'entry_gift', 'entry_halloween', 'entry_world', 'entry_intro', 'entry_creature', 'entry_recover', 'title', 'title_auto', 'sound_on', 'messages', 'chat', 'boot', 'run', 'crash', 'landing', 'operator', 'lights', 'e1words', 'e1life', 'e1done', 'e0_start1', 'e0_play', 'e0_tap', 'ch_story', 'ch_play', 'pw_shown', 'pw_story', 'st_resume', 'st_restart', 'lg_shown:c3', 'lg_shown:crt', 'skip:title', 'skip:messages', 'skip:chat', 'skip:boot', 'skip:run', 'skip:crash', 'skip:landing', 'offer_shown_old', 'offer_go_old', 'offer_later_old', 'offer_shown', 'offer_accepted', 'offer_shown_a', 'offer_shown_b', 'offer_shown_c', 'offer_go_a', 'offer_go_b', 'offer_go_c', 'offer_later_a', 'offer_later_b', 'offer_later_c', 'offer_shown_v3', 'offer_go_v3', 'offer_later_v3', 'end_shown', 'end_roadmap', 'end_github', 'end_free', 'sound_off', 'e0_ask_name', 'e0_ask_logo', 'e0_ask_both', 'e0_ask_skip',
   // the Founder gift (idle-founder.js): eligible by an early world or by a gift link, the offer, the letter, the creator, experiments (1+, 5+, 20+), released, the badge chosen
   'fd_world', 'fd_link', 'fd_personal', 'fd_offer', 'fd_letter', 'fd_creator', 'fd_exp1', 'fd_exp5', 'fd_exp20', 'fd_released', 'fd_badge_pipe', 'fd_badge_spark', 'fd_badge_laurel', 'fd_badge_seed', 'fd_badge_crown',
   // reviews (idle-reviews.js): opened (by a link, from 🧪, from the end card), played an item, sent, already sent
@@ -809,6 +809,18 @@ const likeRate = x => x && x.n ? ((x.s && (x.s[3] || 0) + (x.s[4] || 0) + (x.s[5
 const rvOrder = (c, a) => Object.fromEntries(c.items.map(id => { const x = a.items[id], lr = likeRate(x); return [id, { n: x ? x.n : 0, lr: lr == null ? null : Math.round(lr * 10) / 10 }]; }));
 const rvTotals = (c, a) => { const bt = bradleyTerry(c.items, a.pw); return Object.fromEntries(c.items.map(id => { const x = a.items[id] || { n: 0, sum: 0 }, lr = likeRate(x);
   return [id, { n: x.n, avg: x.n ? Math.round(x.sum / x.n * 100) / 100 : null, like: lr == null ? null : Math.round(lr * 100) / 100, bt: bt[id] }]; })); };
+// the public numbers per item (Nov 6, Nico: "the same style/data as the director views/players have, but for each of the animation options,
+// so users can see the overall engagement, just like youtube… users should be able to toggle it on/off too"): GET /lab/review/<rid>/stats,
+// only for a review anyone can rate (a public stage, or one the pick link opens). Aggregate numbers only: no keys, no notes' words.
+// Retention: a view is one browser's first look at an item, filed as the furthest twentieth of the animation it reached before it moved on
+// (0-19; 20 = to the end), so ret[j] is how many views got no further than j; 'still watching' at j is the share of views with furthest >= j.
+const RV_BINS = 20, RV_STATS_MIN = 5, rvStatsMem = new Map();
+const rvPublic = (rid, c) => c && c.open && (c.stage === 'public' || PICK_OPEN.includes(rid));
+function rvStats(c, a) { const items = {};
+  for (const id of c.items) { const x = a.items[id] || {}, s = x.s || [], n = x.n || 0, pc = k => n ? Math.round((s[k] || 0) / n * 100) : null;
+    const ret = Array.isArray(x.ret) ? x.ret.slice(0, RV_BINS + 1) : null;
+    items[id] = { n, like: pc(3), love: pc(5), nah: pc(1), skip: x.skip || 0, notes: x.notes || 0, views: x.v || 0, rp: x.rp || 0, ret: ret && ret.some(Boolean) ? ret : null }; }
+  return { items, sends: a.sends || 0, min: RV_STATS_MIN, bins: RV_BINS, toggles: a.ui || null }; }
 async function teamDoc(env, t) { let d = null; try { d = JSON.parse(await fbKV(env).get('team:' + t) || 'null'); } catch (e) {} d = d || {}; d.n = d.n || 0; d.m = d.m || {}; return d; }
 async function team(req, env, path) {
   const kv = fbKV(env), m = path.match(/^\/lab\/team\/([a-z-]+)(\/join|\/me)?$/); if (!m || !TEAMS.includes(m[1])) return json({ error: 'no such team' }, 404);
@@ -827,8 +839,12 @@ async function review(req, env, path, ip) {
     let ids = Object.keys(REVIEWS); try { const x = JSON.parse(await kv.get('reviews:index') || 'null'); if (Array.isArray(x)) ids = [...new Set([...x.filter(i => typeof i === 'string' && RID.test(i)), ...ids])]; } catch (e) {}
     const out = []; for (const rid of ids.slice(0, 20)) { const c = await reviewCfg(env, rid); if (c && c.open) out.push({ rid, kind: c.kind, title: c.title, n: c.items.length, stage: c.stage, team: c.team }); }
     return json({ reviews: out }); }
-  const m = path.match(/^\/lab\/review\/([a-z0-9-]+)$/); if (!m || !RID.test(m[1])) return json({ error: 'no such review' }, 404);
+  const m = path.match(/^\/lab\/review\/([a-z0-9-]+)(\/stats)?$/); if (!m || !RID.test(m[1])) return json({ error: 'no such review' }, 404);
   const rid = m[1], c = await reviewCfg(env, rid); if (!c) return json({ error: 'no such review' }, 404);
+  if (m[2]) { if (req.method !== 'GET') return json({ error: 'GET only' }, 405); if (!rvPublic(rid, c)) return json({ error: 'no public numbers for this review' }, 404);
+    const hit = rvStatsMem.get(rid); let o = hit && Date.now() - hit.t < 30e3 ? hit.o : null;
+    if (!o) { o = { rid, ...rvStats(c, await rvAgg(env, rid)) }; rvStatsMem.set(rid, { o, t: Date.now() }); if (rvStatsMem.size > 50) rvStatsMem.clear(); }
+    return new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30' } }); }
   if (req.method === 'GET') { const a = await rvAgg(env, rid), o = { rid, ...c, order: rvOrder(c, a) }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o); }
   if (req.method !== 'POST') return json({ error: 'GET or POST' }, 405);
   if (!c.open) return json({ error: 'this review has closed: thank you anyway' }, 410);
@@ -838,12 +854,16 @@ async function review(req, env, path, ip) {
   // (Nov 6, Nico: "we should add a Skip button/action, and there should be a submit/send/save … for the comments/notes"): skips are items
   // seen and passed without a score (counted per item, once per browser), and a note may come on its own
   const sk = q && Array.isArray(q.skips) ? q.skips : [];
-  const scores = {}, notes = {}, pairs = [], skips = [];
+  // views (the stats): {item: {b: furthest twentieth 0-20, r: replays 0-9}}, counted once per browser per item; ui: the 📊 toggle ('on'|'off'), once per browser each
+  const vw = q && typeof q.views === 'object' && q.views && !Array.isArray(q.views) ? q.views : {}, ui = q && (q.ui === 'on' || q.ui === 'off') ? q.ui : null;
+  const scores = {}, notes = {}, pairs = [], skips = [], views = {};
   for (const [k, v] of Object.entries(sc).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); if (!Number.isInteger(v) || v < 0 || v > 5) return json({ error: 'scores are 0 to 5' }, 400); scores[k] = v; }
   for (const [k, v] of Object.entries(nt).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); const t = scrub(v, 300); if (t) notes[k] = t; }
   for (const p of pr.slice(0, 12)) { if (!Array.isArray(p) || p.length !== 2 || p[0] === p[1] || !c.items.includes(p[0]) || !c.items.includes(p[1])) return json({ error: 'a pair is two different items of this review' }, 400); pairs.push(p[0] + '>' + p[1]); }
   for (const k of sk.slice(0, 40)) { if (typeof k !== 'string' || !c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400); if (!skips.includes(k)) skips.push(k); }
-  if (!Object.keys(scores).length && !pairs.length && !skips.length && !Object.keys(notes).length) return json({ error: 'score at least one, please' }, 400);
+  for (const [k, v] of Object.entries(vw).slice(0, 40)) { if (!c.items.includes(k)) return json({ error: 'not in this review: ' + String(k).slice(0, 40) }, 400);
+    const b = v && v.b, r = v && v.r == null ? 0 : v && v.r; if (!Number.isInteger(b) || b < 0 || b > RV_BINS || !Number.isInteger(r) || r < 0 || r > 9) return json({ error: 'a view is {b: 0-20, r: 0-9}' }, 400); views[k] = { b, r }; }
+  if (!Object.keys(scores).length && !pairs.length && !skips.length && !Object.keys(notes).length && !Object.keys(views).length && !ui) return json({ error: 'score at least one, please' }, 400);
   const bk = typeof q.bkey === 'string' && BKEY.test(q.bkey) ? await bkHash(q.bkey) : null; if (!bk) return json({ error: 'a browser key is needed' }, 400);
   // the one-tap ask at EPOCH 0 COMPLETE (Nov 4): a single 'which one?' pair between the two openings players actually saw, from anyone (no team)
   const ASK_PAIR = ['c3-typed-dust', 'c3-typed-crt'];
@@ -854,7 +874,8 @@ async function review(req, env, path, ip) {
   const a = await rvAgg(env, rid), mine = a.k[bk] || { i: [], p: [], t: 0 }, all = mine.i.includes('*'); mine.s = mine.s || [];
   const newS = Object.entries(scores).filter(([k]) => !all && !mine.i.includes(k)), newP = pairs.filter(p => { const [x, y] = p.split('>'); return !mine.p.includes(p) && !mine.p.includes(y + '>' + x); });
   const newK = skips.filter(k => !mine.s.includes(k) && !mine.i.includes(k) && !newS.some(([x]) => x === k));
-  if (!newS.length && !newP.length && !newK.length && !Object.keys(notes).length) return json({ error: 'this browser already sent these', already: true }, 409);
+  mine.w = mine.w || []; mine.u = mine.u || []; const newV = Object.entries(views).filter(([k]) => !mine.w.includes(k)), newU = ui && !mine.u.includes(ui) ? ui : null;
+  if (!newS.length && !newP.length && !newK.length && !newV.length && !newU && !Object.keys(notes).length) return json({ error: 'this browser already sent these', already: true }, 409);
   // per address only a daily cap (people behind one address may each send theirs)
   const [day, h] = await fbHash(env, ip, 'review'), ck = 'rvrl:' + day + ':' + h;
   const n = Math.max(rvMem.n.get(ck) || 0, +(await kv.get(ck)) || 0); if (n >= RV_DAY_MAX) return json({ error: 'that is a lot of reviews for one day' }, 429);
@@ -864,6 +885,9 @@ async function review(req, env, path, ip) {
   for (const p of newP) { a.pw[p] = (a.pw[p] || 0) + 1; mine.p.push(p); }
   for (const k of newK) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.skip = (x.skip || 0) + 1; mine.s.push(k); }
   for (const k of Object.keys(notes)) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.notes = (x.notes || 0) + 1; }   // a count only: the words go to the private queue
+  for (const [k, v] of newV) { const x = a.items[k] = a.items[k] || { n: 0, sum: 0, s: [0, 0, 0, 0, 0, 0] }; x.v = (x.v || 0) + 1; x.rp = (x.rp || 0) + v.r;
+    x.ret = Array.isArray(x.ret) && x.ret.length === RV_BINS + 1 ? x.ret : new Array(RV_BINS + 1).fill(0); x.ret[v.b]++; mine.w.push(k); }
+  if (newU) { a.ui = a.ui || { on: 0, off: 0 }; a.ui[newU]++; mine.u.push(newU); }
   a.k[bk] = mine; await kv.put('review:' + rid + ':agg', JSON.stringify(a));
   // the team counts what a member contributed (one per batch with something new): the server's half of the cliff check
   if (!td) { const tt = await teamDoc(env, 'loop'); if (tt.m[bk]) td = tt, td._t = 'loop'; } else td._t = c.team;
@@ -871,7 +895,8 @@ async function review(req, env, path, ip) {
   if (Object.keys(notes).length) { const id = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + '-' + crypto.randomUUID().slice(0, 6);
     const text = (rid + ': ' + Object.entries(notes).map(([k, t]) => `${k}${scores[k] != null ? ' ' + scores[k] + '/5' : ''} “${t}”`).join(' · ')).slice(0, 2400);
     await kv.put('fb:' + id, JSON.stringify({ t: Date.now(), kind: 'review', rid, scores, notes, text, ctx: fbCtx(q.ctx), status: 'new' }), { expirationTtl: FB_TTL }); }
-  const o = { ok: true, added: newS.length, pairs: newP.length, skips: newK.length, notes: Object.keys(notes).length, skipped: Object.keys(scores).length - newS.length }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o);
+  rvStatsMem.delete(rid);
+  const o = { ok: true, added: newS.length, pairs: newP.length, skips: newK.length, views: newV.length, notes: Object.keys(notes).length, skipped: Object.keys(scores).length - newS.length }; if (c.showTotals) { o.totals = rvTotals(c, a); o.sends = a.sends; } return json(o);
 }
 
 // the player's own writes (🧪, votes, reviews, the team, gift claims). If KV refuses a write (the daily free-tier cap: 429), the action

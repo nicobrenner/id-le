@@ -312,6 +312,21 @@ out.rate_61st = last;
     sends: agg.sends, dust: agg.items['c3-typed-dust'], pw: agg.pw, me: [me.member, me.reviews], size: size.n, notes: fb.length, scrubbed: fb.length === 1 && !JSON.stringify(fb[0]).includes('a@b.co'),
     rawkey: [...env.STATS.m.values()].some(v => v.includes(K1)), order: order['c3-typed-dust'], closed, bt: t1.totals && t1.totals.a.bt > t1.totals.b.bt && t1.totals.a.like === 1 && t1.totals.b.like === 0, v1again, v1other,
     unknown: (await go('/lab/review/nope')).status }; }
+// the 📊 numbers (Nov 6): views per browser per item (the furthest twentieth, replays) once, the toggle once each way, the public GET with
+// aggregates only (no keys, no notes' words), bounded (21 bins per item), and none for a team-only review
+{ const K3 = 'qqqqqqqqqqqqqqqqqqqqqqqqqq', K4 = 'rrrrrrrrrrrrrrrrrrrrrrrrrr', K5 = 'ssssssssssssssssssssssssss', P = (b, ip) => post('/lab/review/logos', { via: 'pick', ...b }, ip || '7.7.8.1');
+  const badV = [(await P({ views: { 'a3-dust': { b: 21, r: 0 } }, bkey: K3 })).status, (await P({ views: { 'a3-dust': { b: 1.5, r: 0 } }, bkey: K3 })).status, (await P({ views: { nope: { b: 3, r: 0 } }, bkey: K3 })).status,
+    (await P({ views: { 'a3-dust': { b: 3, r: 10 } }, bkey: K3 })).status];
+  const v1 = await (await P({ views: { 'a3-dust': { b: 20, r: 2 }, 'crt-off': { b: 4, r: 0 } }, ui: 'on', bkey: K3 })).json();
+  const again = (await P({ views: { 'a3-dust': { b: 3, r: 0 } }, ui: 'on', bkey: K3 })).status;
+  await P({ views: { 'a3-dust': { b: 4, r: 0 } }, scores: { 'a3-dust': 3 }, skips: ['crt-off'], ui: 'off', bkey: K4 }, '7.7.8.2');
+  await P({ views: { 'a3-dust': { b: 20, r: 0 } }, scores: { 'a3-dust': 5 }, notes: { 'a3-dust': 'secret words here' }, bkey: K5 }, '7.7.8.3');
+  const st = await go('/lab/review/logos/stats'), sj = await st.json(), sa = sj.items['a3-dust'], agg = JSON.parse(env.STATS.m.get('review:logos:agg'));
+  const fonts = (await go('/lab/review/fonts/stats')).status, postStats = (await post('/lab/review/logos/stats', {})).status;
+  out.revstats = { badV, v1: [v1.views, v1.ok], again, cc: st.headers.get('Cache-Control'), a3: { views: sa.views, n: sa.n, like: sa.like, love: sa.love, nah: sa.nah, skip: sa.skip, notes: sa.notes, rp: sa.rp, ret: sa.ret },
+    crt: { views: sj.items['crt-off'].views, skip: sj.items['crt-off'].skip }, toggles: sj.toggles, min: sj.min, bins: sj.bins,
+    privateFree: !JSON.stringify(sj).includes('secret') && !JSON.stringify(sj).includes(K3) && !('k' in sj) && !JSON.stringify(sj).match(/[0-9a-f]{32}/),
+    bounded: agg.items['a3-dust'].ret.length, fonts, postStats }; }
 console.log(JSON.stringify(out));
 """
 
@@ -657,6 +672,11 @@ def worker_unit():
                 "j1": True, "j1b": True, "badTeam": 404, "s1": 2, "writes1": 4, "r2": 409, "writes2": 0, "s3": [1, 1, 1], "r4": 409, "s5": [1, 1],
                 "sends": 2, "dust": {"n": 2, "sum": 8, "s": [0, 0, 0, 1, 0, 1]}, "pw": {"c3-typed-dust>c3-typed-crt": 2}, "me": [True, 2], "size": 2, "notes": 1, "scrubbed": True,
                 "rawkey": False, "order": {"n": 2, "lr": 1}, "closed": 410, "bt": True, "v1again": 409, "v1other": 200, "unknown": 404}, f"reviews: {rv}")
+    rs = o["revstats"]
+    a3ret = [0] * 21; a3ret[4] = 1; a3ret[20] = 2
+    need(rs == {"badV": [400, 400, 400, 400], "v1": [2, True], "again": 409, "cc": "public, max-age=30",
+                "a3": {"views": 3, "n": 3, "like": 33, "love": 33, "nah": 33, "skip": 0, "notes": 1, "rp": 2, "ret": a3ret},
+                "crt": {"views": 1, "skip": 1}, "toggles": {"on": 1, "off": 1}, "min": 5, "bins": 20, "privateFree": True, "bounded": 21, "fonts": 404, "postStats": 405}, f"review stats: {rs}")
     return "stats allowlist + buckets, engagement v1+v2, pedia block, jeffy allowlist, KV write throttle, rate limit, Wikimedia credits, gift links, reviews, presence"
 
 
@@ -817,7 +837,7 @@ class Page:
         self.beacon_posts, self.beacon_seen, self.beacon_mode = [], set(), "ok"
         self.fb = []
         self.gifts = {}
-        self.team_keys, self.rv_order, self.rv_fail = set(), {}, False   # ⭐ reviews: who joined the team (by browser key), the per-item counts the server would return
+        self.team_keys, self.rv_order, self.rv_fail, self.rv_stats = set(), {}, False, None   # ⭐ reviews: who joined the team (by browser key), the per-item counts the server would return
         self.root = None   # set: the build is served from this folder at self.base (a production hostname, t_prod_gates)
         self.here = []      # presence beats (/lab/here) this page sent
         self.helper = None  # set: /lab/here and /lab/live go to this local helper (node helper/dev_server.mjs), t_presence
@@ -869,6 +889,8 @@ class Page:
                 if path.endswith("/join"): self.fb.append(("join", route.request.post_data or "")); self.team_keys.add(body.get("bkey")); return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "n": len(self.team_keys)}))
                 if path.endswith("/me"): return route.fulfill(status=200, content_type="application/json", body=json.dumps({"member": body.get("bkey") in self.team_keys, "reviews": 0}))
                 return route.fulfill(status=200, content_type="application/json", body=json.dumps({"n": len(self.team_keys)}))
+            if path.startswith("/lab/review/") and path.endswith("/stats"):   # the 📊 public numbers (a test sets P.rv_stats)
+                return route.fulfill(status=200, content_type="application/json", body=json.dumps(self.rv_stats)) if self.rv_stats else route.fulfill(status=404, content_type="application/json", body='{"error":"no public numbers"}')
             if path.startswith("/lab/review/"):
                 rid = path[len("/lab/review/"):]; cfg = REVIEW_STUB.get(rid)
                 if not cfg: return route.fulfill(status=404, content_type="application/json", body='{"error":"no such review"}')
@@ -3421,6 +3443,64 @@ def _pick_sent(P):
     return [json.loads(b) for k, b in P.fb if k == "review:logos"]
 
 
+LOGO_IDS = ["c3-typed-dust", "c3-typed-crt", "a3-dust", "b3a-dust-crt", "b3b-crt", "scope-strike", "scope-crt", "typed-scope", "scope-meter", "scope-shockwave", "strike-purr-static", "crt-off"]
+
+
+def t_pick_stats(P, phone=False):
+    """the 📊 numbers on the logo pick (Nov 6, Nico: "the same style/data as the director views/players have, but for each of the animation
+    options, so users can see the overall engagement, just like youtube… users should be able to toggle it on/off too"): GET …/stats gives
+    everyone's numbers; 📊 stats is off before this browser judged an item (so the numbers don't sway it) and on after; the toggle always
+    wins and is remembered; on, the strip gets a 'still watching' curve with ticks where views moved on, and a line "▶ 128 views · ✓ 41%
+    like…"; under the threshold, "not enough views yet"; each item played and moved on from is sent once as a view (its furthest twentieth)"""
+    ret = [0] * 21; ret[2], ret[9], ret[20] = 20, 30, 78
+    items = {i: {"n": 100, "like": 41, "love": 12, "nah": 30, "skip": 9, "notes": 7, "views": 128, "rp": 15, "ret": ret} for i in LOGO_IDS}
+    P.rv_stats = {"rid": "logos", "items": items, "sends": 140, "min": 5, "bins": 20, "toggles": None}
+    P.ctx.add_init_script(PICK_CFG)
+    pg = P.open("/review/intro-logo-animation?statstest")
+    wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card' && window.__reviews.state().stats.loaded", 60, P=P)
+    ink = """() => { const c = document.querySelector('#review .deck canvas.ov'); if (!c) return -1; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i] > 0; return n; }"""
+    look = f"""() => {{ const b = document.querySelector('#review .vrow [data-a=stats]'), l = document.querySelector('#review .deck .rstat'), r = b && b.getBoundingClientRect(), n = document.querySelector('#review .vrow .notebar').getBoundingClientRect();
+      return {{ btn: !!b && !b.hidden, on: !!b && b.classList.contains('on'), line: l && !l.hidden ? l.textContent : null, ink: ({ink})(), pref: localStorage.getItem('idle.rvstats'), leftOfNote: !!b && !!(b.compareDocumentPosition(document.querySelector("#review .vrow .notebar")) & 4) && !!r && !!n }}; }}"""
+    a = pg.evaluate(look)
+    need(a["btn"] and not a["on"] and a["line"] is None and a["ink"] == 0 and a["pref"] is None and a["leftOfNote"], f"before judging: 📊 there but off, nothing shown: {a}")
+    pg.click("#review .vrow [data-a=stats]")
+    wait_for(pg, "() => { const l = document.querySelector('#review .deck .rstat'); return l && !l.hidden; }", 10, P=P)
+    b = pg.evaluate(look)
+    need(b["on"] and b["line"].startswith("📊 ▶ 128 views · ✓ 41% like · ★ 12% love · ✕ 30% nah · » 7% skip · ✎ 7 notes") and b["ink"] > 500 and b["pref"] == "on", f"📊 on: the curve and the line: {b}")
+    shots = os.environ.get("IDLE_PICK_SHOTS")
+    if shots: pg.wait_for_timeout(1200); pg.screenshot(path=os.path.join(shots, f"stats-{'phone' if phone else 'desktop'}.png"))
+    # a view: played, then moved on from, sent once with its furthest twentieth
+    wait_for(pg, "() => window.__reviews.state().playing", 20, P=P); pg.wait_for_timeout(1500)
+    id0 = pg.evaluate("() => window.__reviews.state().current"); pg.keyboard.press("ArrowRight")
+    wait_for(pg, f"() => window.__reviews.state().current !== {json.dumps(id0)}", 20, P=P)
+    pg.evaluate("() => window.__reviews.test.flush()")
+    t0 = time.time()
+    while time.time() - t0 < 15 and not [x for x in _pick_sent(P) if (x.get("views") or {}).get(id0)]: pg.wait_for_timeout(300)
+    vs = [x for x in _pick_sent(P) if (x.get("views") or {}).get(id0)]
+    need(len(vs) == 1 and 1 <= vs[0]["views"][id0]["b"] <= 20 and vs[0]["views"][id0]["r"] == 0 and vs[0].get("ui") == "on" and vs[0]["scores"].get(id0) == 3, f"the view sent once with the swipe (and the toggle): {vs}")
+    # the toggle is remembered; off hides it
+    pg.reload(); wait_for(pg, "() => window.__reviews.state() && window.__reviews.state().view === 'card' && window.__reviews.state().stats.loaded", 60, P=P)
+    c = pg.evaluate(look); need(c["on"] and c["line"] and c["pref"] == "on", f"remembered after a reload: {c}")
+    pg.click("#review .vrow [data-a=stats]"); pg.wait_for_timeout(300)
+    d = pg.evaluate(look); need(not d["on"] and d["line"] is None and d["ink"] == 0 and d["pref"] == "off", f"📊 off: {d}")
+    # no choice made: on by itself for what this browser judged (the gallery shows both), and the threshold
+    seen = pg.evaluate("() => { let m = {}; try { m = JSON.parse(localStorage.getItem('idle.reviews') || '{}').logos || {}; } catch (e) {} return [...Object.keys(m.rated || {}), ...(m.skipped || [])]; }")
+    pg.evaluate("() => localStorage.removeItem('idle.rvstats')"); pg.close()
+    other = next(i for i in LOGO_IDS if i not in seen); fewid = next(i for i in LOGO_IDS if i not in (id0, other))
+    items[fewid] = {"n": 2, "like": 50, "love": 0, "nah": 50, "skip": 1, "notes": 0, "views": 3, "rp": 0, "ret": [0] * 20 + [3]}   # under the threshold (the gallery fetches anew)
+    g = P.open("/review/intro-logo-animation?view=gallery&statstest")
+    wait_for(g, "() => window.__reviews.state() && window.__reviews.state().view === 'gallery' && window.__reviews.state().stats.loaded", 60, P=P)
+    sel = lambda i: f"#review .gal .card[data-item={json.dumps(i)}]"
+    for i in (id0, other, fewid): g.evaluate(f"() => document.querySelector('{sel(i)}').scrollIntoView()"); wait_for(g, f"() => !!document.querySelector('{sel(i)} .rstat')", 15, P=P)
+    line = lambda i: g.evaluate(f"() => {{ const l = document.querySelector('{sel(i)} .rstat'); return l && !l.hidden ? l.textContent : null; }}")
+    need(line(id0) and "128 views" in line(id0) and line(other) is None, f"by default: on for the judged one, off for the others: {line(id0)!r} {line(other)!r}")
+    g.click("#review .vbar [data-a=stats]"); g.wait_for_timeout(300)
+    few = line(fewid); need(few == "📊 not enough views yet" and line(other) and g.evaluate("() => localStorage.getItem('idle.rvstats')") == "on", f"the gallery's 📊 and the threshold: {few!r}")
+    g.close(); P.rv_stats = None; P.clean()
+    return (f"{'phone: ' if phone else ''}📊 off before judging, on after (the gallery shows both), the toggle wins and is remembered; on: the 'still watching' curve, "
+            "ticks where views moved on and '▶ 128 views · ✓ 41% like…'; under 5 views 'not enough views yet'; a view sent once with its swipe (its furthest twentieth)")
+
+
 def t_pick_more(P, phone=False):
     """The pick link, round 2 (Nov 6, Nico: "we should add a Skip button/action, and there should be a submit/send/save … for the
     comments/notes"; "a gallery view … so that users can see/compare all the animations"): ↓ skips (counted, sent as skips, the skipped
@@ -3513,11 +3593,13 @@ def review_results_unit():
     import importlib.util
     spec = importlib.util.spec_from_file_location("review_py", os.path.join(ROOT, "tools", "review.py")); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
     cfg = {"kind": "logos", "title": "the logo", "items": ["a", "b"], "stage": "team"}
-    agg = {"sends": 3, "pick": 2, "items": {"a": {"n": 2, "sum": 8, "s": [0, 0, 0, 1, 0, 1], "skip": 1, "notes": 2}, "b": {"n": 0, "sum": 0, "s": [0] * 6, "skip": 2}}, "pw": {}}
+    ret = [0] * 21; ret[4], ret[20] = 1, 3
+    agg = {"sends": 3, "pick": 2, "ui": {"on": 4, "off": 1}, "items": {"a": {"n": 2, "sum": 8, "s": [0, 0, 0, 1, 0, 1], "skip": 1, "notes": 2, "v": 4, "rp": 2, "ret": ret}, "b": {"n": 0, "sum": 0, "s": [0] * 6, "skip": 2}}, "pw": {}}
     L = m.result_lines("logos", cfg, agg, [{"id": "n1", "notes": {"a": "lovely"}, "scores": {"a": 5}}])
     txt = "\n".join(L)
     need("3 skips" in L[0] and "2 from the pick link" in L[0] and "skipped 1  notes 2" in txt and "skipped 2" in txt and "a 5/5: lovely" in txt, txt)
-    return "totals with skips, per item skipped/notes, the notes' words"
+    need("📊 stats toggle (once per browser each way): turned on 4, turned off 1" in txt and "views 4  to the end 75%  replays 2  █████▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆" in txt, txt)
+    return "totals with skips and the 📊 toggle, per item skipped/notes and the retention sparkline, the notes' words"
 
 
 def pick_routes_unit():
@@ -5632,7 +5714,7 @@ def browser_tests(a, out):
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
-        ("reviews link", t_reviews_link, (), {}), ("pick", t_pick, (), {}), ("pick phone", lambda P: t_pick(P, True), (), PHONE), ("pick more", t_pick_more, (), {}), ("pick more phone", lambda P: t_pick_more(P, True), (), PHONE), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
+        ("reviews link", t_reviews_link, (), {}), ("pick", t_pick, (), {}), ("pick phone", lambda P: t_pick(P, True), (), PHONE), ("pick more", t_pick_more, (), {}), ("pick more phone", lambda P: t_pick_more(P, True), (), PHONE), ("pick stats", t_pick_stats, (), {}), ("pick stats phone", lambda P: t_pick_stats(P, True), (), PHONE), ("reviews fresh", t_reviews_fresh, (), {}), ("founder off", t_founder_off, (), {}), ("reviews phone", t_reviews_phone, (), PHONE),
         ("founder personal", t_founder_personal, (), {}), ("founder phone", t_founder_phone, (), {"is_mobile": True, "has_touch": True}),
         ("story landing", t_story_landing, (), {}), ("story intro", t_story_intro, (), {}), ("logo thunder", t_logo_thunder, (), {}),
         ("story fans", t_story_fans, (), {}), ("story clock", t_story_clock, (), {}), ("logo solo", t_logo_solo, (), {}), ("logo ab", t_logo_ab, (), {}),
@@ -5656,7 +5738,7 @@ def browser_tests(a, out):
 
 
 # the launch tier (-t launch, ~3 min): what must hold before id-le.com gets a deploy. One quick pass per beginning (story, choose, play)
-LAUNCH = {"pick", "pick phone", "pick more", "pick more phone", "agent relay", "genpan", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "rave2", "rave2 phone", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
+LAUNCH = {"pick", "pick phone", "pick more", "pick more phone", "pick stats", "pick stats phone", "agent relay", "genpan", "agent relay server", "arm reload", "arm stats", "beacon ack", "build looks", "chips genesis", "chips playground", "chooser", "conflict markers", "e0 polish", "engage ask", "engaged", "fresh load", "intent links", "intent story", "js syntax", "prelife", "presence", "prod gates", "prod gates arms", "prod gates links", "prod offer", "rave2", "rave2 phone", "reviews split", "reviews timing", "speaker", "speaker phone", "static build", "story arms", "story first paint", "story first paint phone", "title auto", "title auto tap", "toggles", "worker", "world hold"}
 STATIC = [("js syntax", "js syntax", lambda: js_syntax()), ("engaged stats", "engaged stats: stats.py's per-arm line", lambda: engaged_stats()), ("presence privacy", "presence privacy: what a beat carries", lambda: presence_privacy()),
           ("conflict markers", "conflict markers", lambda: no_conflict_markers()), ("fontgen", "fontgen", lambda: fontgen_round()),
           ("gift tool", "gift tool: personal gift links", lambda: gift_tool_unit()), ("worker", "worker: stats, jeffy allowlist, world links, rate limit", lambda: worker_unit()), ("agent relay", "agent relay: bring your own agent (pairing, tokens, limits, gate)", lambda: agent_unit()), ("agent relay server", "agent relay server: server.py's relay for local copies", lambda: agent_server_unit()), ("kv writes", "kv writes: the stats accumulator", lambda: kv_writes_unit()),

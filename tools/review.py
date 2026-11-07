@@ -57,9 +57,14 @@ def result_lines(rid, cfg, agg, notes):
     out = [f"review {rid} ({cfg['kind']}, {cfg.get('stage', 'public')} stage, {'open' if cfg.get('open', True) else 'closed'}): {agg.get('sends', 0)} browsers"
            + (f" ({agg['pick']} from the pick link, id-le.com/review/intro-logo-animation)" if agg.get('pick') else "") + f", {sum((agg.get('pw') or {}).values())} 'which one?' picks"
            + f", {sum((x or {}).get('skip', 0) for x in (agg.get('items') or {}).values())} skips"]
+    ui = agg.get("ui") or {}
+    if ui.get("on") or ui.get("off"):
+        out.append(f"  📊 stats toggle (once per browser each way): turned on {ui.get('on', 0)}, turned off {ui.get('off', 0)}")
     for score, it, lr, n, avg, bt, spread in ranking(cfg, agg):
         sp = " ".join(f"{k}:{v}" for k, v in enumerate(spread) if v); x = (agg.get("items") or {}).get(it) or {}
         extra = (f"  skipped {x['skip']}" if x.get("skip") else "") + (f"  notes {x['notes']}" if x.get("notes") else "")
+        if x.get("v"):   # the 📊 retention: views, the share that watched to the end, replays, and a sparkline of 'still watching' over the 20 twentieths
+            extra += f"  views {x['v']}  to the end {retention_end(x.get('ret'))}%  replays {x.get('rp', 0)}  {sparkline(x.get('ret'))}"
         out.append(f"  {it:<22} {'like %3.0f%%' % (lr * 100) if lr is not None else 'no scores':<10} n={n:<4} avg={'%.2f' % avg if avg is not None else '-':<5} bt={bt:.2f}  {sp}{extra}")
     if notes:
         out.append(f"\nnotes ({len(notes)}, private; mark them read with tools/feedback.py done <id>):")
@@ -68,6 +73,28 @@ def result_lines(rid, cfg, agg, notes):
                 sc = (v.get("scores") or {}).get(it)
                 out.append(f"  {v['id']}  {it}{'' if sc is None else f' {sc}/5'}: {t}")
     return out
+
+
+def still_watching(ret):
+    """ret[j]: views whose furthest twentieth was j (20: to the end) → the share still watching at each twentieth (21 values, 1.0 first)"""
+    ret = list(ret or [])
+    tot = sum(ret)
+    if not tot:
+        return []
+    out, left = [], tot
+    for v in ret:
+        out.append(left / tot); left -= v
+    return out
+
+
+def retention_end(ret):
+    s = still_watching(ret)
+    return round(100 * s[-1]) if s else 0
+
+
+def sparkline(ret):
+    s = still_watching(ret)[:20]
+    return "".join("▁▂▃▄▅▆▇█"[min(7, int(v * 7.999))] for v in s)
 
 
 def ranking(cfg, agg):
