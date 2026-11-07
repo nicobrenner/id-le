@@ -4088,7 +4088,7 @@ def t_stats_first(P):
 def t_arm_stats(P):
     """Nov 4: production showed choose and story arms but no play arm. Each arm's fresh browser must send its arm with its visit report."""
     got, beacons = {}, {}
-    for arm in ("story", "choose", "play"):
+    for arm in ("story", "choose", "play", "light"):
         P.stats.clear()
         ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base, P.stats)
         try:
@@ -4107,6 +4107,69 @@ def t_arm_stats(P):
     P.clean()
     return "visit reports carry their arm: " + ", ".join(f"{a} {len(r)} reports" for a, r in got.items())
 
+
+
+def t_light_arm(P):
+    """Nov 7 (5 days: story 0 of 16 engaged, most left in the opening messages; play 4 of 16; Nico: "a version with light story.. starting from
+    landing/ringing"): the light arm starts in the dark with the ringing (no title card, no film, a 🔊 chip for the one gesture), then the
+    Operator and Genesis; the film is on demand (⚙ 📖 how it all began); a reload doesn't replay anything; the draw is light/choose/play
+    a third each with story out of it; ?story still plays the full film; tools/stats.py's arms line knows light"""
+    ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)
+    try:
+        pg = Q.open("/arena.html?arm=light&test")
+        pg.evaluate("() => { window.__sawIntro = 0; new MutationObserver(() => { if (document.querySelector('#idleIntro')) window.__sawIntro++; }).observe(document.body, { childList: true }); }")
+        wait_for(pg, "() => window.__genesis && window.__genesis.landing().phase === 'dark' && !!window.__genesis.landing().line", 40)
+        a = pg.evaluate("() => ({ v: window.__genesis.variant(), light: window.__genesis.lightArm(), intro: !!document.querySelector('#idleIntro') || window.__sawIntro, chip: !!document.querySelector('#genSnd'), running: (() => { try { return window.__audio.ctx().state === 'running'; } catch (e) { return false; } })(), ring: (window.__genesis.landing().ring || {}).tried, f: window.__funnel.reached(), last: !!(window.__epoch0 && window.__epoch0.last) })")
+        need(a["v"] == "light" and a["light"] and not a["intro"] and (a["chip"] or a["running"]) and a["ring"] and not a["last"], f"light: straight into the dark with the ringing and the 🔊 chip, no title card or film: {a}")
+        need("light_start" in a["f"] and "landing" in a["f"] and "title" not in a["f"] and "messages" not in a["f"], f"light's funnel starts at the dark: {a['f']}")
+        if not a["chip"]:   # this browser's sound already runs (no gesture needed): show the chip as a fresh browser would get it
+            pg.evaluate("() => { const c = window.__audio.ctx(); return c.suspend(); }"); pg.evaluate("() => window.__genesis.soundChip()")
+        need(pg.evaluate("() => !!document.querySelector('#genSnd')"), "with the sound held, the 🔊 chip is there")
+        bb = pg.evaluate("() => { const r = document.querySelector('#genSnd').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }")
+        pg.mouse.click(bb[0], bb[1]); pg.wait_for_timeout(300)   # (any first tap gives the sound: the chip goes on pointerdown)
+        need(not pg.evaluate("() => !!document.querySelector('#genSnd')") and "light_sound" in pg.evaluate("() => window.__funnel.reached()"), "the 🔊 chip goes on a tap and is counted")
+        pg.keyboard.press("Escape")
+        wait_for(pg, "() => document.documentElement.classList.contains('gen-box') && !!document.querySelector('#genBackdrop')", 20)
+        pg.click("#genConsole"); wait_for(pg, "() => window.__genesis.ready()", 40)
+        need(pg.evaluate("() => document.getElementById('lab-text').value") == "lights on", "the Operator ends on 'lights on'")
+        pg.focus("#lab-text"); pg.keyboard.press("Enter"); wait_for(pg, "() => window.__genesis.cosmos().lit", 15)
+        wait_for(pg, "() => window.__genesis.ready() && window.__genesis.next() === 'words' && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 40)
+        pg.focus("#lab-text"); pg.keyboard.press("Enter"); wait_for(pg, "() => window.__genesis.state().steps.words", 30)
+        wait_for(pg, "() => window.__genesis.ready() && document.getElementById('lab-text').value === 'let there be life' && +getComputedStyle(document.querySelector('#lab')).opacity > 0.95", 40)
+        pg.focus("#lab-text"); pg.keyboard.press("Enter"); wait_for(pg, "() => window.__genesis.state().steps.creatures && window.__arena.raw().filter(c => !c.lab).length >= 3", 40)
+        g = pg.evaluate("() => ({ f: window.__funnel.reached(), intro: window.__sawIntro })")
+        need(all(k in g["f"] for k in ("operator", "lights", "e1words", "e1life")) and not g["intro"], f"light: Genesis through life, never a film: {g}")
+        # the film on demand (⚙ 📖 how it all began): plays over the world, Esc leaves it, the world is still there
+        n0 = pg.evaluate("() => window.__arena.raw().filter(c => !c.lab).length")
+        pg.evaluate("() => { window.__filmDone = 0; window.__genesis.filmOnDemand().then(r => window.__filmDone = r ? 1 : -1); }")
+        wait_for(pg, "() => !!document.querySelector('#idleIntro') || !!(window.__epoch0 && window.__epoch0.last)", 20)
+        pg.wait_for_timeout(800); pg.keyboard.press("Escape")
+        wait_for(pg, "() => window.__filmDone !== 0 && !document.querySelector('#idleIntro')", 30)
+        fm = pg.evaluate("() => ({ done: window.__filmDone, f: window.__funnel.reached(), c: window.__arena.raw().filter(c => !c.lab).length })")
+        need(fm["done"] == 1 and "light_film" in fm["f"] and fm["c"] >= n0, f"the film on demand plays and leaves the world as it was: {fm} (before {n0})")
+        pg.reload(); booted(pg); pg.wait_for_timeout(3000)
+        r = pg.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), chooser: !!document.querySelector('#genChoose'), dark: window.__genesis.landing().phase === 'dark' })")
+        need(not r["intro"] and not r["chooser"] and not r["dark"], f"a reload after Genesis replays nothing: {r}")
+        # the draw: light / choose / play a third each, story out (window.__drawArm from arena.html's <head>)
+        d = pg.evaluate("() => { const n = {}; for (let i = 0; i < 6000; i++) { const a = window.__drawArm(); n[a] = (n[a] || 0) + 1; } return { n, w: window.__armWeights }; }")
+        n = d["n"]; e = 2000.0; x2 = sum((n.get(k, 0) - e) ** 2 / e for k in ("light", "choose", "play"))
+        need(set(n) == {"light", "choose", "play"} and x2 < 13.8, f"the draw: light/choose/play a third each, no story (chi-square {x2:.1f}, 2 df, p > .001): {d}")
+    finally:
+        ctx.close()
+    ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}); Q = Page(ctx, P.base)
+    try:
+        q = Q.open("/arena.html?story&test"); wait_for(q, "() => !!document.querySelector('#idleIntro')", 40)
+    finally:
+        ctx.close()
+    import io, importlib.util
+    spec = importlib.util.spec_from_file_location("stats_mod", os.path.join(os.path.dirname(os.path.abspath(__file__)), "stats.py")); S = importlib.util.module_from_spec(spec); spec.loader.exec_module(S)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        S.arms_line({"2026-11-07": {"aa": {"light": 10, "choose": 9, "play": 11, "story": 2}}})
+    line = buf.getvalue()
+    need("light 10" in line and "choose 9" in line and "play 11" in line and "outside the draw: story 2" in line and "split looks fine" in line, f"stats.py's arms line with light: {line!r}")
+    P.clean()
+    return "light: the dark + ringing first (🔊 chip), Genesis to life, film on demand, no replay; draw " + "/".join(f"{k} {n[k]}" for k in ("light", "choose", "play")) + "; ?story plays the film; " + line.strip()[:90]
 
 
 def t_arm_draw(P, root, n=30):
@@ -4298,7 +4361,7 @@ def t_story_arms(P):
     (snapshot first, then the story) and points at ⚙; the two-arm 'current' migrates to 'play'; a browser that already has a world keeps it."""
     pg = P.open("/arena.html?fresh=1&test"); booted(pg)
     off = pg.evaluate("() => ({ ab: window.__genesis.ab, v: window.__genesis.variant(), gv: localStorage.getItem('idle.gv'), arms: window.__genesis.arms })")
-    need(off["ab"] == "on" and off["v"] is None and off["gv"] is None and off["arms"] == ["story", "choose", "play"], f"the A/B/C is on (Nov 4 launch), three arms; a ?test page gets no random arm: {off}")
+    need(off["ab"] == "on" and off["v"] is None and off["gv"] is None and off["arms"] == ["story", "choose", "play", "light"], f"the A/B/C is on (Nov 4 launch), three arms; a ?test page gets no random arm: {off}")
     wait_for(pg, "() => !!localStorage.getItem('arena.autosave')", 30, P=P)
     ret = P.open("/arena.html?arm=story&test"); booted(ret); ret.wait_for_timeout(3000)   # this browser has a world: it keeps it
     r = ret.evaluate("() => ({ intro: !!document.querySelector('#idleIntro'), void: !!window.__genesisVoid, c: window.__arena.raw().filter(c => !c.lab).length })")
@@ -4617,7 +4680,7 @@ def t_story_first_paint(P, root, phone=False):
 def t_intent_links(P, root):
     """id-le.com (production hostname): every link with an explicit destination (arena.html's INTENT_PARAMS / INTENT_HASH, Nov 4: "?lab",
     "?wiki=Octopus" loaded the story) skips the A/B/C draw: no arm, no title card, no story black; it goes where it says and is counted as
-    entry_<kind>. A plain address (only utm tags) still gets its arm. Math.random is pinned so a draw would land on the story arm."""
+    entry_<kind>. A plain address (only utm tags) still gets its arm. Math.random is pinned so a draw lands on the first arm of the split (light since Nov 7)."""
     P.base, P.root = "https://id-le.com", root
     links = [("/?lab&utm_source=x", "lab", "lab"), ("/#lab", "lab", "lab"), ("/?datalab", "lab", "lab"), ("/?start=ready", "start", "world"),
              ("/?wiki=Octopus", "wiki", None), ("/?review=logos", "review", None), ("/?gift=founder", "gift", None), ("/?halloween", "halloween", "world"),
@@ -4627,8 +4690,8 @@ def t_intent_links(P, root):
         ctx = P.ctx.browser.new_context(viewport={"width": 1400, "height": 900}, service_workers="block"); ctx.add_init_script("Math.random = () => 0.01;"); Q = Page(ctx, P.base); Q.root = root
         try:
             q = Q.open(path)
-            if dest == "story":
-                wait_for(q, "() => !!document.querySelector('#idleIntro') && document.querySelector('#idleIntro').dataset.title === '1'", 40)
+            if dest == "story":   # (Nov 7) the pinned draw (0.01) lands on the first arm of the split, light: the dark, no title card
+                wait_for(q, "() => !!window.__genesis && window.__genesis.landing().phase === 'dark'", 40)
             else:
                 wait_for(q, "() => !!window.__restoredOrFresh && !!window.__genesis", 40); q.wait_for_timeout(2500)
             if dest == "lab": wait_for(q, "() => document.querySelector('#team') && document.querySelector('#team').classList.contains('on') && !!(window.__dlwalk && window.__dlwalk.active())", 40)
@@ -4638,7 +4701,7 @@ def t_intent_links(P, root):
               return { gv: localStorage.getItem('idle.gv'), entry: window.__intentEntry || null, title: !!(it && it.dataset.title === '1'), story: !!(st && st.on && st.mode === 'story'),
                 black: document.documentElement.classList.contains('story-boot'), offer: !!document.querySelector('#storyOffer'), marks: Object.keys(f).filter(k => k.startsWith('entry_')) }; }""")
             if kind is None:
-                need(x["gv"] == "story" and x["title"] and not x["entry"], f"a plain address keeps getting its arm: {x}")
+                need(x["gv"] == "light" and x["story"] and not x["title"] and not x["entry"], f"a plain address keeps getting its arm (light, Nov 7): {x}")
             else:
                 need(x["gv"] is None and not x["title"] and not x["story"] and not x["black"] and not x["offer"] and x["entry"] == kind, f"{path}: no arm, no story, goes where it says: {x}")
                 q.wait_for_timeout(1200); m = q.evaluate("() => { try { return Object.keys(JSON.parse(localStorage.getItem('idle.funnel') || '{}')).filter(k => k.startsWith('entry_')); } catch (e) { return []; } }")
@@ -5739,7 +5802,7 @@ def browser_tests(a, out):
         ("v15 operator top phone", lambda P: t_operator_top(P, phone=True), (), PHONE), ("v15 new build", t_new_build, (), {}),
         ("operator float phone", t_operator_float_phone, (), PHONE), ("slash", t_slash, (), {}), ("slash phone", t_slash_phone, (), PHONE),
         ("story end phone", t_story_end_phone, (), PHONE), ("story v6", t_story_v6, (), {}), ("title card", t_title_card, (), {}), ("title auto", lambda P: t_title_auto(P, (1,)), (), {}), ("title auto tap", lambda P: t_title_auto(P, (2, 3, 4)), (), {}), ("speaker", t_speaker, (), {}), ("speaker phone", lambda P: t_speaker(P, phone=True), (), PHONE),
-        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("intent story", t_intent_story, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("rave2", t_rave2, (), {}), ("rave2 phone", t_rave2, (True,), PHONE), ("rave2 reduced", t_rave2_reduced, (), {"reduced_motion": "reduce"}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("genpan", t_genpan, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
+        ("hint phone", t_hint_phone, (), {}), ("story arms", t_story_arms, (), {}), ("light arm", t_light_arm, (), {}), ("intent story", t_intent_story, (), {}), ("e0 polish", t_e0_polish, (), {}), ("chips playground", t_chips_playground, (), {}), ("toggles", t_toggles, (), {}), ("rave2", t_rave2, (), {}), ("rave2 phone", t_rave2, (True,), PHONE), ("rave2 reduced", t_rave2_reduced, (), {"reduced_motion": "reduce"}), ("unsure probe", t_unsure_probe, (), {}), ("chips genesis", t_chips_genesis, (), {}), ("prelife", t_prelife, (), {}), ("genpan", t_genpan, (), {}), ("engaged", t_engaged, (), {}), ("engage ask", t_engage_ask, (), {}), ("arm reload", t_arm_reload, (), {}), ("arm stats", t_arm_stats, (), {}), ("beacon ack", t_beacon_ack, (), {}), ("stats first", t_stats_first, (), {}), ("story offer", t_story_offer, (), {}), ("story offer v2", t_story_offer_v2, (), {}), ("offer preview", t_offer_preview, (), {}), ("never stuck", t_never_stuck, (), {}), ("offer sandbox", t_offer_sandbox, (), {}), ("offer v3", t_offer_v3, (), {}), ("offer v3 phone", t_offer_v3, (True,), PHONE), ("world hold", t_world_hold, (), {}),
         ("founder", t_founder, (), {}), ("founder link", t_founder_link, (), {}), ("reviews invite", t_reviews_invite, (), {}),
         ("reviews", t_reviews, (), {"viewport": {"width": 1280, "height": 800}}), ("reviews cliff", t_reviews_cliff, (), {}), ("reviews tab", t_reviews_tab, (), {}), ("reviews split", t_reviews_split, (), {}), ("reviews split phone", lambda P: t_reviews_split(P, phone=True), (), PHONE),
         ("reviews timing", t_reviews_timing, (), {}), ("reviews cutscene", t_reviews_cutscene, (), {}), ("reviews cutscene phone", t_reviews_cutscene, (True,), PHONE),
