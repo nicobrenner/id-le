@@ -1006,3 +1006,6 @@ Muted: AudioContext `suspended` (was: separate contexts for effects, music and r
 - The gallery autoplays one visible card at a time (silently until sound is allowed). Reduced motion: no autoplay, the poster and ▶ as before.
 - Funnel steps rv_autoplay, rv_sound. Test 'pick autoplay' (+ reduced): the deck moves with the AudioContext held suspended, the chip restarts with sound, the poster after the end, one gallery card playing.
 - **The pick page's preview image (Nov 6):** og:image for /review/intro-logo-animation (and /gallery) is og-review-intro-logo-animation.png (1200×630, made by the VM agent); the home keeps og-image.png.
+
+## The first weather you can see (Nov 6, wxstep)
+- Nico, during a rave at night: the guided weather step picked "packet fog", nothing visible, and the line said only "weather. they will have opinions about it". Now the step picks bit rain or packet storm (never fog, hum, wind or static), at strength 0.85; the rave lights sit under the weather layer (z 5, the weather 6) and dim to 35% for 5 s while it arrives; the Operator names it and a creature ("bit rain. Mote is catching the bits on its tongue"); 2-3 creatures nearby say something within ~2 s (rave lines for the dancers). Test 'wxstep' (a rave, then the step: a visible kind, strength >= 0.8, the line names it, >= 2 bubbles in 3 s, lights under the weather).
