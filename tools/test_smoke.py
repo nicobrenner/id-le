@@ -3454,7 +3454,6 @@ def t_pick_stats(P, phone=False):
     like…"; under the threshold, "not enough views yet"; each item played and moved on from is sent once as a view (its furthest twentieth)"""
     ret = [0] * 21; ret[2], ret[9], ret[20] = 20, 30, 78
     items = {i: {"n": 100, "like": 41, "love": 12, "nah": 30, "skip": 9, "notes": 7, "views": 128, "rp": 15, "ret": ret} for i in LOGO_IDS}
-    items["crt-off"] = {"n": 2, "like": 50, "love": 0, "nah": 50, "skip": 1, "notes": 0, "views": 3, "rp": 0, "ret": [0] * 20 + [3]}
     P.rv_stats = {"rid": "logos", "items": items, "sends": 140, "min": 5, "bins": 20, "toggles": None}
     P.ctx.add_init_script(PICK_CFG)
     pg = P.open("/review/intro-logo-animation?statstest")
@@ -3485,16 +3484,18 @@ def t_pick_stats(P, phone=False):
     pg.click("#review .vrow [data-a=stats]"); pg.wait_for_timeout(300)
     d = pg.evaluate(look); need(not d["on"] and d["line"] is None and d["ink"] == 0 and d["pref"] == "off", f"📊 off: {d}")
     # no choice made: on by itself for what this browser judged (the gallery shows both), and the threshold
+    seen = pg.evaluate("() => { let m = {}; try { m = JSON.parse(localStorage.getItem('idle.reviews') || '{}').logos || {}; } catch (e) {} return [...Object.keys(m.rated || {}), ...(m.skipped || [])]; }")
     pg.evaluate("() => localStorage.removeItem('idle.rvstats')"); pg.close()
+    other = next(i for i in LOGO_IDS if i not in seen); fewid = next(i for i in LOGO_IDS if i not in (id0, other))
+    items[fewid] = {"n": 2, "like": 50, "love": 0, "nah": 50, "skip": 1, "notes": 0, "views": 3, "rp": 0, "ret": [0] * 20 + [3]}   # under the threshold (the gallery fetches anew)
     g = P.open("/review/intro-logo-animation?view=gallery&statstest")
     wait_for(g, "() => window.__reviews.state() && window.__reviews.state().view === 'gallery' && window.__reviews.state().stats.loaded", 60, P=P)
     sel = lambda i: f"#review .gal .card[data-item={json.dumps(i)}]"
-    other = next(i for i in LOGO_IDS if i not in (id0, "crt-off"))
-    for i in (id0, other, "crt-off"): g.evaluate(f"() => document.querySelector('{sel(i)}').scrollIntoView()"); wait_for(g, f"() => !!document.querySelector('{sel(i)} .rstat')", 15, P=P)
+    for i in (id0, other, fewid): g.evaluate(f"() => document.querySelector('{sel(i)}').scrollIntoView()"); wait_for(g, f"() => !!document.querySelector('{sel(i)} .rstat')", 15, P=P)
     line = lambda i: g.evaluate(f"() => {{ const l = document.querySelector('{sel(i)} .rstat'); return l && !l.hidden ? l.textContent : null; }}")
     need(line(id0) and "128 views" in line(id0) and line(other) is None, f"by default: on for the judged one, off for the others: {line(id0)!r} {line(other)!r}")
     g.click("#review .vbar [data-a=stats]"); g.wait_for_timeout(300)
-    few = line("crt-off"); need(few == "📊 not enough views yet" and line(other) and g.evaluate("() => localStorage.getItem('idle.rvstats')") == "on", f"the gallery's 📊 and the threshold: {few!r}")
+    few = line(fewid); need(few == "📊 not enough views yet" and line(other) and g.evaluate("() => localStorage.getItem('idle.rvstats')") == "on", f"the gallery's 📊 and the threshold: {few!r}")
     g.close(); P.rv_stats = None; P.clean()
     return (f"{'phone: ' if phone else ''}📊 off before judging, on after (the gallery shows both), the toggle wins and is remembered; on: the 'still watching' curve, "
             "ticks where views moved on and '▶ 128 views · ✓ 41% like…'; under 5 views 'not enough views yet'; a view sent once with its swipe (its furthest twentieth)")
