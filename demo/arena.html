@@ -8,7 +8,12 @@ html.story-boot body>*:not(#idleIntro):not(#genBlack):not(#genChoose):not(script
    arm is drawn here (idle.gvPre) so the decision is known before the first paint; idle-genesis.js variant() takes that draw instead of
    its own, so the arm, its storage and its beacon stay where they were. Keep AB_ON in step with AB in idle-genesis.js. */
 (() => { try {
-  const AB_ON = true, ARMS = ['story', 'choose', 'play'], q = new URLSearchParams(location.search), h = location.hostname, ls = localStorage;
+  // the split's weights, THE one place (Nov 7, 5 days: story 0 of 16 engaged, most left in the opening messages; play 4 of 16): new browsers
+  // draw light / choose / play a third each; story is out of the draw (?story and ?arm=story still play it). idle-genesis.js reads __armWeights
+  const ARM_WEIGHTS = { light: 1, choose: 1, play: 1, story: 0 }; window.__armWeights = ARM_WEIGHTS;
+  const drawArm = () => { const e = Object.entries(ARM_WEIGHTS).filter(([, w]) => w > 0), t = e.reduce((a, [, w]) => a + w, 0); let r = Math.random() * t; for (const [k, w] of e) { if ((r -= w) < 0) return k; } return e[e.length - 1][0]; };
+  window.__drawArm = drawArm;
+  const AB_ON = true, ARMS = ['story', 'choose', 'play', 'light'], q = new URLSearchParams(location.search), h = location.hostname, ls = localStorage;
   const testHost = /^staging\./.test(h) || h === 'localhost' || h === '127.0.0.1';
   let story = q.has('story');
   // links with an explicit destination (Nov 4, Nico: "How do I skip the story/abc split and go directly to the lab?", then ?wiki=Octopus loading
@@ -34,8 +39,8 @@ html.story-boot body>*:not(#idleIntro):not(#genBlack):not(#genChoose):not(script
       const forced = q.get('arm') === 'current' ? 'play' : q.get('arm');
       if (testHost && ARMS.includes(forced)) gv = forced;
       else if (!ARMS.includes(gv) && AB_ON && !q.has('test')) {
-        gv = ls.getItem('idle.gvPre'); if (!ARMS.includes(gv)) { gv = ARMS[Math.floor(Math.random() * ARMS.length)]; ls.setItem('idle.gvPre', gv); } }
-      story = gv === 'story'; } }
+        gv = ls.getItem('idle.gvPre'); if (!ARMS.includes(gv)) { gv = drawArm(); ls.setItem('idle.gvPre', gv); } }
+      story = gv === 'story' || gv === 'light'; } }
   if (!story) return;
   const de = document.documentElement; de.classList.add('story-boot');
   // lifted as soon as the story's own black or the intro is up (they cover everything from then on), or the chooser shows, or genesis says

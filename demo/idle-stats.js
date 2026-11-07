@@ -191,7 +191,7 @@
   const fpsBucket = () => { if (!fpsS.length) return null; const v = fpsS.slice().sort((a, b) => a - b)[fpsS.length >> 1]; return v < 20 ? '<20' : v < 40 ? '20-40' : v < 55 ? '40-55' : '55+'; };
 
   function payload(final) {
-    const p = { v: 1 }; let any = false; try { const gv0 = localStorage.getItem('idle.gv'), gv = gv0 === 'current' ? 'play' : gv0; if (gv === 'story' || gv === 'choose' || gv === 'play') p.gv = gv; } catch (e) {}   // the storyline A/B arm (idle-genesis.js), only while it runs
+    const p = { v: 1 }; let any = false; try { const gv0 = localStorage.getItem('idle.gv'), gv = gv0 === 'current' ? 'play' : gv0; if (gv === 'story' || gv === 'choose' || gv === 'play' || gv === 'light') p.gv = gv; } catch (e) {}   // the storyline A/B arm (idle-genesis.js), only while it runs
     // the storyline's funnel (idle-runtime.js __funnel): each moment once per browser (title … lights, Epoch 1, skips, the offer)
     try { const f = window.__funnel ? window.__funnel.reached().filter(k => !ahaSent['sf:' + k]).slice(0, 30) : []; if (f.length) { p.sf = f; any = true; } } catch (e) {}
     // the story's logo A/B (idle-epoch0.js): the arm rides along once this browser has seen its logo, so the moments after it count per arm too
@@ -253,7 +253,7 @@
   // the arm beacon (Nov 4): the A/B/C arm this browser got, sent on its own as soon as the page is on screen and stats are live, once per
   // browser (idle.armSent). Only { v, aa, u }: the true count of assignments per arm, independent of the batches above (whose first report
   // can go missing). helper/worker.js counts it as arm_assigned per arm (our own checks' tags in their own bucket)
-  const ARM_SENT = 'idle.armSent', ARMS3 = ['story', 'choose', 'play'];
+  const ARM_SENT = 'idle.armSent', ARMS3 = ['story', 'choose', 'play', 'light'];
   // confirmed beacons (Nov 4, after 09:57–11:55 PT, when a stale accumulator dropped the daily beacons while the pages had already set their
   // "sent" flags): each of these goes by fetch (keepalive) and its flag is set only when the server answers { stored: true }, i.e. the
   // accumulator (or the KV fallback) has it. Until then it waits in idle.bpend and is sent again once per page load (on hide, as a

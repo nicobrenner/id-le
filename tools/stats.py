@@ -138,8 +138,8 @@ def call(path, tok, raw=False, body=None):
 
 
 # the storyline's funnel (helper/worker.js 'sf': "arm|step" → browsers), in the order a player meets them
-SF_STEPS = ["title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play", "e0_tap", "e0_ask_name", "e0_ask_logo", "e0_ask_both", "e0_ask_skip", "ch_story", "ch_play", "pw_shown", "pw_story", "st_resume", "st_restart"]
-SF_NAMES = {"title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
+SF_STEPS = ["light_start", "light_sound", "title", "messages", "chat", "boot", "run", "crash", "landing", "operator", "lights", "e1words", "e1life", "e1done", "e0_start1", "e0_play", "e0_tap", "e0_ask_name", "e0_ask_logo", "e0_ask_both", "e0_ask_skip", "ch_story", "ch_play", "pw_shown", "pw_story", "st_resume", "st_restart", "light_film"]
+SF_NAMES = {"light_start": "light: started in the dark (no film)", "light_sound": "light: tapped for sound", "light_film": "light: watched how it all began (⚙)", "title": "title card", "messages": "messages", "chat": "labchat", "boot": "boot", "run": "the run", "crash": "the crash", "landing": "the dark",
             "operator": "the Operator", "lights": "lights on", "e1words": "Epoch 0: words", "e1life": "Epoch 0: life", "e1done": "Epoch 0 done (Genesis)",
             "e0_start1": "Epoch 0 moment: start Epoch 1", "e0_play": "Epoch 0 moment: the playground", "e0_tap": "tapped a creature in the look-around", "e0_ask_name": "the ask: named the first creature", "e0_ask_logo": "the ask: picked an opening", "e0_ask_both": "the ask: liked both openings", "e0_ask_skip": "the ask: skipped", "entry_lab": "link: ?lab (data lab)", "entry_start": "link: ?start=…", "entry_wiki": "link: ?wiki= (a Wikipedia world)", "entry_review": "link: ?review=", "entry_gift": "link: ?gift=", "entry_halloween": "link: ?halloween", "entry_world": "link: a shared world", "entry_intro": "link: ?intro=", "entry_creature": "link: #c= (a creature)", "entry_recover": "link: #recover",
             "ch_story": "chooser: the storyline", "ch_play": "chooser: the playground", "pw_shown": "playground welcome shown", "pw_story": "playground welcome: started the story",
@@ -166,6 +166,29 @@ def sc_total(sfs):
         for k, n in o.get("sc", {}).items():
             t[k] = t.get(k, 0) + n
     return t
+
+
+def arm_weights():
+    """the split's weights, THE one place: arena.html's ARM_WEIGHTS (Nov 7)"""
+    try:
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo", "arena.html"), encoding="utf-8").read()
+        m = re.search(r"const ARM_WEIGHTS = \{(.*?)\}", src)
+        return {k: float(v) for k, v in re.findall(r"(\w+):\s*([0-9.]+)", m.group(1))}
+    except Exception:
+        return {"light": 1, "choose": 1, "play": 1, "story": 0}
+
+
+def chi2_sf(x, df):
+    """P(chi-square with df degrees of freedom > x), for small df (series for the regularized upper gamma)"""
+    if x <= 0:
+        return 1.0
+    if df == 2:
+        return math.exp(-x / 2)
+    k = df / 2.0; t = x / 2.0; term = s_ = 1.0 / k; i = 1
+    while term > 1e-12 * s_ and i < 500:
+        term *= t / (k + i); s_ += term; i += 1
+    lower = s_ * math.exp(-t + k * math.log(t) - math.lgamma(k))
+    return max(0.0, min(1.0, 1.0 - lower))
 
 
 def internal_tags():
@@ -201,7 +224,7 @@ def engaged_lines(days):
     if not dd and not en and not cb:
         return
     print("engaged (browser-days: here, did something on purpose, came back; once per browser per day; our own checks excluded):")
-    for arm in ["story", "choose", "play", "none", "pick"]:   # pick: came by the logo pick link (/review/intro-logo-animation), whatever it did after
+    for arm in ["light", "story", "choose", "play", "none", "pick"]:   # pick: came by the logo pick link (/review/intro-logo-animation), whatever it did after
         here, acts, back = dd.get(arm, 0), en.get(arm, {}), cb.get(arm, {})
         if not (here or acts or back):
             continue
@@ -223,11 +246,18 @@ def arms_line(days):
             ia[k] = ia.get(k, 0) + n
     if not a and not ia:
         return
-    arms = ["story", "choose", "play"]; n = sum(a.get(k, 0) for k in arms); e = n / 3 if n else 0
-    x2 = sum((a.get(k, 0) - e) ** 2 / e for k in arms) if e else 0.0; p = math.exp(-x2 / 2)
+    # the draw's arms (Nov 7): light / choose / play a third each, story out of the draw (arena.html's ARM_WEIGHTS). A window from before
+    # the change (no light) is checked against the old split, story / choose / play
+    allarms = ["light", "story", "choose", "play"]
+    drawn = arm_weights() if a.get("light") else {"story": 1, "choose": 1, "play": 1}
+    arms = [k for k in allarms if drawn.get(k)]; n = sum(a.get(k, 0) for k in arms); W = sum(drawn[k] for k in arms)
+    exp = {k: n * drawn[k] / W for k in arms} if n else {}
+    x2 = sum((a.get(k, 0) - exp[k]) ** 2 / exp[k] for k in arms) if n else 0.0; df = max(1, len(arms) - 1); p = chi2_sf(x2, df)
     flag = "" if n < 9 else (f" · ⚠ split looks off (chi-square {x2:.1f}, p {p:.3f})" if p < 0.01 else f" · split looks fine (p {p:.2f})")
-    print(f"arms assigned: " + " · ".join(f"{k} {a.get(k, 0)}" for k in arms) + f" (expected {e:.1f} each of {n}){flag}"
-          + (" · our own checks: " + " · ".join(f"{k} {ia.get(k, 0)}" for k in arms) if ia else ""))
+    out = [k for k in allarms if k not in arms and a.get(k)]
+    print(f"arms assigned: " + " · ".join(f"{k} {a.get(k, 0)}" for k in arms) + f" (expected {'/'.join(f'{exp[k]:.1f}' for k in arms) if n else 0} of {n}){flag}"
+          + (" · outside the draw: " + " · ".join(f"{k} {a.get(k, 0)}" for k in out) if out else "")
+          + (" · our own checks: " + " · ".join(f"{k} {ia.get(k, 0)}" for k in allarms if ia.get(k)) if ia else ""))
 
 
 def internal_line(days):

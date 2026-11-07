@@ -92,6 +92,10 @@
     "your run spilled over… this is the consciousness you were training, and you're inside it now",
     "it's fragile. you have 10 epochs to help it grow until it can live on its own, or it fades",
     'first things first: the lights. say "lights on"'];
+  // the light arm (Nov 7, Nico: "you don't remember, do you? that's ok, it'll come back"): no film before the dark, so the Operator
+  // lets the gap be a mystery; the film is in ⚙ for the curious
+  const LIGHT_WAKE = "you don't remember, do you? that's ok, it'll come back";
+  const wakeLines = () => { const light = (typeof S !== 'undefined' && S && S.light) || (typeof variant === 'function' && variant() === 'light'); return light ? [WAKE[0], WAKE[1], LIGHT_WAKE, ...WAKE.slice(2)] : WAKE.slice(); };
   const LIGHTS_ON = 'Nice!! we can see something now at least';
   // the epochs (Nico, story v3: "10 epochs, not 6–7 days"; v11: "should it be Epoch0 that they first beat? and they move on to Epoch1"):
   // Epoch 0 · Genesis is the intro, the dark landing, lights on, words and first life, and it is the player's first win (its Gazette);
@@ -233,7 +237,11 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
   // only NEW browsers, only while AB is on; stored in this browser only (idle.gv). The two-arm keys migrate: 'current' (the starter world)
   // is 'play'. ?arm=story|choose|play forces one on staging and local copies only. A browser that
   // already has a world keeps it, whatever its arm.
-  const ARMS = ['story', 'choose', 'play'], OLD_ARM = { current: 'play' }, armOf = v => OLD_ARM[v] || v;
+  // 'light' (Nov 7, Nico: "letting people arrive first... a version with light story.. starting from landing/ringing"): the storyline without the
+  // title card and the opening film: the dark with the ringing, the Operator, then Genesis; the film is on demand (⚙ 📖 how it all began).
+  // The draw's weights live in arena.html's <head> (window.__armWeights / __drawArm): light, choose, play a third each; story out of the draw
+  const ARMS = ['story', 'choose', 'play', 'light'], OLD_ARM = { current: 'play' }, armOf = v => OLD_ARM[v] || v;
+  const drawArm = () => { try { if (window.__drawArm) return window.__drawArm(); } catch (e) {} const d = ['light', 'choose', 'play']; return d[Math.floor(Math.random() * d.length)]; };
   // a link with an explicit destination (Nov 4): ?lab/#lab, ?start=ready|free, ?wiki=, ?review=, ?gift=, ?halloween, ?world=, ?intro=, #c=Name,
   // #recover. The list lives in ONE place, arena.html's <head> (INTENT_PARAMS / INTENT_HASH, which also keeps these from painting black);
   // here it is only read. Such a visit draws no arm, gets no title card or storyline offer, and goes where the link says; entry_<kind> in the funnel
@@ -243,10 +251,10 @@ html.gen-cosmos.gen-cosmos.gen-cosmos #arena,html.gen-cosmos.gen-cosmos.gen-cosm
     if (ARMS.includes(v)) return v; if (AB !== 'on' || !fresh0 || Q.has('test') || ENTRY) return null;   // a direct entry (?lab, ?start=ready) never draws an arm   // tests (?test) get no random arm: ?arm= forces one
     // the draw may already have been made in arena.html's <head> (idle.gvPre), so the first paint knew whether this is a story start (Nov 4)
     let pre = null; try { pre = localStorage.getItem('idle.gvPre'); localStorage.removeItem('idle.gvPre'); } catch (e) {}
-    v = ARMS.includes(pre) ? pre : ARMS[Math.floor(Math.random() * ARMS.length)]; try { localStorage.setItem(GV, v); } catch (e) {} return v; }
+    v = ARMS.includes(pre) ? pre : drawArm(); try { localStorage.setItem(GV, v); } catch (e) {} return v; }
   // called by the arena for a browser with no world of its own (fresh0), before the guided start would load the starter world:
   // the story and choose arms begin here; the play arm gets the ready world (the guided start), then the Operator's welcome (playWelcome)
-  function wants(fresh0) { if (Q.has('genesis') || Q.has('story') || ['free', 'guided'].includes(Q.get('start'))) return true; if (ENTRY) return false; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose'; }
+  function wants(fresh0) { if (Q.has('genesis') || Q.has('story') || ['free', 'guided'].includes(Q.get('start'))) return true; if (ENTRY) return false; const v = !!fresh0 && variant(fresh0); return v === 'story' || v === 'choose' || v === 'light'; }
   // the storyline is "out" on the test site and local copies, or anywhere once the A/B runs: that's where it is offered
   // ?arm= forces an arm only on the test site and local copies (never on id-le.com, where the A/B decides)
   const offerPreview = () => ENTRY === 'offer';   // ?offer=a|b|c|old on staging/local (arena.html's INTENT list): a returning world to preview the offer
@@ -276,6 +284,14 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
     try { const p = h.cam(); h.flyTo(p.x, p.y, innerWidth < 700 ? 0.8 : 1); } catch (e) {} }
 
   // ---------- the intro (idle-intro.js) or a short fallback line
+  // the light arm's sound (Nov 7): no title card to tap, so a small chip asks for the one gesture the browser needs; the dark plays meanwhile
+  function soundChip() { const A = window.__audio; let c = null; try { c = A && A.ctx && A.ctx(); } catch (e) {} if (c && c.state === 'running') return; if (document.getElementById('genSnd')) return;
+    const b = document.createElement('button'); b.id = 'genSnd'; b.textContent = '🔊 tap for sound';
+    b.style.cssText = 'position:fixed;left:14px;bottom:14px;z-index:2147481998;font:600 12px var(--ui-font,system-ui);color:#cdbf9a;background:#0b0f18cc;border:1px solid #2b6f86;border-radius:14px;padding:5px 12px;cursor:pointer;opacity:.85';
+    const go = () => { try { A && A.wantSound && A.wantSound(); const cx = A && A.ctx && A.ctx(); cx && cx.resume && cx.resume(); } catch (e) {} mark('light_sound'); b.remove(); removeEventListener('pointerdown', any, true); removeEventListener('keydown', any, true); };
+    const any = () => go(); b.addEventListener('click', e => { e.stopPropagation(); go(); }); addEventListener('pointerdown', any, true); addEventListener('keydown', any, true); document.body.appendChild(b); }
+  // the opening film on demand (light arm, ⚙ 📖 how it all began): the storyline's film over the world, then back where you were
+  async function filmOnDemand() { mark('light_film'); if (!(window.__epoch0 && window.__epoch0.play)) return false; try { await window.__epoch0.play({ story: true, boot: true, arrive: true }); } catch (e) { console.warn('genesis: film', e); return false; } return true; }
   async function intro() { if (Q.get('intro') === '0' || skAfter('logo')) return; const saveData = navigator.connection && navigator.connection.saveData;
     if (window.__intro && window.__intro.play && !saveData) {
       // Epoch 0 unless ?intro=storm|eerie|epic
@@ -617,14 +633,16 @@ html.gen-box #genTag{display:none}#genDay{top:44px!important}html.gen-story:not(
   async function boot(force) { if (!H()) return false; bootedHere = true;
     // which start: ?story → the storyline; ?start=free|story|ready; otherwise the chooser (script section E)
     // ('guided': the earlier guided genesis, light → words → life → weather or music, kept for links and tests)
-    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ENTRY === 'lab' ? 'ready' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : variant() === 'story' && !Q.has('genesis') && !storyBegun() ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
+    let mode = ['story', 'free', 'ready', 'guided'].includes(force) ? force : Q.has('story') ? 'story' : ENTRY === 'lab' ? 'ready' : ['story', 'free', 'ready', 'guided'].includes(Q.get('start')) ? Q.get('start') : (variant() === 'story' || variant() === 'light') && !Q.has('genesis') && !storyBegun() ? 'story' : null;   // a new browser in the story arm goes straight in (later new consciousnesses get the chooser)
     if (mode !== 'story') { try { window.__storyBootLift && window.__storyBootLift(); } catch (e) {} }   // not a story after all: lift the first-paint black (arena.html <head>)
     if (!mode) mode = await chooser();
     if (mode === 'ready') { if (S) { S.on = false; save(); } applyUnlocks(); dropFlag(); return readyWorld(); }
     S = { on: true, steps: {}, t0: now(), n: ((S && S.n) || 0) + 1, mode, ev: 2 }; if (mode === 'free') S.free = now(); save(); toVoid(); dropFlag(); try { if (window.__boot && window.__boot.step) { window.__boot.step('creatures'); window.__boot.step('words'); } } catch (e) {}   // the void is the world: the loading cover can go (else it waits for its 9 s cap, and the dark with it)
     if (mode === 'free') cls('gen-calm', 0);
     // v12: in the story the game is hushed from the intro on (the intro plays past it, storyOut) and held until the music step
-    if (mode === 'story') { blackCover(true); silence(true); worldHold(true); if (SK) await SK.ready; await intro(); cosmos.start(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} await landing(); await wake(); await keyAdvance(); return true; }
+    // the light arm (Nov 7): no title card and no film; the dark and its ringing come first (S.light keeps it so on a reload)
+    const light = mode === 'story' && !Q.has('story') && !SK && variant() === 'light'; if (light) { S.light = 1; save(); mark('light_start'); }
+    if (mode === 'story') { blackCover(true); silence(true); worldHold(true); if (SK) await SK.ready; if (!light) await intro(); else soundChip(); cosmos.start(); S.tc = now(); save(); try { H().log('genesis', { step: 'start', mode, light: !!light }); } catch (e) {} await landing(); await wake(); await keyAdvance(); return true; }
     await intro(); S.tc = now(); save(); openConsole(); try { H().log('genesis', { step: 'start', mode }); } catch (e) {} return true; }
   // the chooser (v13, Nico: "what we currently call 'free play', the story-less space, let's call it the playground… And then there's the
   // storyline of the Doc"): two worlds, the storyline and the playground; the playground starts as a ready world (creatures already
@@ -834,12 +852,12 @@ ${storyLive() || Q.has('story') ? `<button class="rec" data-m="story"><b>📖 th
     cls('gen-box', 1); wakeShown = []; wakeTyping = ''; wakeBusy = true; openConsole(); opTitle(true); mark('operator'); if (nightCv) sonar(true); setTimeout(() => cls('gen-landing', 0), 600);   // the Operator pings the dark
     const RM = matchMedia('(prefers-reduced-motion: reduce)').matches; let skip = false; const onTap = () => { skip = true; }; if (lab) lab.addEventListener('pointerdown', onTap);
     const fast = skAfter('operator');   // a later keyframe: the opening is already said
-    for (const line of WAKE) { if (RM || fast) { wakeShown.push(line); renderConsole(); if (!fast) await new Promise(r => setTimeout(r, 900)); continue; }
+    for (const line of wakeLines()) { if (RM || fast) { wakeShown.push(line); renderConsole(); if (!fast) await new Promise(r => setTimeout(r, 900)); continue; }
       for (let i = 1; i <= line.length; i += 2) { if (skip) break; wakeTyping = line.slice(0, i); renderConsole(); await new Promise(r => setTimeout(r, 26)); }
       wakeTyping = ''; wakeShown.push(line); renderConsole(); if (!skip) await new Promise(r => setTimeout(r, Math.min(1600, 500 + line.length * 18))); skip = false; }
     if (lab) lab.removeEventListener('pointerdown', onTap);
-    wakeBusy = false; try { WAKE.forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {}
-    curLine = WAKE[WAKE.length - 1]; wakeShown = WAKE.slice(); renderConsole(); }
+    wakeBusy = false; try { wakeLines().forEach(l => window.__idleAI && window.__idleAI.add && window.__idleAI.add('TO', l, 'ai')); } catch (e) {}
+    curLine = wakeLines().slice(-1)[0]; wakeShown = wakeLines(); renderConsole(); }
   // the window is the Operator's (v10, Nico: "the sidebar chat is Operator"; the 🔮 Oracle is its own lightbox); since v14 it never docks
   function opTitle() { const b = $('#lab-head b'), N = window.IDLE_NAMES; if (!b || !N) return; b.textContent = N.op.icon + ' ' + N.op.short; }
 
@@ -979,8 +997,8 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
     if (!did('creatures')) { const h = H(), cs = h.creatures(); hold = cs.splice(0).filter(c => !c.lab);
       for (const c of hold) { if (c.bub) c.bub.classList.remove('on'); if (c.el) c.el.style.visibility = 'hidden'; c.held = false; c.carrying = null; } }
     if (did('light')) { cls('gen-lit', 1); night(false); cosmos.light(); cls('gen-float', 1); } else night(true);
-    silence(!did('creatures')); applyUnlocks(); tag(); openConsole(); opTitle(); wakeBusy = false; wakeShown = did('light') ? [] : WAKE.slice();
-    renderConsole(did('light') ? introOf(nextGuide() || 'light') : WAKE[WAKE.length - 1]);
+    silence(!did('creatures')); applyUnlocks(); tag(); openConsole(); opTitle(); wakeBusy = false; wakeShown = did('light') ? [] : wakeLines();
+    renderConsole(did('light') ? introOf(nextGuide() || 'light') : wakeLines().slice(-1)[0]);
     try { window.dispatchEvent(new CustomEvent('idle:ev', { detail: { type: 'genesis_resume_reload', extra: { step: nextGuide() } } })); } catch (e) {} return true; }
   { let k = 0; const iv = setInterval(() => { if (window.__restoredOrFresh) { clearInterval(iv); setTimeout(() => { try { resumeGenesis(); } catch (e) { console.warn('genesis: resume after reload', e); } }, 400); } else if (++k > 300) clearInterval(iv); }, 200); }
   // the playground's way back (v16): the 🛠 tray's chip and /story (idle-opwin.js asks for it)
@@ -1321,6 +1339,6 @@ html.gen-modal :is(#ntf,#notice,#distoast,#iosHintToast,#storyOffer){visibility:
   function pending() { try { if (!storyMode() || !S || !S.on) return 0; const d = dayOf(S.day || 0); if (!d || (S.days && S.days[d.n]) || (d.n > 0 && !builtNext(d.n))) return 0;
     return d.goals.filter(([k]) => !(d.n === 0 ? did(k) : false)).length; } catch (e) { return 0; } }
   // ready(): v15 — also only once the window is actually up (not during the landing, the dawn or a step's aside)
-  window.__genesis = { genPending, resumeGenesis, ask: () => ({ mode: ASK.mode, state: moment ? (moment.ready ? (moment.ask || 'open') : 'typing') : null, msg: moment && moment.askMsg, first: land.firstBorn, q: { name: ASK.name.q, logo: ASK.logo.q } }), askSet: m => { if (m === 'name' || m === 'logo') ASK.mode = m; }, gate: () => lastGate && { ...lastGate }, gateOf, gateNgrams, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, offerState: () => ({ notNow: lastNotNow, seen: offerSeen(), variant: offerVariant(), on: offerOn, touched: offerTouched, quiet: offerQuiet(), wait: offerWait(), last: lastOffer, text: OFFERV }), storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
+  window.__genesis = { genPending, resumeGenesis, filmOnDemand, soundChip, lightArm: () => variant() === 'light' || !!(S && S.light), ask: () => ({ mode: ASK.mode, state: moment ? (moment.ready ? (moment.ask || 'open') : 'typing') : null, msg: moment && moment.askMsg, first: land.firstBorn, q: { name: ASK.name.q, logo: ASK.logo.q } }), askSet: m => { if (m === 'name' || m === 'logo') ASK.mode = m; }, gate: () => lastGate && { ...lastGate }, gateOf, gateNgrams, loadGate, isCommand, modalUp, shrinkEnd, storyRow, storyModal, storyProgress, resumeAt, progressOf, resumeLines: { ...RESUME }, arms: ARMS.slice(), welcome: { ...WELCOME, lines: WELCOME.lines.slice() }, playWelcome, pending, ready: () => !!(storyMode() && guiding() && nextGuide() && !busy && !wakeBusy && !moment && $('#genConsole') && !/\bgen-(landing|dawning|aside)\b/.test(document.documentElement.className)), chip, moment: () => moment && { ...moment }, momentLines: { ...MOMENT, lines: MOMENT.lines.slice() }, life: { ...LIFE }, aside, gsound: { humSound, tickSound, tickPlan, GS, state: () => JSON.parse(JSON.stringify(snd)), humOn: () => !!humCtl }, dawnMs, playground: () => PG(), noLife, darkLines: DARK.slice(), approach: APPROACH, ringEnd: RING_END, silentLine: SILENT, untilLine, untilApproach: (i, d) => untilLine(i, d, APPROACH), ringCtl: () => ringCtl, unlocks: () => ({ epoch: epochReached(), story: storyMode() && !!(S && S.on), hidden: storyMode() && S && S.on ? UNLOCK.filter(r => r[1] == null || r[1] > epochReached()).map(r => r[0]) : [] }), unlockTable: () => UNLOCK.map(r => r.slice()), oracleLine: ORACLE_LINE, ringSound, rumbleSound, statusLine: () => statusLine(), offer, offerState: () => ({ notNow: lastNotNow, seen: offerSeen(), variant: offerVariant(), on: offerOn, touched: offerTouched, quiet: offerQuiet(), wait: offerWait(), last: lastOffer, text: OFFERV }), storyLive, landing: () => ({ ...land, line: land.line ? land.line.text : null, rimmed: nightState.rimmed, night: !!nightCv }), ab: AB, wants, variant: () => variant(), boot, newUniverse, actions, step: k => actions[{ words: 'letThereBeWords', creatures: 'firstCreatures' }[k] || k]?.(), state: () => S && JSON.parse(JSON.stringify(S)),
     steps: ORDER.slice(), guide: GUIDE.slice(), end: () => ({ open: !!(S && S.endOpen), at: S && S.endAt || null, free: !!(S && S.fp) }), showEnd, freePlay, canResume, resumeStory, endLines: { ...END }, key: () => SK && SK.key, days: DAYS.map(d => ({ n: d.n, title: d.title, goals: d.goals.map(g => g[1]) })), mode: () => (S && S.mode) || null, cosmos: () => cosmos.state(), wakeLines: WAKE.slice(), next: () => (guiding() ? nextGuide() : null), say: s => submit(s), skipGuide: () => endGuide(true), stats, void: () => !!window.__genesisVoid, topic: () => topic };
 })();
